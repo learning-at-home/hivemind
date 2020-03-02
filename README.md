@@ -1,7 +1,7 @@
 ## Tesseract
 Distributed training of large neural networks across volunteer computers.
 
-![img](./scheme.png)
+![img](https://i.imgur.com/qggwsaY.gif?1)
 
 __[WIP]__ - this branch is in progress of updating. If you're interested in supplementary code for [Learning@home paper](https://arxiv.org/abs/2002.04013), you can find it at https://github.com/mryab/learning-at-home .
 
