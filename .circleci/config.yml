@@ -12,11 +12,14 @@ jobs:
       - python/install-deps
       - python/save-cache
       - run:
-          command: ./manage.py test
-          name: Test
-      - run:
           command: echo Hi
           name: Hi
+      - run:
+          command: python setup.py develop
+          name: develop
+      - run:
+          command: python tests/benchmark_throughput.py --preset minimalistic
+          name: benchmark
 
 workflows:
   main:
