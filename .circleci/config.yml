@@ -12,9 +12,6 @@ jobs:
       - python/install-deps
       - python/save-cache
       - run:
-          command: echo Hi
-          name: Hi
-      - run:
           command: sudo python setup.py develop
           name: develop
       - run:
