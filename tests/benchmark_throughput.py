@@ -110,6 +110,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
         print("Note: benchmark code failed, timing/memory results only indicate time till failure!")
     print_device_info(device)
     print(flush=True)
+    assert not benchmarking_failed.is_set()
 
 
 if __name__ == "__main__":
