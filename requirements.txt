@@ -5,4 +5,3 @@ requests>=2.22.0
 tqdm
 kademlia>=2.2
 prefetch_generator>=1.0.1
-toml

@@ -10,10 +10,10 @@ jobs:
       - checkout
       - python/load-cache
       - python/install-deps
+      - python/save-cache
       - run:
           command: sudo python setup.py develop
           name: setup
-      - python/save-cache
       - run:
           command: python tests/benchmark_throughput.py --preset minimalistic
           name: benchmark
