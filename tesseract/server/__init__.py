@@ -4,6 +4,7 @@ import threading
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict
 from warnings import warn
+raise 1 
 
 from .connection_handler import handle_connection
 from .network_handler import NetworkHandlerThread
