@@ -1,4 +1,8 @@
 ## Tesseract
+
+[![<ORG_NAME>](https://circleci.com/gh/learning-at-home/tesseract.svg?style=svg)](https://circleci.com/gh/learning-at-home/tesseract)
+
+
 Distributed training of large neural networks across volunteer computers.
 
 ![img](https://i.imgur.com/GPxolxb.gif)
