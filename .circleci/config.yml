@@ -15,7 +15,7 @@ jobs:
           command: echo Hi
           name: Hi
       - run:
-          command: python setup.py develop
+          command: sudo python setup.py develop
           name: develop
       - run:
           command: python tests/benchmark_throughput.py --preset minimalistic
