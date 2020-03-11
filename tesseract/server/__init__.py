@@ -1,15 +1,14 @@
+from ..runtime import TesseractRuntime, ExpertBackend
+from ..network import TesseractNetwork
+from .network_handler import NetworkHandlerThread
+from .connection_handler import handle_connection
 import multiprocessing as mp
 import os
 import threading
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict
 from warnings import warn
-raise 1 
-
-from .connection_handler import handle_connection
-from .network_handler import NetworkHandlerThread
-from ..network import TesseractNetwork
-from ..runtime import TesseractRuntime, ExpertBackend
+raise 1
 
 
 class TesseractServer(threading.Thread):
@@ -19,7 +18,8 @@ class TesseractServer(threading.Thread):
         super().__init__()
         self.network, self.experts, self.update_period = network, expert_backends, update_period
         self.addr, self.port = addr, port
-        self.conn_handlers = self._create_connection_handlers(conn_handler_processes)
+        self.conn_handlers = self._create_connection_handlers(
+            conn_handler_processes)
         self.runtime = TesseractRuntime(self.experts, **kwargs)
 
         if start:
