@@ -21,15 +21,15 @@ raise 1
 
 class TesseractServer(threading.Thread):
     def __init__(
-        self,
-        network: TesseractNetwork,
-        expert_backends: Dict[str, ExpertBackend],
-        addr="127.0.0.1",
-        port: int = 8080,
-        conn_handler_processes: int = 1,
-        update_period: int = 30,
-        start=False,
-        **kwargs,
+            self,
+            network: TesseractNetwork,
+            expert_backends: Dict[str, ExpertBackend],
+            addr="127.0.0.1",
+            port: int = 8080,
+            conn_handler_processes: int = 1,
+            update_period: int = 30,
+            start=False,
+            **kwargs,
     ):
         super().__init__()
         self.network, self.experts, self.update_period = (
@@ -38,7 +38,8 @@ class TesseractServer(threading.Thread):
             update_period,
         )
         self.addr, self.port = addr, port
-        self.conn_handlers = self._create_connection_handlers(conn_handler_processes)
+        self.conn_handlers = self._create_connection_handlers(
+            conn_handler_processes)
         self.runtime = TesseractRuntime(self.experts, **kwargs)
 
         if start:
@@ -71,9 +72,8 @@ class TesseractServer(threading.Thread):
 
     @property
     def ready(self):
-        return (
-            self.runtime.ready
-        )  # mp.Event that is true if self is ready to process batches
+        return (self.runtime.ready
+                )  # mp.Event that is true if self is ready to process batches
 
     def _create_connection_handlers(self, num_handlers):
         sock = socket(AF_INET, SOCK_STREAM)
@@ -83,10 +83,9 @@ class TesseractServer(threading.Thread):
         sock.settimeout(self.update_period)
 
         processes = [
-            mp.Process(
-                target=socket_loop, name=f"socket_loop-{i}", args=(sock, self.experts)
-            )
-            for i in range(num_handlers)
+            mp.Process(target=socket_loop,
+                       name=f"socket_loop-{i}",
+                       args=(sock, self.experts)) for i in range(num_handlers)
         ]
         return processes
 
@@ -107,5 +106,6 @@ def socket_loop(sock, experts):
         except KeyboardInterrupt as e:
             print(f"Socket loop has caught {type(e)}, exiting")
             break
-        except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
+        except (timeout, BrokenPipeError, ConnectionResetError,
+                NotImplementedError):
             continue
