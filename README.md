@@ -18,24 +18,24 @@ __[WIP]__ - this branch is in progress of updating. If you're interested in supp
   * Running on Windows natively is not supported, please use vm or docker;
 
 ## How do I run it?
-1. Clone or download this repo. `cd` to its root directory.
-2. Grab or build a working python enviromnent. [Anaconda](https://www.anaconda.com/) works fine.
-3. Install packages from `requirements.txt`
-4. Go to [./experiments](./experiments) and follow the README.md from there
+Currently, there isn't any way to do it easily. There are some tests (you can look into CI logs and/or config) and we want to expand them, but if you want to do something complex with it, you're on your own.
 
 
 ## tesseract quick tour
 
 __Trainer process:__
-  * __`RemoteExpert`__(`lib/client/remote_expert.py`) behaves like a pytorch module with autograd support but actually sends request to a remote runtime.
-  * __`GatingFunction`__(`lib/client/gating_function.py`) finds best experts for a given input and either returns them as `RemoteExpert` or applies them right away.
+  * __`RemoteExpert`__(`tesseract/client/remote_expert.py`) behaves like a pytorch module with autograd support but actually sends request to a remote runtime.
+  * __`GatingFunction`__(`tesseract/client/gating_function.py`) finds best experts for a given input and either returns them as `RemoteExpert` or applies them right away.
 
 __Runtime process:__
-  * __`TesseractRuntime`__ (`lib/runtime/__init__.py`) aggregates batches and performs inference/training of experts according to their priority. 
-  * __`TesseractServer`__ (`lib/server/__init__.py`) wraps runtime and periodically uploads experts into `TesseractNetwork`.
+  * __`TesseractRuntime`__ (`tesseract/runtime/__init__.py`) aggregates batches and performs inference/training of experts according to their priority. 
+  * __`TesseractServer`__ (`tesseract/server/__init__.py`) wraps runtime and periodically uploads experts into `TesseractNetwork`.
 
 __DHT:__
-   * __`TesseractNetwork`__(`lib/network/__init__.py`) is a node of Kademlia-based DHT that stores metadata used by trainer and runtime.
+   * __`TesseractNetwork`__(`tesseract/network/__init__.py`) is a node of Kademlia-based DHT that stores metadata used by trainer and runtime.
 
 ## Limitations
-WIP
+__DHT__:
+
+- DHT functionality is severely limited by its inability to traverse NAT.
+- Because of this all the features that require DHT are in deep pre-alpha state and cannot be used without special setup.
