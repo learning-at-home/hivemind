@@ -10,6 +10,7 @@ jobs:
       - checkout
       - python/load-cache
       - python/install-deps
+      - run: sudo pip install codecov
       - python/save-cache
       - run:
           command: sudo python setup.py develop
@@ -17,6 +18,9 @@ jobs:
       - run:
           command: python tests/benchmark_throughput.py --preset minimalistic
           name: benchmark
+      - run:
+          command: codecov
+          name: codecov
 
 workflows:
   main:
