@@ -6,7 +6,7 @@ Distributed training of large neural networks across volunteer computers.
 
 ![img](https://i.imgur.com/GPxolxb.gif)
 
-**[WIP]** - this branch is in progress of updating. If you're interested in
+**[WIP]** - this branch is a work in progress. If you're interested in
 supplementary code for [Learning@home paper](https://arxiv.org/abs/2002.04013),
 you can find it at https://github.com/mryab/learning-at-home .
 
@@ -22,11 +22,11 @@ you can find it at https://github.com/mryab/learning-at-home .
 
 ## How do I run it?
 
-Currently, there isn't any way to do it easily. There are some tests (you can
-look into CI logs and/or config) and we want to expand them, but if you want to
-do something complex with it, you're on your own.
+Currently, there is no way to do it easily. There are some tests (you can check [`./tests/benchmark_throughput.py`](./tests/benchmark_throughput.py)
+ or look into CI logs) and we want to expand them. If you want to
+do something complex with it, please contact us by opening an issue (less preferred: [telegram](https://t.me/justheuristic)).
 
-## tesseract quick tour
+## `tesseract` quick tour
 
 **Trainer process:**
 
