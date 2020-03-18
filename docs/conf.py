@@ -15,11 +15,14 @@
 # import os
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
+import sys
+
 from recommonmark.transform import AutoStructify
 from recommonmark.parser import CommonMarkParser
 
 
 # -- Project information -----------------------------------------------------
+import tesseract
 
 project = 'tesseract'
 copyright = '2020, Learning@home & contributors'
@@ -29,6 +32,7 @@ author = 'Learning@home & contributors'
 version = ''
 # The full version, including alpha/beta/rc tags
 release = 'latest'
+branch = 'master'
 
 
 # -- General configuration ---------------------------------------------------
@@ -42,14 +46,34 @@ release = 'latest'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
     'sphinx.ext.ifconfig',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.githubpages',
+    # 'sphinx.ext.viewcode',  # create HTML file of source code and link to it
+    'sphinx.ext.linkcode',  # link to github, see linkcode_resolve() below
+    # 'numpydoc',
+    'sphinx.ext.napoleon',  # alternative to numpydoc
 ]
+
+# see http://stackoverflow.com/q/12206334/562769
+# numpydoc_show_class_members = False
+
+
+# Napoleon settings
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_include_init_with_doc = True
+napoleon_include_private_with_doc = False
+napoleon_include_special_with_doc = True
+napoleon_use_admonition_for_examples = False
+napoleon_use_admonition_for_notes = False
+napoleon_use_admonition_for_references = False
+napoleon_use_ivar = False
+napoleon_use_param = True
+napoleon_use_rtype = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -57,12 +81,7 @@ templates_path = ['_templates']
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
-# source_suffix = ['.rst', '.md']
-source_suffix = {
-    '.rst': 'restructuredtext',
-    '.md': 'markdown',
-}
-
+source_suffix = ['.rst', '.md']
 
 source_parsers = {
     '.md': CommonMarkParser,
@@ -216,3 +235,29 @@ def setup(app):
         # 'enable_auto_doc_ref': True,
     }, True)
     app.add_transform(AutoStructify)
+
+
+#  Resolve function for the linkcode extension.
+
+
+def linkcode_resolve(domain, info):
+    def find_source():
+        # try to find the file and line number, based on code from numpy:
+        # https://github.com/numpy/numpy/blob/master/doc/source/conf.py#L286
+        obj = sys.modules[info['module']]
+        for part in info['fullname'].split('.'):
+            obj = getattr(obj, part)
+        import inspect
+        import os
+        fn = inspect.getsourcefile(obj)
+        fn = os.path.relpath(fn, start=os.path.dirname(tesseract.__file__))
+        source, lineno = inspect.getsourcelines(obj)
+        return fn, lineno, lineno + len(source) - 1
+
+    if domain != 'py' or not info['module']:
+        return None
+    try:
+        filename = 'tesseract/%s#L%d-L%d' % find_source()
+    except Exception:
+        filename = info['module'].replace('.', '/') + '.py'
+    return "https://github.com/learning-at-home/tesseract/blob/%s/%s" % (branch, filename)

@@ -73,7 +73,7 @@ class GatingFunction(nn.Module):
         :param k_best: how many of the top experts participate in the computation
         :param kwargs: extra keyword parameters passed to self.network.first_k_active
         :returns: a list of *batch_size* lists that contain chosen experts for one sample
-            each inner list contains RemoteExpert instances for *up to* k_best experts
+        each inner list contains RemoteExpert instances for *up to* k_best experts
         """
         assert len(grid_scores) == len(self.grid_size)
         assert all(len(dim_scores.shape) == 2 for dim_scores in grid_scores)

@@ -20,7 +20,7 @@ API documentation:
 .. toctree::
   :maxdepth: 2
 
-  modules/client.md
+  modules/client.rst
   modules/runtime.md
 
 Indices and tables
