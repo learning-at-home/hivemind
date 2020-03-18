@@ -1,7 +1,9 @@
-AgentNet
+``learning@home::tesseract``
 ====================================
 
-AgentNet is a toolkit for Deep Reinforcement Learning agent design and training.
+Tesseract lets you train huge neural networks on computers provided by volunteers.
+
+Written in pytorch for your creative freedom.
 
 .. image:: https://i.imgur.com/GPxolxb.gif
 
@@ -10,17 +12,16 @@ User guide:
 .. toctree::
   :maxdepth: 2
 
-  user/install
-  user/whats_what
-  user/demos
+  user/quickstart.md
 
-API guide:
+
+API documentation:
 
 .. toctree::
   :maxdepth: 2
 
-  modules/client
-  modules/runtime
+  modules/client.md
+  modules/runtime.md
 
 Indices and tables
 ==================
