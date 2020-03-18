@@ -55,3 +55,9 @@ do something complex with it, please contact us by opening an issue (less prefer
 - DHT functionality is severely limited by its inability to traverse NAT.
 - Because of this all the features that require DHT are in deep pre-alpha state
   and cannot be used without special setup.
+
+**Runtime**:
+* You can achieve 4x less network load by passing quantized uint8 activations across experts.
+    Implement your own quantization or wait for tesseract v0.8.
+* Currently runtime can form batches that exceed maximal batch_size by task_size - 1. 
+    We will fix that in the nearest patch.
