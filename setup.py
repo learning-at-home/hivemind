@@ -1,12 +1,22 @@
 from pkg_resources import parse_requirements
 from setuptools import setup
+import codecs
+import re
+import os
+
+here = os.path.abspath(os.path.dirname(__file__))
 
 with open('requirements.txt') as requirements_file:
     install_requires = [str(requirement) for requirement in parse_requirements(requirements_file)]
 
+# loading version from setup.py
+with codecs.open(os.path.join(here, 'tesseract/__init__.py'), encoding='utf-8') as init_file:
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.M)
+    version_string = version_match.group(1)
+
 setup(
     name='tesseract',
-    version='0.7',
+    version=version_string,
     description='',
     long_description='',
     author='Learning@home authors',

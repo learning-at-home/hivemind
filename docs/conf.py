@@ -29,7 +29,7 @@ copyright = '2020, Learning@home & contributors'
 author = 'Learning@home & contributors'
 
 # The short X.Y version
-version = ''
+version = tesseract.__version__
 # The full version, including alpha/beta/rc tags
 release = 'latest'
 branch = 'master'
