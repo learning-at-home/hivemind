@@ -8,7 +8,5 @@ $$ formula = x + y $$
 
 Contents
 --------
-* Titles1
-  * [Title1](modules/runtime.md)
-  * [Title2](modules/client.md)
-* Titles2
+ * [Title1](modules/runtime.md)
+   * [Title2](modules/client.md)
