@@ -15,6 +15,8 @@
 # import os
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
+from recommonmark.transform import AutoStructify
+from recommonmark.parser import CommonMarkParser
 
 
 # -- Project information -----------------------------------------------------
@@ -47,7 +49,6 @@ extensions = [
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
-    'recommonmark'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -60,6 +61,11 @@ templates_path = ['_templates']
 source_suffix = {
     '.rst': 'restructuredtext',
     '.md': 'markdown',
+}
+
+
+source_parsers = {
+    '.md': CommonMarkParser,
 }
 
 # The master toctree document.
@@ -196,3 +202,17 @@ intersphinx_mapping = {'https://docs.python.org/': None}
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
+
+# markdown autostructify
+
+def setup(app):
+    github_doc_root = 'https://github.com/rtfd/recommonmark/tree/master/doc/'  # TODO
+    app.add_config_value('recommonmark_config', {
+        'url_resolver': lambda url: github_doc_root + url,
+        'auto_toc_tree_section': 'Contents',
+        'enable_math': True,
+        'enable_inline_math': True,
+        'enable_eval_rst': True,
+        # 'enable_auto_doc_ref': True,
+    }, True)
+    app.add_transform(AutoStructify)
