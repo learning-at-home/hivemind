@@ -65,7 +65,9 @@ if __name__ == "__main__":
                                                         max_batch_size=args.max_batch_size,
                                                         )
     # start server
-    server = tesseract.TesseractServer(network, experts, port=port, conn_handler_processes=num_handlers, device=device)
+    server = tesseract.TesseractServer(
+        network, experts, addr=args.host, port=port, conn_handler_processes=num_handlers, device=device)
+    print("Running server at {args.host}:{args.port}")
     print("Active expert uids:", sorted(experts))
     try:
         server.run()
