@@ -55,7 +55,7 @@ extensions = [
 
 # see http://stackoverflow.com/q/12206334/562769
 numpydoc_show_class_members = False
-
+napoleon_include_init_with_doc = True
 
 mathjax_path = ('https://cdn.mathjax.org/mathjax/latest/MathJax.js?'
                 'config=TeX-AMS-MML_HTMLorMML')
