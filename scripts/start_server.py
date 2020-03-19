@@ -39,9 +39,7 @@ if __name__ == "__main__":
             print("Could not increase open file limit, currently at soft={}, hard={}".format(soft, hard))
 
     assert args.expert_cls in layers.name_to_block
-    num_handlers = args.num_handlers or args.num_experts * 8
-    port = args.port or find_open_port()
-    network_port = args.network_port or find_open_port()
+    args.num_handlers = args.num_handlers or args.num_experts * 8
 
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -51,8 +49,8 @@ if __name__ == "__main__":
         initial_peers = eval(args.initial_peers)
         print("Parsed initial peers:", initial_peers)
 
-        network = tesseract.TesseractNetwork(*initial_peers, port=network_port, start=True)
-        print(f"Running network node on port {network_port}")
+        network = tesseract.TesseractNetwork(*initial_peers, port=args.network_port or find_open_port(), start=True)
+        print(f"Running network node on port {network.port}")
 
     # initialize experts
     experts = {}
@@ -66,8 +64,9 @@ if __name__ == "__main__":
                                                         )
     # start server
     server = tesseract.TesseractServer(
-        network, experts, addr=args.host, port=port, conn_handler_processes=num_handlers, device=device)
-    print(f"Running server at {args.host}:{args.port}")
+        network, experts, addr=args.host, port=args.port or find_open_port(),
+        conn_handler_processes=args.num_handlers, device=device)
+    print(f"Running server at {server.addr}:{server.port}")
     print("Active expert uids:", sorted(experts))
     try:
         server.run()
