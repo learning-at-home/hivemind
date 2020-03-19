@@ -1,3 +1,2 @@
 recommonmark
 sphinx_rtd_theme
-https://github.com/learning-at-home/tesseract/archive/master.zip
