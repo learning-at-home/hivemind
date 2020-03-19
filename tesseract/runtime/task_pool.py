@@ -116,7 +116,7 @@ class TaskPool(TaskPoolBase):
         return batch_tasks
 
     def run(self, *args, **kwargs):
-        print(f'Starting pool, {os.getpid()=}')
+        print(f'Starting pool, pid={os.getpid()}')
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
                                          name=f'{self.uid}-pool_output_loop')
