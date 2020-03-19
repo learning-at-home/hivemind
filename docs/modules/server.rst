@@ -1,4 +1,4 @@
-``tesseract.server & tesseract.runtime``
+``tesseract.server & runtime``
 ========================================
 
 .. automodule:: tesseract.server
