@@ -56,12 +56,13 @@ if __name__ == "__main__":
     experts = {}
     for i in range(args.num_experts):
         expert = torch.jit.script(layers.name_to_block[args.expert_cls](args.hidden_dim))
-        experts[f'expert{i}'] = tesseract.ExpertBackend(name=f'{args.expert_prefix}.{i + args.expert_offset}',
-                                                        expert=expert, opt=torch.optim.Adam(expert.parameters()),
-                                                        args_schema=(tesseract.BatchTensorProto(args.hidden_dim),),
-                                                        outputs_schema=tesseract.BatchTensorProto(args.hidden_dim),
-                                                        max_batch_size=args.max_batch_size,
-                                                        )
+        expert_uid = f'{args.expert_prefix}.{i + args.expert_offset}'
+        experts[expert_uid] = tesseract.ExpertBackend(name=expert_uid,
+                                                      expert=expert, opt=torch.optim.Adam(expert.parameters()),
+                                                      args_schema=(tesseract.BatchTensorProto(args.hidden_dim),),
+                                                      outputs_schema=tesseract.BatchTensorProto(args.hidden_dim),
+                                                      max_batch_size=args.max_batch_size,
+                                                      )
     # start server
     server = tesseract.TesseractServer(
         network, experts, addr=args.host, port=args.port or find_open_port(),
