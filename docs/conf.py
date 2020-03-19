@@ -22,6 +22,7 @@ from recommonmark.parser import CommonMarkParser
 
 
 # -- Project information -----------------------------------------------------
+sys.path.insert(0, '..')
 src_path = '../tesseract'
 project = 'tesseract'
 copyright = '2020, Learning@home & contributors'
