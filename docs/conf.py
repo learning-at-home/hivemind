@@ -22,17 +22,13 @@ from recommonmark.parser import CommonMarkParser
 
 
 # -- Project information -----------------------------------------------------
-import importlib.util
-spec = importlib.util.spec_from_file_location("tesseract", "../tesseract/__init__.py")
-tesseract = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(tesseract)
-
+src_path = '../tesseract'
 project = 'tesseract'
 copyright = '2020, Learning@home & contributors'
 author = 'Learning@home & contributors'
 
 # The short X.Y version
-version = tesseract.__version__
+version = ''
 # The full version, including alpha/beta/rc tags
 release = 'latest'
 branch = 'master'
@@ -253,7 +249,7 @@ def linkcode_resolve(domain, info):
         import inspect
         import os
         fn = inspect.getsourcefile(obj)
-        fn = os.path.relpath(fn, start=os.path.dirname(tesseract.__file__))
+        fn = os.path.relpath(fn, start=os.path.dirname(src_path))
         source, lineno = inspect.getsourcelines(obj)
         return fn, lineno, lineno + len(source) - 1
 
