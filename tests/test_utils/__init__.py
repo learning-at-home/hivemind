@@ -1,5 +1,3 @@
-from socket import socket
-
 import torch
 
 
@@ -14,12 +12,3 @@ def print_device_info(device=None):
         print('Memory Usage:')
         print('Allocated:', round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1), 'GB')
         print('Cached:   ', round(torch.cuda.memory_cached(0) / 1024 ** 3, 1), 'GB')
-
-
-def find_open_port():
-    try:
-        sock = socket()
-        sock.bind(('', 0))
-        return sock.getsockname()[1]
-    except:
-        raise ValueError("Could not find open port")

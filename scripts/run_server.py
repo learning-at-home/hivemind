@@ -7,7 +7,8 @@ import torch
 import tesseract
 
 sys.path.append(os.path.dirname(__file__) + '/../tests')
-from test_utils import layers, find_open_port
+from test_utils import layers
+from tesseract import find_open_port
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
