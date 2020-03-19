@@ -45,7 +45,7 @@ class TesseractRuntime(threading.Thread):
                     outputs = pool.process_func(*batch)
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
                     progress.update(len(outputs[0]))
-                    progress.desc = f'{pool.uid=} {len(outputs[0])=}'
+                    progress.desc = f'pool.uid={pool.uid} batch_size={len(outputs[0])}'
             finally:
                 self.shutdown()
 
