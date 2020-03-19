@@ -103,7 +103,7 @@ language = None
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = None
+pygments_style = 'sphinx'
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -222,9 +222,9 @@ intersphinx_mapping = {'https://docs.python.org/': None}
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
 
-# markdown autostructify
 
 def setup(app):
+    app.add_stylesheet("fix_rtd.css")
     github_doc_root = 'https://github.com/rtfd/recommonmark/tree/master/doc/'  # TODO
     app.add_config_value('recommonmark_config', {
         'url_resolver': lambda url: github_doc_root + url,
