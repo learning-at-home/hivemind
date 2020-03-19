@@ -25,6 +25,7 @@ if __name__ == "__main__":
     parser.add_argument('--no_network', action='store_true')
     parser.add_argument('--initial_peers', type=str, default="[]", required=False)
     parser.add_argument('--network_port', type=int, default=None, required=False)
+    parser.add_argument('--lifetime_seconds', type=int, default=None, required=False)
     parser.add_argument('--increase_file_limit', action='store_true')
 
     args = parser.parse_args()
@@ -65,9 +66,10 @@ if __name__ == "__main__":
     server = tesseract.TesseractServer(
         network, experts, addr=args.host, port=args.port or find_open_port(),
         conn_handler_processes=args.num_handlers, device=device)
-    print(f"Running server at {server.addr}:{server.port}")
-    print(f"Active experts of type {args.expert_cls}: {list(experts.keys())}")
     try:
-        server.run()
+        server.run_in_background(await_ready=True)
+        print(f"Running server at {server.addr}:{server.port}")
+        print(f"Active experts of type {args.expert_cls}: {list(experts.keys())}")
+        server.join(timeout=args.lifetime_seconds)
     finally:
         server.shutdown()
