@@ -36,8 +36,10 @@ class TesseractNetwork(mp.Process):
 
     def shutdown(self) -> None:
         """ Shuts down the network process """
-        warnings.warn("TODO shutdown network gracefully")
-        self.terminate()
+        if self.is_alive():
+            self.terminate()
+        else:
+            warnings.warn("Network shutdown has no effect: network process is already not alive")
 
     def get_experts(self, uids: List[str], heartbeat_expiration=HEARTBEAT_EXPIRATION) -> List[Optional[RemoteExpert]]:
         """ Find experts across DHT using their ids; Return a list of [RemoteExpert if found else None]"""
