@@ -59,7 +59,7 @@ class TaskPool(TaskPoolBase):
     to process these batches and dispatches results back to request sources. Operates as a background process.
 
     :param process_func: function to be applied to every formed batch; called by TesseractRuntime
-        Note: process_func should accept only *args Tensors and return a list of output Tensors
+        Note that process_func should accept only \*args Tensors and return a flat tuple of Tensors
     :param max_batch_size: process at most this many inputs in a batch (task contains have one or several inputs)
     :param min_batch_size: process at least this many inputs in a batch, otherwise wait for more
     :param timeout: wait for a subsequent task for at most this many seconds
@@ -90,6 +90,7 @@ class TaskPool(TaskPoolBase):
             self.start()
 
     def submit_task(self, *args: torch.Tensor) -> Future:
+        """ Add task to this pool's queue, return Future for its output """
         future1, future2 = SharedFuture.make_pair()
         self.tasks.put(Task(future1, args))
         self.undispatched_task_timestamps.put(time.time())

@@ -11,9 +11,10 @@ class ExpertBackend(nn.Module):
     """
     ExpertBackend is a wrapper around torch module that allows it to run tasks asynchronously with TesseractRuntime
     By default, ExpertBackend handles three types of requests:
-     * forward - receive inputs and compute outputs. Concurrent requests will be batched for better GPU utilization.
-     * backward - receive gradients w.r.t. outputs, compute gradients w.r.t. inputs and **update expert**. Also batched.
-     * get_info - return expert metadata. Not batched.
+
+     - forward - receive inputs and compute outputs. Concurrent requests will be batched for better GPU utilization.
+     - backward - receive gradients w.r.t. outputs, compute gradients w.r.t. inputs and **update expert**. Also batched.
+     - get_info - return expert metadata. Not batched.
 
     :param expert: nn.Module to be wrapped into a backend. Arbitrary pytorch module with a few limitations:
 

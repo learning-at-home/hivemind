@@ -1,5 +1,5 @@
 ``tesseract.server & tesseract.runtime``
-================
+========================================
 
 .. automodule:: tesseract.server
 
@@ -8,10 +8,6 @@
 .. autoclass:: TesseractServer
    :members:
    :member-order: bysource
-
-
-tesseract.runtime
-=================
 
 .. currentmodule:: tesseract.runtime
 
