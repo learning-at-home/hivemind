@@ -1,16 +1,13 @@
 import argparse
-import multiprocessing as mp
-import random
 import resource
 import os
 import sys
-import time
 
 import torch
-sys.path.append(os.path.dirname(__file__) + '/../tests')
-from test_utils import layers, find_open_port
 import tesseract
 
+sys.path.append(os.path.dirname(__file__) + '/../tests')
+from test_utils import layers, find_open_port
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
