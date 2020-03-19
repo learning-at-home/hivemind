@@ -47,33 +47,19 @@ branch = 'master'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.todo',
-    'sphinx.ext.coverage',
+    'sphinx.ext.doctest',
     'sphinx.ext.mathjax',
-    'sphinx.ext.ifconfig',
-    # 'sphinx.ext.viewcode',  # create HTML file of source code and link to it
     'sphinx.ext.linkcode',  # link to github, see linkcode_resolve() below
-    # 'numpydoc',
     'sphinx.ext.napoleon',  # alternative to numpydoc
 ]
 
 # see http://stackoverflow.com/q/12206334/562769
-# numpydoc_show_class_members = False
+numpydoc_show_class_members = False
 
 
-# Napoleon settings
-napoleon_google_docstring = False
-napoleon_numpy_docstring = True
-napoleon_include_init_with_doc = True
-napoleon_include_private_with_doc = False
-napoleon_include_special_with_doc = True
-napoleon_use_admonition_for_examples = False
-napoleon_use_admonition_for_notes = False
-napoleon_use_admonition_for_references = False
-napoleon_use_ivar = False
-napoleon_use_param = True
-napoleon_use_rtype = True
+mathjax_path = ('https://cdn.mathjax.org/mathjax/latest/MathJax.js?'
+                'config=TeX-AMS-MML_HTMLorMML')
+
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -81,11 +67,8 @@ templates_path = ['_templates']
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
+source_parsers = {'.md': CommonMarkParser}
 source_suffix = ['.rst', '.md']
-
-source_parsers = {
-    '.md': CommonMarkParser,
-}
 
 # The master toctree document.
 master_doc = 'index'
