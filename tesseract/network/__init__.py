@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import multiprocessing as mp
+import warnings
 from typing import Tuple, List, Optional
 
 from kademlia.network import Server
@@ -32,6 +33,11 @@ class TesseractNetwork(mp.Process):
         while True:
             method, args, kwargs = self._pipe.recv()
             getattr(self, method)(*args, **kwargs)
+
+    def shutdown(self) -> None:
+        """ Shuts down the network process """
+        warnings.warn("TODO shutdown network gracefully")
+        self.terminate()
 
     def get_experts(self, uids: List[str], heartbeat_expiration=HEARTBEAT_EXPIRATION) -> List[Optional[RemoteExpert]]:
         """ Find experts across DHT using their ids; Return a list of [RemoteExpert if found else None]"""

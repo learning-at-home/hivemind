@@ -1,7 +1,7 @@
 ``learning@home::tesseract``
 ====================================
 
-Tesseract lets you train huge neural networks on computers provided by volunteers. Powered by pytorch
+Tesseract lets you train huge neural networks on computers provided by volunteers. Powered by pytorch.
 
 .. image:: _static/bug.gif
 
@@ -19,7 +19,7 @@ API documentation:
   :maxdepth: 2
 
   modules/client.rst
-  modules/runtime.md
+  modules/server.rst
 
 Indices and tables
 ==================

@@ -13,14 +13,29 @@ from .task_pool import TaskPool, TaskPoolBase
 
 
 class TesseractRuntime(threading.Thread):
+    """
+    A group of processes that processes incoming requests for multiple experts on a shared device.
+    TesseractRuntime is usually created and managed by TesseractServer, humans need not apply.
+
+    For debugging, you can start runtime manually with .start() or .run()
+
+    >>> expert_backends = {'expert_name': ExpertBackend(**kwargs)}
+    >>> runtime = TesseractRuntime(expert_backends)
+    >>> runtime.start()  # start runtime in background thread. To start in current thread, use runtime.run()
+    >>> runtime.ready.wait()  # await for runtime to load all experts on device and create request pools
+    >>> future = runtime.expert_backends['expert_name'].forward_pool.submit_task(*expert_inputs)
+    >>> print("Returned:", future.result())
+    >>> runtime.shutdown()
+
+    :param expert_backends: a dict [expert uid -> ExpertBackend]
+    :param prefetch_batches: form up to this many batches in advance
+    :param start: start runtime immediately (at the end of __init__)
+    :param sender_threads: dispatches outputs from finished batches using this many asynchronous threads
+    :param device: if specified, moves all experts and data to this device via .to(device=device).
+      If you want to manually specify devices for each expert (in their forward pass), leave device=None (default)
+    """
     def __init__(self, expert_backends: Dict[str, ExpertBackend], prefetch_batches=64, sender_threads: int = 1,
                  device: torch.device = None):
-        """
-        A group of processes that process tasks for multiple experts on a shared device
-        :param expert_backends: a dict [expert uid -> ExpertBackend]
-        :param prefetch_batches: generate up to this many batches in advance
-        :param start: start runtime immediately (at the end of __init__)
-        """
         super().__init__()
         self.expert_backends = expert_backends
         self.pools = tuple(chain(*(expert.get_pools() for expert in expert_backends.values())))
@@ -52,7 +67,7 @@ class TesseractRuntime(threading.Thread):
     SHUTDOWN_TRIGGER = "RUNTIME SHUTDOWN TRIGGERED"
 
     def shutdown(self):
-        """ Trigger runtime to terminate, process-save """
+        """ Gracefully terminate a running runtime. """
         self.ready.clear()
         self.shutdown_send.send(self.SHUTDOWN_TRIGGER)  # trigger background thread to shutdown
         for pool in self.pools:
