@@ -66,8 +66,7 @@ templates_path = ['_templates']
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
-source_parsers = {'.md': CommonMarkParser}
-source_suffix = ['.rst', '.md']
+source_suffix = {'.rst': 'restructuredtext', '.md': 'markdown'}
 
 # The master toctree document.
 master_doc = 'index'
@@ -217,6 +216,8 @@ def setup(app):
         # 'enable_auto_doc_ref': True,
     }, True)
     app.add_transform(AutoStructify)
+    app.add_source_suffix('.md', 'markdown')
+    app.add_source_parser(CommonMarkParser)
 
 
 #  Resolve function for the linkcode extension.

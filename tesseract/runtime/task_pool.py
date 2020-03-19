@@ -54,21 +54,23 @@ class TaskPoolBase(mp.Process):
 
 
 class TaskPool(TaskPoolBase):
+    """
+    Request aggregator that accepts processing requests, groups them into batches, waits for TesseractRuntime
+    to process these batches and dispatches results back to request sources. Operates as a background process.
+
+    :param process_func: function to be applied to every formed batch; called by TesseractRuntime
+        Note that process_func should accept only \*args Tensors and return a flat tuple of Tensors
+    :param max_batch_size: process at most this many inputs in a batch (task contains have one or several inputs)
+    :param min_batch_size: process at least this many inputs in a batch, otherwise wait for more
+    :param timeout: wait for a subsequent task for at most this many seconds
+    :param pool_size: store at most this many unprocessed tasks in a queue
+    :param prefetch_batches: prepare up to this many *batches* in background for faster off-loading to runtime
+    :param uid: pool identifier used for shared array allocation
+    :param start: if True, start automatically at the end of __init__
+    """
 
     def __init__(self, process_func: callable, max_batch_size: int, min_batch_size=1,
                  timeout=None, pool_size=None, prefetch_batches=1, uid=None, start=False):
-        """
-        Naive implementation of task pool that forms batch from earliest submitted tasks
-        :param process_func: function to be applied to every formed batch; called by TesseractRuntime
-            Note: process_func should accept only *args Tensors and return a list of output Tensors
-        :param max_batch_size: process at most this many inputs in a batch (task contains have one or several inputs)
-        :param min_batch_size: process at least this many inputs in a batch, otherwise wait for more
-        :param timeout: wait for a subsequent task for at most this many seconds
-        :param pool_size: store at most this many unprocessed tasks in a queue
-        :param prefetch_batches: prepare up to this many *batches* in background for faster off-loading to runtime
-        :param uid: pool identifier used for shared array allocation
-        :param start: if True, start automatically at the end of __init__
-        """
 
         super().__init__(process_func)
         self.min_batch_size, self.max_batch_size, self.timeout = min_batch_size, max_batch_size, timeout
@@ -88,6 +90,7 @@ class TaskPool(TaskPoolBase):
             self.start()
 
     def submit_task(self, *args: torch.Tensor) -> Future:
+        """ Add task to this pool's queue, return Future for its output """
         future1, future2 = SharedFuture.make_pair()
         self.tasks.put(Task(future1, args))
         self.undispatched_task_timestamps.put(time.time())

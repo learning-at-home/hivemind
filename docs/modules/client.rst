@@ -1,5 +1,5 @@
-tesseract.client
-================
+``tesseract.client``
+====================
 
 .. automodule:: tesseract.client
 

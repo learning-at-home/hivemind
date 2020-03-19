@@ -2,3 +2,7 @@
 .rst-content table.field-list .field-body {
     padding-top: 8px;
 }
+/* unlimited page width */
+.wy-nav-content {
+    max-width: none;
+}
