@@ -12,6 +12,7 @@ tesseract.client
   <br><br>
 
 .. autoclass:: RemoteExpert
+   :members: forward
 
 .. autoclass:: GatingFunction
    :members:
