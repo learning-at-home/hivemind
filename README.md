@@ -9,7 +9,7 @@ Distributed training of large neural networks across volunteer computers.
 
 **[WIP]** - this branch is a work in progress. If you're interested in
 supplementary code for [Learning@home paper](https://arxiv.org/abs/2002.04013),
-you can find it at https://github.com/mryab/learning-at-home .
+you can find it at https://github.com/mryab/learning-at-home.
 
 ## What do I need to run it?
 
