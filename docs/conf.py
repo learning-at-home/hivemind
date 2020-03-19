@@ -22,7 +22,8 @@ from recommonmark.parser import CommonMarkParser
 
 
 # -- Project information -----------------------------------------------------
-import tesseract
+import importlib
+tesseract = importlib.import_module('tesseract', '../tesseract')
 
 project = 'tesseract'
 copyright = '2020, Learning@home & contributors'
