@@ -22,8 +22,10 @@ from recommonmark.parser import CommonMarkParser
 
 
 # -- Project information -----------------------------------------------------
-import importlib
-tesseract = importlib.import_module('tesseract', '../tesseract')
+import importlib.util
+spec = importlib.util.spec_from_file_location("tesseract", "../tesseract/__init__.py")
+tesseract = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tesseract)
 
 project = 'tesseract'
 copyright = '2020, Learning@home & contributors'
