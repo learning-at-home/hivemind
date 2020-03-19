@@ -1,11 +1,9 @@
 ``learning@home::tesseract``
 ====================================
 
-Tesseract lets you train huge neural networks on computers provided by volunteers.
+Tesseract lets you train huge neural networks on computers provided by volunteers. Powered by pytorch
 
-Written in pytorch for your creative freedom.
-
-.. image:: https://i.imgur.com/GPxolxb.gif
+.. image:: _static/bug.gif
 
 User guide:
 
