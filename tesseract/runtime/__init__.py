@@ -1,7 +1,8 @@
 import multiprocessing as mp
 import threading
 from itertools import chain
-from selectors import DefaultSelector, EVENT_READ
+from selectors import DefaultSelector
+from selectors import EVENT_READ
 from typing import Dict
 
 import torch
@@ -9,7 +10,8 @@ import tqdm
 from prefetch_generator import BackgroundGenerator
 
 from .expert_backend import ExpertBackend
-from .task_pool import TaskPool, TaskPoolBase
+from .task_pool import TaskPool
+from .task_pool import TaskPoolBase
 
 
 class TesseractRuntime(threading.Thread):
