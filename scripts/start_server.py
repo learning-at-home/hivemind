@@ -52,7 +52,7 @@ if __name__ == "__main__":
         print("Parsed initial peers:", initial_peers)
 
         network = tesseract.TesseractNetwork(*initial_peers, port=network_port, start=True)
-        print("Running network node on port {network_port}")
+        print(f"Running network node on port {network_port}")
 
     # initialize experts
     experts = {}
