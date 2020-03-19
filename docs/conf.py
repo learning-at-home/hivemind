@@ -18,7 +18,6 @@ import sys
 from recommonmark.parser import CommonMarkParser
 from recommonmark.transform import AutoStructify
 
-
 # -- Project information -----------------------------------------------------
 sys.path.insert(0, "..")
 src_path = "../tesseract"
@@ -31,7 +30,6 @@ version = ""
 # The full version, including alpha/beta/rc tags
 release = "latest"
 branch = "master"
-
 
 # -- General configuration ---------------------------------------------------
 
@@ -54,10 +52,8 @@ extensions = [
 # see http://stackoverflow.com/q/12206334/562769
 numpydoc_show_class_members = False
 
-mathjax_path = (
-    "https://cdn.mathjax.org/mathjax/latest/MathJax.js?" "config=TeX-AMS-MML_HTMLorMML"
-)
-
+mathjax_path = ("https://cdn.mathjax.org/mathjax/latest/MathJax.js?"
+                "config=TeX-AMS-MML_HTMLorMML")
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -84,7 +80,6 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"
-
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -114,12 +109,10 @@ html_static_path = ["_static"]
 #
 # html_sidebars = {}
 
-
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = "tesseractdoc"
-
 
 # -- Options for LaTeX output ------------------------------------------------
 
@@ -151,13 +144,11 @@ latex_documents = [
     ),
 ]
 
-
 # -- Options for manual page output ------------------------------------------
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [(master_doc, "tesseract", "tesseract Documentation", [author], 1)]
-
 
 # -- Options for Texinfo output ----------------------------------------------
 
@@ -176,7 +167,6 @@ texinfo_documents = [
     ),
 ]
 
-
 # -- Options for Epub output -------------------------------------------------
 
 # Bibliographic Dublin Core info.
@@ -193,7 +183,6 @@ epub_title = project
 
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ["search.html"]
-
 
 # -- Extension configuration -------------------------------------------------
 

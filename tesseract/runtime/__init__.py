@@ -38,17 +38,17 @@ class TesseractRuntime(threading.Thread):
     """
 
     def __init__(
-        self,
-        expert_backends: Dict[str, ExpertBackend],
-        prefetch_batches=64,
-        sender_threads: int = 1,
-        device: torch.device = None,
+            self,
+            expert_backends: Dict[str, ExpertBackend],
+            prefetch_batches=64,
+            sender_threads: int = 1,
+            device: torch.device = None,
     ):
         super().__init__()
         self.expert_backends = expert_backends
         self.pools = tuple(
-            chain(*(expert.get_pools() for expert in expert_backends.values()))
-        )
+            chain(*(expert.get_pools()
+                    for expert in expert_backends.values())))
         self.device, self.prefetch_batches, self.sender_threads = (
             device,
             prefetch_batches,
@@ -71,12 +71,12 @@ class TesseractRuntime(threading.Thread):
             try:
                 self.ready.set()
                 for pool, batch_index, batch in BackgroundGenerator(
-                    self.iterate_minibatches_from_pools(), self.prefetch_batches
-                ):
+                        self.iterate_minibatches_from_pools(),
+                        self.prefetch_batches):
                     outputs = pool.process_func(*batch)
                     output_sender_pool.apply_async(
-                        pool.send_outputs_from_runtime, args=[batch_index, outputs]
-                    )
+                        pool.send_outputs_from_runtime,
+                        args=[batch_index, outputs])
                     progress.update(len(outputs[0]))
                     progress.desc = f"pool.uid={pool.uid} batch_size={len(outputs[0])}"
             finally:
@@ -98,7 +98,8 @@ class TesseractRuntime(threading.Thread):
         Chooses pool according to priority, then copies exposed batch and frees the buffer
         """
         with DefaultSelector() as selector:
-            selector.register(self.shutdown_recv, EVENT_READ, self.SHUTDOWN_TRIGGER)
+            selector.register(self.shutdown_recv, EVENT_READ,
+                              self.SHUTDOWN_TRIGGER)
             for pool in self.pools:
                 selector.register(pool.batch_receiver, EVENT_READ, pool)
 
@@ -112,6 +113,5 @@ class TesseractRuntime(threading.Thread):
                 pool = max(ready_objects, key=lambda pool: pool.priority)
 
                 batch_index, batch_tensors = pool.load_batch_to_runtime(
-                    timeout, self.device
-                )
+                    timeout, self.device)
                 yield pool, batch_index, batch_tensors
