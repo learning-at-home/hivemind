@@ -69,7 +69,7 @@ class TesseractNetwork(mp.Process):
         :param wait_timeout: if wait_timeout > 0, waits for the procedure to finish
         """
         done_event = mp.Event() if wait_timeout else None
-        self.pipe.send(('_declare_experts', [], dict(uids=uids, addr=addr, port=port, done_event=done_event)))
+        self.pipe.send(('_declare_experts', [], dict(uids=list(uids), addr=addr, port=port, done_event=done_event)))
         if done_event is not None:
             done_event.wait(wait_timeout)
 
