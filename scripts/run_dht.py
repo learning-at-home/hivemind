@@ -13,11 +13,11 @@ if __name__ == "__main__":
     initial_peers = eval(args.initial_peers)
     print("Parsed initial peers:", initial_peers)
 
-    network = tesseract.TesseractNetwork(*initial_peers, port=args.port or find_open_port(), start=False)
-    print(f"Running network node on port {network.port}")
+    network = tesseract.TesseractNetwork(*initial_peers, port=args.port or find_open_port())
 
     try:
         network.start()
+        print(f"Running network node on port {network.port}")
         network.join(timeout=args.lifetime_seconds)
     finally:
         network.shutdown()
