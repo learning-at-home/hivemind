@@ -68,7 +68,7 @@ if __name__ == "__main__":
         network, experts, addr=args.host, port=args.port or find_open_port(),
         conn_handler_processes=args.num_handlers, device=device)
     print(f"Running server at {server.addr}:{server.port}")
-    print(f"Active expert uids: {experts}")
+    print(f"Active expert uids: {list(experts.keys())} of type {args.expert_cls}")
     try:
         server.run()
     finally:
