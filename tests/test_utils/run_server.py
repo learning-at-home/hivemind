@@ -31,7 +31,7 @@ def background_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
     for i in range(num_experts):
         expert = torch.jit.script(name_to_block[expert_cls](hidden_dim))
         opt = torch.optim.SGD(expert.parameters(), 0.0) if no_optimizer else torch.optim.Adam(expert.parameters())
-        expert_uid = f'{expert_prefix}.{i + expert_offset}'
+        expert_uid = f'{expert_prefix}{i + expert_offset}'
         experts[expert_uid] = tesseract.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
                                                       args_schema=(tesseract.BatchTensorProto(hidden_dim),),
                                                       outputs_schema=tesseract.BatchTensorProto(hidden_dim),
