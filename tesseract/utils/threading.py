@@ -39,7 +39,7 @@ def run_and_await_k(jobs: List[callable], k: int,
     jobs = list(jobs)
     assert k <= len(jobs), f"Can't await {k} out of {len(jobs)} jobs."
     start_time = time.time()
-    future_to_ix = {run_in_background(job): i for i, job in jobs}
+    future_to_ix = {run_in_background(job): i for i, job in enumerate(jobs)}
     outputs = [None] * len(jobs)
     success_count = 0
 
