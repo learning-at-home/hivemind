@@ -1,2 +1,2 @@
-from .remote_moe import RemoteMixtureOfExperts
-from .remote_expert import RemoteExpert
+from .moe import RemoteMixtureOfExperts
+from .expert import RemoteExpert

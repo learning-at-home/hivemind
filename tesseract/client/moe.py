@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .remote_expert import RemoteExpert
+from .expert import RemoteExpert
 from ..utils import nested_map, check_numpy, run_in_background
 
 
