@@ -3,7 +3,7 @@ from threading import Thread
 
 
 def run_in_background(func: callable, *args, **kwargs) -> Future:
-    """ run f(*args, **kwargs) in background and return Future for its outputs """
+    """ run func(*args, **kwargs) in background and return Future for its outputs """
     future = Future()
 
     def _run():
