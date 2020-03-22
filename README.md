@@ -23,9 +23,11 @@ you can find it at https://github.com/mryab/learning-at-home.
 
 ## How do I run it?
 
-Currently, there is no way to do it easily. There are some tests (you can check [`./tests/benchmark_throughput.py`](./tests/benchmark_throughput.py)
- or look into CI logs) and we want to expand them. If you want to
-do something complex with it, please contact us by opening an issue (less preferred: [telegram](https://t.me/justheuristic)).
+Currently, there is no way to do it easily. There are some tests (you can check
+[`./tests/benchmark_throughput.py`](./tests/benchmark_throughput.py) or look
+into CI logs) and we want to expand them. If you want to do something complex
+with it, please contact us by opening an issue (less preferred:
+[telegram](https://t.me/justheuristic)).
 
 ## `tesseract` quick tour
 
@@ -33,9 +35,9 @@ do something complex with it, please contact us by opening an issue (less prefer
 
 - **`RemoteExpert`**(`tesseract/client/remote_expert.py`) behaves like a pytorch
   module with autograd support but actually sends request to a remote runtime.
-- **`RemoteMixtureOfExperts`**(`tesseract/client/remote_moe.py`) finds best experts
-  for a given input and either returns them as `RemoteExpert` or applies them
-  right away.
+- **`RemoteMixtureOfExperts`**(`tesseract/client/remote_moe.py`) finds best
+  experts for a given input and either returns them as `RemoteExpert` or applies
+  them right away.
 
 **Runtime process:**
 
@@ -58,7 +60,8 @@ do something complex with it, please contact us by opening an issue (less prefer
   and cannot be used without special setup.
 
 **Runtime**:
-* You can achieve 4x less network load by passing quantized uint8 activations across experts.
-    Implement your own quantization or wait for tesseract v0.8.
-* Currently runtime can form batches that exceed maximal batch_size by task_size - 1. 
-    We will fix that in the nearest patch.
+
+- You can achieve 4x less network load by passing quantized uint8 activations
+  across experts. Implement your own quantization or wait for tesseract v0.8.
+- Currently runtime can form batches that exceed maximal batch_size by
+  task_size - 1. We will fix that in the nearest patch.
