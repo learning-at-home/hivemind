@@ -2,12 +2,16 @@ import asyncio
 import datetime
 import multiprocessing as mp
 import warnings
-from typing import Tuple, List, Optional
+from typing import List
+from typing import Optional
+from typing import Tuple
 
 from kademlia.network import Server
 
 from tesseract.client import RemoteExpert
-from tesseract.utils import run_forever, SharedFuture, PickleSerializer
+from tesseract.utils import PickleSerializer
+from tesseract.utils import run_forever
+from tesseract.utils import SharedFuture
 
 
 class TesseractNetwork(mp.Process):

@@ -1,14 +1,19 @@
 import multiprocessing as mp
 import multiprocessing.pool
 from concurrent.futures import as_completed
-from typing import Tuple, List, Dict, Any
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 
+from ..utils import check_numpy
+from ..utils import nested_map
+from ..utils import run_in_background
 from .remote_expert import RemoteExpert
-from ..utils import nested_map, check_numpy, run_in_background
 
 
 class RemoteMixtureOfExperts(nn.Module):

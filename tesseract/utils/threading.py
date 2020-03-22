@@ -1,7 +1,10 @@
 import time
-from concurrent.futures import Future, TimeoutError
+from concurrent.futures import Future
+from concurrent.futures import TimeoutError
 from itertools import count
-from threading import Thread, Event, Lock
+from threading import Event
+from threading import Lock
+from threading import Thread
 
 
 def run_in_background(func: callable, *args, **kwargs) -> Future:
