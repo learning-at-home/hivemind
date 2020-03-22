@@ -4,7 +4,7 @@ from itertools import count
 from threading import Thread, Event, Lock
 
 
-def run_in_background(func: callable, *args, **kwargs):
+def run_in_background(func: callable, *args, **kwargs) -> Future:
     """ run f(*args, **kwargs) in background and return Future for its outputs """
     future = Future()
 

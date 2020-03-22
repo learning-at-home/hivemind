@@ -33,7 +33,7 @@ do something complex with it, please contact us by opening an issue (less prefer
 
 - **`RemoteExpert`**(`tesseract/client/remote_expert.py`) behaves like a pytorch
   module with autograd support but actually sends request to a remote runtime.
-- **`GatingFunction`**(`tesseract/client/gating_function.py`) finds best experts
+- **`RemoteMixtureOfExperts`**(`tesseract/client/remote_moe.py`) finds best experts
   for a given input and either returns them as `RemoteExpert` or applies them
   right away.
 
