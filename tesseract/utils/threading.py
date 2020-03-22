@@ -20,7 +20,9 @@ def run_in_background(func: callable, *args, **kwargs) -> Future:
 
 def run_forever(func: callable, *args, **kwargs):
     """ A function that runs a :func: in background forever. Returns a future that catches exceptions """
+
     def repeat():
         while True:
             func(*args, **kwargs)
+
     return run_in_background(repeat)
