@@ -1,7 +1,6 @@
 import multiprocessing as mp
 import multiprocessing.pool
-from concurrent.futures import Future, as_completed
-from functools import partial
+from concurrent.futures import as_completed
 from typing import Tuple, List, Dict, Any
 
 import numpy as np

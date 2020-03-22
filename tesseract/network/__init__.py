@@ -7,7 +7,7 @@ from typing import Tuple, List, Optional
 from kademlia.network import Server
 
 from tesseract.client import RemoteExpert
-from tesseract.utils import run_in_background, repeated, SharedFuture, PickleSerializer
+from tesseract.utils import run_forever, SharedFuture, PickleSerializer
 
 
 class TesseractNetwork(mp.Process):
@@ -28,7 +28,7 @@ class TesseractNetwork(mp.Process):
         asyncio.set_event_loop(loop)
         loop.run_until_complete(self.server.listen(self.port))
         loop.run_until_complete(self.server.bootstrap(self.initial_peers))
-        run_in_background(repeated(loop.run_forever))
+        run_forever(loop.run_forever)
 
         while True:
             method, args, kwargs = self._pipe.recv()
