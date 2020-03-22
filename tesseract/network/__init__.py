@@ -12,7 +12,8 @@ from tesseract.utils import run_forever, SharedFuture, PickleSerializer
 
 class TesseractNetwork(mp.Process):
     UID_DELIMETER = '.'  # splits expert uids over this delimeter
-    HEARTBEAT_EXPIRATION = 120  # expert is inactive iff it fails to post timestamp for *this many seconds*
+    # expert is inactive iff it fails to post timestamp for *this many seconds*
+    HEARTBEAT_EXPIRATION = 120
     make_key = "{}::{}".format
 
     def __init__(self, *initial_peers: Tuple[str, int], port=8081, start=False):
@@ -39,12 +40,14 @@ class TesseractNetwork(mp.Process):
         if self.is_alive():
             self.terminate()
         else:
-            warnings.warn("Network shutdown has no effect: network process is already not alive")
+            warnings.warn(
+                "Network shutdown has no effect: network process is already not alive")
 
     def get_experts(self, uids: List[str], heartbeat_expiration=HEARTBEAT_EXPIRATION) -> List[Optional[RemoteExpert]]:
         """ Find experts across DHT using their ids; Return a list of [RemoteExpert if found else None]"""
         future, _future = SharedFuture.make_pair()
-        self.pipe.send(('_get_experts', [], dict(uids=uids, heartbeat_expiration=heartbeat_expiration, future=_future)))
+        self.pipe.send(('_get_experts', [], dict(
+            uids=uids, heartbeat_expiration=heartbeat_expiration, future=_future)))
         return future.result()
 
     def _get_experts(self, uids: List[str], heartbeat_expiration: float, future: SharedFuture):
@@ -71,7 +74,8 @@ class TesseractNetwork(mp.Process):
         :param wait_timeout: if wait_timeout > 0, waits for the procedure to finish
         """
         done_event = mp.Event() if wait_timeout else None
-        self.pipe.send(('_declare_experts', [], dict(uids=list(uids), addr=addr, port=port, done_event=done_event)))
+        self.pipe.send(('_declare_experts', [], dict(
+            uids=list(uids), addr=addr, port=port, done_event=done_event)))
         if done_event is not None:
             done_event.wait(wait_timeout)
 
@@ -84,12 +88,15 @@ class TesseractNetwork(mp.Process):
         unique_prefixes = set()
 
         for uid in uids:
-            asyncio.run_coroutine_threadsafe(self.server.set(self.make_key('expert', uid), expert_metadata), loop)
+            asyncio.run_coroutine_threadsafe(self.server.set(
+                self.make_key('expert', uid), expert_metadata), loop)
             uid_parts = uid.split(self.UID_DELIMETER)
-            unique_prefixes.update([self.UID_DELIMETER.join(uid_parts[:i + 1]) for i in range(len(uid_parts))])
+            unique_prefixes.update([self.UID_DELIMETER.join(
+                uid_parts[:i + 1]) for i in range(len(uid_parts))])
 
         for prefix in unique_prefixes:
-            asyncio.run_coroutine_threadsafe(self.server.set(self.make_key('prefix', prefix), prefix_metadata), loop)
+            asyncio.run_coroutine_threadsafe(self.server.set(
+                self.make_key('prefix', prefix), prefix_metadata), loop)
 
         if done_event is not None:
             done_event.set()
