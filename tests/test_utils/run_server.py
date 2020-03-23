@@ -51,6 +51,7 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
     return server
 
 
+@contextmanager
 def background_server(*args, verbose=True, **kwargs):
     """ Runs server in a background process and returns a reference to it. """
     try:
