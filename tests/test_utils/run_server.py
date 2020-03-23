@@ -11,7 +11,7 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
                       no_network=False, initial_peers=(), network_port=None, verbose=False, start=True, **kwargs
                       ) -> tesseract.TesseractServer:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
-    if verbose and len(kwargs) == 0:
+    if verbose and len(kwargs) != 0:
         print("Ignored kwargs:", kwargs)
     assert expert_cls in name_to_block
     num_handlers = num_handlers if num_handlers is not None else num_experts * 8
@@ -64,7 +64,9 @@ def background_server(*args, verbose=True, **kwargs):
     try:
         runner = mp.Process(target=server_runner)
         runner.start()
+        print('!!waiting')
         server = recv_server.recv()
+        print('!!received')
         yield server
         runner.join()
     finally:
