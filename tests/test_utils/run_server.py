@@ -46,7 +46,7 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
     if start:
         server.run_in_background(await_ready=True)
         if verbose:
-            print(f"Running server at {server.addr}:{server.port}")
+            print(f"Server started at {server.addr}:{server.port}")
             print(f"Active experts of type {expert_cls}: {list(experts.keys())}")
     return server
 
@@ -59,6 +59,9 @@ def background_server(*args, verbose=True, **kwargs):
         runner = mp.Process(target=lambda: (server.start(), server.join()))
         runner.start()
         server.ready.wait()
+        if verbose:
+            print(f"Running server at {server.addr}:{server.port}")
+
         yield server
         runner.join()
     finally:
