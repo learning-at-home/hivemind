@@ -47,22 +47,24 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
         server.run_in_background(await_ready=True)
         if verbose:
             print(f"Server started at {server.addr}:{server.port}")
-            print(f"Active experts of type {expert_cls}: {list(experts.keys())}")
+            print(f"Got {num_experts} active experts of type {expert_cls}: {list(experts.keys())}")
     return server
 
 
 @contextmanager
 def background_server(*args, verbose=True, **kwargs):
     """ Runs server in a background process and returns a reference to it. """
+    recv_server, send_server = mp.Pipe(duplex=False)
+
+    def server_runner():
+        server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
+        send_server.send(server)
+        server.join()
+
     try:
-        server = make_dummy_server(*args, verbose=verbose, start=False, **kwargs)
-
-        runner = mp.Process(target=lambda: (server.start(), server.join()))
+        runner = mp.Process(target=server_runner)
         runner.start()
-        server.ready.wait()
-        if verbose:
-            print(f"Running server at {server.addr}:{server.port}")
-
+        server = recv_server.recv()
         yield server
         runner.join()
     finally:
