@@ -7,7 +7,7 @@ import multiprocessing as mp
 
 
 def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024, num_handlers=None,
-                      expert_prefix='expert.', expert_offset=0, max_batch_size=16384, device=None, no_optimizer=False,
+                      expert_prefix='expert.', expert_offset=0, max_batch_size=16384, device='cpu', no_optimizer=False,
                       no_network=False, initial_peers=(), network_port=None, verbose=False, start=True, **kwargs
                       ) -> tesseract.TesseractServer:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
@@ -58,6 +58,7 @@ def background_server(*args, verbose=True, **kwargs):
 
     def server_runner():
         server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
+        print('!!abouttosend')
         send_server.send(server)
         server.join()
 
