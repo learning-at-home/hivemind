@@ -1,3 +1,5 @@
+import subprocess
+
 import torch
 
 import tesseract
@@ -54,26 +56,28 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
 @contextmanager
 def background_server(*args, verbose=True, **kwargs):
     """ Runs server in a background process and returns a reference to it. """
-    recv_server, send_server = mp.Pipe(duplex=False)
+    recv_addr, send_addr = mp.Pipe(duplex=True)
+    trigger_shutdown = mp.Event()
 
     def server_runner():
-        server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
-        print('!!abouttosend')
-        send_server.send(server)
-        server.join()
+        try:
+            server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
+            send_addr.send((server.addr, server.port))
+            trigger_shutdown.wait()
+        finally:
+            if verbose:
+                print("Shutting down server...")
+            trigger_shutdown.set()  # if server failed internally, set the shutdown trigger anyway
+            server.shutdown()
+            if verbose:
+                print("Server shut down successfully.")
 
     try:
         runner = mp.Process(target=server_runner)
         runner.start()
-        print('!!waiting')
-        server = recv_server.recv()
-        print('!!received')
-        yield server
-        runner.join()
+        yield recv_addr.recv()  # yield tuple(hostname, port)
+
     finally:
-        if verbose:
-            print("Shutting down server...")
-        server.shutdown()
-        runner.terminate()
-        if verbose:
-            print("Server shut down successfully.")
+        trigger_shutdown.set()
+        runner.join()
+
