@@ -111,9 +111,11 @@ class TesseractServer(threading.Thread):
         self.ready.clear()
         for process in self.conn_handlers:
             process.terminate()
-        self.runtime.shutdown()
+
         if self.network is not None:
             self.network.shutdown()
+
+        self.runtime.shutdown()
 
 
 def socket_loop(sock, experts):
