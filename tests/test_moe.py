@@ -12,7 +12,7 @@ def test_remote_module_call():
     timeout_total = None
     backward_timeout = None
     rtol = 1e-3
-    atol = 1e-5
+    atol = 1e-6
 
     xx = torch.randn(32, 1024, requires_grad=True)
     logits = torch.randn(3, requires_grad=True)
