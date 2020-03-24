@@ -198,10 +198,10 @@ class _RemoteMoECall(torch.autograd.Function):
         alive_ix = torch.as_tensor(alive_ix, device=expert_logits.device)
         alive_expert_probs = torch.softmax(expert_logits[alive_ix], dim=0)
 
-        stacked_alive_outputs = tuple(map(torch.stack, zip(*alive_outputs)))
+        stacked_alive_outputs = tuple(map(torch.stack, list(zip(*alive_outputs))))
         flat_average_outputs = tuple(dot_along_first_axis(alive_expert_probs, stacked_out)
                                      for stacked_out in stacked_alive_outputs)
-        print(flat_average_outputs)
+        print('!' * 50, [x.shape for x in flat_average_outputs])
 
         # 3. save individual outputs for backward pass
         ctx.save_for_backward(expert_logits, alive_ix, alive_expert_probs, *stacked_alive_outputs)
