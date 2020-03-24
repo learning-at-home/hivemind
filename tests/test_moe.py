@@ -27,6 +27,7 @@ def test_remote_module_call():
 
         # reference outputs: call all experts manually and average their outputs with softmax probabilities
         probs = torch.softmax(logits, 0)
+        print(f'ref {probs=}')
         outs = [expert(xx) for expert in experts[:3]]
         manual_output = sum(p * x for p, x in zip(probs, outs))
         grad_xx_manual, = torch.autograd.grad(torch.sum(random_proj * manual_output), xx, retain_graph=True)
