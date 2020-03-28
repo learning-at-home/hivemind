@@ -1,5 +1,7 @@
+import resource
 from contextlib import contextmanager
 import multiprocessing as mp
+import argparse
 
 import torch
 import tesseract
@@ -7,7 +9,7 @@ from .layers import name_to_block
 
 
 def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024, num_handlers=None,
-                      expert_prefix='expert.', expert_offset=0, max_batch_size=16384, device='cpu', no_optimizer=False,
+                      expert_prefix='expert.', expert_offset=0, max_batch_size=16384, device=None, no_optimizer=False,
                       no_network=False, initial_peers=(), network_port=None, verbose=True, start=True, **kwargs
                       ) -> tesseract.TesseractServer:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
@@ -80,5 +82,38 @@ def background_server(*args, verbose=True, **kwargs):
 
 
 if __name__ == '__main__':
-    with background_server() as (host, port):
-        mp.Event().wait()  # aka fall asleep forever
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', type=str, default='0.0.0.0', required=False)
+    parser.add_argument('--port', type=int, default=None, required=False)
+    parser.add_argument('--num_experts', type=int, default=1, required=False)
+    parser.add_argument('--expert_cls', type=str, default='ffn', required=False)
+    parser.add_argument('--hidden_dim', type=int, default=1024, required=False)
+    parser.add_argument('--num_handlers', type=int, default=None, required=False)
+    parser.add_argument('--expert_prefix', type=str, default='expert.', required=False)
+    parser.add_argument('--expert_offset', type=int, default=0, required=False)
+    parser.add_argument('--max_batch_size', type=int, default=16384, required=False)
+    parser.add_argument('--device', type=str, default=None, required=False)
+    parser.add_argument('--no_optimizer', action='store_true')
+    parser.add_argument('--no_network', action='store_true')
+    parser.add_argument('--initial_peers', type=str, default="[]", required=False)
+    parser.add_argument('--network_port', type=int, default=None, required=False)
+
+    parser.add_argument('--increase_file_limit', action='store_true')
+
+    args = vars(parser.parse_args())
+
+    if args.pop('increase_file_limit'):
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        try:
+            print("Setting open file limit to soft={}, hard={}".format(max(soft, 2 ** 15), max(hard, 2 ** 15)))
+            resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 2 ** 15), max(hard, 2 ** 15)))
+        except:
+            print("Could not increase open file limit, currently at soft={}, hard={}".format(soft, hard))
+
+    args['initial_peers'] = eval(args['initial_peers'])
+
+    try:
+        server = make_dummy_server(**args, start=False, verbose=True)
+        server.join()
+    finally:
+        server.shutdown()
