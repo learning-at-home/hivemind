@@ -113,7 +113,7 @@ if __name__ == '__main__':
     args['initial_peers'] = eval(args['initial_peers'])
 
     try:
-        server = make_dummy_server(**args, start=False, verbose=True)
+        server = make_dummy_server(**args, start=True, verbose=True)
         server.join()
     finally:
         server.shutdown()
