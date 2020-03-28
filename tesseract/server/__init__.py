@@ -52,7 +52,7 @@ class TesseractServer(threading.Thread):
         """
         if self.network:
             if not self.network.is_alive():
-                self.network.start()
+                self.network.run_in_background(await_ready=True)
 
             network_thread = NetworkHandlerThread(experts=self.experts, network=self.network,
                                                   addr=self.addr, port=self.port, update_period=self.update_period)

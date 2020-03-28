@@ -19,9 +19,10 @@ class TesseractNetwork(mp.Process):
         super().__init__()
         self.port, self.initial_peers = port, initial_peers
         self._pipe, self.pipe = mp.Pipe(duplex=False)
+        self.ready = mp.Event()
         self.server = Server()
         if start:
-            self.start()
+            self.run_in_background(await_ready=True)
 
     def run(self) -> None:
         loop = asyncio.new_event_loop()
@@ -29,10 +30,20 @@ class TesseractNetwork(mp.Process):
         loop.run_until_complete(self.server.listen(self.port))
         loop.run_until_complete(self.server.bootstrap(self.initial_peers))
         run_forever(loop.run_forever)
+        self.ready.set()
 
         while True:
             method, args, kwargs = self._pipe.recv()
             getattr(self, method)(*args, **kwargs)
+
+    def run_in_background(self, await_ready=True, timeout=None):
+        """
+        Starts TesseractNetwork in a background process. if await_ready, this method will wait until background network
+        is ready to process incoming requests or for :timeout: seconds max.
+        """
+        self.start()
+        if await_ready and not self.ready.wait(timeout=timeout):
+            raise TimeoutError("TesseractServer didn't notify .ready in {timeout} seconds")
 
     def shutdown(self) -> None:
         """ Shuts down the network process """
