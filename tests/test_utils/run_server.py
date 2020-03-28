@@ -1,16 +1,14 @@
-import subprocess
-
-import torch
-
-import tesseract
-from .layers import name_to_block
 from contextlib import contextmanager
 import multiprocessing as mp
+
+import torch
+import tesseract
+from .layers import name_to_block
 
 
 def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024, num_handlers=None,
                       expert_prefix='expert.', expert_offset=0, max_batch_size=16384, device='cpu', no_optimizer=False,
-                      no_network=False, initial_peers=(), network_port=None, verbose=False, start=True, **kwargs
+                      no_network=False, initial_peers=(), network_port=None, verbose=True, start=True, **kwargs
                       ) -> tesseract.TesseractServer:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
     if verbose and len(kwargs) != 0:
@@ -81,3 +79,7 @@ def background_server(*args, verbose=True, **kwargs):
         trigger_shutdown.set()
         runner.join()
 
+
+if __name__ == '__main__':
+    with background_server() as (host, port):
+        mp.Event().wait()  # aka fall asleep forever
