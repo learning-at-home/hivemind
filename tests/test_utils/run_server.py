@@ -10,8 +10,8 @@ from .layers import name_to_block
 
 def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024, num_handlers=None,
                       expert_prefix='expert.', expert_offset=0, max_batch_size=16384, device=None, no_optimizer=False,
-                      no_network=False, initial_peers=(), network_port=None, verbose=True, start=True, **kwargs
-                      ) -> tesseract.TesseractServer:
+                      no_network=False, initial_peers=(), network_port=None, root_port=None, verbose=True, start=True,
+                      **kwargs) -> tesseract.TesseractServer:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
     if verbose and len(kwargs) != 0:
         print("Ignored kwargs:", kwargs)
@@ -25,10 +25,12 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
         if not len(initial_peers):
             print("No initial peers provided. Starting additional network as an initial peer.")
             network = tesseract.TesseractNetwork(
-                *initial_peers, port=network_port or tesseract.find_open_port(), start=True)
+                *initial_peers, port=root_port or tesseract.find_open_port(), start=True)
             print(f"Running DHT root on port {network.port}")
         else:
             print("Bootstrapping dht with peers:", initial_peers)
+            if root_port is not None:
+                print(f"Warning: root_port={root_port} will not be used since we already have some peers.")
 
         network = tesseract.TesseractNetwork(
             *initial_peers, port=network_port or tesseract.find_open_port(), start=True)
@@ -104,6 +106,7 @@ if __name__ == '__main__':
     parser.add_argument('--no_network', action='store_true')
     parser.add_argument('--initial_peers', type=str, default="[]", required=False)
     parser.add_argument('--network_port', type=int, default=None, required=False)
+    parser.add_argument('--root_port', type=int, default=None, required=False)
 
     parser.add_argument('--increase_file_limit', action='store_true')
 
