@@ -20,9 +20,8 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
     # initialize network
     network = None
     if not no_network:
-        initial_peers = eval(initial_peers)
-        network = tesseract.TesseractNetwork(*initial_peers, port=network_port or tesseract.find_open_port(),
-                                             start=True)
+        network = tesseract.TesseractNetwork(
+            *initial_peers, port=network_port or tesseract.find_open_port(), start=True)
         if verbose:
             print("Parsed initial peers:", initial_peers)
             print(f"Running network node on port {network.port}")
