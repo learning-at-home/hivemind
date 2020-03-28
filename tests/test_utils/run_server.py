@@ -24,9 +24,10 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
     if not no_network:
         if not len(initial_peers):
             print("No initial peers provided. Starting additional network as an initial peer.")
-            network = tesseract.TesseractNetwork(
+            dht_root = tesseract.TesseractNetwork(
                 *initial_peers, port=root_port or tesseract.find_open_port(), start=True)
-            print(f"Running DHT root on port {network.port}")
+            print(f"Running DHT root on port {dht_root.port}")
+            initial_peers = (('localhost', dht_root.port))
         else:
             print("Bootstrapping dht with peers:", initial_peers)
             if root_port is not None:
