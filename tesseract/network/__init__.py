@@ -15,12 +15,13 @@ class TesseractNetwork(mp.Process):
     HEARTBEAT_EXPIRATION = 120  # expert is inactive iff it fails to post timestamp for *this many seconds*
     make_key = "{}::{}".format
 
-    def __init__(self, *initial_peers: Tuple[str, int], port=8081, start=False):
+    def __init__(self, *initial_peers: Tuple[str, int], port=8081, start=False, daemon=True):
         super().__init__()
         self.port, self.initial_peers = port, initial_peers
         self._pipe, self.pipe = mp.Pipe(duplex=False)
         self.ready = mp.Event()
         self.server = Server()
+        self.daemon = daemon
         if start:
             self.run_in_background(await_ready=True)
 
