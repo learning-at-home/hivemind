@@ -1,21 +1,15 @@
-from concurrent.futures import Future, as_completed
+import os
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 import time
-from threading import Thread
 from typing import Optional, List
+
+GLOBAL_EXECUTOR = ThreadPoolExecutor(max_workers=os.environ.get("TESSERACT_THREADS", float('inf')))
 
 
 def run_in_background(func: callable, *args, **kwargs) -> Future:
     """ run func(*args, **kwargs) in background and return Future for its outputs """
-    future = Future()
 
-    def _run():
-        try:
-            future.set_result(func(*args, **kwargs))
-        except BaseException as e:
-            future.set_exception(e)
-
-    Thread(target=_run).start()
-    return future
+    return GLOBAL_EXECUTOR.submit(func, *args, **kwargs)
 
 
 def run_forever(func: callable, *args, **kwargs):
