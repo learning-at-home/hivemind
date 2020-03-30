@@ -48,10 +48,7 @@ class RemoteMixtureOfExperts(nn.Module):
         self.allow_broadcasting = allow_broadcasting
 
         self.proj = nn.Linear(in_features, sum(grid_size))  # jointly predict logits for all grid dimensions
-
-        # grab some expert to set ensemble output shape
-        dummy_scores = self.proj(torch.randn(1, self.proj.in_features)).split_with_sizes(grid_size, dim=-1)
-        self.output_schema = self.beam_search(dummy_scores, k_best=1)[0][0].info['outputs_schema']
+        self._outputs_schema = None
 
     def forward(self, input: torch.Tensor, *args: torch.Tensor, **kwargs: torch.Tensor):
         """
@@ -142,12 +139,15 @@ class RemoteMixtureOfExperts(nn.Module):
 
         unique_experts = self.network.get_experts(list(set(
             uid for row in beam for uid in row if uid != self.expert_padding)))
+        if self._outputs_schema is None:
+            self._output_schema = next(iter(unique_experts)).info['output_schema']
         unique_experts_by_uid = {expert.uid: expert for expert in unique_experts if expert != self.expert_padding}
 
         return [[unique_experts_by_uid[uid] for uid in row if uid in unique_experts_by_uid] for row in beam]
 
-    def compute_expert_scores(self, grid_scores: List[torch.Tensor],
-                              batch_experts: List[List[RemoteExpert]]) -> List[Dict[RemoteExpert, torch.Tensor]]:
+    def compute_expert_scores(
+            self, grid_scores: List[torch.Tensor], batch_experts: List[List[RemoteExpert]]) -> torch.Tensor:
+        """ TODO docstring here """
         expert_counts = list(map(len, batch_experts))
         batch_size = len(batch_experts)
         max_num_experts = max(expert_counts)
@@ -172,6 +172,14 @@ class RemoteMixtureOfExperts(nn.Module):
         scores = torch.full((batch_size, max_num_experts), fill_value=-float('inf'), device=grid_scores[0].device)
         scores[flat_batch_indices, flat_local_indices] = flat_scores  # backprop-able w.r.t. flat_scores
         return scores
+
+    @property
+    def output_schema(self):
+        if self._outputs_schema is None:
+            # grab some expert to set ensemble output shape
+            dummy_scores = self.proj(torch.randn(1, self.proj.in_features)).split_with_sizes(grid_size, dim=-1)
+            self._outputs_schema = self.beam_search(dummy_scores, k_best=1)[0][0].info['outputs_schema']
+        return self._outputs_schema
 
 
 class _RemoteMoECall(torch.autograd.Function):
