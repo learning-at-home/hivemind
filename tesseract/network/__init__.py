@@ -34,7 +34,10 @@ class TesseractNetwork(mp.Process):
         self.ready.set()
 
         while True:
-            method, args, kwargs = self._pipe.recv()
+            try:
+                method, args, kwargs = self._pipe.recv()
+            except:
+                print('>>', self.pid, flush=True)
             getattr(self, method)(*args, **kwargs)
 
     def run_in_background(self, await_ready=True, timeout=None):
