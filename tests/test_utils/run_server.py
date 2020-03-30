@@ -71,7 +71,8 @@ def background_server(*args, verbose=True, **kwargs):
     def server_runner():
         try:
             server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
-            send_addr.send((server.addr, server.port, server.network.port))
+            network_port = server.network.port if server.network is not None else None
+            send_addr.send((server.addr, server.port, network_port))
             trigger_shutdown.wait()
         finally:
             if verbose:
