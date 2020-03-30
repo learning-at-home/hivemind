@@ -26,7 +26,6 @@ class TesseractNetwork(mp.Process):
             self.run_in_background(await_ready=True)
 
     def run(self) -> None:
-        print('started', self.pid)
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(self.server.listen(self.port))
@@ -35,10 +34,7 @@ class TesseractNetwork(mp.Process):
         self.ready.set()
 
         while True:
-            try:
-                method, args, kwargs = self._pipe.recv()
-            except:
-                print('>>', self.pid, flush=True)
+            method, args, kwargs = self._pipe.recv()
             getattr(self, method)(*args, **kwargs)
 
     def run_in_background(self, await_ready=True, timeout=None):
@@ -53,7 +49,6 @@ class TesseractNetwork(mp.Process):
     def shutdown(self) -> None:
         """ Shuts down the network process """
         if self.is_alive():
-            print('terminated', self.pid)
             self.kill()
         else:
             warnings.warn("Network shutdown has no effect: network process is already not alive")
