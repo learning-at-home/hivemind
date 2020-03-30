@@ -84,7 +84,7 @@ class RemoteMixtureOfExperts(nn.Module):
             for i in range(len(input))
         )
 
-        averaged_outputs_flat = map_with_parallel_backward(_RemoteMoECall, *batch_jobs_args)
+        averaged_outputs_flat = map(torch.cat, map_with_parallel_backward(_RemoteMoECall, *batch_jobs_args)
         return nested_pack(averaged_outputs_flat, self.outputs_schema)
 
     def beam_search(self, grid_scores: List[torch.Tensor], k_best: int, **kwargs) -> List[List[RemoteExpert]]:
