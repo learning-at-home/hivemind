@@ -44,7 +44,7 @@ def test_remote_module_call():
 
 
 def test_compute_expert_scores():
-    with background_server() as (server_addr, server_port, network_port):
+    with background_server(device='cpu') as (server_addr, server_port, network_port):
         dht = tesseract.TesseractNetwork(('localhost', network_port), port=tesseract.find_open_port(), start=True)
         moe = tesseract.client.moe.RemoteMixtureOfExperts(
             network=dht, in_features=1024, grid_size=[40], k_best=4, k_min=1, timeout_after_k_min=1,
