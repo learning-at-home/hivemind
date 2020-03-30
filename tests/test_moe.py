@@ -19,7 +19,7 @@ def test_remote_module_call():
     random_proj = torch.randn_like(xx)
 
     with background_server(num_experts=num_experts,  device='cpu',
-                           no_optimizer=True, no_network=True) as (localhost, server_port):
+                           no_optimizer=True, no_network=True) as (localhost, server_port, network_port):
         experts = [tesseract.RemoteExpert(uid=f'expert.{i}', port=server_port) for i in range(num_experts)]
         moe_output, = tesseract.client.moe._RemoteMoECall.apply(
             logits, experts[:len(logits)], k_min, timeout_after_k_min, backward_k_min, timeout_total, backward_timeout,
