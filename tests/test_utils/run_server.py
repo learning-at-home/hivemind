@@ -9,7 +9,7 @@ from .layers import name_to_block
 
 
 def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024, num_handlers=None,
-                      expert_prefix='expert.', expert_offset=0, max_batch_size=16384, device=None, no_optimizer=False,
+                      expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None, no_optimizer=False,
                       no_network=False, initial_peers=(), network_port=None, root_port=None, verbose=True, start=False,
                       **kwargs) -> tesseract.TesseractServer:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
@@ -43,7 +43,7 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
     for i in range(num_experts):
         expert = torch.jit.script(name_to_block[expert_cls](hidden_dim))
         opt = torch.optim.SGD(expert.parameters(), 0.0) if no_optimizer else torch.optim.Adam(expert.parameters())
-        expert_uid = f'{expert_prefix}{i + expert_offset}'
+        expert_uid = f'{expert_prefix}{network.UID_DELIMETER}{i + expert_offset}'
         experts[expert_uid] = tesseract.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
                                                       args_schema=(tesseract.BatchTensorProto(hidden_dim),),
                                                       outputs_schema=tesseract.BatchTensorProto(hidden_dim),
@@ -99,7 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('--expert_cls', type=str, default='ffn', required=False)
     parser.add_argument('--hidden_dim', type=int, default=1024, required=False)
     parser.add_argument('--num_handlers', type=int, default=None, required=False)
-    parser.add_argument('--expert_prefix', type=str, default='expert.', required=False)
+    parser.add_argument('--expert_prefix', type=str, default='expert', required=False)
     parser.add_argument('--expert_offset', type=int, default=0, required=False)
     parser.add_argument('--max_batch_size', type=int, default=16384, required=False)
     parser.add_argument('--device', type=str, default=None, required=False)
