@@ -79,7 +79,7 @@ class _ParallelApplyFunction(torch.autograd.Function):
 
         futures = [run_in_background(run_isolated_forward, func, *args) for args in args_per_call]
 
-        outputs, contexts = zip(*[future.result() for future in futures])
+        contexts, outputs = zip(*[future.result() for future in futures])
         output_strides = np.cumsum([0] + list(map(len, outputs)))
         ctx._inner_func = func
         ctx._call_contexts = contexts
