@@ -89,6 +89,7 @@ def background_server(*args, verbose=True, **kwargs):
 
     finally:
         trigger_shutdown.set()
+        runner.terminate()
         runner.join()
 
 
