@@ -48,6 +48,7 @@ class TesseractNetwork(mp.Process):
 
     def shutdown(self) -> None:
         """ Shuts down the network process """
+        print('!shutdown called', self.is_alive(), flush=True)
         if self.is_alive():
             self.terminate()
         else:
