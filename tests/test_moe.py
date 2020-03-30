@@ -63,7 +63,6 @@ def test_compute_expert_scores():
 
         for b in range(len(ii)):
             for e in range(len(ii[b])):
-                print(end='.')
                 assert torch.allclose(logits[b, e], gx[b, ii[b][e]] + gy[b, jj[b][e]]), "compute_expert_scores returned incorrect score"
 
         dht.shutdown()
