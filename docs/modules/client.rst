@@ -14,6 +14,6 @@
 .. autoclass:: RemoteExpert
    :members: forward
 
-.. autoclass:: GatingFunction
+.. autoclass:: RemoteMixtureOfExperts
    :members:
    :member-order: bysource

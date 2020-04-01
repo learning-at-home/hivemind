@@ -7,7 +7,7 @@ from typing import Tuple, List, Optional
 from kademlia.network import Server
 
 from tesseract.client import RemoteExpert
-from tesseract.utils import run_in_background, repeated, SharedFuture, PickleSerializer
+from tesseract.utils import run_forever, SharedFuture, PickleSerializer
 
 
 class TesseractNetwork(mp.Process):
@@ -15,29 +15,41 @@ class TesseractNetwork(mp.Process):
     HEARTBEAT_EXPIRATION = 120  # expert is inactive iff it fails to post timestamp for *this many seconds*
     make_key = "{}::{}".format
 
-    def __init__(self, *initial_peers: Tuple[str, int], port=8081, start=False):
+    def __init__(self, *initial_peers: Tuple[str, int], port=8081, start=False, daemon=True):
         super().__init__()
         self.port, self.initial_peers = port, initial_peers
         self._pipe, self.pipe = mp.Pipe(duplex=False)
+        self.ready = mp.Event()
         self.server = Server()
+        self.daemon = daemon
         if start:
-            self.start()
+            self.run_in_background(await_ready=True)
 
     def run(self) -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(self.server.listen(self.port))
         loop.run_until_complete(self.server.bootstrap(self.initial_peers))
-        run_in_background(repeated(loop.run_forever))
+        run_forever(loop.run_forever)
+        self.ready.set()
 
         while True:
             method, args, kwargs = self._pipe.recv()
             getattr(self, method)(*args, **kwargs)
 
+    def run_in_background(self, await_ready=True, timeout=None):
+        """
+        Starts TesseractNetwork in a background process. if await_ready, this method will wait until background network
+        is ready to process incoming requests or for :timeout: seconds max.
+        """
+        self.start()
+        if await_ready and not self.ready.wait(timeout=timeout):
+            raise TimeoutError("TesseractServer didn't notify .ready in {timeout} seconds")
+
     def shutdown(self) -> None:
         """ Shuts down the network process """
         if self.is_alive():
-            self.terminate()
+            self.kill()
         else:
             warnings.warn("Network shutdown has no effect: network process is already not alive")
 
