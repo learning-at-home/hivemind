@@ -52,3 +52,12 @@ class Connection(AbstractContextManager):
 
     def __exit__(self, *exc_info):
         self.conn.close()
+
+
+def find_open_port():
+    try:
+        sock = socket()
+        sock.bind(('', 0))
+        return sock.getsockname()[1]
+    except:
+        raise ValueError("Could not find open port")

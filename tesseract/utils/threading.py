@@ -1,125 +1,67 @@
+import os
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed, TimeoutError
 import time
-from concurrent.futures import Future, TimeoutError
-from itertools import count
-from threading import Thread, Event, Lock
+from typing import Optional, List
+
+GLOBAL_EXECUTOR = ThreadPoolExecutor(max_workers=os.environ.get("TESSERACT_THREADS", float('inf')))
 
 
-def run_in_background(func: callable, *args, **kwargs):
-    """ run f(*args, **kwargs) in background and return Future for its outputs """
-    future = Future()
+def run_in_background(func: callable, *args, **kwargs) -> Future:
+    """ run func(*args, **kwargs) in background and return Future for its outputs """
 
-    def _run():
-        try:
-            future.set_result(func(*args, **kwargs))
-        except Exception as e:
-            future.set_exception(e)
-
-    Thread(target=_run).start()
-    return future
+    return GLOBAL_EXECUTOR.submit(func, *args, **kwargs)
 
 
-def repeated(func: callable, n_times=None):
-    """ A function that runs a :func: forever or for a specified number of times; use with run_run_in_background """
-
+def run_forever(func: callable, *args, **kwargs):
+    """ A function that runs a :func: in background forever. Returns a future that catches exceptions """
     def repeat():
-        for i in count():
-            if n_times is not None and i > n_times:
-                break
-            func()
-
-    return repeat
+        while True:
+            func(*args, **kwargs)
+    return run_in_background(repeat)
 
 
-def add_event_callback(event: Event, callback, timeout=None):
-    """ Add callback that will be executed asynchronously when event is set """
-    return Thread(target=lambda: (event.wait(timeout), callback())).start()
-
-
-class CountdownEvent(Event):
-    def __init__(self, count_to: int, initial=0):
-        """ An event that must be incremented :count_to: times before it is considered set """
-        super().__init__()
-        self.value = initial
-        self.count_to = count_to
-        self.lock = Lock()
-        self.increment(by=0)  # trigger set/unset depending on initial value
-
-    def increment(self, by=1):
-        with self.lock:
-            self.value += by
-            if self.value >= self.count_to:
-                super().set()
-            else:
-                super().clear()
-            return self.value
-
-    def clear(self):
-        return self.increment(by=-self.value)
-
-
-def await_first(*events: Event, k=1, timeout=None):
-    """
-    wait until first k (default=1) events are set, return True if event was set fast
-    # Note: after k successes we manually *set* all events to avoid memory leak.
-    """
-    events_done = CountdownEvent(count_to=k)
-    for event in events:
-        add_event_callback(event, callback=events_done.increment, timeout=timeout)
-
-    if events_done.wait(timeout=timeout):
-        [event.set() for event in events]
-        return True
-    else:
-        raise TimeoutError()
-
-
-def run_and_await_k(jobs: callable, k, timeout_after_k=0, timeout_total=None):
+def run_and_await_k(jobs: List[callable], k: int,
+                    timeout_after_k: Optional[float] = 0, timeout_total: Optional[float] = None):
     """
     Runs all :jobs: asynchronously, awaits for at least k of them to finish
-    :param jobs: functions to call
-    :param k: how many functions should finish
+    :param jobs: functions to call asynchronously
+    :param k: how many functions should finish for call to be successful
     :param timeout_after_k: after reaching k finished jobs, wait for this long before cancelling
     :param timeout_total: if specified, terminate cancel jobs after this many seconds
     :returns: a list of either results or exceptions for each job
     """
-    assert k <= len(jobs)
+    jobs = list(jobs)
+    assert k <= len(jobs), f"Can't await {k} out of {len(jobs)} jobs."
     start_time = time.time()
-    min_successful_jobs = CountdownEvent(count_to=k)
-    max_failed_jobs = CountdownEvent(count_to=len(jobs) - k + 1)
+    future_to_ix = {run_in_background(job): i for i, job in enumerate(jobs)}
+    outputs = [None] * len(jobs)
+    success_count = 0
 
-    def _run_and_increment(run_job: callable):
-        try:
-            result = run_job()
-            min_successful_jobs.increment()
-            return result
-        except Exception as e:
-            max_failed_jobs.increment()
-            return e
+    try:
+        # await first k futures for as long as it takes
+        for future in as_completed(list(future_to_ix.keys()), timeout=timeout_total):
+            success_count += int(not future.exception())
+            outputs[future_to_ix.pop(future)] = future.result() if not future.exception() else future.exception()
+            if success_count >= k:
+                break  # we have enough futures to succeed
+            if len(outputs) + len(future_to_ix) < k:
+                failed = len(jobs) - len(outputs) - len(future_to_ix)
+                raise ValueError(f"Couldn't get enough results: too many jobs failed ({failed} / {len(outputs)})")
 
-    def _run_and_await(run_job: callable):
-        # call function asynchronously. Increment counter after finished
-        future = run_in_background(_run_and_increment, run_job)
+        # await stragglers for at most self.timeout_after_k_min or whatever time is left
+        if timeout_after_k is not None and timeout_total is not None:
+            time_left = min(timeout_after_k, timeout_total - time.time() + start_time)
+        else:
+            time_left = timeout_after_k if timeout_after_k is not None else timeout_total
+        for future in as_completed(list(future_to_ix.keys()), timeout=time_left):
+            success_count += int(not future.exception())
+            outputs[future_to_ix.pop(future)] = future.result() if not future.exception() else future.exception()
 
-        try:  # await for success counter to reach k OR for fail counter to reach n - k + 1
-            await_first(min_successful_jobs, max_failed_jobs,
-                        timeout=None if timeout_total is None else timeout_total - time.time() + start_time)
-        except TimeoutError as e:  # counter didn't reach k jobs in timeout_total
-            return future.result() if future.done() else e
-
-        try:  # await for subsequent jobs if asked to
-            return future.result(timeout=timeout_after_k)
-        except TimeoutError as e:
+    except TimeoutError:
+        if len(outputs) < k:
+            raise TimeoutError(f"Couldn't get enough results: time limit exceeded (got {len(outputs)} of {k})")
+    finally:
+        for future, index in future_to_ix.items():
             future.cancel()
-            return e
-
-        except Exception as e:  # job failed with exception. Ignore it.
-            return e
-
-    results = [run_in_background(_run_and_await, f) for f in jobs]
-    results = [result.result() for result in results]
-    if min_successful_jobs.is_set():
-        return results
-    elif max_failed_jobs.is_set():
-        raise ValueError("Could not get enough results: too many jobs failed.")
-    else:
-        raise TimeoutError("Could not get enough results: reached timeout_total.")
+            outputs[index] = future.result() if not future.exception() else future.exception()
+    return outputs

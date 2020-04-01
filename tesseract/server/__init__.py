@@ -52,7 +52,7 @@ class TesseractServer(threading.Thread):
         """
         if self.network:
             if not self.network.is_alive():
-                self.network.start()
+                self.network.run_in_background(await_ready=True)
 
             network_thread = NetworkHandlerThread(experts=self.experts, network=self.network,
                                                   addr=self.addr, port=self.port, update_period=self.update_period)
@@ -111,9 +111,11 @@ class TesseractServer(threading.Thread):
         self.ready.clear()
         for process in self.conn_handlers:
             process.terminate()
-        self.runtime.shutdown()
+
         if self.network is not None:
             self.network.shutdown()
+
+        self.runtime.shutdown()
 
 
 def socket_loop(sock, experts):

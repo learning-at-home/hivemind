@@ -2,6 +2,7 @@ from typing import Tuple, Optional
 
 import torch
 import torch.nn as nn
+from torch.autograd.function import once_differentiable
 
 from ..utils import nested_flatten, DUMMY, PytorchSerializer, nested_pack, nested_compare, Connection
 
@@ -69,6 +70,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         return tuple(PytorchSerializer.loads(msg))  # flattened expert outputs
 
     @staticmethod
+    @once_differentiable
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
         connection = Connection.create(ctx.host, ctx.port)
         payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
