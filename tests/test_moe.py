@@ -18,8 +18,8 @@ def test_remote_module_call():
     logits = torch.randn(3, requires_grad=True)
     random_proj = torch.randn_like(xx)
 
-    with background_server(num_experts=num_experts,  device='cpu',
-                           no_optimizer=True, no_network=True) as (localhost, server_port, network_port):
+    with background_server(num_experts=num_experts, device='cpu',
+                           no_optimizer=True, no_dht=True) as (localhost, server_port, dht_port):
         experts = [tesseract.RemoteExpert(uid=f'expert.{i}', port=server_port) for i in range(num_experts)]
         moe_output, = tesseract.client.moe._RemoteMoECall.apply(
             logits, experts[:len(logits)], k_min, timeout_after_k_min, backward_k_min, timeout_total, backward_timeout,
@@ -45,9 +45,9 @@ def test_remote_module_call():
 
 def test_compute_expert_scores():
     try:
-        dht = tesseract.TesseractNetwork(port=tesseract.find_open_port(), start=True)
+        dht = tesseract.DHTNode(port=tesseract.find_open_port(), start=True)
         moe = tesseract.client.moe.RemoteMixtureOfExperts(
-            network=dht, in_features=1024, grid_size=[40], k_best=4, k_min=1, timeout_after_k_min=1,
+            dht=dht, in_features=1024, grid_size=[40], k_best=4, k_min=1, timeout_after_k_min=1,
             uid_prefix='expert')
         gx, gy = torch.randn(4, 5, requires_grad=True), torch.torch.randn(4, 3, requires_grad=True)
         ii = [[4, 0, 2], [3, 1, 1, 1, 3], [0], [3, 2]]

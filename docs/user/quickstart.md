@@ -35,11 +35,11 @@ do something complex with it, please contact us by opening an issue (less prefer
 - **`TesseractRuntime`** (`tesseract/runtime/__init__.py`) aggregates batches
   and performs inference/training of experts according to their priority.
 - **`TesseractServer`** (`tesseract/server/__init__.py`) wraps runtime and
-  periodically uploads experts into `TesseractNetwork`.
+  periodically uploads experts into `DHTNode`.
 
 **DHT:**
 
-- **`TesseractNetwork`**(`tesseract/network/__init__.py`) is a node of
+- **`DHTNode`**(`tesseract/dht/__init__.py`) is a node of
   Kademlia-based DHT that stores metadata used by trainer and runtime.
 
 ## Limitations
