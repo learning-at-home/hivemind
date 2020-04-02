@@ -10,18 +10,18 @@ with open('requirements.txt') as requirements_file:
     install_requires = [str(requirement) for requirement in parse_requirements(requirements_file)]
 
 # loading version from setup.py
-with codecs.open(os.path.join(here, 'tesseract/__init__.py'), encoding='utf-8') as init_file:
+with codecs.open(os.path.join(here, 'hivemind/__init__.py'), encoding='utf-8') as init_file:
     version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.M)
     version_string = version_match.group(1)
 
 setup(
-    name='tesseract',
+    name='hivemind',
     version=version_string,
     description='',
     long_description='',
     author='Learning@home authors',
     author_email='mryabinin@hse.ru',
-    packages=['tesseract'],
+    packages=['hivemind'],
     license='MIT',
     install_requires=install_requires,
     classifiers=[

@@ -1,8 +1,8 @@
 from socket import socket
 from typing import Tuple, Dict
 
-from tesseract.runtime.expert_backend import ExpertBackend
-from tesseract.utils import PytorchSerializer, Connection
+from hivemind.runtime.expert_backend import ExpertBackend
+from hivemind.utils import PytorchSerializer, Connection
 
 
 def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[str, ExpertBackend]):

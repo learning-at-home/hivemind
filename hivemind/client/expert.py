@@ -16,8 +16,8 @@ class RemoteExpert(nn.Module):
     Sending wrong input shapes can cause RemoteExpert to freeze indefinitely due to error in runtime.
 
     :param uid: unique expert identifier
-    :param host: hostname where TesseractServer operates
-    :param port: port to which TesseractServer listens
+    :param host: hostname where Server operates
+    :param port: port to which Server listens
     """
 
     def __init__(self, uid, host='127.0.0.1', port=8080):

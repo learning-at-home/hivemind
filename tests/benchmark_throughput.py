@@ -7,14 +7,14 @@ import time
 
 import torch
 from test_utils import layers, print_device_info
-from tesseract import find_open_port
+from hivemind import find_open_port
 
-import tesseract
+import hivemind
 
 
 def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
     can_start.wait()
-    experts = [tesseract.RemoteExpert(f"expert{i}", port=port) for i in range(num_experts)]
+    experts = [hivemind.RemoteExpert(f"expert{i}", port=port) for i in range(num_experts)]
 
     try:
         dummy_batch = torch.randn(batch_size, hid_dim)
@@ -62,14 +62,14 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
         experts = {}
         for i in range(num_experts):
             expert = torch.jit.script(layers.name_to_block[expert_cls](hid_dim))
-            experts[f'expert{i}'] = tesseract.ExpertBackend(name=f'expert{i}',
-                                                            expert=expert, opt=torch.optim.Adam(expert.parameters()),
-                                                            args_schema=(tesseract.BatchTensorProto(hid_dim),),
-                                                            outputs_schema=tesseract.BatchTensorProto(hid_dim),
-                                                            max_batch_size=max_batch_size,
-                                                            )
+            experts[f'expert{i}'] = hivemind.ExpertBackend(name=f'expert{i}',
+                                                           expert=expert, opt=torch.optim.Adam(expert.parameters()),
+                                                           args_schema=(hivemind.BatchTensorProto(hid_dim),),
+                                                           outputs_schema=hivemind.BatchTensorProto(hid_dim),
+                                                           max_batch_size=max_batch_size,
+                                                           )
         timestamps['created_experts'] = time.perf_counter()
-        server = tesseract.TesseractServer(None, experts, port=port, conn_handler_processes=num_handlers, device=device)
+        server = hivemind.Server(None, experts, port=port, conn_handler_processes=num_handlers, device=device)
         server.start()
         server.ready.wait()
         timestamps['server_ready'] = time.perf_counter()

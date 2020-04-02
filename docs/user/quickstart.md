@@ -1,6 +1,6 @@
 # Quick start [nothing here yet]
 
-This will eventually become a tutorial on how to host a tesseract node or connect to an existing node.
+This will eventually become a tutorial on how to host a hivemind node or connect to an existing node.
 
 ![img](https://media.giphy.com/media/3oz8xtBx06mcZWoNJm/giphy.gif)
 
@@ -16,30 +16,30 @@ This will eventually become a tutorial on how to host a tesseract node or connec
 
 ## How do I run it?
 
-Currently, there is no way to do it easily. There are some tests (you can check [`./tests/benchmark_throughput.py`](https://github.com/learning-at-home/tesseract/blob/master/tests/benchmark_throughput.py)
+Currently, there is no way to do it easily. There are some tests (you can check [`./tests/benchmark_throughput.py`](https://github.com/learning-at-home/hivemind/blob/master/tests/benchmark_throughput.py)
  or look into CI logs) and we want to expand them. If you want to
 do something complex with it, please contact us by opening an issue (less preferred: [telegram](https://t.me/justheuristic)).
 
-## `tesseract` quick tour
+## `hivemind` quick tour
 
 **Trainer process:**
 
-- **`RemoteExpert`**(`tesseract/client/remote_expert.py`) behaves like a pytorch
+- **`RemoteExpert`**(`hivemind/client/remote_expert.py`) behaves like a pytorch
   module with autograd support but actually sends request to a remote runtime.
-- **`RemoteMixtureOfExperts`**(`tesseract/client/remote_moe.py`) finds best experts
+- **`RemoteMixtureOfExperts`**(`hivemind/client/remote_moe.py`) finds best experts
   for a given input and either returns them as `RemoteExpert` or applies them
   right away.
 
 **Runtime process:**
 
-- **`TesseractRuntime`** (`tesseract/runtime/__init__.py`) aggregates batches
+- **`Runtime`** (`hivemind/runtime/__init__.py`) aggregates batches
   and performs inference/training of experts according to their priority.
-- **`TesseractServer`** (`tesseract/server/__init__.py`) wraps runtime and
+- **`Server`** (`hivemind/server/__init__.py`) wraps runtime and
   periodically uploads experts into `DHTNode`.
 
 **DHT:**
 
-- **`DHTNode`**(`tesseract/dht/__init__.py`) is a node of
+- **`DHTNode`**(`hivemind/dht/__init__.py`) is a node of
   Kademlia-based DHT that stores metadata used by trainer and runtime.
 
 ## Limitations
@@ -52,6 +52,6 @@ do something complex with it, please contact us by opening an issue (less prefer
 
 **Runtime**:
 * You can achieve 4x less network load by passing quantized uint8 activations across experts.
-    Implement your own quantization or wait for tesseract v0.8.
+    Implement your own quantization or wait for hivemind v0.8.
 * Currently runtime can form batches that exceed maximal batch_size by task_size - 1. 
     We will fix that in the nearest patch.
