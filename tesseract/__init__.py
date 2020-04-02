@@ -1,5 +1,5 @@
 from .client import *
-from .network import *
+from .dht import *
 from .server import *
 from .utils import *
 

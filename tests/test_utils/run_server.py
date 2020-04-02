@@ -10,8 +10,8 @@ from .layers import name_to_block
 
 def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024, num_handlers=None,
                       expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None, no_optimizer=False,
-                      no_network=False, initial_peers=(), network_port=None, root_port=None, verbose=True, start=False,
-                      UID_DELIMETER=tesseract.TesseractNetwork.UID_DELIMETER, **kwargs) -> tesseract.TesseractServer:
+                      no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True, start=False,
+                      UID_DELIMETER=tesseract.DHTNode.UID_DELIMETER, **kwargs) -> tesseract.TesseractServer:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
     if verbose and len(kwargs) != 0:
         print("Ignored kwargs:", kwargs)
@@ -19,12 +19,12 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
     num_handlers = num_handlers if num_handlers is not None else num_experts * 8
     device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # initialize network
-    network = None
-    if not no_network:
+    # initialize dht
+    dht = None
+    if not no_dht:
         if not len(initial_peers):
-            print("No initial peers provided. Starting additional network as an initial peer.")
-            dht_root = tesseract.TesseractNetwork(
+            print("No initial peers provided. Starting additional dht as an initial peer.")
+            dht_root = tesseract.DHTNode(
                 *initial_peers, port=root_port or tesseract.find_open_port(), start=True)
             print(f"Initializing DHT with port {dht_root.port}")
             initial_peers = (('localhost', dht_root.port), )
@@ -33,10 +33,10 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
             if root_port is not None:
                 print(f"Warning: root_port={root_port} will not be used since we already have peers.")
 
-        network = tesseract.TesseractNetwork(
-            *initial_peers, port=network_port or tesseract.find_open_port(), start=True)
+        dht = tesseract.DHTNode(
+            *initial_peers, port=dht_port or tesseract.find_open_port(), start=True)
         if verbose:
-            print(f"Running network node on port {network.port}")
+            print(f"Running dht node on port {dht.port}")
 
     # initialize experts
     experts = {}
@@ -51,7 +51,7 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
                                                       )
     # actually start server
     server = tesseract.TesseractServer(
-        network, experts, addr=host, port=port or tesseract.find_open_port(),
+        dht, experts, addr=host, port=port or tesseract.find_open_port(),
         conn_handler_processes=num_handlers, device=device)
 
     if start:
@@ -71,8 +71,8 @@ def background_server(*args, verbose=True, **kwargs):
     def server_runner():
         try:
             server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
-            network_port = server.network.port if server.network is not None else None
-            send_addr.send((server.addr, server.port, network_port))
+            dht_port = server.dht.port if server.dht is not None else None
+            send_addr.send((server.addr, server.port, dht_port))
             trigger_shutdown.wait()
         finally:
             if verbose:
@@ -106,9 +106,9 @@ if __name__ == '__main__':
     parser.add_argument('--max_batch_size', type=int, default=16384, required=False)
     parser.add_argument('--device', type=str, default=None, required=False)
     parser.add_argument('--no_optimizer', action='store_true')
-    parser.add_argument('--no_network', action='store_true')
+    parser.add_argument('--no_dht', action='store_true')
     parser.add_argument('--initial_peers', type=str, default="[]", required=False)
-    parser.add_argument('--network_port', type=int, default=None, required=False)
+    parser.add_argument('--dht_port', type=int, default=None, required=False)
     parser.add_argument('--root_port', type=int, default=None, required=False)
 
     parser.add_argument('--increase_file_limit', action='store_true')

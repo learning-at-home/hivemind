@@ -10,7 +10,7 @@ from tesseract.client import RemoteExpert
 from tesseract.utils import run_forever, SharedFuture, PickleSerializer
 
 
-class TesseractNetwork(mp.Process):
+class DHTNode(mp.Process):
     UID_DELIMETER = '.'  # splits expert uids over this delimeter
     HEARTBEAT_EXPIRATION = 120  # expert is inactive iff it fails to post timestamp for *this many seconds*
     make_key = "{}::{}".format
@@ -39,7 +39,7 @@ class TesseractNetwork(mp.Process):
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
-        Starts TesseractNetwork in a background process. if await_ready, this method will wait until background network
+        Starts DHTNode in a background process. if await_ready, this method will wait until background dht
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()
@@ -47,11 +47,11 @@ class TesseractNetwork(mp.Process):
             raise TimeoutError("TesseractServer didn't notify .ready in {timeout} seconds")
 
     def shutdown(self) -> None:
-        """ Shuts down the network process """
+        """ Shuts down the dht process """
         if self.is_alive():
             self.kill()
         else:
-            warnings.warn("Network shutdown has no effect: network process is already not alive")
+            warnings.warn("DHT shutdown has no effect: dht process is already not alive")
 
     def get_experts(self, uids: List[str], heartbeat_expiration=HEARTBEAT_EXPIRATION) -> List[Optional[RemoteExpert]]:
         """ Find experts across DHT using their ids; Return a list of [RemoteExpert if found else None]"""

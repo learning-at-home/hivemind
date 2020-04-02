@@ -5,8 +5,8 @@ from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeo
 from typing import Dict
 
 from .connection_handler import handle_connection
-from .network_handler import NetworkHandlerThread
-from ..network import TesseractNetwork
+from .dht_handler import DHTHandlerThread
+from ..dht import DHTNode
 from ..runtime import TesseractRuntime, ExpertBackend
 
 
@@ -20,24 +20,24 @@ class TesseractServer(threading.Thread):
      - publishes updates to expert status every :update_period: seconds
      - follows orders from TesseractController - if it exists
 
-    :type network: TesseractNetwork or None. Server with network=None will NOT be visible from DHT,
+    :type dht: DHTNode or None. Server with dht=None will NOT be visible from DHT,
      but it will still support accessing experts directly with RemoteExpert(uid=UID, host=IPADDR, port=PORT).
     :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
-    :param addr: server's network address that determines how it can be accessed. Default is local connections only.
+    :param addr: server's dht address that determines how it can be accessed. Default is local connections only.
     :param port: port to which server listens for requests such as expert forward or backward pass.
     :param conn_handler_processes: maximum number of simultaneous requests. Please note that the default value of 1
         if too small for normal functioning, we recommend 4 handlers per expert backend.
     :param update_period: how often will server attempt to publish its state (i.e. experts) to the DHT;
-        if network is None, this parameter is ignored.
+        if dht is None, this parameter is ignored.
     :param start: if True, the server will immediately start as a background thread and returns control after server
         is ready (see .ready below)
     """
 
-    def __init__(self, network: TesseractNetwork, expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
+    def __init__(self, dht: DHTNode, expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
                  port: int = 8080, conn_handler_processes: int = 1, update_period: int = 30, start=False,
                  **kwargs):
         super().__init__()
-        self.network, self.experts, self.update_period = network, expert_backends, update_period
+        self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
         self.conn_handlers = self._create_connection_handlers(conn_handler_processes)
         self.runtime = TesseractRuntime(self.experts, **kwargs)
@@ -47,16 +47,16 @@ class TesseractServer(threading.Thread):
 
     def run(self):
         """
-        Starts TesseractServer in the current thread. Initializes network if necessary, starts connection handlers,
+        Starts TesseractServer in the current thread. Initializes dht if necessary, starts connection handlers,
         runs TesseractRuntime (self.runtime) to process incoming requests.
         """
-        if self.network:
-            if not self.network.is_alive():
-                self.network.run_in_background(await_ready=True)
+        if self.dht:
+            if not self.dht.is_alive():
+                self.dht.run_in_background(await_ready=True)
 
-            network_thread = NetworkHandlerThread(experts=self.experts, network=self.network,
+            dht_handler_thread = DHTHandlerThread(experts=self.experts, dht=self.dht,
                                                   addr=self.addr, port=self.port, update_period=self.update_period)
-            network_thread.start()
+            dht_handler_thread.start()
 
         for process in self.conn_handlers:
             if not process.is_alive():
@@ -66,8 +66,8 @@ class TesseractServer(threading.Thread):
 
         for process in self.conn_handlers:
             process.join()
-        if self.network:
-            network_thread.join()
+        if self.dht:
+            dht_handler_thread.join()
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
@@ -112,8 +112,8 @@ class TesseractServer(threading.Thread):
         for process in self.conn_handlers:
             process.terminate()
 
-        if self.network is not None:
-            self.network.shutdown()
+        if self.dht is not None:
+            self.dht.shutdown()
 
         self.runtime.shutdown()
 
