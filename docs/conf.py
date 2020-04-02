@@ -23,8 +23,8 @@ from recommonmark.parser import CommonMarkParser
 
 # -- Project information -----------------------------------------------------
 sys.path.insert(0, '..')
-src_path = '../tesseract'
-project = 'tesseract'
+src_path = '../hivemind'
+project = 'hivemind'
 copyright = '2020, Learning@home & contributors'
 author = 'Learning@home & contributors'
 
@@ -119,7 +119,7 @@ html_static_path = ['_static']
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'tesseractdoc'
+htmlhelp_basename = 'hiveminddoc'
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -146,7 +146,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'tesseract.tex', 'tesseract Documentation',
+    (master_doc, 'hivemind.tex', 'hivemind Documentation',
      'Learning@home \\& contributors', 'manual'),
 ]
 
@@ -156,7 +156,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'tesseract', 'tesseract Documentation',
+    (master_doc, 'hivemind', 'hivemind Documentation',
      [author], 1)
 ]
 
@@ -167,8 +167,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'tesseract', 'tesseract Documentation',
-     author, 'tesseract', 'One line description of project.',
+    (master_doc, 'hivemind', 'hivemind Documentation',
+     author, 'hivemind', 'One line description of project.',
      'Miscellaneous'),
 ]
 
@@ -240,7 +240,7 @@ def linkcode_resolve(domain, info):
     if domain != 'py' or not info['module']:
         return None
     try:
-        filename = 'tesseract/%s#L%d-L%d' % find_source()
+        filename = 'hivemind/%s#L%d-L%d' % find_source()
     except Exception:
         filename = info['module'].replace('.', '/') + '.py'
     return "https://github.com/learning-at-home/tesseract/blob/%s/%s" % (branch, filename)

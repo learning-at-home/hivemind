@@ -12,15 +12,15 @@ from .expert_backend import ExpertBackend
 from .task_pool import TaskPool, TaskPoolBase
 
 
-class TesseractRuntime(threading.Thread):
+class Runtime(threading.Thread):
     """
     A group of processes that processes incoming requests for multiple experts on a shared device.
-    TesseractRuntime is usually created and managed by TesseractServer, humans need not apply.
+    Runtime is usually created and managed by Server, humans need not apply.
 
     For debugging, you can start runtime manually with .start() or .run()
 
     >>> expert_backends = {'expert_name': ExpertBackend(**kwargs)}
-    >>> runtime = TesseractRuntime(expert_backends)
+    >>> runtime = Runtime(expert_backends)
     >>> runtime.start()  # start runtime in background thread. To start in current thread, use runtime.run()
     >>> runtime.ready.wait()  # await for runtime to load all experts on device and create request pools
     >>> future = runtime.expert_backends['expert_name'].forward_pool.submit_task(*expert_inputs)

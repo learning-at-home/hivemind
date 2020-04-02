@@ -20,7 +20,7 @@ Task = namedtuple("Task", ("future", "args"))
 
 
 class TaskPoolBase(mp.Process):
-    """ A pool that accepts tasks and forms batches for parallel processing, interacts with TesseractRuntime """
+    """ A pool that accepts tasks and forms batches for parallel processing, interacts with Runtime """
 
     def __init__(self, process_func: callable):
         super().__init__()
@@ -55,10 +55,10 @@ class TaskPoolBase(mp.Process):
 
 class TaskPool(TaskPoolBase):
     """
-    Request aggregator that accepts processing requests, groups them into batches, waits for TesseractRuntime
+    Request aggregator that accepts processing requests, groups them into batches, waits for Runtime
     to process these batches and dispatches results back to request sources. Operates as a background process.
 
-    :param process_func: function to be applied to every formed batch; called by TesseractRuntime
+    :param process_func: function to be applied to every formed batch; called by Runtime
         Note that process_func should accept only \*args Tensors and return a flat tuple of Tensors
     :param max_batch_size: process at most this many inputs in a batch (task contains have one or several inputs)
     :param min_batch_size: process at least this many inputs in a batch, otherwise wait for more
@@ -81,7 +81,7 @@ class TaskPool(TaskPoolBase):
         self.tasks = mp.Queue(maxsize=pool_size or 0)
         self.undispatched_task_timestamps = mp.SimpleQueue()
 
-        # interaction with TesseractRuntime
+        # interaction with Runtime
         self.batch_receiver, self.batch_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain batch inputs
         self.batch_received = mp.Event()  # runtime can notify pool that it can send next batch
         self.outputs_receiver, self.outputs_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain outputs

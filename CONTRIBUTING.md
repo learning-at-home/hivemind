@@ -1,7 +1,7 @@
 
 
 ### Rules for collaborating:
-Tesseract is still in the early stage of development, we expect only a handful of collaborators with individual roles.
+Hivemind is still in the early stage of development, we expect only a handful of collaborators with individual roles.
 
 1. Before you write any code, please contact us to avoid duplicate work:
    * Report bugs and propose new features via issues. We don't have templates at this point;
@@ -20,5 +20,5 @@ Tesseract is still in the early stage of development, we expect only a handful o
 
 ### Tips & tricks
 * You can find a wealth of pytorch debugging tricks at [their contributing page](https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md).
-* Tesseract is optimized for development in pycharm CE 2019.3 or newer.
+* Hivemind is optimized for development in pycharm CE 2019.3 or newer.
   * When working on tests, please mark "tests" as sources root.

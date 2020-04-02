@@ -1,9 +1,9 @@
-``tesseract.client``
+``hidemind.client``
 ====================
 
-.. automodule:: tesseract.client
+.. automodule:: hivemind.client
 
-.. currentmodule:: tesseract.client
+.. currentmodule:: hivemind.client
 
 .. raw:: html
 

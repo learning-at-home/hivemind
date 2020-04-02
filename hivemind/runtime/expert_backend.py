@@ -9,7 +9,7 @@ from ..utils import nested_flatten, nested_pack, nested_compare, BatchTensorProt
 
 class ExpertBackend(nn.Module):
     """
-    ExpertBackend is a wrapper around torch module that allows it to run tasks asynchronously with TesseractRuntime
+    ExpertBackend is a wrapper around torch module that allows it to run tasks asynchronously with Runtime
     By default, ExpertBackend handles three types of requests:
 
      - forward - receive inputs and compute outputs. Concurrent requests will be batched for better GPU utilization.
@@ -57,7 +57,7 @@ class ExpertBackend(nn.Module):
 
     def forward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
-        Apply forward pass to an aggregated batch of requests. Used by TesseractRuntime, do not call this manually;
+        Apply forward pass to an aggregated batch of requests. Used by Runtime, do not call this manually;
         To submit a request for asynchronous processing, please use ``ExpertBackend.forward_pool.submit_task``.
 
         Subclassing:
@@ -78,7 +78,7 @@ class ExpertBackend(nn.Module):
 
     def backward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
-        Apply backward pass to an aggregated batch of requests. Used by TesseractRuntime, do not call this manually
+        Apply backward pass to an aggregated batch of requests. Used by Runtime, do not call this manually
         To submit a request for asynchronous processing, please use ``ExpertBackend.backward_pool.submit_task``.
 
         Subclassing:
@@ -86,7 +86,7 @@ class ExpertBackend(nn.Module):
 
            It should return gradients w.r.t. inputs that follow ``nested_flatten(self.forward_schema)``;
 
-           TesseractRuntime doesn't guarantee that backward will be performed in the same order and for the same data
+           Runtime doesn't guarantee that backward will be performed in the same order and for the same data
            as forward, so we recommend stateless backward pass that re-runs expert forward pass inside backward.
 
            .. todo state, randomness, etc
@@ -127,6 +127,6 @@ class ExpertBackend(nn.Module):
                     keyword_names=tuple(self.kwargs_schema.keys()))
 
     def get_pools(self) -> Sequence[TaskPool]:
-        """ return all pools that should be processed by ``TesseractRuntime`` """
+        """ return all pools that should be processed by ``Runtime`` """
         return self.forward_pool, self.backward_pool
 

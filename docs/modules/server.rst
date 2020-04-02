@@ -1,17 +1,17 @@
-``tesseract.server & runtime``
+``hivemind.server & runtime``
 ========================================
 
-.. automodule:: tesseract.server
+.. automodule:: hivemind.server
 
-.. currentmodule:: tesseract.server
+.. currentmodule:: hivemind.server
 
-.. autoclass:: TesseractServer
+.. autoclass:: Server
    :members:
    :member-order: bysource
 
-.. currentmodule:: tesseract.runtime
+.. currentmodule:: hivemind.runtime
 
-.. autoclass:: TesseractRuntime
+.. autoclass:: Runtime
     :members:
     :member-order: bysource
 

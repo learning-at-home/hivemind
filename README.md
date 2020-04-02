@@ -1,4 +1,4 @@
-## Tesseract
+## Hivemind
 
 [![Build status](https://circleci.com/gh/learning-at-home/tesseract.svg?style=shield)](https://circleci.com/gh/learning-at-home/tesseract)
 [![Documentation Status](https://readthedocs.org/projects/learning-at-home/badge/?version=latest)](https://learning-at-home.readthedocs.io/en/latest/?badge=latest)

@@ -6,8 +6,8 @@ from typing import Tuple, List, Optional
 
 from kademlia.network import Server
 
-from tesseract.client import RemoteExpert
-from tesseract.utils import run_forever, SharedFuture, PickleSerializer
+from hivemind.client import RemoteExpert
+from hivemind.utils import run_forever, SharedFuture, PickleSerializer
 
 
 class DHTNode(mp.Process):
@@ -44,7 +44,7 @@ class DHTNode(mp.Process):
         """
         self.start()
         if await_ready and not self.ready.wait(timeout=timeout):
-            raise TimeoutError("TesseractServer didn't notify .ready in {timeout} seconds")
+            raise TimeoutError("Server didn't notify .ready in {timeout} seconds")
 
     def shutdown(self) -> None:
         """ Shuts down the dht process """

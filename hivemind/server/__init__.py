@@ -7,18 +7,18 @@ from typing import Dict
 from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
 from ..dht import DHTNode
-from ..runtime import TesseractRuntime, ExpertBackend
+from ..runtime import Runtime, ExpertBackend
 
 
-class TesseractServer(threading.Thread):
+class Server(threading.Thread):
     """
-    TesseractServer allows you to host "experts" - pytorch sub-networks used by Decentralized Mixture of Experts.
-    After creation, a server should be started: see TesseractServer.run or TesseractServer.run_in_background.
+    Server allows you to host "experts" - pytorch sub-networks used by Decentralized Mixture of Experts.
+    After creation, a server should be started: see Server.run or Server.run_in_background.
 
     A working server does 3 things:
-     - processes incoming forward/backward requests via TesseractRuntime (created by the server)
+     - processes incoming forward/backward requests via Runtime (created by the server)
      - publishes updates to expert status every :update_period: seconds
-     - follows orders from TesseractController - if it exists
+     - follows orders from HivemindController - if it exists
 
     :type dht: DHTNode or None. Server with dht=None will NOT be visible from DHT,
      but it will still support accessing experts directly with RemoteExpert(uid=UID, host=IPADDR, port=PORT).
@@ -40,15 +40,15 @@ class TesseractServer(threading.Thread):
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
         self.conn_handlers = self._create_connection_handlers(conn_handler_processes)
-        self.runtime = TesseractRuntime(self.experts, **kwargs)
+        self.runtime = Runtime(self.experts, **kwargs)
 
         if start:
             self.run_in_background(await_ready=True)
 
     def run(self):
         """
-        Starts TesseractServer in the current thread. Initializes dht if necessary, starts connection handlers,
-        runs TesseractRuntime (self.runtime) to process incoming requests.
+        Starts Server in the current thread. Initializes dht if necessary, starts connection handlers,
+        runs Runtime (self.runtime) to process incoming requests.
         """
         if self.dht:
             if not self.dht.is_alive():
@@ -71,12 +71,12 @@ class TesseractServer(threading.Thread):
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
-        Starts TesseractServer in a background thread. if await_ready, this method will wait until background server
+        Starts Server in a background thread. if await_ready, this method will wait until background server
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()
         if await_ready and not self.ready.wait(timeout=timeout):
-            raise TimeoutError("TesseractServer didn't notify .ready in {timeout} seconds")
+            raise TimeoutError("Server didn't notify .ready in {timeout} seconds")
 
     @property
     def ready(self) -> mp.synchronize.Event:
@@ -104,7 +104,7 @@ class TesseractServer(threading.Thread):
 
     def shutdown(self):
         """
-        Gracefully terminate a tesseract server, process-safe.
+        Gracefully terminate a hivemind server, process-safe.
         Please note that terminating server otherwise (e.g. by killing processes) may result in zombie processes.
         If you did already cause a zombie outbreak, your only option is to kill them with -9 (SIGKILL).
         """

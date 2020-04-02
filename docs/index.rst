@@ -1,7 +1,7 @@
-``learning@home::tesseract``
+``learning@home::hivemind``
 ====================================
 
-Tesseract lets you train huge neural networks on computers provided by volunteers. Powered by pytorch.
+Hivemind lets you train huge neural networks on computers provided by volunteers. Powered by pytorch.
 
 .. image:: _static/bug.gif
 
@@ -28,4 +28,4 @@ Indices and tables
 * :ref:`modindex`
 * :ref:`search`
 
-.. _GitHub: https://github.com/learning-at-home/tesseract
+.. _GitHub: https://github.com/learning-at-home/hivemind
