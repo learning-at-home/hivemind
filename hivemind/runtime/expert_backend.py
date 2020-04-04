@@ -76,7 +76,7 @@ class ExpertBackend(nn.Module):
             outputs = self.expert(*args, **kwargs)
 
         # Note: TaskPool requires function to accept and return a flat tuple of values, we pack/unpack it on client side
-        return tuple(nested_flatten([outputs] + [get_rng_states()]))
+        return tuple(nested_flatten([outputs])) + (get_rng_states(),)
 
     def backward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
