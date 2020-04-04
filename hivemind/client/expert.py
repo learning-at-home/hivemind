@@ -59,16 +59,18 @@ class _RemoteModuleCall(torch.autograd.Function):
     def forward(ctx, dummy: torch.Tensor,
                 uid: str, host: str, port: int, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         # Note: *inputs are flattened input tensors that follow the expert's info['input_schema']
-        *inputs, rng_state = tuple(map(torch.Tensor.detach, inputs))  # detach to avoid pickling the computation graph
+        inputs = tuple(map(torch.Tensor.detach, inputs))  # detach to avoid pickling the computation graph
         ctx.uid, ctx.host, ctx.port = uid, host, port
-        ctx.rng_state = rng_state
-        ctx.save_for_backward(inputs)
+
+        ctx.save_for_backward(*inputs)
 
         connection = Connection.create(ctx.host, ctx.port)
         connection.send_raw('fwd_', PytorchSerializer.dumps((ctx.uid, inputs)))
         rtype, msg = connection.recv_message()
         assert len(msg) != 0, "ExpertBackend.forward did not respond"
-        return tuple(PytorchSerializer.loads(msg))  # flattened expert outputs
+        *outputs, rng_state = tuple(PytorchSerializer.loads(msg))
+        ctx.rng_state = rng_state
+        return rng_state  # flattened expert outputs
 
     @staticmethod
     @once_differentiable
