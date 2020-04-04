@@ -70,11 +70,24 @@ class TaskPool(TaskPoolBase):
     :param start: if True, start automatically at the end of __init__
     """
 
-    def __init__(self, process_func: callable, max_batch_size: int, min_batch_size=1,
-                 timeout=None, pool_size=None, prefetch_batches=1, uid=None, start=False):
+    def __init__(
+        self,
+        process_func: callable,
+        max_batch_size: int,
+        min_batch_size=1,
+        timeout=None,
+        pool_size=None,
+        prefetch_batches=1,
+        uid=None,
+        start=False,
+    ):
 
         super().__init__(process_func)
-        self.min_batch_size, self.max_batch_size, self.timeout = min_batch_size, max_batch_size, timeout
+        self.min_batch_size, self.max_batch_size, self.timeout = (
+            min_batch_size,
+            max_batch_size,
+            timeout,
+        )
         self.uid = uid or uuid.uuid4()
         self.prefetch_batches = prefetch_batches
 
@@ -84,11 +97,13 @@ class TaskPool(TaskPoolBase):
 
         # interaction with Runtime
         self.batch_receiver, self.batch_sender = mp.Pipe(
-            duplex=False)  # send/recv arrays that contain batch inputs
+            duplex=False
+        )  # send/recv arrays that contain batch inputs
         # runtime can notify pool that it can send next batch
         self.batch_received = mp.Event()
         self.outputs_receiver, self.outputs_sender = mp.Pipe(
-            duplex=False)  # send/recv arrays that contain outputs
+            duplex=False
+        )  # send/recv arrays that contain outputs
 
         if start:
             self.start()
@@ -112,7 +127,8 @@ class TaskPool(TaskPoolBase):
                 task = self.tasks.get(timeout=self.timeout)
             except Empty:
                 exc = TimeoutError(
-                    f"Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet.")
+                    f"Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet."
+                )
                 for task in batch_tasks:
                     task.future.set_exception(exc)
                 raise exc
@@ -124,11 +140,14 @@ class TaskPool(TaskPoolBase):
         return batch_tasks
 
     def run(self, *args, **kwargs):
-        print(f'Starting pool, pid={os.getpid()}')
+        print(f"Starting pool, pid={os.getpid()}")
         # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         pending_batches = {}
-        output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
-                                         name=f'{self.uid}-pool_output_loop')
+        output_thread = threading.Thread(
+            target=self._pool_output_loop,
+            args=[pending_batches],
+            name=f"{self.uid}-pool_output_loop",
+        )
         try:
             output_thread.start()
             self._pool_input_loop(pending_batches, *args, **kwargs)
@@ -162,8 +181,7 @@ class TaskPool(TaskPoolBase):
 
             # find or create shared arrays for current batch size
             batch_inputs = [
-                torch.cat([task.args[i]
-                           for task in batch_tasks]).share_memory_()
+                torch.cat([task.args[i] for task in batch_tasks]).share_memory_()
                 for i in range(len(batch_tasks[0].args))
             ]
 
@@ -186,32 +204,39 @@ class TaskPool(TaskPoolBase):
             batch_tasks = pending_batches.pop(batch_index)
             task_sizes = [self.get_task_size(task) for task in batch_tasks]
             outputs_per_task = zip(
-                *(torch.split_with_sizes(array, task_sizes, dim=0) for array in batch_outputs))
+                *(
+                    torch.split_with_sizes(array, task_sizes, dim=0)
+                    for array in batch_outputs
+                )
+            )
 
             # dispatch results to futures
             for task, task_outputs in zip(batch_tasks, outputs_per_task):
-                task.future.set_result(
-                    tuple(task_outputs) + (batch_rng_state,))
+                task.future.set_result(tuple(task_outputs) + (batch_rng_state,))
 
     @property
     def empty(self):
         return not self.batch_receiver.poll()
 
-    def load_batch_to_runtime(self, timeout=None, device=None) -> Tuple[Any, List[torch.Tensor]]:
+    def load_batch_to_runtime(
+        self, timeout=None, device=None
+    ) -> Tuple[Any, List[torch.Tensor]]:
         """ receive next batch of numpy arrays """
         if not self.batch_receiver.poll(timeout):
             raise TimeoutError()
 
         batch_index, batch_inputs = self.batch_receiver.recv()
         self.batch_received.set()  # pool can now prepare next batch
-        batch_inputs = [tensor.to(device, non_blocking=True)
-                        for tensor in batch_inputs]
+        batch_inputs = [tensor.to(device, non_blocking=True) for tensor in batch_inputs]
         return batch_index, batch_inputs
 
-    def send_outputs_from_runtime(self, batch_index: int, batch_outputs: List[torch.Tensor]):
+    def send_outputs_from_runtime(
+        self, batch_index: int, batch_outputs: List[torch.Tensor]
+    ):
         """ send results for a processed batch, previously loaded through load_batch_to_runtime """
-        batch_outputs = [tensor.to(device='cpu').share_memory_()
-                         for tensor in batch_outputs]
+        batch_outputs = [
+            tensor.to(device="cpu").share_memory_() for tensor in batch_outputs
+        ]
         self.outputs_sender.send((batch_index, batch_outputs))
 
     def get_task_size(self, task: Task) -> int:

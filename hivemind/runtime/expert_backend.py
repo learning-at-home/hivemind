@@ -4,7 +4,14 @@ import torch
 from torch import nn
 
 from .task_pool import TaskPool
-from ..utils import nested_flatten, nested_pack, nested_compare, BatchTensorProto, DUMMY_BATCH_SIZE, nested_map
+from ..utils import (
+    nested_flatten,
+    nested_pack,
+    nested_compare,
+    BatchTensorProto,
+    DUMMY_BATCH_SIZE,
+    nested_map,
+)
 
 
 class ExpertBackend(nn.Module):
@@ -29,28 +36,40 @@ class ExpertBackend(nn.Module):
     :param kwargs: extra parameters to be forwarded into TaskPool.__init__
     """
 
-    def __init__(self, name: str, expert: nn.Module, opt: torch.optim.Optimizer, *,
-                 args_schema: Tuple[BatchTensorProto, ...] = None,
-                 kwargs_schema: Dict[str, BatchTensorProto] = None,
-                 outputs_schema: Union[BatchTensorProto, Tuple[BatchTensorProto, ...]] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        name: str,
+        expert: nn.Module,
+        opt: torch.optim.Optimizer,
+        *,
+        args_schema: Tuple[BatchTensorProto, ...] = None,
+        kwargs_schema: Dict[str, BatchTensorProto] = None,
+        outputs_schema: Union[BatchTensorProto, Tuple[BatchTensorProto, ...]] = None,
+        **kwargs,
+    ):
         super().__init__()
         self.expert, self.opt, self.name = expert, opt, name
 
         self.args_schema = args_schema = tuple(args_schema or ())
         self.kwargs_schema = kwargs_schema = dict(kwargs_schema or {})
-        assert args_schema or kwargs_schema, "expert must receive at least one positional or keyword input." \
-                                             " Did you forget to provide args_schema/kwargs_schema?"
+        assert args_schema or kwargs_schema, (
+            "expert must receive at least one positional or keyword input."
+            " Did you forget to provide args_schema/kwargs_schema?"
+        )
 
         if outputs_schema is None:
             # run expert once to get outputs schema
-            dummy_args = tuple(sample.make_empty(DUMMY_BATCH_SIZE)
-                               for sample in args_schema)
-            dummy_kwargs = {key: sample.make_empty(
-                DUMMY_BATCH_SIZE) for key, sample in kwargs_schema.items()}
+            dummy_args = tuple(
+                sample.make_empty(DUMMY_BATCH_SIZE) for sample in args_schema
+            )
+            dummy_kwargs = {
+                key: sample.make_empty(DUMMY_BATCH_SIZE)
+                for key, sample in kwargs_schema.items()
+            }
             dummy_outputs = self.expert(*dummy_args, **dummy_kwargs)
-            outputs_schema = nested_map(
-                BatchTensorProto.from_tensor, dummy_outputs) + (get_rng_states(),)
+            outputs_schema = nested_map(BatchTensorProto.from_tensor, dummy_outputs) + (
+                get_rng_states(),
+            )
             # also submit all buffers and RNG state (torch.size)
             # last one is RNG state, buffers come before it
 
@@ -58,10 +77,10 @@ class ExpertBackend(nn.Module):
         self.forward_schema = (self.args_schema, self.kwargs_schema)
         # original inputs and grad w.r.t. outputs
         self.backward_schema = (self.forward_schema, self.outputs_schema)
-        self.forward_pool = TaskPool(
-            self.forward, uid=f'{self.name}_forward', **kwargs)
+        self.forward_pool = TaskPool(self.forward, uid=f"{self.name}_forward", **kwargs)
         self.backward_pool = TaskPool(
-            self.backward, uid=f'{self.name}_backward', **kwargs)
+            self.backward, uid=f"{self.name}_backward", **kwargs
+        )
 
     def forward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
@@ -102,34 +121,49 @@ class ExpertBackend(nn.Module):
            Please make sure to call ``ExpertBackend.apply_gradients`` **within** this method, otherwise the expert will not train
         """
         (args, kwargs), grad_outputs, rng_states = nested_pack(
-            inputs, structure=self.backward_schema)
+            inputs, structure=self.backward_schema
+        )
 
         cur_rng_states = get_rng_states()
         set_rng_states(rng_states)
 
         with torch.enable_grad():
             args = [tensor.detach().requires_grad_(True) for tensor in args]
-            kwargs = {input_key: tensor.detach().requires_grad_(True)
-                      for input_key, tensor in kwargs.items()}
+            kwargs = {
+                input_key: tensor.detach().requires_grad_(True)
+                for input_key, tensor in kwargs.items()
+            }
 
             outputs = self.expert(*args, **kwargs)
             assert nested_compare(
-                outputs, grad_outputs), "outputs and grad_outputs must have the same structure"
+                outputs, grad_outputs
+            ), "outputs and grad_outputs must have the same structure"
 
             outputs_flat = tuple(nested_flatten(outputs))
 
-            grad_outputs_flat = tuple(map(
-                lambda grad, out: grad.to(
-                    device=out.device, dtype=out.dtype, non_blocking=True),
-                nested_flatten(grad_outputs), outputs_flat))
-            torch.autograd.backward(outputs_flat, grad_tensors=grad_outputs_flat,
-                                    create_graph=False, retain_graph=False)
+            grad_outputs_flat = tuple(
+                map(
+                    lambda grad, out: grad.to(
+                        device=out.device, dtype=out.dtype, non_blocking=True
+                    ),
+                    nested_flatten(grad_outputs),
+                    outputs_flat,
+                )
+            )
+            torch.autograd.backward(
+                outputs_flat,
+                grad_tensors=grad_outputs_flat,
+                create_graph=False,
+                retain_graph=False,
+            )
             self.apply_gradients()
 
         set_rng_states(cur_rng_states)
 
-        return tuple(x.grad if isinstance(x.grad, torch.Tensor) else torch.zeros_like(x)
-                     for x in nested_flatten((args, kwargs)))
+        return tuple(
+            x.grad if isinstance(x.grad, torch.Tensor) else torch.zeros_like(x)
+            for x in nested_flatten((args, kwargs))
+        )
 
     def apply_gradients(self) -> None:
         """
@@ -140,8 +174,11 @@ class ExpertBackend(nn.Module):
 
     def get_info(self) -> Dict[str, Any]:
         """ Get expert parameters and stats. Used by RemoteExpert to check shapes and for DMoE orchestration. """
-        return dict(forward_schema=self.forward_schema, outputs_schema=self.outputs_schema,
-                    keyword_names=tuple(self.kwargs_schema.keys()))
+        return dict(
+            forward_schema=self.forward_schema,
+            outputs_schema=self.outputs_schema,
+            keyword_names=tuple(self.kwargs_schema.keys()),
+        )
 
     def get_pools(self) -> Sequence[TaskPool]:
         """ return all pools that should be processed by ``Runtime`` """
