@@ -46,8 +46,8 @@ class ExpertBackend(nn.Module):
             # run expert once to get outputs schema
             dummy_args = tuple(sample.make_empty(DUMMY_BATCH_SIZE) for sample in args_schema)
             dummy_kwargs = {key: sample.make_empty(DUMMY_BATCH_SIZE) for key, sample in kwargs_schema.items()}
-            dummy_outputs = self.expert(*dummy_args, **dummy_kwargs) + [get_rng_states()]
-            outputs_schema = nested_map(BatchTensorProto.from_tensor, dummy_outputs)
+            dummy_outputs = self.expert(*dummy_args, **dummy_kwargs)
+            outputs_schema = nested_map(BatchTensorProto.from_tensor, dummy_outputs) + (get_rng_states(),)
             # also submit all buffers and RNG state (torch.size)
             # last one is RNG state, buffers come before it
 
