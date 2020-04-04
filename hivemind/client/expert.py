@@ -70,7 +70,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         assert len(msg) != 0, "ExpertBackend.forward did not respond"
         *outputs, rng_state = tuple(PytorchSerializer.loads(msg))
         ctx.rng_state = rng_state
-        return rng_state  # flattened expert outputs
+        return outputs  # flattened expert outputs
 
     @staticmethod
     @once_differentiable
