@@ -141,7 +141,7 @@ class ExpertBackend(nn.Module):
 def get_rng_states():
     states = (torch.get_rng_state(),)
     if torch.cuda.is_available():
-        states = states + torch.cuda.get_rng_state()
+        states = states + (torch.cuda.get_rng_state(),)
     return states
 
 
