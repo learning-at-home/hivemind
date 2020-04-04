@@ -172,7 +172,7 @@ class TaskPool(TaskPoolBase):
             if isinstance(payload, BaseException):
                 raise payload
             else:
-                batch_index, batch_outputs = payload
+                batch_index, (batch_outputs, batch_rng_state) = payload
 
             # split batch into partitions for individual tasks
             batch_tasks = pending_batches.pop(batch_index)
@@ -181,7 +181,7 @@ class TaskPool(TaskPoolBase):
 
             # dispatch results to futures
             for task, task_outputs in zip(batch_tasks, outputs_per_task):
-                task.future.set_result(tuple(task_outputs))
+                task.future.set_result(tuple(task_outputs) + (batch_rng_state,))
 
     @property
     def empty(self):
