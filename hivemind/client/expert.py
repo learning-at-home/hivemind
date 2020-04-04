@@ -1,17 +1,16 @@
-from typing import Tuple, Optional
+from typing import Optional
+from typing import Tuple
 
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-from ..utils import (
-    nested_flatten,
-    DUMMY,
-    PytorchSerializer,
-    nested_pack,
-    nested_compare,
-    Connection,
-)
+from ..utils import Connection
+from ..utils import DUMMY
+from ..utils import nested_compare
+from ..utils import nested_flatten
+from ..utils import nested_pack
+from ..utils import PytorchSerializer
 
 
 class RemoteExpert(nn.Module):
