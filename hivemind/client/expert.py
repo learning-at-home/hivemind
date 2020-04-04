@@ -59,9 +59,10 @@ class _RemoteModuleCall(torch.autograd.Function):
     def forward(ctx, dummy: torch.Tensor,
                 uid: str, host: str, port: int, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         # Note: *inputs are flattened input tensors that follow the expert's info['input_schema']
-        inputs = tuple(map(torch.Tensor.detach, inputs))  # detach to avoid pickling the computation graph
+        *inputs, rng_state = tuple(map(torch.Tensor.detach, inputs))  # detach to avoid pickling the computation graph
         ctx.uid, ctx.host, ctx.port = uid, host, port
-        ctx.save_for_backward(*inputs)
+        ctx.rng_state = rng_state
+        ctx.save_for_backward(inputs)
 
         connection = Connection.create(ctx.host, ctx.port)
         connection.send_raw('fwd_', PytorchSerializer.dumps((ctx.uid, inputs)))
@@ -73,7 +74,7 @@ class _RemoteModuleCall(torch.autograd.Function):
     @once_differentiable
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
         connection = Connection.create(ctx.host, ctx.port)
-        payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
+        payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs, ctx.rng_state)))
         connection.send_raw('bwd_', PytorchSerializer.dumps((ctx.uid, payload)))
         rtype, msg = connection.recv_message()
         assert len(msg) != 0, "ExpertBackend.backward did not respond"

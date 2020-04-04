@@ -46,8 +46,10 @@ class ExpertBackend(nn.Module):
             # run expert once to get outputs schema
             dummy_args = tuple(sample.make_empty(DUMMY_BATCH_SIZE) for sample in args_schema)
             dummy_kwargs = {key: sample.make_empty(DUMMY_BATCH_SIZE) for key, sample in kwargs_schema.items()}
-            dummy_outputs = self.expert(*dummy_args, **dummy_kwargs)
+            dummy_outputs = self.expert(*dummy_args, **dummy_kwargs) + [torch.cuda.get_rng_state()]
             outputs_schema = nested_map(BatchTensorProto.from_tensor, dummy_outputs)
+            # also submit all buffers and RNG state (torch.size)
+            # last one is RNG state, buffers come before it
 
         self.outputs_schema = outputs_schema
         self.forward_schema = (self.args_schema, self.kwargs_schema)
@@ -74,7 +76,7 @@ class ExpertBackend(nn.Module):
             outputs = self.expert(*args, **kwargs)
 
         # Note: TaskPool requires function to accept and return a flat tuple of values, we pack/unpack it on client side
-        return tuple(nested_flatten(outputs))
+        return tuple(nested_flatten([outputs] + [torch.cuda.get_rng_state()]))
 
     def backward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
@@ -93,7 +95,10 @@ class ExpertBackend(nn.Module):
 
            Please make sure to call ``ExpertBackend.apply_gradients`` **within** this method, otherwise the expert will not train
         """
-        (args, kwargs), grad_outputs = nested_pack(inputs, structure=self.backward_schema)
+        (args, kwargs), grad_outputs, rng_state = nested_pack(inputs, structure=self.backward_schema)
+
+        cur_rng_state = torch.cuda.get_rng_state()
+        torch.cuda.set_rng_state(rng_state)
 
         with torch.enable_grad():
             args = [tensor.detach().requires_grad_(True) for tensor in args]
@@ -110,6 +115,8 @@ class ExpertBackend(nn.Module):
             torch.autograd.backward(outputs_flat, grad_tensors=grad_outputs_flat,
                                     create_graph=False, retain_graph=False)
             self.apply_gradients()
+
+        torch.cuda.set_rng_state(cur_rng_state)
 
         return tuple(x.grad if isinstance(x.grad, torch.Tensor) else torch.zeros_like(x)
                      for x in nested_flatten((args, kwargs)))
@@ -129,4 +136,3 @@ class ExpertBackend(nn.Module):
     def get_pools(self) -> Sequence[TaskPool]:
         """ return all pools that should be processed by ``Runtime`` """
         return self.forward_pool, self.backward_pool
-
