@@ -46,9 +46,9 @@ class RemoteExpert(nn.Module):
                 f"Inputs do not match expert input schema. Did you pass the right number of parameters?"
             )
 
-        flat_outputs = _RemoteModuleCall.apply(
-            DUMMY, self.uid, self.host, self.port, *nested_flatten(forward_inputs)
-        )
+        flat_outputs = _RemoteModuleCall.apply(DUMMY, self.uid, self.host,
+                                               self.port,
+                                               *nested_flatten(forward_inputs))
         # Note: we send DUMMY to prevent torch from excluding expert from backward if no other inputs require grad
         return nested_pack(flat_outputs, structure=self.info["outputs_schema"])
 
@@ -68,9 +68,8 @@ class _RemoteModuleCall(torch.autograd.Function):
     """ Internal autograd-friendly call of a remote module. For applications, use RemoteExpert instead. """
 
     @staticmethod
-    def forward(
-        ctx, dummy: torch.Tensor, uid: str, host: str, port: int, *inputs: torch.Tensor
-    ) -> Tuple[torch.Tensor, ...]:
+    def forward(ctx, dummy: torch.Tensor, uid: str, host: str, port: int,
+                *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         # Note: *inputs are flattened input tensors that follow the expert's info['input_schema']
         # detach to avoid pickling the computation graph
         inputs = tuple(map(torch.Tensor.detach, inputs))
@@ -91,9 +90,9 @@ class _RemoteModuleCall(torch.autograd.Function):
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
         connection = Connection.create(ctx.host, ctx.port)
         payload = tuple(
-            nested_flatten((ctx.saved_tensors, grad_outputs, ctx.rng_state))
-        )
-        connection.send_raw("bwd_", PytorchSerializer.dumps((ctx.uid, payload)))
+            nested_flatten((ctx.saved_tensors, grad_outputs, ctx.rng_state)))
+        connection.send_raw("bwd_", PytorchSerializer.dumps(
+            (ctx.uid, payload)))
         rtype, msg = connection.recv_message()
         assert len(msg) != 0, "ExpertBackend.backward did not respond"
         grad_inputs = PytorchSerializer.loads(msg)
