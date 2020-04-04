@@ -44,18 +44,24 @@ class ExpertBackend(nn.Module):
 
         if outputs_schema is None:
             # run expert once to get outputs schema
-            dummy_args = tuple(sample.make_empty(DUMMY_BATCH_SIZE) for sample in args_schema)
-            dummy_kwargs = {key: sample.make_empty(DUMMY_BATCH_SIZE) for key, sample in kwargs_schema.items()}
+            dummy_args = tuple(sample.make_empty(DUMMY_BATCH_SIZE)
+                               for sample in args_schema)
+            dummy_kwargs = {key: sample.make_empty(
+                DUMMY_BATCH_SIZE) for key, sample in kwargs_schema.items()}
             dummy_outputs = self.expert(*dummy_args, **dummy_kwargs)
-            outputs_schema = nested_map(BatchTensorProto.from_tensor, dummy_outputs) + (get_rng_states(),)
+            outputs_schema = nested_map(
+                BatchTensorProto.from_tensor, dummy_outputs) + (get_rng_states(),)
             # also submit all buffers and RNG state (torch.size)
             # last one is RNG state, buffers come before it
 
         self.outputs_schema = outputs_schema
         self.forward_schema = (self.args_schema, self.kwargs_schema)
-        self.backward_schema = (self.forward_schema, self.outputs_schema)  # original inputs and grad w.r.t. outputs
-        self.forward_pool = TaskPool(self.forward, uid=f'{self.name}_forward', **kwargs)
-        self.backward_pool = TaskPool(self.backward, uid=f'{self.name}_backward', **kwargs)
+        # original inputs and grad w.r.t. outputs
+        self.backward_schema = (self.forward_schema, self.outputs_schema)
+        self.forward_pool = TaskPool(
+            self.forward, uid=f'{self.name}_forward', **kwargs)
+        self.backward_pool = TaskPool(
+            self.backward, uid=f'{self.name}_backward', **kwargs)
 
     def forward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
@@ -95,22 +101,26 @@ class ExpertBackend(nn.Module):
 
            Please make sure to call ``ExpertBackend.apply_gradients`` **within** this method, otherwise the expert will not train
         """
-        (args, kwargs), grad_outputs, rng_states = nested_pack(inputs, structure=self.backward_schema)
+        (args, kwargs), grad_outputs, rng_states = nested_pack(
+            inputs, structure=self.backward_schema)
 
         cur_rng_states = get_rng_states()
         set_rng_states(rng_states)
 
         with torch.enable_grad():
             args = [tensor.detach().requires_grad_(True) for tensor in args]
-            kwargs = {input_key: tensor.detach().requires_grad_(True) for input_key, tensor in kwargs.items()}
+            kwargs = {input_key: tensor.detach().requires_grad_(True)
+                      for input_key, tensor in kwargs.items()}
 
             outputs = self.expert(*args, **kwargs)
-            assert nested_compare(outputs, grad_outputs), "outputs and grad_outputs must have the same structure"
+            assert nested_compare(
+                outputs, grad_outputs), "outputs and grad_outputs must have the same structure"
 
             outputs_flat = tuple(nested_flatten(outputs))
 
             grad_outputs_flat = tuple(map(
-                lambda grad, out: grad.to(device=out.device, dtype=out.dtype, non_blocking=True),
+                lambda grad, out: grad.to(
+                    device=out.device, dtype=out.dtype, non_blocking=True),
                 nested_flatten(grad_outputs), outputs_flat))
             torch.autograd.backward(outputs_flat, grad_tensors=grad_outputs_flat,
                                     create_graph=False, retain_graph=False)
