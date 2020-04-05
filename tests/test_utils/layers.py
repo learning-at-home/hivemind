@@ -64,7 +64,7 @@ class NopExpert(nn.Sequential):
 
 class DeterministicDropoutNetwork(nn.Module):
     def __init__(self, hid_dim, dropout_prob):
-        super().__init__(self)
+        super().__init__()
         self.linear_in = nn.Linear(hid_dim, 2 * hid_dim)
         self.activation = nn.ReLU()
         self.dropout = DeterministicDropout(dropout_prob)

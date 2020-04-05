@@ -10,7 +10,7 @@ from .layers import name_to_block
 
 def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024, num_handlers=None,
                       expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None, no_optimizer=False,
-                      no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True, start=False,
+                      no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
                       UID_DELIMETER=hivemind.DHTNode.UID_DELIMETER, **kwargs) -> hivemind.Server:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
     if verbose and len(kwargs) != 0:
@@ -27,7 +27,7 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
             dht_root = hivemind.DHTNode(
                 *initial_peers, port=root_port or hivemind.find_open_port(), start=True)
             print(f"Initializing DHT with port {dht_root.port}")
-            initial_peers = (('localhost', dht_root.port), )
+            initial_peers = (('localhost', dht_root.port),)
         else:
             print("Bootstrapping dht with peers:", initial_peers)
             if root_port is not None:
@@ -54,11 +54,10 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
         dht, experts, addr=host, port=port or hivemind.find_open_port(),
         conn_handler_processes=num_handlers, device=device)
 
-    if start:
-        server.run_in_background(await_ready=True)
-        if verbose:
-            print(f"Server started at {server.addr}:{server.port}")
-            print(f"Got {num_experts} active experts of type {expert_cls}: {list(experts.keys())}")
+    if verbose:
+        print(f"Server created at {server.addr}:{server.port}")
+        print(f"Got {num_experts} active experts of type {expert_cls}: {list(experts.keys())}")
+
     return server
 
 
@@ -125,8 +124,10 @@ if __name__ == '__main__':
 
     args['initial_peers'] = eval(args['initial_peers'])
 
+    server = make_dummy_server(**args, start=True, verbose=True)
+
     try:
-        server = make_dummy_server(**args, start=True, verbose=True)
+        server.run_in_background(await_ready=True)
         server.join()
     finally:
         server.shutdown()
