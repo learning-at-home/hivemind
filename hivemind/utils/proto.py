@@ -47,26 +47,22 @@ class BatchTensorProto(TensorProto):
 
     # compatibility: allow initializing with *size
     def __init__(self, *instance_size, **kwargs):
-        if len(instance_size) == 1 and isinstance(
-            instance_size[0], (list, tuple, torch.Size)
-        ):
+        if len(instance_size) == 1 and isinstance(instance_size[0],
+                                                  (list, tuple, torch.Size)):
             # we were given size as the only parameter instead of *parameters
             instance_size = instance_size[0]
         super().__init__((None, *instance_size), **kwargs)
 
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor):
-        return cls(
-            *tensor.shape[1:],
-            dtype=tensor.dtype,
-            layout=tensor.layout,
-            device=tensor.device,
-            requires_grad=tensor.requires_grad,
-            pin_memory=torch.cuda.is_available() and tensor.is_pinned()
-        )
+        return cls(*tensor.shape[1:],
+                   dtype=tensor.dtype,
+                   layout=tensor.layout,
+                   device=tensor.device,
+                   requires_grad=tensor.requires_grad,
+                   pin_memory=torch.cuda.is_available() and tensor.is_pinned())
 
     def make_empty(self, batch_size, **kwargs):
-        assert (
-            self.shape[0] is None
-        ), "Make sure 0-th dimension is not specified (set to None)"
+        assert (self.shape[0] is None
+                ), "Make sure 0-th dimension is not specified (set to None)"
         return super().make_empty(size=(batch_size, *self.shape[1:]), **kwargs)
