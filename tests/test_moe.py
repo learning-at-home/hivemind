@@ -91,3 +91,4 @@ def test_compute_expert_scores():
 if __name__ == '__main__':
     test_remote_module_call()
     test_compute_expert_scores()
+    test_determinism()
