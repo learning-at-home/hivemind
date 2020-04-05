@@ -1,17 +1,19 @@
-from typing import Dict, Sequence, Any, Tuple, Union
+from typing import Any
+from typing import Dict
+from typing import Sequence
+from typing import Tuple
+from typing import Union
 
 import torch
 from torch import nn
 
+from ..utils import BatchTensorProto
+from ..utils import DUMMY_BATCH_SIZE
+from ..utils import nested_compare
+from ..utils import nested_flatten
+from ..utils import nested_map
+from ..utils import nested_pack
 from .task_pool import TaskPool
-from ..utils import (
-    nested_flatten,
-    nested_pack,
-    nested_compare,
-    BatchTensorProto,
-    DUMMY_BATCH_SIZE,
-    nested_map,
-)
 
 
 class ExpertBackend(nn.Module):
