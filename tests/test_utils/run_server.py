@@ -39,7 +39,7 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
             print(f"Running dht node on port {dht.port}")
 
     sample_input = name_to_input[expert_cls](4, hidden_dim)
-    if isinstance(input, tuple):
+    if isinstance(sample_input, tuple):
         args_schema = tuple(hivemind.BatchTensorProto.from_tensor(arg) for arg in sample_input)
     else:
         args_schema = (hivemind.BatchTensorProto.from_tensor(sample_input),)
