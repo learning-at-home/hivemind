@@ -243,4 +243,4 @@ def linkcode_resolve(domain, info):
         filename = 'hivemind/%s#L%d-L%d' % find_source()
     except Exception:
         filename = info['module'].replace('.', '/') + '.py'
-    return "https://github.com/learning-at-home/tesseract/blob/%s/%s" % (branch, filename)
+    return "https://github.com/learning-at-home/hivemind/blob/%s/%s" % (branch, filename)
