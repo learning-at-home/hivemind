@@ -6,7 +6,7 @@ class DeterministicDropoutFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, keep_prob, mask):
         ctx.keep_prob = keep_prob
-        ctx.mask = mask
+        ctx.save_for_backward(mask)
         return x * mask / keep_prob
 
     @staticmethod
