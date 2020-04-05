@@ -1,6 +1,6 @@
 ## Hivemind
 
-[![Build status](https://circleci.com/gh/learning-at-home/tesseract.svg?style=shield)](https://circleci.com/gh/learning-at-home/tesseract)
+[![Build status](https://circleci.com/gh/learning-at-home/hivemind.svg?style=shield)](https://circleci.com/gh/learning-at-home/hivemind)
 [![Documentation Status](https://readthedocs.org/projects/learning-at-home/badge/?version=latest)](https://learning-at-home.readthedocs.io/en/latest/?badge=latest)
 
 Distributed training of large neural networks across volunteer computers.
