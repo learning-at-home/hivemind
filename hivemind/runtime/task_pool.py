@@ -94,7 +94,7 @@ class TaskPool(TaskPoolBase):
         future1, future2 = SharedFuture.make_pair()
         task = Task(future1, args)
         if self.get_task_size(task) > self.max_batch_size:
-            exc = ValueError("Task size greater than max_batch_size, it will never be finished")
+            exc = ValueError(f"Task size greater than max_batch_size ({self.max_batch_size}), it will never be finished")
             future2.set_exception(exc)
         else:
             self.tasks.put(task)
