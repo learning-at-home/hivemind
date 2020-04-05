@@ -5,7 +5,7 @@ import argparse
 
 import torch
 import hivemind
-from .layers import name_to_block
+from .layers import name_to_block, name_to_input
 
 
 def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024, num_handlers=None,
@@ -27,7 +27,7 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
             dht_root = hivemind.DHTNode(
                 *initial_peers, port=root_port or hivemind.find_open_port(), start=True)
             print(f"Initializing DHT with port {dht_root.port}")
-            initial_peers = (('localhost', dht_root.port), )
+            initial_peers = (('localhost', dht_root.port),)
         else:
             print("Bootstrapping dht with peers:", initial_peers)
             if root_port is not None:
@@ -38,6 +38,12 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
         if verbose:
             print(f"Running dht node on port {dht.port}")
 
+    sample_input = name_to_input[expert_cls]
+    if isinstance(input, tuple):
+        args_schema = tuple(hivemind.BatchTensorProto.from_tensor(arg) for arg in sample_input)
+    else:
+        args_schema = (hivemind.BatchTensorProto.from_tensor(sample_input),)
+
     # initialize experts
     experts = {}
     for i in range(num_experts):
@@ -45,7 +51,7 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
         opt = torch.optim.SGD(expert.parameters(), 0.0) if no_optimizer else torch.optim.Adam(expert.parameters())
         expert_uid = f'{expert_prefix}{UID_DELIMETER}{i + expert_offset}'
         experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
-                                                     args_schema=(hivemind.BatchTensorProto(hidden_dim),),
+                                                     args_schema=args_schema,
                                                      outputs_schema=hivemind.BatchTensorProto(hidden_dim),
                                                      max_batch_size=max_batch_size,
                                                      )
