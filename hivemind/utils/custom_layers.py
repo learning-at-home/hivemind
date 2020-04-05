@@ -11,7 +11,7 @@ class DeterministicDropoutFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        return ctx.mask * grad_output / ctx.keep_prob, None, None
+        return ctx.saved_tensors[0] * grad_output / ctx.keep_prob, None, None
 
 
 class DeterministicDropout(nn.Module):
