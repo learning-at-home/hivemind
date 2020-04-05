@@ -1,5 +1,7 @@
 import torch
-from torch import nn as nn
+import torch.nn as nn
+
+from hivemind.utils.custom_layers import DeterministicDropout
 
 
 class FeedforwardBlock(nn.Module):
@@ -60,9 +62,25 @@ class NopExpert(nn.Sequential):
         return x.clone()
 
 
+class DeterministicDropoutNetwork(nn.Module):
+    def __init__(self, hid_dim, dropout_prob):
+        super().__init__(self)
+        self.linear_in = nn.Linear(hid_dim, 2 * hid_dim)
+        self.activation = nn.ReLU()
+        self.dropout = DeterministicDropout(dropout_prob)
+        self.linear_out = nn.Linear(2 * hid_dim, hid_dim)
+
+    def forward(self, x, mask):
+        x = self.dropout(self.linear_in(x), mask)
+        return self.linear_out(self.activation(x))
+
+
 name_to_block = {'ffn': lambda hid_dim: FeedforwardBlock(hid_dim),
                  'transformer': lambda hid_dim: TransformerEncoderLayer(hid_dim, nhead=16),
-                 'nop': lambda hid_dim: NopExpert(hid_dim)}
+                 'nop': lambda hid_dim: NopExpert(hid_dim),
+                 'det_dropout': lambda hid_dim: DeterministicDropoutNetwork(hid_dim, dropout_prob=0.2)}
 name_to_input = {'ffn': lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
                  'transformer': lambda batch_size, hid_dim: torch.empty((batch_size, 512, hid_dim)),
-                 'nop': lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))}
+                 'nop': lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
+                 'det_dropout': lambda batch_size, hid_dim:
+                 (torch.empty((batch_size, hid_dim)), torch.randint(0, 1, (batch_size, hid_dim)))}
