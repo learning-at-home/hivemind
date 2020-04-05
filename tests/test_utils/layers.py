@@ -71,7 +71,7 @@ class DeterministicDropoutNetwork(nn.Module):
         self.linear_out = nn.Linear(2 * hid_dim, hid_dim)
 
     def forward(self, x, mask):
-        x = self.linear_in(self.dropout(x), mask)
+        x = self.linear_in(self.dropout(x, mask))
         return self.linear_out(self.activation(x))
 
 
