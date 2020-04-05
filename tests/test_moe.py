@@ -59,6 +59,7 @@ def test_determinism():
 
         grad, = torch.autograd.grad(out.sum(), xx, retain_graph=True)
         grad_rerun, = torch.autograd.grad(out_rerun.sum(), xx, retain_graph=True)
+        grad += 1
 
     assert torch.allclose(out, out_rerun, rtol, atol), "Dropout layer outputs are non-deterministic."
     assert torch.allclose(grad, grad_rerun, rtol, atol), "Gradients are non-deterministic."
