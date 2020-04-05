@@ -102,6 +102,10 @@ class TaskPool(TaskPoolBase):
         total_size = 0
 
         while True:
+            if total_size >= self.min_batch_size and self.tasks.empty():
+                yield batch
+                batch = []
+                total_size = 0
             try:
                 task = self.tasks.get(timeout=self.timeout)
             except Empty:
@@ -112,7 +116,7 @@ class TaskPool(TaskPoolBase):
 
             task_size = self.get_task_size(task)
 
-            if total_size + task_size > self.max_batch_size or total_size >= self.min_batch_size and self.tasks.empty():
+            if total_size + task_size > self.max_batch_size:
                 yield batch
                 batch = []
                 total_size = 0
