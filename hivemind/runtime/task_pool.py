@@ -10,7 +10,11 @@ import uuid
 from collections import namedtuple
 from concurrent.futures import Future
 from queue import Empty
-from typing import List, Tuple, Dict, Any, Generator
+from typing import Any
+from typing import Dict
+from typing import Generator
+from typing import List
+from typing import Tuple
 
 import torch
 
