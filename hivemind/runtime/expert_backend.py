@@ -96,8 +96,10 @@ class ExpertBackend(nn.Module):
         (args, kwargs), grad_outputs = nested_pack(inputs, structure=self.backward_schema)
 
         with torch.enable_grad():
-            args = [tensor.detach().requires_grad_(True) for tensor in args]
-            kwargs = {input_key: tensor.detach().requires_grad_(True) for input_key, tensor in kwargs.items()}
+            args = [tensor.detach().requires_grad_(True) if tensor.dtype in (torch.half, torch.float, torch.double)
+                    else tensor.detach() for tensor in args]
+            kwargs = {input_key: (tensor.detach().requires_grad_(True) if tensor.dtype in (torch.half, torch.float, torch.double)
+                                  else tensor.detach()) for input_key, tensor in kwargs.items()}
 
             outputs = self.expert(*args, **kwargs)
             assert nested_compare(outputs, grad_outputs), "outputs and grad_outputs must have the same structure"
@@ -129,4 +131,3 @@ class ExpertBackend(nn.Module):
     def get_pools(self) -> Sequence[TaskPool]:
         """ return all pools that should be processed by ``Runtime`` """
         return self.forward_pool, self.backward_pool
-
