@@ -15,6 +15,11 @@ class DeterministicDropoutFunction(torch.autograd.Function):
 
 
 class DeterministicDropout(nn.Module):
+    """
+    Custom dropout layer which accepts dropout mask as an input (drop_prob is only used for scaling input activations).
+    Can be used with RemoteExpert/ExpertBackend to ensure that dropout mask is the same at forward and backward steps
+    """
+
     def __init__(self, drop_prob):
         super().__init__()
         self.keep_prob = 1 - drop_prob
