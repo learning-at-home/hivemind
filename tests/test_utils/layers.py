@@ -75,12 +75,20 @@ class DeterministicDropoutNetwork(nn.Module):
         return self.linear_out(self.activation(x))
 
 
-name_to_block = {'ffn': lambda hid_dim: FeedforwardBlock(hid_dim),
-                 'transformer': lambda hid_dim: TransformerEncoderLayer(hid_dim, nhead=16),
-                 'nop': lambda hid_dim: NopExpert(hid_dim),
-                 'det_dropout': lambda hid_dim: DeterministicDropoutNetwork(hid_dim, dropout_prob=0.2)}
-name_to_input = {'ffn': lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
-                 'transformer': lambda batch_size, hid_dim: torch.empty((batch_size, 512, hid_dim)),
-                 'nop': lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
-                 'det_dropout': lambda batch_size, hid_dim:
-                 (torch.empty((batch_size, hid_dim)), torch.randint(0, 1, (batch_size, hid_dim)))}
+name_to_block = {
+    "ffn": lambda hid_dim: FeedforwardBlock(hid_dim),
+    "transformer": lambda hid_dim: TransformerEncoderLayer(hid_dim, nhead=16),
+    "nop": lambda hid_dim: NopExpert(hid_dim),
+    "det_dropout": lambda hid_dim: DeterministicDropoutNetwork(
+        hid_dim, dropout_prob=0.2
+    ),
+}
+name_to_input = {
+    "ffn": lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
+    "transformer": lambda batch_size, hid_dim: torch.empty((batch_size, 512, hid_dim)),
+    "nop": lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
+    "det_dropout": lambda batch_size, hid_dim: (
+        torch.empty((batch_size, hid_dim)),
+        torch.randint(0, 1, (batch_size, hid_dim)),
+    ),
+}
