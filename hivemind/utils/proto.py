@@ -37,9 +37,11 @@ class TensorProto(ProtoBase):
 class BatchTensorProto(TensorProto):
     """ torch Tensor with a variable 0-th dimension, used to describe batched data """
 
-    def __init__(self, *instance_size, **kwargs):  # compatibility: allow initializing with *size
+    # compatibility: allow initializing with *size
+    def __init__(self, *instance_size, **kwargs):
         if len(instance_size) == 1 and isinstance(instance_size[0], (list, tuple, torch.Size)):
-            instance_size = instance_size[0]  # we were given size as the only parameter instead of *parameters
+            # we were given size as the only parameter instead of *parameters
+            instance_size = instance_size[0]
         super().__init__((None, *instance_size), **kwargs)
 
     @classmethod
@@ -48,5 +50,6 @@ class BatchTensorProto(TensorProto):
                    device=tensor.device, requires_grad=tensor.requires_grad, pin_memory=torch.cuda.is_available() and tensor.is_pinned())
 
     def make_empty(self, batch_size, **kwargs):
-        assert self.shape[0] is None, "Make sure 0-th dimension is not specified (set to None)"
+        assert self.shape[
+            0] is None, "Make sure 0-th dimension is not specified (set to None)"
         return super().make_empty(size=(batch_size, *self.shape[1:]), **kwargs)
