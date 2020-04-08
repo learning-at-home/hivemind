@@ -68,8 +68,8 @@ class ExpertBackend(nn.Module):
 
            It should return gradients w.r.t. inputs that follow ``nested_flatten(self.outputs_schema)``;
 
-           TODO we handle layer states (e.g. batchnorm stats) incorrectly, updating them twice.
-           For now, either register all buffers as outputs or avoid stateful experts
+           .. todo we handle layer states (e.g. batchnorm stats) incorrectly, updating them twice.
+           .. For now, either register all buffers as outputs or avoid stateful experts
 
         """
         args, kwargs = nested_pack(inputs, structure=self.forward_schema)
@@ -93,7 +93,7 @@ class ExpertBackend(nn.Module):
            Runtime doesn't guarantee that backward will be performed in the same order and for the same data
            as forward, so we recommend stateless backward pass that re-runs expert forward pass inside backward.
 
-           TODO correct state handling (see forward)
+           .. todo correct state handling (see forward)
 
            Please make sure to call ``ExpertBackend.apply_gradients`` **within** this method, otherwise the expert will not train
         """
