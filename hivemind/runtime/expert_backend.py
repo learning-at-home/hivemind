@@ -22,7 +22,7 @@ class ExpertBackend(nn.Module):
         - All \*args, \*\*kwargs and outputs must be **tensors** where 0-th dimension represents to batch size
         - We recommend using experts that are ~invariant to the order in which they process batches
         - Using randomness (e.g. Dropout) leads to different samples at forward and backward. If you want to ensure consistency,
-            you should register these samples as model outputs, so that they are sent back to the client.
+            you should explicitly register these random variables as model outputs, so that they are sent back to the client.
             See hivemind.utils.custom_layers.DeterministicDropout for an example
 
     :param opt: torch optimizer to be applied on every backward call
