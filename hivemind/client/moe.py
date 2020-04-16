@@ -26,7 +26,7 @@ class RemoteMixtureOfExperts(nn.Module):
     :param grid_size: hivemind dimensions that form expert uid (see below)
     :param uid_prefix: common prefix for all expert uids
      expert uid follows the pattern {uid_prefix}.{0...grid_size[0]}.{0...grid_size[1]}...{0...grid_size[-1]}
-    :param dht: DHTNode where the experts reside
+    :param dht: DHT where the experts reside
     :param num_workers: number of threads for parallel dht operation
     :param k_best: queries this many experts with highest scores
     :param k_min: makes sure at least this many experts returned output

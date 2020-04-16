@@ -1,3 +1,9 @@
+"""
+This sub-module implements a node in a Kademlia-based DHT. The code is organized as follows:
+ * class DHT (below) - high-level class for model training. Runs DHTNode in a background process.
+ * class DHTNode (node.py) - an asyncio implementation of dht server, stores AND gets keys. Asyncio-based.
+ * class KademliaProtocol (protocol.py) - an rpc protocol to request data from dht nodes. Asyncio-based.
+"""
 import asyncio
 import datetime
 import multiprocessing as mp
@@ -7,16 +13,24 @@ from typing import Tuple, List, Optional
 from kademlia.network import Server
 
 from hivemind.client import RemoteExpert
-from hivemind.utils import run_forever, SharedFuture, PickleSerializer
+from hivemind.utils import run_forever, SharedFuture, PickleSerializer, find_open_port
 
 
-class DHTNode(mp.Process):
+class DHT(mp.Process):
+    """
+    A high-level interface to hivemind DHT. Runs a dht node in a background process.
+    :param initial_peers: one or multiple pairs of (host, port) pointing to active DHT peers. Default: no peers
+    :param port: a port where DHT will listen to incoming connections. Defaults to hivemind.utils.find_open_port
+    :param start: if True, automatically starts the background process on creation. Otherwise await manual start
+    :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
+    """
     UID_DELIMETER = '.'  # splits expert uids over this delimeter
     HEARTBEAT_EXPIRATION = 120  # expert is inactive iff it fails to post timestamp for *this many seconds*
     make_key = "{}::{}".format
 
-    def __init__(self, *initial_peers: Tuple[str, int], port=8081, start=False, daemon=True):
+    def __init__(self, *initial_peers: Tuple[str, int], port=None, start, daemon=True):
         super().__init__()
+        port = find_open_port() if port is None else port
         self.port, self.initial_peers = port, initial_peers
         self._pipe, self.pipe = mp.Pipe(duplex=False)
         self.ready = mp.Event()
@@ -39,7 +53,7 @@ class DHTNode(mp.Process):
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
-        Starts DHTNode in a background process. if await_ready, this method will wait until background dht
+        Starts DHT in a background process. if await_ready, this method will wait until background dht
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()
