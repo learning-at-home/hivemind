@@ -1,10 +1,9 @@
+import random
 import heapq
 import operator
 from itertools import chain
-from random import random
 
 from hivemind.dht.routing import RoutingTable, DHTID
-
 from hivemind.utils.serializer import PickleSerializer
 
 
@@ -30,8 +29,7 @@ def test_ids():
         assert reference == ours, f"ours {ours} != reference {reference}, ids: {ids}"
 
 
-def test_routing_table():
-    # small table
+def test_routing_table_basic():
     node_id = DHTID.generate()
     routing_table = RoutingTable(node_id, bucket_size=20, modulo=5, timeout=300)
     for phony_neighbor_port in random.sample(range(10000), 100):
@@ -42,7 +40,8 @@ def test_routing_table():
         assert len(bucket.replacement_nodes) == 0, "There should be no replacement nodes in a table with 100 entries"
     assert 3 <= len(routing_table.buckets) <= 10, len(routing_table.buckets)
 
-    # large table, various parameter sets
+
+def test_routing_table_parameters():
     for (bucket_size, modulo, min_nbuckets, max_nbuckets) in [
         (20,          5,      45,           65),
         (50,          5,      35,           45),
@@ -58,7 +57,8 @@ def test_routing_table():
         assert min_nbuckets <= len(routing_table.buckets) <= max_nbuckets, (
             f"Unexpected number of buckets: {min_nbuckets} <= {len(routing_table.buckets)} <= {max_nbuckets}")
 
-    # test nearest neighbor search
+
+def test_routing_table_search():
     node_id = DHTID.generate()
     routing_table = RoutingTable(node_id, bucket_size=20, modulo=5, timeout=300)
     num_added = 0

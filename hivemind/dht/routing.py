@@ -25,7 +25,6 @@ class RoutingTable:
     def __init__(self, node_id: DHTID, bucket_size: int, modulo: int, timeout: Union[float, int]):
         self.node_id, self.bucket_size, self.modulo, self.timeout = node_id, bucket_size, modulo, timeout
         self.buckets = [KBucket(node_id.MIN, node_id.MAX, bucket_size)]
-        self.nodes_to_ping: Set[DHTID] = set()
 
     def get_bucket_index(self, node_id: DHTID) -> int:
         """ Get the index of the bucket that the given node would fall into. """
@@ -48,12 +47,10 @@ class RoutingTable:
 
         # Per section 4.2 of paper, split if the bucket has node's own id in its range
         # or if bucket depth is not congruent to 0 mod $b$
-        if bucket.has_in_range(self.node_id) or bucket.depth() % self.modulo != 0:
+        if bucket.has_in_range(self.node_id) or bucket.depth % self.modulo != 0:
             self.split_bucket(bucket_index)
             return self.try_add_node(node_id, addr)
-        else:
-            self.nodes_to_ping.add(node_id)
-            return False
+        return False
 
     def __getitem__(self, node_id: DHTID) -> Endpoint:
         return self.buckets[self.get_bucket_index(node_id)][node_id]
@@ -112,20 +109,23 @@ class RoutingTable:
 
     def register_request_from(self, sender: Tuple[Hostname, Port], node_id: Optional[DHTID]) -> None:
         """ Update routing table on incoming request from host:port """
-        raise NotImplementedError()
+        raise NotImplementedError("TODO")
 
     def register_request_to(self, recepient: Tuple[Hostname, Port], node_id: Optional[DHTID],
                             *, responded: bool) -> None:
         """ Update routing table upon receiving response from a remote node """
         if node_id in self.nodes_to_ping:
             self.nodes_to_ping.remove(node_id)
-        raise NotImplementedError()
+        raise NotImplementedError("TODO")
 
-    def get_refresh_ids(self, timeout) -> List[Tuple[DHTID, Endpoint]]:
-        """ return a list of nodes """
-        staleness_threshold = time.monotonic() - timeout
+    def get_refresh_ids(self) -> List[Tuple[DHTID, Endpoint]]:
+        """ return a list of nodes that should be queried """
+        staleness_threshold = time.monotonic() - self.timeout
         stale_buckets = [bucket for bucket in self.buckets if bucket.last_updated < staleness_threshold]
-        raise NotImplementedError()
+        staleness_ids = [DHTID(random.randint(bucket.lower, bucket.upper)) for bucket in stale_buckets]
+
+
+        raise NotImplementedError("TODO")
 
     def __repr__(self):
         bucket_info = "\n".join(repr(bucket) for bucket in self.buckets)
@@ -138,8 +138,9 @@ class KBucket:
     A bucket containing up to :size: of DHTIDs in [lower, upper) semi-interval.
     Maps DHT node ids to their endpoints (hostname, addr)
     """
-    def __init__(self, lower: int, upper: int, size: int):
-        self.lower, self.upper, self.size = lower, upper, size
+    def __init__(self, lower: int, upper: int, size: int, depth: int = 0):
+        # assert upper - lower == 2 ** depth
+        self.lower, self.upper, self.size, self.depth = lower, upper, size, depth
         self.nodes_to_addr: Dict[DHTID, Endpoint] = {}
         self.replacement_nodes: Dict[DHTID, Endpoint] = {}
         self.last_updated = time.monotonic()
@@ -197,23 +198,16 @@ class KBucket:
         """ Split bucket over midpoint, rounded down, assign nodes to according to their id """
         midpoint = (self.lower + self.upper) // 2
         assert self.lower < midpoint < self.upper, f"Bucket to small to be split: [{self.lower}: {self.upper})"
-        left, right = KBucket(self.lower, midpoint, self.size), KBucket(midpoint, self.upper, self.size)
+        left = KBucket(self.lower, midpoint, self.size, depth=self.depth + 1)
+        right =KBucket(midpoint, self.upper, self.size, depth=self.depth + 1)
         for node_id, addr in chain(self.nodes_to_addr.items(), self.replacement_nodes.items()):
             bucket = left if int(node_id) <= midpoint else right
             bucket.try_add_node(node_id, addr)
         return left, right
 
-    def depth(self):
-        """ :returns: bucket depth aka the number of bits in the greatest common prefix between nodes in this bucket """
-        return DHTID.longest_common_prefix_length(*self.nodes_to_addr.keys())
-
-    def head(self):
-        """ :returns: an endpoint of a first node by the order in which they were added to the KBucket """
-        return next(iter(self.nodes_to_addr.values()))
-
     def __repr__(self):
         return f"{self.__class__.__name__}({len(self.nodes_to_addr)} nodes" \
-               f" with {len(self.replacement_nodes)} replacements, depth={self.depth()}, max size={self.size}" \
+               f" with {len(self.replacement_nodes)} replacements, depth={self.depth}, max size={self.size}" \
                f" lower={hex(self.lower)}, upper={hex(self.upper)})"
 
 
