@@ -2,7 +2,7 @@ import multiprocessing as mp
 import os
 import threading
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
-from typing import Dict
+from typing import Dict, Optional
 
 from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
@@ -33,7 +33,7 @@ class Server(threading.Thread):
         is ready (see .ready below)
     """
 
-    def __init__(self, dht: DHT, expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
+    def __init__(self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
                  port: int = 8080, conn_handler_processes: int = 1, update_period: int = 30, start=False,
                  **kwargs):
         super().__init__()

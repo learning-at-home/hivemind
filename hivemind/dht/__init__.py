@@ -3,6 +3,9 @@ This sub-module implements a node in a Kademlia-based DHT. The code is organized
  * class DHT (below) - high-level class for model training. Runs DHTNode in a background process.
  * class DHTNode (node.py) - an asyncio implementation of dht server, stores AND gets keys. Asyncio-based.
  * class KademliaProtocol (protocol.py) - an rpc protocol to request data from dht nodes. Asyncio-based.
+
+The code in this module is a modified version of https://github.com/bmuller/kademlia
+Brian, if you're reading this: THANK YOU! you're awesome :)
 """
 import asyncio
 import datetime
@@ -13,7 +16,7 @@ from typing import Tuple, List, Optional
 from kademlia.network import Server
 
 from hivemind.client import RemoteExpert
-from hivemind.utils import run_forever, SharedFuture, PickleSerializer, find_open_port
+from hivemind.utils import run_forever, SharedFuture, PickleSerializer, find_open_port, Hostname, Port
 
 
 class DHT(mp.Process):
@@ -28,7 +31,8 @@ class DHT(mp.Process):
     HEARTBEAT_EXPIRATION = 120  # expert is inactive iff it fails to post timestamp for *this many seconds*
     make_key = "{}::{}".format
 
-    def __init__(self, *initial_peers: Tuple[str, int], port=None, start, daemon=True):
+    def __init__(self, *initial_peers: Tuple[Hostname, Port], port: Optional[Port] = None,
+                 start: bool, daemon: bool = True):
         super().__init__()
         port = find_open_port() if port is None else port
         self.port, self.initial_peers = port, initial_peers

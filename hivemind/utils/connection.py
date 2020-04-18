@@ -2,6 +2,9 @@ from contextlib import AbstractContextManager
 from socket import socket
 from typing import Tuple
 
+Hostname, Port = str, int  # flavour types
+Endpoint = Tuple[Hostname, Port]  # https://networkengineering.stackexchange.com/a/9435
+
 
 class Connection(AbstractContextManager):
     header_size = 4  # number of characters in all headers
@@ -9,7 +12,7 @@ class Connection(AbstractContextManager):
 
     __slots__ = ('conn', 'addr')
 
-    def __init__(self, conn: socket, addr: Tuple[str, int]):
+    def __init__(self, conn: socket, addr: Endpoint):
         self.conn, self.addr = conn, addr
 
     @staticmethod
