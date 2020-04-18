@@ -17,13 +17,18 @@ class RoutingTable:
     A data structure that contains DHT peers bucketed according to their distance to node_id
     :param node_id: node id used to measure distance
     :param bucket_size: parameter $k$ from Kademlia paper Section 2.2
-    :param modulo: parameter $b$ from Kademlia paper Section 2.2
+    :param depth_modulo: parameter $b$ from Kademlia paper Section 2.2.
+     In short, RoutingTable will can split bucket containing root indefinitely but will only split other buckets
+      up to the nearest multiple of :depth_modulo:
+    :param staleness_timeout: a bucket is considered stale if no node from that bucket
+        was updated for this many seconds
 
     :note: kademlia paper refers to https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, modulo: int, timeout: Union[float, int]):
-        self.node_id, self.bucket_size, self.modulo, self.timeout = node_id, bucket_size, modulo, timeout
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, staleness_timeout: Union[float, int]):
+        self.node_id, self.bucket_size = node_id, bucket_size
+        self.depth_modulo, self.staleness_timeout = depth_modulo, staleness_timeout
         self.buckets = [KBucket(node_id.MIN, node_id.MAX, bucket_size)]
 
     def get_bucket_index(self, node_id: DHTID) -> int:
@@ -47,7 +52,7 @@ class RoutingTable:
 
         # Per section 4.2 of paper, split if the bucket has node's own id in its range
         # or if bucket depth is not congruent to 0 mod $b$
-        if bucket.has_in_range(self.node_id) or bucket.depth % self.modulo != 0:
+        if bucket.has_in_range(self.node_id) or bucket.depth % self.depth_modulo != 0:
             self.split_bucket(bucket_index)
             return self.try_add_node(node_id, addr)
         return False
@@ -118,9 +123,9 @@ class RoutingTable:
             self.nodes_to_ping.remove(node_id)
         raise NotImplementedError("TODO")
 
-    def get_refresh_ids(self) -> List[Tuple[DHTID, Endpoint]]:
+    def get_nodes_to_refresh(self) -> List[Tuple[DHTID, Endpoint]]:
         """ return a list of nodes that should be queried """
-        staleness_threshold = time.monotonic() - self.timeout
+        staleness_threshold = time.monotonic() - self.staleness_timeout
         stale_buckets = [bucket for bucket in self.buckets if bucket.last_updated < staleness_threshold]
         staleness_ids = [DHTID(random.randint(bucket.lower, bucket.upper)) for bucket in stale_buckets]
 
@@ -130,7 +135,7 @@ class RoutingTable:
     def __repr__(self):
         bucket_info = "\n".join(repr(bucket) for bucket in self.buckets)
         return f"{self.__class__.__name__}(node_id={self.node_id}, bucket_size={self.bucket_size}," \
-               f" modulo={self.modulo}, timeout={self.timeout},\nbuckets=[\n{bucket_info})"
+               f" modulo={self.depth_modulo}, timeout={self.staleness_timeout},\nbuckets=[\n{bucket_info})"
 
 
 class KBucket:
@@ -139,7 +144,7 @@ class KBucket:
     Maps DHT node ids to their endpoints (hostname, addr)
     """
     def __init__(self, lower: int, upper: int, size: int, depth: int = 0):
-        # assert upper - lower == 2 ** depth
+        assert upper - lower == 2 ** (DHTID.HASH_NBYTES * 8 - depth)
         self.lower, self.upper, self.size, self.depth = lower, upper, size, depth
         self.nodes_to_addr: Dict[DHTID, Endpoint] = {}
         self.replacement_nodes: Dict[DHTID, Endpoint] = {}

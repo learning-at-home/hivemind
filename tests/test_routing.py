@@ -31,7 +31,7 @@ def test_ids():
 
 def test_routing_table_basic():
     node_id = DHTID.generate()
-    routing_table = RoutingTable(node_id, bucket_size=20, modulo=5, timeout=300)
+    routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5, staleness_timeout=300)
     for phony_neighbor_port in random.sample(range(10000), 100):
         routing_table.try_add_node(DHTID.generate(), ('localhost', phony_neighbor_port))
 
@@ -49,7 +49,7 @@ def test_routing_table_parameters():
         (20,          1,      7,            15),
     ]:
         node_id = DHTID.generate()
-        routing_table = RoutingTable(node_id, bucket_size=bucket_size, modulo=modulo, timeout=300)
+        routing_table = RoutingTable(node_id, bucket_size=bucket_size, depth_modulo=modulo, staleness_timeout=300)
         for phony_neighbor_port in random.sample(range(1_000_000), 10_000):
             routing_table.try_add_node(DHTID.generate(), ('localhost', phony_neighbor_port))
         for bucket in routing_table.buckets:
@@ -60,7 +60,7 @@ def test_routing_table_parameters():
 
 def test_routing_table_search():
     node_id = DHTID.generate()
-    routing_table = RoutingTable(node_id, bucket_size=20, modulo=5, timeout=300)
+    routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5, staleness_timeout=300)
     num_added = 0
     for phony_neighbor_port in random.sample(range(1_000_000), 10_000):
         num_added += routing_table.try_add_node(DHTID.generate(), ('localhost', phony_neighbor_port))
