@@ -1,6 +1,7 @@
 import torch
-import hivemind
 from test_utils.run_server import background_server
+
+import hivemind
 
 
 def test_remote_module_call():

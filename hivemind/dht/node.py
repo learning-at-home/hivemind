@@ -1,5 +1,7 @@
 from typing import Optional
+
 from kademlia.storage import ForgetfulStorage as Storage
+
 from .protocol import KademliaProtocol
 from .routing import DHTID
 

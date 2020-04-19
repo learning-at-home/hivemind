@@ -1,9 +1,14 @@
 from typing import Optional
+
 from rpcudp.protocol import RPCProtocol
 
+from ..utils import Endpoint
+from ..utils import Hostname
+from ..utils import Port
+from ..utils import Tuple
 from .node import DHTNode
-from .routing import RoutingTable, DHTID
-from ..utils import Hostname, Port, Tuple, Endpoint
+from .routing import DHTID
+from .routing import RoutingTable
 
 
 class KademliaProtocol(RPCProtocol):
