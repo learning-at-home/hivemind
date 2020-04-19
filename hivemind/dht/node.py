@@ -17,10 +17,10 @@ class DHTNode:
     """
 
     def __init__(
-        self,
-        node_id: Optional[DHTID] = None,
-        storage: Optional[Storage] = None,
-        beam_size=20,
+            self,
+            node_id: Optional[DHTID] = None,
+            storage: Optional[Storage] = None,
+            beam_size=20,
     ):
         self.id = node_id or DHTID.generate()
         self.storage = storage or Storage()

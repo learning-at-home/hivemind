@@ -25,7 +25,8 @@ class Connection(AbstractContextManager):
 
     def send_raw(self, header: str, content: bytes):
         self.conn.send(header.encode())
-        self.conn.send(len(content).to_bytes(self.payload_length_size, byteorder="big"))
+        self.conn.send(
+            len(content).to_bytes(self.payload_length_size, byteorder="big"))
 
         total_sent = 0
         while total_sent < len(content):
@@ -38,9 +39,8 @@ class Connection(AbstractContextManager):
         return self.conn.recv(self.header_size).decode()
 
     def recv_raw(self, max_package: int = 2048) -> bytes:
-        length = int.from_bytes(
-            self.conn.recv(self.payload_length_size), byteorder="big"
-        )
+        length = int.from_bytes(self.conn.recv(self.payload_length_size),
+                                byteorder="big")
         chunks = []
         bytes_recd = 0
         while bytes_recd < length:
