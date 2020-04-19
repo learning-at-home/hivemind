@@ -30,5 +30,6 @@ class KademliaProtocol(RPCProtocol):
         """ Get recipient's node id and add him to the routing table. If recipient doesn't respond, return None """
         responded, recipient_node_id = self.ping(recipient, self.node.id)
         self.routing_table.register_request_to(
-            recipient, recipient_node_id, responded=responded)
+            recipient, recipient_node_id, responded=responded
+        )
         return recipient_node_id

@@ -33,14 +33,21 @@ class Server(threading.Thread):
         is ready (see .ready below)
     """
 
-    def __init__(self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
-                 port: int = 8080, conn_handler_processes: int = 1, update_period: int = 30, start=False,
-                 **kwargs):
+    def __init__(
+        self,
+        dht: Optional[DHT],
+        expert_backends: Dict[str, ExpertBackend],
+        addr="127.0.0.1",
+        port: int = 8080,
+        conn_handler_processes: int = 1,
+        update_period: int = 30,
+        start=False,
+        **kwargs,
+    ):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
-        self.conn_handlers = self._create_connection_handlers(
-            conn_handler_processes)
+        self.conn_handlers = self._create_connection_handlers(conn_handler_processes)
         self.runtime = Runtime(self.experts, **kwargs)
 
         if start:
@@ -55,8 +62,13 @@ class Server(threading.Thread):
             if not self.dht.is_alive():
                 self.dht.run_in_background(await_ready=True)
 
-            dht_handler_thread = DHTHandlerThread(experts=self.experts, dht=self.dht,
-                                                  addr=self.addr, port=self.port, update_period=self.update_period)
+            dht_handler_thread = DHTHandlerThread(
+                experts=self.experts,
+                dht=self.dht,
+                addr=self.addr,
+                port=self.port,
+                update_period=self.update_period,
+            )
             dht_handler_thread.start()
 
         for process in self.conn_handlers:
@@ -77,8 +89,7 @@ class Server(threading.Thread):
         """
         self.start()
         if await_ready and not self.ready.wait(timeout=timeout):
-            raise TimeoutError(
-                "Server didn't notify .ready in {timeout} seconds")
+            raise TimeoutError("Server didn't notify .ready in {timeout} seconds")
 
     @property
     def ready(self) -> mp.synchronize.Event:
@@ -91,17 +102,23 @@ class Server(threading.Thread):
         >>> server.ready.wait(timeout=10)
         >>> print("Server ready" if server.ready.is_set() else "Server didn't start in 10 seconds")
         """
-        return self.runtime.ready  # mp.Event that is true if self is ready to process batches
+        return (
+            self.runtime.ready
+        )  # mp.Event that is true if self is ready to process batches
 
     def _create_connection_handlers(self, num_handlers):
         sock = socket(AF_INET, SOCK_STREAM)
         sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-        sock.bind(('', self.port))
+        sock.bind(("", self.port))
         sock.listen()
         sock.settimeout(self.update_period)
 
-        processes = [mp.Process(target=socket_loop, name=f"socket_loop-{i}", args=(sock, self.experts))
-                     for i in range(num_handlers)]
+        processes = [
+            mp.Process(
+                target=socket_loop, name=f"socket_loop-{i}", args=(sock, self.experts)
+            )
+            for i in range(num_handlers)
+        ]
         return processes
 
     def shutdown(self):
@@ -122,12 +139,12 @@ class Server(threading.Thread):
 
 def socket_loop(sock, experts):
     """ catch connections, send tasks to processing, respond with results """
-    print(f'Spawned connection handler pid={os.getpid()}')
+    print(f"Spawned connection handler pid={os.getpid()}")
     while True:
         try:
             handle_connection(sock.accept(), experts)
         except KeyboardInterrupt as e:
-            print(f'Socket loop has caught {type(e)}, exiting')
+            print(f"Socket loop has caught {type(e)}, exiting")
             break
         except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
             continue

@@ -26,7 +26,13 @@ class RoutingTable:
     :note: kademlia paper refers to https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, staleness_timeout: Union[float, int]):
+    def __init__(
+        self,
+        node_id: DHTID,
+        bucket_size: int,
+        depth_modulo: int,
+        staleness_timeout: Union[float, int],
+    ):
         self.node_id, self.bucket_size = node_id, bucket_size
         self.depth_modulo, self.staleness_timeout = depth_modulo, staleness_timeout
         self.buckets = [KBucket(node_id.MIN, node_id.MAX, bucket_size)]
@@ -38,7 +44,8 @@ class RoutingTable:
             if bucket.lower <= node_id < bucket.upper:
                 return index
         raise ValueError(
-            f"Failed to get bucket for node_id={node_id}, this should not be possible.")
+            f"Failed to get bucket for node_id={node_id}, this should not be possible."
+        )
 
     def try_add_node(self, node_id: DHTID, addr: Endpoint) -> bool:
         """
@@ -63,7 +70,8 @@ class RoutingTable:
 
     def __setitem__(self, node_id: DHTID, addr: Endpoint) -> NotImplementedError:
         raise NotImplementedError(
-            "KBucket doesn't support direct item assignment. Use KBucket.try_add_node instead")
+            "KBucket doesn't support direct item assignment. Use KBucket.try_add_node instead"
+        )
 
     def __contains__(self, node_id: DHTID) -> bool:
         return node_id in self.buckets[self.get_bucket_index(node_id)]
@@ -78,7 +86,9 @@ class RoutingTable:
         self.buckets[index] = first
         self.buckets.insert(index + 1, second)
 
-    def get_nearest_neighbors(self, query_node_id: DHTID, k: int, exclude: bool) -> List[DHTID]:
+    def get_nearest_neighbors(
+        self, query_node_id: DHTID, k: int, exclude: bool
+    ) -> List[DHTID]:
         """
         Find k nearest neighbors according to XOR distance
         :param query_node_id: find neighbors of this node
@@ -110,17 +120,29 @@ class RoutingTable:
         """
         all_nodes = chain(*map(KBucket.get_nodes, self.buckets))
         nearest_neighbors = heapq.nsmallest(
-            k + int(exclude), all_nodes, key=query_node_id.xor_distance)
-        return [node_id for node_id in nearest_neighbors if (not exclude or node_id != query_node_id)]
+            k + int(exclude), all_nodes, key=query_node_id.xor_distance
+        )
+        return [
+            node_id
+            for node_id in nearest_neighbors
+            if (not exclude or node_id != query_node_id)
+        ]
 
     # Protocol methods for DHTNode and KademliaProtocol
 
-    def register_request_from(self, sender: Tuple[Hostname, Port], node_id: Optional[DHTID]) -> None:
+    def register_request_from(
+        self, sender: Tuple[Hostname, Port], node_id: Optional[DHTID]
+    ) -> None:
         """ Update routing table on incoming request from host:port """
         raise NotImplementedError("TODO")
 
-    def register_request_to(self, recepient: Tuple[Hostname, Port], node_id: Optional[DHTID],
-                            *, responded: bool) -> None:
+    def register_request_to(
+        self,
+        recepient: Tuple[Hostname, Port],
+        node_id: Optional[DHTID],
+        *,
+        responded: bool,
+    ) -> None:
         """ Update routing table upon receiving response from a remote node """
         if node_id in self.nodes_to_ping:
             self.nodes_to_ping.remove(node_id)
@@ -130,16 +152,23 @@ class RoutingTable:
         """ return a list of nodes that should be queried """
         staleness_threshold = time.monotonic() - self.staleness_timeout
         stale_buckets = [
-            bucket for bucket in self.buckets if bucket.last_updated < staleness_threshold]
-        staleness_ids = [DHTID(random.randint(bucket.lower, bucket.upper))
-                         for bucket in stale_buckets]
+            bucket
+            for bucket in self.buckets
+            if bucket.last_updated < staleness_threshold
+        ]
+        staleness_ids = [
+            DHTID(random.randint(bucket.lower, bucket.upper))
+            for bucket in stale_buckets
+        ]
 
         raise NotImplementedError("TODO")
 
     def __repr__(self):
         bucket_info = "\n".join(repr(bucket) for bucket in self.buckets)
-        return f"{self.__class__.__name__}(node_id={self.node_id}, bucket_size={self.bucket_size}," \
-               f" modulo={self.depth_modulo}, timeout={self.staleness_timeout},\nbuckets=[\n{bucket_info})"
+        return (
+            f"{self.__class__.__name__}(node_id={self.node_id}, bucket_size={self.bucket_size},"
+            f" modulo={self.depth_modulo}, timeout={self.staleness_timeout},\nbuckets=[\n{bucket_info})"
+        )
 
 
 class KBucket:
@@ -185,7 +214,11 @@ class KBucket:
         return list(self.nodes_to_addr.keys())
 
     def __getitem__(self, node_id: DHTID) -> Endpoint:
-        return self.nodes_to_addr[node_id] if node_id in self.nodes_to_addr else self.replacement_nodes[node_id]
+        return (
+            self.nodes_to_addr[node_id]
+            if node_id in self.nodes_to_addr
+            else self.replacement_nodes[node_id]
+        )
 
     def __delitem__(self, node_id: DHTID):
         if not (node_id in self.nodes_to_addr or node_id in self.replacement_nodes):
@@ -207,18 +240,24 @@ class KBucket:
     def split(self) -> Tuple[KBucket, KBucket]:
         """ Split bucket over midpoint, rounded down, assign nodes to according to their id """
         midpoint = (self.lower + self.upper) // 2
-        assert self.lower < midpoint < self.upper, f"Bucket to small to be split: [{self.lower}: {self.upper})"
+        assert (
+            self.lower < midpoint < self.upper
+        ), f"Bucket to small to be split: [{self.lower}: {self.upper})"
         left = KBucket(self.lower, midpoint, self.size, depth=self.depth + 1)
         right = KBucket(midpoint, self.upper, self.size, depth=self.depth + 1)
-        for node_id, addr in chain(self.nodes_to_addr.items(), self.replacement_nodes.items()):
+        for node_id, addr in chain(
+            self.nodes_to_addr.items(), self.replacement_nodes.items()
+        ):
             bucket = left if int(node_id) <= midpoint else right
             bucket.try_add_node(node_id, addr)
         return left, right
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({len(self.nodes_to_addr)} nodes" \
-               f" with {len(self.replacement_nodes)} replacements, depth={self.depth}, max size={self.size}" \
-               f" lower={hex(self.lower)}, upper={hex(self.upper)})"
+        return (
+            f"{self.__class__.__name__}({len(self.nodes_to_addr)} nodes"
+            f" with {len(self.replacement_nodes)} replacements, depth={self.depth}, max size={self.size}"
+            f" lower={hex(self.lower)}, upper={hex(self.upper)})"
+        )
 
 
 class DHTID(int):
@@ -228,10 +267,12 @@ class DHTID(int):
     RANGE = MIN, MAX = 0, 2 ** (HASH_NBYTES * 8)
 
     def __new__(cls, value: int):
-        assert cls.MIN <= value < cls.MAX, f"DHTID must be in [{cls.MIN}, {cls.MAX}) but got {value}"
+        assert (
+            cls.MIN <= value < cls.MAX
+        ), f"DHTID must be in [{cls.MIN}, {cls.MAX}) but got {value}"
         return super().__new__(cls, value)
 
-    def to_bytes(self, length=HASH_NBYTES, byteorder='big', *, signed=False) -> bytes:
+    def to_bytes(self, length=HASH_NBYTES, byteorder="big", *, signed=False) -> bytes:
         return super().to_bytes(length, byteorder, signed=signed)
 
     @classmethod
@@ -239,8 +280,7 @@ class DHTID(int):
         """
         Generates random uid based on SHA1
         """
-        randbytes = (seed or random.getrandbits(nbits)
-                     ).to_bytes(nbits, byteorder='big')
+        randbytes = (seed or random.getrandbits(nbits)).to_bytes(nbits, byteorder="big")
         raw_uid = hashlib.sha1(randbytes).digest()
         return cls(int(raw_uid.hex(), 16))
 
@@ -250,8 +290,7 @@ class DHTID(int):
 
     @classmethod
     def longest_common_prefix_length(cls, *ids: DHTID) -> int:
-        ids_bits = [bin(uid)[2:].rjust(8 * cls.HASH_NBYTES, '0')
-                    for uid in ids]
+        ids_bits = [bin(uid)[2:].rjust(8 * cls.HASH_NBYTES, "0") for uid in ids]
         return len(os.path.commonprefix(ids_bits))
 
     def __repr__(self):
