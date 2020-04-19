@@ -23,7 +23,8 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
     dht = None
     if not no_dht:
         if not len(initial_peers):
-            print("No initial peers provided. Starting additional dht as an initial peer.")
+            print(
+                "No initial peers provided. Starting additional dht as an initial peer.")
             dht_root = hivemind.DHT(
                 *initial_peers, port=root_port or hivemind.find_open_port(), start=True)
             print(f"Initializing DHT with port {dht_root.port}")
@@ -31,7 +32,8 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
         else:
             print("Bootstrapping dht with peers:", initial_peers)
             if root_port is not None:
-                print(f"Warning: root_port={root_port} will not be used since we already have peers.")
+                print(
+                    f"Warning: root_port={root_port} will not be used since we already have peers.")
 
         dht = hivemind.DHT(
             *initial_peers, port=dht_port or hivemind.find_open_port(), start=True)
@@ -42,11 +44,14 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
     experts = {}
     for i in range(num_experts):
         expert = torch.jit.script(name_to_block[expert_cls](hidden_dim))
-        opt = torch.optim.SGD(expert.parameters(), 0.0) if no_optimizer else torch.optim.Adam(expert.parameters())
+        opt = torch.optim.SGD(expert.parameters(
+        ), 0.0) if no_optimizer else torch.optim.Adam(expert.parameters())
         expert_uid = f'{expert_prefix}{UID_DELIMETER}{i + expert_offset}'
         experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
-                                                     args_schema=(hivemind.BatchTensorProto(hidden_dim),),
-                                                     outputs_schema=hivemind.BatchTensorProto(hidden_dim),
+                                                     args_schema=(
+                                                         hivemind.BatchTensorProto(hidden_dim),),
+                                                     outputs_schema=hivemind.BatchTensorProto(
+                                                         hidden_dim),
                                                      max_batch_size=max_batch_size,
                                                      )
     # actually start server
@@ -58,7 +63,8 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
         server.run_in_background(await_ready=True)
         if verbose:
             print(f"Server started at {server.addr}:{server.port}")
-            print(f"Got {num_experts} active experts of type {expert_cls}: {list(experts.keys())}")
+            print(
+                f"Got {num_experts} active experts of type {expert_cls}: {list(experts.keys())}")
     return server
 
 
@@ -70,7 +76,8 @@ def background_server(*args, verbose=True, **kwargs):
 
     def server_runner():
         try:
-            server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
+            server = make_dummy_server(
+                *args, verbose=verbose, start=True, **kwargs)
             dht_port = server.dht.port if server.dht is not None else None
             send_addr.send((server.addr, server.port, dht_port))
             trigger_shutdown.wait()
@@ -98,16 +105,21 @@ if __name__ == '__main__':
     parser.add_argument('--host', type=str, default='0.0.0.0', required=False)
     parser.add_argument('--port', type=int, default=None, required=False)
     parser.add_argument('--num_experts', type=int, default=1, required=False)
-    parser.add_argument('--expert_cls', type=str, default='ffn', required=False)
+    parser.add_argument('--expert_cls', type=str,
+                        default='ffn', required=False)
     parser.add_argument('--hidden_dim', type=int, default=1024, required=False)
-    parser.add_argument('--num_handlers', type=int, default=None, required=False)
-    parser.add_argument('--expert_prefix', type=str, default='expert', required=False)
+    parser.add_argument('--num_handlers', type=int,
+                        default=None, required=False)
+    parser.add_argument('--expert_prefix', type=str,
+                        default='expert', required=False)
     parser.add_argument('--expert_offset', type=int, default=0, required=False)
-    parser.add_argument('--max_batch_size', type=int, default=16384, required=False)
+    parser.add_argument('--max_batch_size', type=int,
+                        default=16384, required=False)
     parser.add_argument('--device', type=str, default=None, required=False)
     parser.add_argument('--no_optimizer', action='store_true')
     parser.add_argument('--no_dht', action='store_true')
-    parser.add_argument('--initial_peers', type=str, default="[]", required=False)
+    parser.add_argument('--initial_peers', type=str,
+                        default="[]", required=False)
     parser.add_argument('--dht_port', type=int, default=None, required=False)
     parser.add_argument('--root_port', type=int, default=None, required=False)
 
@@ -118,10 +130,13 @@ if __name__ == '__main__':
     if args.pop('increase_file_limit'):
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         try:
-            print("Setting open file limit to soft={}, hard={}".format(max(soft, 2 ** 15), max(hard, 2 ** 15)))
-            resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 2 ** 15), max(hard, 2 ** 15)))
+            print("Setting open file limit to soft={}, hard={}".format(
+                max(soft, 2 ** 15), max(hard, 2 ** 15)))
+            resource.setrlimit(resource.RLIMIT_NOFILE,
+                               (max(soft, 2 ** 15), max(hard, 2 ** 15)))
         except:
-            print("Could not increase open file limit, currently at soft={}, hard={}".format(soft, hard))
+            print("Could not increase open file limit, currently at soft={}, hard={}".format(
+                soft, hard))
 
     args['initial_peers'] = eval(args['initial_peers'])
 
