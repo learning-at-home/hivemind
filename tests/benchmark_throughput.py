@@ -5,10 +5,12 @@ import resource
 import sys
 import time
 
-import hivemind
 import torch
+from test_utils import layers
+from test_utils import print_device_info
+
+import hivemind
 from hivemind import find_open_port
-from test_utils import layers, print_device_info
 
 
 def client_process(
