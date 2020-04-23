@@ -14,18 +14,19 @@ from hivemind import find_open_port
 
 
 def client_process(
-    can_start,
-    benchmarking_failed,
-    port,
-    num_experts,
-    batch_size,
-    hid_dim,
-    num_batches,
-    backprop=True,
+        can_start,
+        benchmarking_failed,
+        port,
+        num_experts,
+        batch_size,
+        hid_dim,
+        num_batches,
+        backprop=True,
 ):
     can_start.wait()
     experts = [
-        hivemind.RemoteExpert(f"expert{i}", port=port) for i in range(num_experts)
+        hivemind.RemoteExpert(f"expert{i}", port=port)
+        for i in range(num_experts)
     ]
 
     try:
@@ -41,23 +42,21 @@ def client_process(
 
 
 def benchmark_throughput(
-    num_experts=16,
-    num_handlers=None,
-    num_clients=128,
-    num_batches_per_client=16,
-    expert_cls="ffn",
-    hid_dim=1024,
-    batch_size=2048,
-    max_batch_size=None,
-    backprop=True,
-    device=None,
-    port=None,
+        num_experts=16,
+        num_handlers=None,
+        num_clients=128,
+        num_batches_per_client=16,
+        expert_cls="ffn",
+        hid_dim=1024,
+        batch_size=2048,
+        max_batch_size=None,
+        backprop=True,
+        device=None,
+        port=None,
 ):
-    assert (
-        not hasattr(torch.cuda, "is_initialized")
-        or not torch.cuda.is_initialized()
-        or torch.device(device) == torch.device("cpu")
-    )
+    assert (not hasattr(torch.cuda, "is_initialized")
+            or not torch.cuda.is_initialized()
+            or torch.device(device) == torch.device("cpu"))
     assert expert_cls in layers.name_to_block
     port = port or find_open_port()
     max_batch_size = max_batch_size or batch_size * 4
@@ -83,8 +82,7 @@ def benchmark_throughput(
                     num_batches_per_client,
                     backprop,
                 ),
-            )
-            for i in range(num_clients)
+            ) for i in range(num_clients)
         ]
 
         for client in clients:
@@ -92,26 +90,28 @@ def benchmark_throughput(
             client.start()
 
         timestamps["launched_clients"] = timestamps[
-            "began_launching_server"
-        ] = time.perf_counter()
+            "began_launching_server"] = time.perf_counter()
 
         # start server
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         experts = {}
         for i in range(num_experts):
-            expert = torch.jit.script(layers.name_to_block[expert_cls](hid_dim))
+            expert = torch.jit.script(
+                layers.name_to_block[expert_cls](hid_dim))
             experts[f"expert{i}"] = hivemind.ExpertBackend(
                 name=f"expert{i}",
                 expert=expert,
                 opt=torch.optim.Adam(expert.parameters()),
-                args_schema=(hivemind.BatchTensorProto(hid_dim),),
+                args_schema=(hivemind.BatchTensorProto(hid_dim), ),
                 outputs_schema=hivemind.BatchTensorProto(hid_dim),
                 max_batch_size=max_batch_size,
             )
         timestamps["created_experts"] = time.perf_counter()
-        server = hivemind.Server(
-            None, experts, port=port, conn_handler_processes=num_handlers, device=device
-        )
+        server = hivemind.Server(None,
+                                 experts,
+                                 port=port,
+                                 conn_handler_processes=num_handlers,
+                                 device=device)
         server.start()
         server.ready.wait()
         timestamps["server_ready"] = time.perf_counter()
@@ -135,30 +135,21 @@ def benchmark_throughput(
     sys.stderr.flush()
 
     def time_between(key1, key2):
-        return (
-            abs(timestamps[key2] - timestamps[key1])
-            if (key1 in timestamps and key2 in timestamps)
-            else float("nan")
-        )
+        return (abs(timestamps[key2] - timestamps[key1]) if
+                (key1 in timestamps and key2 in timestamps) else float("nan"))
 
     total_examples = batch_size * num_clients * num_batches_per_client
 
     print("\n" * 3)
+    print("Benchmark finished, status:".format(
+        ["Success", "Failure"][benchmarking_failed.is_set()]))
     print(
-        "Benchmark finished, status:".format(
-            ["Success", "Failure"][benchmarking_failed.is_set()]
-        )
-    )
+        "Server parameters: num_experts={}, num_handlers={}, max_batch_size={}, expert_cls={}, hid_dim={}, device={}"
+        .format(num_experts, num_handlers, max_batch_size, expert_cls, hid_dim,
+                device))
     print(
-        "Server parameters: num_experts={}, num_handlers={}, max_batch_size={}, expert_cls={}, hid_dim={}, device={}".format(
-            num_experts, num_handlers, max_batch_size, expert_cls, hid_dim, device
-        )
-    )
-    print(
-        "Client parameters: num_clients={}, num_batches_per_client={}, batch_size={}, backprop={}".format(
-            num_clients, num_batches_per_client, batch_size, backprop
-        )
-    )
+        "Client parameters: num_clients={}, num_batches_per_client={}, batch_size={}, backprop={}"
+        .format(num_clients, num_batches_per_client, batch_size, backprop))
 
     startup_time = time_between("began_launching_server", "server_ready")
     experts_time = time_between("began_launching_server", "created_experts")
@@ -169,21 +160,12 @@ def benchmark_throughput(
     stage = "forward + backward" if backprop else "forward"
 
     print("Results: ")
-    print(
-        "\tServer startup took {} s. ({} s. experts + {} s. networking)".format(
-            startup_time, experts_time, networking_time, ".3f"
-        )
-    )
-    print(
-        "\tProcessed {} examples in {}".format(
-            total_examples, time_betweenprocess_examples_time, ".3f"
-        )
-    )
-    print(
-        "\tThroughput for {} passes: {} samples / s.".format(
-            stage, total_examples / process_examples_time, ".3f"
-        )
-    )
+    print("\tServer startup took {} s. ({} s. experts + {} s. networking)".
+          format(startup_time, experts_time, networking_time, ".3f"))
+    print("\tProcessed {} examples in {}".format(
+        total_examples, time_betweenprocess_examples_time, ".3f"))
+    print("\tThroughput for {} passes: {} samples / s.".format(
+        stage, total_examples / process_examples_time, ".3f"))
     print("\tBenchmarking took {} s.".format(overall_time, ".3f"))
 
     if benchmarking_failed.is_set():
@@ -198,18 +180,21 @@ def benchmark_throughput(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--preset", type=str, default="default", required=False)
-    parser.add_argument(
-        "--num_batches_per_client", type=int, default=16, required=False
-    )
+    parser.add_argument("--preset",
+                        type=str,
+                        default="default",
+                        required=False)
+    parser.add_argument("--num_batches_per_client",
+                        type=int,
+                        default=16,
+                        required=False)
     args = parser.parse_args()
 
     if args.preset in ("default", "ffn_forward_backward"):
         benchmark_throughput()
     elif args.preset == "ffn_forward":
         benchmark_throughput(
-            backprop=False, num_batches_per_client=args.num_batches_per_client
-        )
+            backprop=False, num_batches_per_client=args.num_batches_per_client)
     elif args.preset == "ffn_small_batch":
         benchmark_throughput(
             backprop=False,
@@ -221,20 +206,14 @@ if __name__ == "__main__":
     elif args.preset == "ffn_massive":
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         try:
-            print(
-                "Setting open file limit to soft={}, hard={}".format(
-                    max(soft, 2 ** 15), max(hard, 2 ** 15)
-                )
-            )
-            resource.setrlimit(
-                resource.RLIMIT_NOFILE, (max(soft, 2 ** 15), max(hard, 2 ** 15))
-            )
+            print("Setting open file limit to soft={}, hard={}".format(
+                max(soft, 2**15), max(hard, 2**15)))
+            resource.setrlimit(resource.RLIMIT_NOFILE,
+                               (max(soft, 2**15), max(hard, 2**15)))
         except:
             print(
-                "Could not increase open file limit, currently at soft={}, hard={}".format(
-                    soft, hard
-                )
-            )
+                "Could not increase open file limit, currently at soft={}, hard={}"
+                .format(soft, hard))
         benchmark_throughput(
             backprop=False,
             num_clients=512,
