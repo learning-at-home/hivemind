@@ -69,13 +69,13 @@ class KademliaProtocol(RPCProtocol):
         peer_ids = self.routing_table.get_nearest_neighbors(key_node_id, k=self.bucket_size, exclude=sender_id)
         return [(bytes(peer_id), self.routing_table[peer_id]) for peer_id in peer_ids], bytes(self.node_id)
 
-    async def call_find_node(self, recipient: Endpoint, key_node: DHTID) -> List[Tuple[DHTID, Endpoint]]:
+    async def call_find_node(self, recipient: Endpoint, key_node_id: DHTID) -> List[Tuple[DHTID, Endpoint]]:
         """
         Ask a recipient to give you nearest neighbors to key_node. If recipient knows key_node directly,
          it will be returned as first of the neighbors; if recipient does not respond, return empty list.
         :returns: a list of pairs (node id, address) as per Section 2.3 of the paper
         """
-        responded, response = await self.find_node(recipient, bytes(self.node_id), key_node)
+        responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(key_node_id))
         if responded:
             peers = [(DHTID.from_bytes(peer_id_bytes), addr) for peer_id_bytes, addr in response[0]]
             self.routing_table.register_request_to(recipient, DHTID.from_bytes(response[1]), responded=responded)
