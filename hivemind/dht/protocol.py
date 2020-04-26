@@ -25,14 +25,15 @@ class KademliaProtocol(RPCProtocol):
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo, staleness_timeout)
         self.storage = LocalStorage()
 
-    def rpc_ping(self, sender: Endpoint, sender_id_binary: bytes) -> DHTID:
+    def rpc_ping(self, sender: Endpoint, sender_id_binary: bytes) -> bytes:
         """ Some dht node wants us to add it to our routing table. """
-        self.routing_table.register_request_from(sender, DHTID.from_bytes(sender_id))
-        return self.node_id
+        self.routing_table.register_request_from(sender, DHTID.from_bytes(sender_id_binary))
+        return bytes(self.node_id)
 
     async def call_ping(self, recipient: Endpoint) -> Optional[DHTID]:
         """ Get recipient's node id and add him to the routing table. If recipient doesn't respond, return None """
-        responded, recipient_node_id = await self.ping(recipient, bytes(self.node_id))
+        responded, response = await self.ping(recipient, bytes(self.node_id))
+        recipient_node_id = DHTID.from_bytes(response) if responded else None
         self.routing_table.register_request_to(recipient, recipient_node_id, responded=responded)
         return recipient_node_id
 
