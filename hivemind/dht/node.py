@@ -34,7 +34,7 @@ class DHTNode:
     def __init__(self, node_id: Optional[DHTID] = None, bucket_size=20, beam_size=3, modulo=5, staleness_timeout=600):
         self.id = node_id or DHTID.generate()
         self.beam_size = beam_size
-        self.protocol = KademliaProtocol(self, bucket_size=bucket_size, modulo=modulo,
+        self.protocol = KademliaProtocol(self, bucket_size=bucket_size, depth_modulo=modulo,
                                          staleness_timeout=staleness_timeout)
 
     def get(self, key: DHTID, sufficient_time: DHTExpirationTime = -float('inf')) -> \

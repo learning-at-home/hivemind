@@ -1,11 +1,8 @@
-import time
-from enum import Enum
-from typing import Optional, Union, List, Any
+from typing import Optional, Union, List, Tuple
 from rpcudp.protocol import RPCProtocol
 
-from .node import DHTNode
 from .routing import RoutingTable, DHTID, DHTValue, DHTExpirationTime
-from ..utils import Hostname, Port, Tuple, Endpoint
+from ..utils import Endpoint
 
 
 class KademliaProtocol(RPCProtocol):
@@ -19,9 +16,10 @@ class KademliaProtocol(RPCProtocol):
      Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
     """
 
-    def __init__(self, node: DHTNode, bucket_size: int, modulo: int, staleness_timeout=Union[float, int]):
-        self.node, self.bucket_size = node, bucket_size
-        self.routing_table = RoutingTable(node, bucket_size, modulo, staleness_timeout)
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, staleness_timeout: float):
+        self.node_id, self.bucket_size = node_id, bucket_size
+        self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo, staleness_timeout)
+        self.storage = LocalStorage()
 
     def rpc_ping(self, sender: Endpoint, sender_id: DHTID) -> DHTID:
         """ Some dht node wants us to add it to our routing table. """
@@ -65,7 +63,7 @@ class KademliaProtocol(RPCProtocol):
         neighbor_ids = self.routing_table.get_nearest_neighbors(key_node, k=self.bucket_size, exclude=sender_id)
         return [(neighbor_id, self.routing_table[neighbor_id]) for neighbor_id in neighbor_ids], self.node_id
 
-    def call_find_node(self, recipient: Endpoint, key_node: DHTID) -> List[Tuple[DHTID, Endpoint]]:
+    async def call_find_node(self, recipient: Endpoint, key_node: DHTID) -> List[Tuple[DHTID, Endpoint]]:
         """
         Ask a recipient to give you nearest neighbors to key_node. If recipient knows key_node directly,
          it will be returned as first of the neighbors; if recipient does not respond, return empty list.
@@ -84,9 +82,9 @@ class KademliaProtocol(RPCProtocol):
         :note: this is a deviation from Section 2.3 of the paper, original kademlia returner EITHER value OR neighbors
         :returns: (value or None if we have no value, nearest neighbors, our own dht id)
         """
-        return tuple(self.node.get(key)) + self.rpc_find_node(sender, sender_id, key)
+        return self.node.get(key) + self.rpc_find_node(sender, sender_id, key)
 
-    def call_find_value(self, recipient: Endpoint, key: DHTID) -> \
+    async def call_find_value(self, recipient: Endpoint, key: DHTID) -> \
             Tuple[Optional[DHTValue], Optional[DHTExpirationTime], List[Tuple[DHTID, Endpoint]]]:
         """
         Ask a recipient to give you the value, if it has one, or nearest neighbors to your key.
@@ -100,3 +98,13 @@ class KademliaProtocol(RPCProtocol):
         value, expiration_time, neighbors, recipient_node_id = response if responded else (None, None, [], None)
         self.routing_table.register_request_to(recipient, recipient_node_id, responded=responded)
         return value, expiration_time, neighbors
+
+
+class LocalStorage(dict):
+    def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpirationTime) -> bool:
+        # TODO
+        self[key] = (value, expiration_time)
+
+    def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpirationTime]):
+        # TODO
+        return self[key] if key in self else (None, None)
