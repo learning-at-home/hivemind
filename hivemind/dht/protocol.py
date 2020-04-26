@@ -19,9 +19,8 @@ class KademliaProtocol(RPCProtocol):
      Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
     """
 
-    def __init__(self, node: DHTNode, bucket_size: int, modulo: int,
-                 num_neighbors: int, staleness_timeout=Union[float, int]):
-        self.node, self.bucket_size, self.num_neighbors = node, bucket_size, num_neighbors
+    def __init__(self, node: DHTNode, bucket_size: int, modulo: int, staleness_timeout=Union[float, int]):
+        self.node, self.bucket_size = node, bucket_size
         self.routing_table = RoutingTable(node, bucket_size, modulo, staleness_timeout)
 
     def rpc_ping(self, sender: Endpoint, sender_id: DHTID) -> DHTID:
@@ -57,13 +56,13 @@ class KademliaProtocol(RPCProtocol):
                       key_node: DHTID) -> Tuple[List[Tuple[DHTID, Endpoint]], DHTID]:
         """
         Someone wants to find :key_node: in the DHT. Give him k nearest neighbors from our routing table
-        :returns: a list of pairs (node_id, address) of :num_neighbors: nearest to key_node according to XOR distance,
+        :returns: a list of pairs (node_id, address) of :bucket_size: nearest to key_node according to XOR distance,
          also returns our own node id for routing table maintenance
         """
         self.routing_table.register_request_from(sender, sender_id)
         if key_node in self.routing_table:
             return [(key_node, self.routing_table[key_node])], self.node.id
-        neighbor_ids = self.routing_table.get_nearest_neighbors(key_node, k=self.num_neighbors, exclude=sender_id)
+        neighbor_ids = self.routing_table.get_nearest_neighbors(key_node, k=self.bucket_size, exclude=sender_id)
         return [(neighbor_id, self.routing_table[neighbor_id]) for neighbor_id in neighbor_ids], self.node_id
 
     def call_find_node(self, recipient: Endpoint, key_node: DHTID) -> List[Tuple[DHTID, Endpoint]]:
@@ -81,8 +80,8 @@ class KademliaProtocol(RPCProtocol):
             Tuple[Optional[DHTValue], Optional[DHTExpirationTime], List[Tuple[DHTID, Endpoint]], DHTID]:
         """
         Someone wants to find value corresponding to key. If we have the value, return the value and its expiration time
-        In any case, return :num_neighbors: nearest neighbors to that node.
-        Note: this is a deviation from Section 2.3 of the paper, original kademlia returner EITHER value OR neighbors
+         Either way, return :bucket_size: nearest neighbors to that node.
+        :note: this is a deviation from Section 2.3 of the paper, original kademlia returner EITHER value OR neighbors
         :returns: (value or None if we have no value, nearest neighbors, our own dht id)
         """
         return tuple(self.node.get(key)) + self.rpc_find_node(sender, sender_id, key)

@@ -18,11 +18,8 @@ class RoutingTable:
     :param node_id: node id used to measure distance
     :param bucket_size: parameter $k$ from Kademlia paper Section 2.2
     :param depth_modulo: parameter $b$ from Kademlia paper Section 2.2.
-     In short, RoutingTable will can split bucket containing root indefinitely but will only split other buckets
-      up to the nearest multiple of :depth_modulo:
-    :param staleness_timeout: a bucket is considered stale if no node from that bucket
-        was updated for this many seconds
-
+    :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated for this many seconds
+    :note: you can find a more detailed docstring for Node class, see node.py
     :note: kademlia paper refers to https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
     """
 
@@ -30,6 +27,7 @@ class RoutingTable:
         self.node_id, self.bucket_size = node_id, bucket_size
         self.depth_modulo, self.staleness_timeout = depth_modulo, staleness_timeout
         self.buckets = [KBucket(node_id.MIN, node_id.MAX, bucket_size)]
+        self.nodes_to_ping: Set[Tuple[DHTID, Endpoint]] = set()
 
     def get_bucket_index(self, node_id: DHTID) -> int:
         """ Get the index of the bucket that the given node would fall into. """
@@ -55,6 +53,8 @@ class RoutingTable:
         if bucket.has_in_range(self.node_id) or bucket.depth % self.depth_modulo != 0:
             self.split_bucket(bucket_index)
             return self.try_add_node(node_id, addr)
+
+        self.nodes_to_ping.add(bucket.get_least_recently_updated_node())
         return False
 
     def __getitem__(self, node_id: DHTID) -> Endpoint:
@@ -120,7 +120,7 @@ class RoutingTable:
                             *, responded: bool) -> None:
         """ Update routing table upon receiving response from a remote node """
         if node_id in self.nodes_to_ping:
-            self.nodes_to_ping.remove(node_id)
+            self.nodes_to_ping.remove(node_id) #TODO actually ping him
         raise NotImplementedError("TODO")
 
     def get_nodes_to_refresh(self) -> List[Tuple[DHTID, Endpoint]]:
@@ -152,6 +152,9 @@ class KBucket:
 
     def register_update(self) -> None:
         self.last_updated = time.monotonic()
+
+    def get_least_recently_updated_node(self) -> Tuple[DHTID, Endpoint]:
+        return next(iter(self.nodes_to_addr.items()))
 
     def has_in_range(self, node_id: DHTID):
         """ Check if node_id is between this bucket's lower and upper bounds """
