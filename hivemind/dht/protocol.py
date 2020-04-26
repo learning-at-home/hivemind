@@ -51,7 +51,7 @@ class KademliaProtocol(RPCProtocol):
         Ask a recipient to store (key, value) pair until expiration time or update their older value
         :returns: True if value was accepted, False if it was rejected (recipient has newer value), None if no response
         """
-        responded, response = await self.store(recipient, self.node_id, bytes(key), value, expiration_time)
+        responded, response = await self.store(recipient, bytes(self.node_id), bytes(key), value, expiration_time)
         if responded:
             self.routing_table.register_request_to(recipient, DHTID.from_bytes(response[1]), responded=responded)
             return response[0]  # response[0] is True if an update was accepted, False if rejected
@@ -102,7 +102,7 @@ class KademliaProtocol(RPCProtocol):
          neighbors:  a list of pairs (node id, address) as per Section 2.3 of the paper;
         Note: if no response, returns None, None, []
         """
-        responded, response = await self.find_value(recipient, self.node_id, key)
+        responded, response = await self.find_value(recipient, bytes(self.node_id), key)
         if responded:
             value, expiration_time, peers_bytes, recipient_id_bytes = response
             peers = [(DHTID.from_bytes(peer_id_bytes), addr) for peer_id_bytes, addr in peers_bytes]
