@@ -228,8 +228,8 @@ class DHTID(int):
         assert cls.MIN <= value < cls.MAX, f"DHTID must be in [{cls.MIN}, {cls.MAX}) but got {value}"
         return super().__new__(cls, value)
 
-    def to_bytes(self, length=HASH_NBYTES, byteorder='big', *, signed=False) -> bytes:
-        return super().to_bytes(length, byteorder, signed=signed)
+    def __bytes__(self):
+        return self.to_bytes(self.HASH_NBYTES, byteorder='big', signed=False)
 
     @classmethod
     def generate(cls, seed: Optional[int] = None, nbits: int = 255):
