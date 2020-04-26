@@ -228,9 +228,6 @@ class DHTID(int):
         assert cls.MIN <= value < cls.MAX, f"DHTID must be in [{cls.MIN}, {cls.MAX}) but got {value}"
         return super().__new__(cls, value)
 
-    def __bytes__(self):
-        return self.to_bytes(self.HASH_NBYTES, byteorder='big', signed=False)
-
     @classmethod
     def generate(cls, seed: Optional[int] = None, nbits: int = 255):
         """
@@ -249,7 +246,17 @@ class DHTID(int):
         ids_bits = [bin(uid)[2:].rjust(8 * cls.HASH_NBYTES, '0') for uid in ids]
         return len(os.path.commonprefix(ids_bits))
 
+    def to_bytes(self, length=HASH_NBYTES, byteorder='big', *, signed=False) -> bytes:
+        return super().to_bytes(length, byteorder, signed=signed)
+
+    def from_bytes(cls, bytes: bytes, byteorder='big', *, signed=False) -> DHTID:
+        return DHTID(super().from_bytes(bytes, byteorder=byteorder, signed=signed))
+
     def __repr__(self):
         return f"{self.__class__.__name__}({hex(self)})"
+
+    def __bytes__(self):
+        return self.to_bytes()
+
 
 DHTValue, DHTExpirationTime = Any, float  # flavour types
