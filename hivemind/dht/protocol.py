@@ -77,7 +77,8 @@ class KademliaProtocol(RPCProtocol):
         """
         responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(key_node_id))
         if responded:
-            peers = [(DHTID.from_bytes(peer_id_bytes), addr) for peer_id_bytes, addr in response[0]]
+            peers = [(DHTID.from_bytes(peer_id_bytes), tuple(addr)) for peer_id_bytes, addr in response[0]]
+            # Note: we convert addr from list to tuple here --^ because some msgpack versions convert tuples to lists
             self.routing_table.register_request_to(recipient, DHTID.from_bytes(response[1]), responded=responded)
             return peers
         return []
@@ -105,7 +106,7 @@ class KademliaProtocol(RPCProtocol):
         responded, response = await self.find_value(recipient, bytes(self.node_id), key)
         if responded:
             value, expiration_time, peers_bytes, recipient_id_bytes = response
-            peers = [(DHTID.from_bytes(peer_id_bytes), addr) for peer_id_bytes, addr in peers_bytes]
+            peers = [(DHTID.from_bytes(peer_id_bytes), tuple(addr)) for peer_id_bytes, addr in peers_bytes]
             self.routing_table.register_request_to(recipient, DHTID.from_bytes(recipient_id_bytes), responded=responded)
             return value, expiration_time, peers
         return None, None, []

@@ -34,8 +34,11 @@ def test_ids_depth():
 def test_routing_table_basic():
     node_id = DHTID.generate()
     routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5, staleness_timeout=300)
+
     for phony_neighbor_port in random.sample(range(10000), 100):
-        routing_table.try_add_node(DHTID.generate(), ('localhost', phony_neighbor_port))
+        phony_id = DHTID.generate()
+        routing_table.try_add_node(phony_id, ('localhost', phony_neighbor_port))
+        assert routing_table[phony_id] == ('localhost', phony_neighbor_port)
 
     assert routing_table.buckets[0].lower == DHTID.MIN and routing_table.buckets[-1].upper == DHTID.MAX
     for bucket in routing_table.buckets:
