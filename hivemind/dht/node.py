@@ -54,13 +54,6 @@ class DHTNode:
         """
         raise NotImplementedError()
 
-    def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpirationTime) -> bool:
-        """
-        Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
-        :returns: True if new value was stored, False it was rejected (current value is newer)
-        """
-        raise NotImplementedError()
-
 
 # TODO bmuller's kademlia updated node's bucket:
 # * on every rpc_find_node - for the node that is searched for

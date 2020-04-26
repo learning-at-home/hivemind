@@ -23,7 +23,7 @@ class RoutingTable:
     :note: kademlia paper refers to https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, staleness_timeout: Union[float, int]):
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, staleness_timeout: float):
         self.node_id, self.bucket_size = node_id, bucket_size
         self.depth_modulo, self.staleness_timeout = depth_modulo, staleness_timeout
         self.buckets = [KBucket(node_id.MIN, node_id.MAX, bucket_size)]

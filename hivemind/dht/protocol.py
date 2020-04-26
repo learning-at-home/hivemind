@@ -11,12 +11,16 @@ class KademliaProtocol(RPCProtocol):
     As a side-effect, KademliaProtocol also maintains a routing table as described in
     https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
 
-    Node: the rpc_* methods defined in this class will be automatically exposed to other DHT nodes,
+    See DHTNode (node.py) for a more detailed description.
+
+    :note: the rpc_* methods defined in this class will be automatically exposed to other DHT nodes,
      for instance, def rpc_ping can be called as protocol.ping() from a remote machine
      Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, staleness_timeout: float):
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int,
+                 staleness_timeout: float, wait_timeout: float):
+        super().__init__(wait_timeout)
         self.node_id, self.bucket_size = node_id, bucket_size
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo, staleness_timeout)
         self.storage = LocalStorage()
@@ -102,10 +106,13 @@ class KademliaProtocol(RPCProtocol):
 
 class LocalStorage(dict):
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpirationTime) -> bool:
-        # TODO
+        """
+        Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
+        :returns: True if new value was stored, False it was rejected (current value is newer)
+        """
         self[key] = (value, expiration_time)
         return True
 
     def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpirationTime]):
-        # TODO
+        """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
         return self[key] if key in self else (None, None)
