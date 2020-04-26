@@ -2,6 +2,7 @@ import time
 import asyncio
 import multiprocessing as mp
 from functools import partial
+from typing import Optional
 
 import hivemind
 import hivemind.dht.protocol
@@ -49,7 +50,7 @@ def test_kademlia_protocol():
         peer2_proc.terminate()
 
 
-def dht_peer_func(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping=None):
+def dht_peer_func(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping: Optional[hivemind.Endpoint] = None):
     loop = asyncio.new_event_loop()
     protocol = partial(KademliaProtocol, dhtid, 20, 5, 300, 5)
     listen = loop.create_datagram_endpoint(protocol, local_addr=('127.0.0.1', port))
