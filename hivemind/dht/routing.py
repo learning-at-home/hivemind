@@ -7,7 +7,7 @@ import random
 import time
 import heapq
 from itertools import chain
-from typing import Tuple, Optional, List, Dict, Set, Union
+from typing import Tuple, Optional, List, Dict, Set, Union, Any
 
 from ..utils import Hostname, Port, Endpoint
 
@@ -76,7 +76,7 @@ class RoutingTable:
         self.buckets[index] = first
         self.buckets.insert(index + 1, second)
 
-    def get_nearest_neighbors(self, query_node_id: DHTID, k: int, exclude: bool) -> List[DHTID]:
+    def get_nearest_neighbors(self, query_node_id: DHTID, k: int, exclude: Optional[DHTID] = None) -> List[DHTID]:
         """
         Find k nearest neighbors according to XOR distance
         :param query_node_id: find neighbors of this node
@@ -107,8 +107,8 @@ class RoutingTable:
             Better yet: use binary tree with skips for O(num_nodes * log(num_nodes))
         """
         all_nodes = chain(*map(KBucket.get_nodes, self.buckets))
-        nearest_neighbors = heapq.nsmallest(k + int(exclude), all_nodes, key=query_node_id.xor_distance)
-        return [node_id for node_id in nearest_neighbors if (not exclude or node_id != query_node_id)]
+        nearest_neighbors = heapq.nsmallest(k + int(exclude is not None), all_nodes, key=query_node_id.xor_distance)
+        return [node_id for node_id in nearest_neighbors if (exclude is None or node_id != exclude)]
 
     # Protocol methods for DHTNode and KademliaProtocol
 
@@ -248,3 +248,5 @@ class DHTID(int):
 
     def __repr__(self):
         return f"{self.__class__.__name__}({hex(self)})"
+
+DHTValue, DHTExpirationTime = Any, float  # flavour types

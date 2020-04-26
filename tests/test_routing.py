@@ -76,8 +76,8 @@ def test_routing_table_search():
     # random queries
     for i in range(500):
         k = random.randint(1, 100)
-        exclude = random.random() < 0.5
         query_id = DHTID.generate()
+        exclude = query_id if random.random() < 0.5 else None
         our_knn = routing_table.get_nearest_neighbors(query_id, k=k, exclude=exclude)
         reference_knn = heapq.nsmallest(k, all_active_neighbors, key=query_id.xor_distance)
         assert all(our == ref for our, ref in zip(our_knn, reference_knn))
@@ -86,7 +86,7 @@ def test_routing_table_search():
     for i in range(500):
         k = random.randint(1, 100)
         query_id = random.choice(all_active_neighbors)
-        our_knn = routing_table.get_nearest_neighbors(query_id, k=k, exclude=True)
+        our_knn = routing_table.get_nearest_neighbors(query_id, k=k, exclude=query_id)
         reference_knn = heapq.nsmallest(
             k, all_active_neighbors,
             key=lambda uid: query_id.xor_distance(uid) if uid != query_id else float('inf'))
@@ -94,7 +94,7 @@ def test_routing_table_search():
         assert query_id not in our_knn
         assert all(query_id.xor_distance(our) == query_id.xor_distance(ref)
                    for our, ref in zip(our_knn, reference_knn))
-        assert routing_table.get_nearest_neighbors(query_id, k=k, exclude=False)[0] == query_id
+        assert routing_table.get_nearest_neighbors(query_id, k=k, exclude=None)[0] == query_id
 
 
 def shared_prefix(*strings: str):
