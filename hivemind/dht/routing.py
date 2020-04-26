@@ -112,15 +112,18 @@ class RoutingTable:
 
     # Protocol methods for DHTNode and KademliaProtocol
 
-    def register_request_from(self, sender: Tuple[Hostname, Port], node_id: Optional[DHTID]) -> None:
+    def register_request_from(self, sender: Tuple[Hostname, Port], sender_node_id: Optional[DHTID]) -> None:
         """ Update routing table on incoming request from host:port """
+        self.buckets[self.get_bucket_index(sender_node_id)].try_add_node(sender_node_id, sender)
         #raise NotImplementedError("TODO")
 
-    def register_request_to(self, recepient: Tuple[Hostname, Port], node_id: Optional[DHTID],
+    def register_request_to(self, recepient: Tuple[Hostname, Port], recipient_node_id: Optional[DHTID],
                             *, responded: bool) -> None:
         """ Update routing table upon receiving response from a remote node """
-        if node_id in self.nodes_to_ping:
-            self.nodes_to_ping.remove(node_id) #TODO actually ping him
+        if responded:
+            if recipient_node_id in self.nodes_to_ping:
+                self.nodes_to_ping.remove(recipient_node_id) #TODO actually ping him
+            self.buckets[self.get_bucket_index(recipient_node_id)].try_add_node(recipient_node_id, recepient)
         #raise NotImplementedError("TODO")
 
     def get_nodes_to_refresh(self) -> List[Tuple[DHTID, Endpoint]]:
