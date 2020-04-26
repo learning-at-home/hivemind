@@ -249,7 +249,8 @@ class DHTID(int):
     def to_bytes(self, length=HASH_NBYTES, byteorder='big', *, signed=False) -> bytes:
         return super().to_bytes(length, byteorder, signed=signed)
 
-    def from_bytes(cls, bytes: bytes, byteorder='big', *, signed=False) -> DHTID:
+    @classmethod
+    def from_bytes(self, bytes, byteorder='big', *, signed=False) -> DHTID:
         return DHTID(super().from_bytes(bytes, byteorder=byteorder, signed=signed))
 
     def __repr__(self):
