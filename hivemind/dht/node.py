@@ -8,15 +8,20 @@ class DHTNode:
     """
     A low-level class that represents DHT participant.
     Each DHTNode has an identifier, a local storage and access too other nodes via KademliaProtocol.
-    Note: unlike Kademlia, nodes in a Hivemind DHT is optimized to store temporary metadata that is regularly updated
+
+    Note: Hivemind DHT is optimized to store temporary metadata that is regularly updated.
      For example, an expert alive timestamp that emitted by the Server responsible for that expert.
      Such metadata does not require maintenance such as ensuring at least k hosts have it or (de)serialization in case
      of node shutdown. Instead, DHTNode is designed to reduce the latency of looking up such data.
 
-    Contract:
+    Every (key, value) pair in this DHT has expiration_time - float number computed wth time.monotonic().
+    Informally, dht nodes always prefer values with higher expiration_time and may delete any value past its expiration.
+
+    Formally, DHTNode follows this contract:
+      - when asked to store(key, value, expiration_time), a node must store (key, value) at least until expiration_time
+       unless it already stores that key with greater or equal expiration_time - if so, node must keep the previous key
       - when asked to get(key), a node must return the value with highest expiration time IF that time has not come yet
-       if expiration time is greater than current time.monotonic(), DHTNode *may* delete the corresponding value
-      - when looking for a value, DHTNode must return the value with highest expiration time out of all it could find
+       if expiration time is greater than current time.monotonic(), DHTNode *may* return None
     """
 
     def __init__(self, node_id: Optional[DHTID] = None, storage: Optional[Storage] = None, beam_size=20):
