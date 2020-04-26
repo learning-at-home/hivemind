@@ -114,14 +114,14 @@ class RoutingTable:
 
     def register_request_from(self, sender: Tuple[Hostname, Port], node_id: Optional[DHTID]) -> None:
         """ Update routing table on incoming request from host:port """
-        raise NotImplementedError("TODO")
+        #raise NotImplementedError("TODO")
 
     def register_request_to(self, recepient: Tuple[Hostname, Port], node_id: Optional[DHTID],
                             *, responded: bool) -> None:
         """ Update routing table upon receiving response from a remote node """
         if node_id in self.nodes_to_ping:
             self.nodes_to_ping.remove(node_id) #TODO actually ping him
-        raise NotImplementedError("TODO")
+        #raise NotImplementedError("TODO")
 
     def get_nodes_to_refresh(self) -> List[Tuple[DHTID, Endpoint]]:
         """ return a list of nodes that should be queried """
