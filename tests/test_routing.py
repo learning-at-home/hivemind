@@ -15,7 +15,7 @@ def test_ids():
         assert DHTID.xor_distance(id1, id1) == DHTID.xor_distance(id2, id2) == 0
         assert DHTID.xor_distance(id1, id2) > 0 or (id1 == id2)
         assert len(PickleSerializer.dumps(id1)) - len(PickleSerializer.dumps(int(id1))) < 40
-
+        assert DHTID.from_bytes(bytes(id1)) == id1 and DHTID.from_bytes(id2.to_bytes()) == id2
     # test depth (aka longest common prefix)
     for i in range(100):
         ids = [random.randint(0, 4096) for i in range(random.randint(1, 256))]
