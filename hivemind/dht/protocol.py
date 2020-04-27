@@ -1,7 +1,7 @@
 from typing import Optional, Union, List, Tuple
 from rpcudp.protocol import RPCProtocol
 
-from .routing import RoutingTable, DHTID, DHTValue, DHTExpirationTime, BinaryDHTID
+from .routing import RoutingTable, DHTID, DHTValue, DHTExpiration, BinaryDHTID
 from ..utils import Endpoint
 
 
@@ -39,14 +39,14 @@ class KademliaProtocol(RPCProtocol):
         return recipient_node_id
 
     def rpc_store(self, sender: Endpoint, sender_id_bytes: BinaryDHTID,
-                  key: DHTID, value: DHTValue, expiration_time: DHTExpirationTime) -> Tuple[bool, BinaryDHTID]:
+                  key_bytes: BinaryDHTID, value: DHTValue, expiration_time: DHTExpiration) -> Tuple[bool, BinaryDHTID]:
         """ Some node wants us to store this (key, value) pair """
         self.routing_table.register_request_from(sender, DHTID.from_bytes(sender_id_bytes))
-        store_accepted = self.storage.store(key, value, expiration_time)
+        store_accepted = self.storage.store(DHTID.from_bytes(key_bytes), value, expiration_time)
         return store_accepted, bytes(self.node_id)
 
     async def call_store(self, recipient: Endpoint, key: DHTID, value: DHTValue,
-                         expiration_time: DHTExpirationTime) -> Optional[bool]:
+                         expiration_time: DHTExpiration) -> Optional[bool]:
         """
         Ask a recipient to store (key, value) pair until expiration time or update their older value
         :returns: True if value was accepted, False if it was rejected (recipient has newer value), None if no response
@@ -84,7 +84,7 @@ class KademliaProtocol(RPCProtocol):
         return []
 
     def rpc_find_value(self, sender: Endpoint, sender_id_bytes: BinaryDHTID, key_bytes: BinaryDHTID) -> \
-            Tuple[Optional[DHTValue], Optional[DHTExpirationTime], List[Tuple[BinaryDHTID, Endpoint]], BinaryDHTID]:
+            Tuple[Optional[DHTValue], Optional[DHTExpiration], List[Tuple[BinaryDHTID, Endpoint]], BinaryDHTID]:
         """
         Someone wants to find value corresponding to key. If we have the value, return the value and its expiration time
          Either way, return :bucket_size: nearest neighbors to that node.
@@ -94,7 +94,7 @@ class KademliaProtocol(RPCProtocol):
         return self.storage.get(DHTID.from_bytes(key_bytes)) + self.rpc_find_node(sender, sender_id_bytes, key_bytes)
 
     async def call_find_value(self, recipient: Endpoint, key: BinaryDHTID) -> \
-            Tuple[Optional[DHTValue], Optional[DHTExpirationTime], List[Tuple[DHTID, Endpoint]]]:
+            Tuple[Optional[DHTValue], Optional[DHTExpiration], List[Tuple[DHTID, Endpoint]]]:
         """
         Ask a recipient to give you the value, if it has one, or nearest neighbors to your key.
         :returns: (optional value, optional expiration time, and neighbors)
@@ -113,7 +113,7 @@ class KademliaProtocol(RPCProtocol):
 
 
 class LocalStorage(dict):
-    def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpirationTime) -> bool:
+    def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
         :returns: True if new value was stored, False it was rejected (current value is newer)
@@ -121,6 +121,6 @@ class LocalStorage(dict):
         self[key] = (value, expiration_time)
         return True
 
-    def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpirationTime]):
+    def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpiration]):
         """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
         return self[key] if key in self else (None, None)

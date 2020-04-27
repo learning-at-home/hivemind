@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 from .protocol import KademliaProtocol
-from .routing import DHTID, DHTValue, DHTExpirationTime
+from .routing import DHTID, DHTValue, DHTExpiration
 
 
 class DHTNode:
@@ -37,8 +37,8 @@ class DHTNode:
         self.protocol = KademliaProtocol(self, bucket_size=bucket_size, depth_modulo=modulo,
                                          staleness_timeout=staleness_timeout)
 
-    def get(self, key: DHTID, sufficient_time: DHTExpirationTime = -float('inf')) -> \
-            Tuple[Optional[DHTValue], Optional[DHTExpirationTime]]:
+    def get(self, key: DHTID, sufficient_time: DHTExpiration = -float('inf')) -> \
+            Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
         :param key: traverse the DHT and find the value for this key
         :param sufficient_time: if the search finds a value that expires after sufficient_time, it can return this
@@ -47,7 +47,7 @@ class DHTNode:
         """
         raise NotImplementedError()
 
-    def set(self, key: DHTID, value: DHTValue, expiration_time: DHTExpirationTime) -> bool:
+    def set(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
         Also cache (key, value, expiration_time) at all nodes you met along the way (see Section 2.1 end)
