@@ -103,7 +103,7 @@ class KademliaProtocol(RPCProtocol):
          neighbors:  a list of pairs (node id, address) as per Section 2.3 of the paper;
         Note: if no response, returns None, None, []
         """
-        responded, response = await self.find_value(recipient, bytes(self.node_id), key)
+        responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
         if responded:
             value, expiration_time, peers_bytes, recipient_id_bytes = response
             peers = [(DHTID.from_bytes(peer_id_bytes), tuple(addr)) for peer_id_bytes, addr in peers_bytes]
