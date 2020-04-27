@@ -43,6 +43,27 @@ def test_remote_module_call():
     assert torch.allclose(grad_logits_moe, grad_logits_manual, rtol, atol), "incorrect gradient w.r.t. logits"
 
 
+def test_determinism():
+    rtol = 0
+    atol = 1e-6
+
+    xx = torch.randn(32, 1024, requires_grad=True)
+    mask = torch.randint(0, 1, (32, 1024))
+
+    with background_server(num_experts=1, device='cpu', expert_cls='det_dropout',
+                           no_optimizer=True, no_dht=True) as (localhost, server_port, dht_port):
+        expert = hivemind.RemoteExpert(uid=f'expert.0', port=server_port)
+
+        out = expert(xx, mask)
+        out_rerun = expert(xx, mask)
+
+        grad, = torch.autograd.grad(out.sum(), xx, retain_graph=True)
+        grad_rerun, = torch.autograd.grad(out_rerun.sum(), xx, retain_graph=True)
+
+    assert torch.allclose(out, out_rerun, rtol, atol), "Dropout layer outputs are non-deterministic."
+    assert torch.allclose(grad, grad_rerun, rtol, atol), "Gradients are non-deterministic."
+
+
 def test_compute_expert_scores():
     try:
         dht = hivemind.DHTNode(port=hivemind.find_open_port(), start=True)
@@ -70,3 +91,4 @@ def test_compute_expert_scores():
 if __name__ == '__main__':
     test_remote_module_call()
     test_compute_expert_scores()
+    test_determinism()
