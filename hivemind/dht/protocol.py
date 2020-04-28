@@ -119,7 +119,7 @@ class LocalStorage(dict):
         :returns: True if new value was stored, False it was rejected (current value is newer)
         """
         self[key] = (value, expiration_time)
-        return True
+        return True  # TODO implement actual local storage, test that the logic is correct
 
     def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpiration]):
         """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
