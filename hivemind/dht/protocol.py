@@ -1,8 +1,9 @@
-from typing import Optional, Union, List, Tuple
+from typing import List, Optional, Tuple, Union
+
 from rpcudp.protocol import RPCProtocol
 
-from .routing import RoutingTable, DHTID, DHTValue, DHTExpiration, BinaryDHTID
 from ..utils import Endpoint
+from .routing import DHTID, BinaryDHTID, DHTExpiration, DHTValue, RoutingTable
 
 
 class KademliaProtocol(RPCProtocol):

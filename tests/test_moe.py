@@ -1,5 +1,5 @@
-import torch
 import hivemind
+import torch
 from test_utils.run_server import background_server
 
 

@@ -1,13 +1,13 @@
 import asyncio
 import time
-from itertools import chain
 from functools import partial
-from typing import Optional, Tuple, List, Dict
+from itertools import chain
+from typing import Dict, List, Optional, Tuple
 from warnings import warn
 
-from .protocol import KademliaProtocol
-from .routing import DHTID, DHTValue, DHTExpiration, Endpoint, Port
 from ..utils import find_open_port
+from .protocol import KademliaProtocol
+from .routing import DHTID, DHTExpiration, DHTValue, Endpoint, Port
 
 
 class DHTNode:

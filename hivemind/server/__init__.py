@@ -1,13 +1,14 @@
 import multiprocessing as mp
 import os
 import threading
-from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
+from socket import (AF_INET, SO_REUSEADDR, SOCK_STREAM, SOL_SOCKET, socket,
+                    timeout)
 from typing import Dict, Optional
 
+from ..dht import DHT
+from ..runtime import ExpertBackend, Runtime
 from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
-from ..dht import DHT
-from ..runtime import Runtime, ExpertBackend
 
 
 class Server(threading.Thread):

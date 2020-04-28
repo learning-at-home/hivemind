@@ -1,10 +1,11 @@
+import argparse
+import multiprocessing as mp
 import resource
 from contextlib import contextmanager
-import multiprocessing as mp
-import argparse
 
-import torch
 import hivemind
+import torch
+
 from .layers import name_to_block, name_to_input
 
 

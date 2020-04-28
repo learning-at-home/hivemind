@@ -1,9 +1,9 @@
-import random
 import heapq
 import operator
+import random
 from itertools import chain
 
-from hivemind.dht.routing import RoutingTable, DHTID
+from hivemind.dht.routing import DHTID, RoutingTable
 from hivemind.utils.serializer import PickleSerializer
 
 

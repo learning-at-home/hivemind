@@ -1,29 +1,18 @@
 import multiprocessing as mp
 import multiprocessing.pool
 from functools import partial
-from typing import Tuple, List, Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
+from ..utils import (DUMMY, EmulatedAutogradContext, check_numpy,
+                     map_with_parallel_backward, nested_flatten, nested_map,
+                     nested_pack, run_and_await_k, run_in_background,
+                     run_isolated_backward, run_isolated_forward)
 from .expert import RemoteExpert, _RemoteModuleCall
-from ..utils import (
-    nested_map,
-    check_numpy,
-    run_and_await_k,
-    nested_pack,
-    nested_flatten,
-    DUMMY,
-    run_in_background,
-)
-from ..utils import (
-    run_isolated_forward,
-    EmulatedAutogradContext,
-    run_isolated_backward,
-    map_with_parallel_backward,
-)
 
 
 class RemoteMixtureOfExperts(nn.Module):

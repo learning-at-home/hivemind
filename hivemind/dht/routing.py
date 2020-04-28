@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import os
 import random
-
 import time
-import heapq
 from itertools import chain
-from typing import Tuple, Optional, List, Dict, Set, Union, Any
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from ..utils import Hostname, Port, Endpoint
+from ..utils import Endpoint, Hostname, Port
 
 
 class RoutingTable:
