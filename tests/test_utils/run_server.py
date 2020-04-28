@@ -3,10 +3,11 @@ import multiprocessing as mp
 import resource
 from contextlib import contextmanager
 
-import hivemind
 import torch
 
-from .layers import name_to_block, name_to_input
+import hivemind
+from .layers import name_to_block
+from .layers import name_to_input
 
 
 def make_dummy_server(

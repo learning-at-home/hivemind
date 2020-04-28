@@ -4,9 +4,9 @@ import time
 from functools import partial
 from typing import Optional
 
-import hivemind
 import hivemind.dht.protocol
-from hivemind.dht.node import DHTID, KademliaProtocol
+from hivemind.dht.node import DHTID
+from hivemind.dht.node import KademliaProtocol
 
 
 def test_kademlia_protocol():

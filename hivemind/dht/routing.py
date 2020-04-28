@@ -6,9 +6,17 @@ import os
 import random
 import time
 from itertools import chain
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Set
+from typing import Tuple
+from typing import Union
 
-from ..utils import Endpoint, Hostname, Port
+from ..utils import Endpoint
+from ..utils import Hostname
+from ..utils import Port
 
 
 class RoutingTable:

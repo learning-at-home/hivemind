@@ -11,12 +11,19 @@ import asyncio
 import datetime
 import multiprocessing as mp
 import warnings
-from typing import List, Optional, Tuple
+from typing import List
+from typing import Optional
+from typing import Tuple
+
+from kademlia.network import Server
 
 from hivemind.client import RemoteExpert
-from hivemind.utils import (Hostname, PickleSerializer, Port, SharedFuture,
-                            find_open_port, run_forever)
-from kademlia.network import Server
+from hivemind.utils import find_open_port
+from hivemind.utils import Hostname
+from hivemind.utils import PickleSerializer
+from hivemind.utils import Port
+from hivemind.utils import run_forever
+from hivemind.utils import SharedFuture
 
 
 class DHT(mp.Process):
