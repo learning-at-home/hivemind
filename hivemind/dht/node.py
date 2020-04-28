@@ -42,47 +42,82 @@ class DHTNode:
        if expiration time is greater than current time.monotonic(), DHTNode *may* return None
     """
 
-    def __init__(self, node_id: Optional[DHTID] = None, port: Port = None, initial_peers: Tuple[Endpoint, ...] = (),
-                 bucket_size=20, beam_size=3, modulo=5, staleness_timeout=600, wait_timeout=5, bootstrap_timeout=None,
-                 loop=None):
+    def __init__(
+        self,
+        node_id: Optional[DHTID] = None,
+        port: Port = None,
+        initial_peers: Tuple[Endpoint, ...] = (),
+        bucket_size=20,
+        beam_size=3,
+        modulo=5,
+        staleness_timeout=600,
+        wait_timeout=5,
+        bootstrap_timeout=None,
+        loop=None,
+    ):
         self.id = node_id = node_id or DHTID.generate()
         self.port = port = port or find_open_port()
         self.beam_size = beam_size
 
         loop = loop if loop is not None else asyncio.get_event_loop()
-        make_protocol = partial(KademliaProtocol, self.id, bucket_size=bucket_size, depth_modulo=modulo,
-                                staleness_timeout=staleness_timeout, wait_timeout=wait_timeout)
+        make_protocol = partial(
+            KademliaProtocol,
+            self.id,
+            bucket_size=bucket_size,
+            depth_modulo=modulo,
+            staleness_timeout=staleness_timeout,
+            wait_timeout=wait_timeout,
+        )
         self.transport, self.protocol = loop.create_datagram_endpoint(
-            make_protocol, local_addr=('127.0.0.1', port))
+            make_protocol, local_addr=("127.0.0.1", port)
+        )
 
         # bootstrap part 1: ping initial_peers, add each other to the routing table
-        bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
+        bootstrap_timeout = (
+            bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
+        )
         began_bootstrap_time = time.monotonic()
         ping_tasks = map(self.protocol.call_ping, initial_peers)
         first_finished, remaining_tasks = loop.run_until_complete(
-            asyncio.wait(ping_tasks, timeout=wait_timeout, return_when=asyncio.FIRST_COMPLETED))
+            asyncio.wait(
+                ping_tasks, timeout=wait_timeout, return_when=asyncio.FIRST_COMPLETED
+            )
+        )
         time_to_first_response = time.monotonic() - began_bootstrap_time
 
         # bootstrap part 2: gather all peers who responded within bootstrap_timeout, but at least one peer
         finished_in_time, stragglers = loop.run_until_complete(
-            asyncio.wait(remaining_tasks, timeout=bootstrap_timeout - time_to_first_response, loop=loop))
+            asyncio.wait(
+                remaining_tasks,
+                timeout=bootstrap_timeout - time_to_first_response,
+                loop=loop,
+            )
+        )
         for straggler in stragglers:
             straggler.cancel()
 
-        peer_ids = [task.result() for task in chain(
-            first_finished, finished_in_time) if task.result() is not None]
+        peer_ids = [
+            task.result()
+            for task in chain(first_finished, finished_in_time)
+            if task.result() is not None
+        ]
         if len(peer_ids) == 0 and len(initial_peers) != 0:
-            warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
+            warn(
+                "DHTNode bootstrap failed: none of the initial_peers responded to a ping."
+            )
 
         # bootstrap part 3: run beam search for my node id to add my own nearest neighbors to the routing table
         self.find_nearest_nodes(node_id=self.id, initial_beam=peer_ids)
 
-    def find_nearest_nodes(self, node_id: DHTID, initial_beam: Optional[List[DHTID]] = None) -> Dict[DHTID, Endpoint]:
+    def find_nearest_nodes(
+        self, node_id: DHTID, initial_beam: Optional[List[DHTID]] = None
+    ) -> Dict[DHTID, Endpoint]:
         """ TODO """
         raise NotImplementedError()
 
-    def get(self, key: DHTID, sufficient_time: DHTExpiration = -float('inf')) -> \
-            Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
+    def get(
+        self, key: DHTID, sufficient_time: DHTExpiration = -float("inf")
+    ) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
         :param key: traverse the DHT and find the value for this key (or None if it does not exist)
         :param sufficient_time: if the search finds a value that expires after sufficient_time, it can return this
