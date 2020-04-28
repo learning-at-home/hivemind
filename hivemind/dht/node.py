@@ -67,6 +67,7 @@ class DHTNode:
             asyncio.wait(remaining_tasks, timeout=bootstrap_timeout - time_to_first_response, loop=loop))
         for straggler in stragglers:
             straggler.cancel()
+
         peer_ids = [task.result() for task in chain(first_finished, finished_in_time) if task.result() is not None]
         if len(peer_ids) == 0 and len(initial_peers) != 0:
             warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
@@ -74,7 +75,7 @@ class DHTNode:
         # bootstrap part 3: run beam search for my node id to add my own nearest neighbors to the routing table
         self.find_nearest_nodes(node_id=self.id, initial_beam=peer_ids)
 
-    def find_nearest_nodes(self, node_id: DHTID, *, initial_beam: List[DHTID]) -> Dict[DHTID, Endpoint]:
+    def find_nearest_nodes(self, node_id: DHTID, initial_beam: Optional[List[DHTID]] = None) -> Dict[DHTID, Endpoint]:
         """ TODO """
         raise NotImplementedError()
 
