@@ -42,7 +42,7 @@ class DHTNode:
        if expiration time is greater than current time.monotonic(), DHTNode *may* return None
     """
 
-    def __init__(self, node_id: Optional[DHTID] = None, port: Port=None, initial_peers: Tuple[Endpoint, ...] = (),
+    def __init__(self, node_id: Optional[DHTID] = None, port: Port = None, initial_peers: Tuple[Endpoint, ...] = (),
                  bucket_size=20, beam_size=3, modulo=5, staleness_timeout=600, wait_timeout=5, bootstrap_timeout=None,
                  loop=None):
         self.id = node_id = node_id or DHTID.generate()
@@ -52,7 +52,8 @@ class DHTNode:
         loop = loop if loop is not None else asyncio.get_event_loop()
         make_protocol = partial(KademliaProtocol, self.id, bucket_size=bucket_size, depth_modulo=modulo,
                                 staleness_timeout=staleness_timeout, wait_timeout=wait_timeout)
-        self.transport, self.protocol = loop.create_datagram_endpoint(make_protocol, local_addr=('127.0.0.1', port))
+        self.transport, self.protocol = loop.create_datagram_endpoint(
+            make_protocol, local_addr=('127.0.0.1', port))
 
         # bootstrap part 1: ping initial_peers, add each other to the routing table
         bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
@@ -68,7 +69,8 @@ class DHTNode:
         for straggler in stragglers:
             straggler.cancel()
 
-        peer_ids = [task.result() for task in chain(first_finished, finished_in_time) if task.result() is not None]
+        peer_ids = [task.result() for task in chain(
+            first_finished, finished_in_time) if task.result() is not None]
         if len(peer_ids) == 0 and len(initial_peers) != 0:
             warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
 

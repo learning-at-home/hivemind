@@ -39,7 +39,8 @@ class Server(threading.Thread):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
-        self.conn_handlers = self._create_connection_handlers(conn_handler_processes)
+        self.conn_handlers = self._create_connection_handlers(
+            conn_handler_processes)
         self.runtime = Runtime(self.experts, **kwargs)
 
         if start:
@@ -76,7 +77,8 @@ class Server(threading.Thread):
         """
         self.start()
         if await_ready and not self.ready.wait(timeout=timeout):
-            raise TimeoutError("Server didn't notify .ready in {timeout} seconds")
+            raise TimeoutError(
+                "Server didn't notify .ready in {timeout} seconds")
 
     @property
     def ready(self) -> mp.synchronize.Event:

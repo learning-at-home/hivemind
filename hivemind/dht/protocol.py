@@ -23,26 +23,31 @@ class KademliaProtocol(RPCProtocol):
                  staleness_timeout: float, wait_timeout: float):
         super().__init__(wait_timeout)
         self.node_id, self.bucket_size = node_id, bucket_size
-        self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo, staleness_timeout)
+        self.routing_table = RoutingTable(
+            node_id, bucket_size, depth_modulo, staleness_timeout)
         self.storage = LocalStorage()
 
     def rpc_ping(self, sender: Endpoint, sender_id_bytes: BinaryDHTID) -> BinaryDHTID:
         """ Some dht node wants us to add it to our routing table. """
-        self.routing_table.register_request_from(sender, DHTID.from_bytes(sender_id_bytes))
+        self.routing_table.register_request_from(
+            sender, DHTID.from_bytes(sender_id_bytes))
         return bytes(self.node_id)
 
     async def call_ping(self, recipient: Endpoint) -> Optional[DHTID]:
         """ Get recipient's node id and add him to the routing table. If recipient doesn't respond, return None """
         responded, response = await self.ping(recipient, bytes(self.node_id))
         recipient_node_id = DHTID.from_bytes(response) if responded else None
-        self.routing_table.register_request_to(recipient, recipient_node_id, responded=responded)
+        self.routing_table.register_request_to(
+            recipient, recipient_node_id, responded=responded)
         return recipient_node_id
 
     def rpc_store(self, sender: Endpoint, sender_id_bytes: BinaryDHTID,
                   key_bytes: BinaryDHTID, value: DHTValue, expiration_time: DHTExpiration) -> Tuple[bool, BinaryDHTID]:
         """ Some node wants us to store this (key, value) pair """
-        self.routing_table.register_request_from(sender, DHTID.from_bytes(sender_id_bytes))
-        store_accepted = self.storage.store(DHTID.from_bytes(key_bytes), value, expiration_time)
+        self.routing_table.register_request_from(
+            sender, DHTID.from_bytes(sender_id_bytes))
+        store_accepted = self.storage.store(
+            DHTID.from_bytes(key_bytes), value, expiration_time)
         return store_accepted, bytes(self.node_id)
 
     async def call_store(self, recipient: Endpoint, key: DHTID, value: DHTValue,
@@ -53,8 +58,10 @@ class KademliaProtocol(RPCProtocol):
         """
         responded, response = await self.store(recipient, bytes(self.node_id), bytes(key), value, expiration_time)
         if responded:
-            self.routing_table.register_request_to(recipient, DHTID.from_bytes(response[1]), responded=responded)
-            return response[0]  # response[0] is True if an update was accepted, False if rejected
+            self.routing_table.register_request_to(
+                recipient, DHTID.from_bytes(response[1]), responded=responded)
+            # response[0] is True if an update was accepted, False if rejected
+            return response[0]
         return None
 
     def rpc_find_node(self, sender: Endpoint, sender_id_bytes: BinaryDHTID,
@@ -64,9 +71,11 @@ class KademliaProtocol(RPCProtocol):
         :returns: a list of pairs (node_id, address) of :bucket_size: nearest to key_node according to XOR distance,
          also returns our own node id for routing table maintenance
         """
-        key_node_id, sender_id = DHTID.from_bytes(key_bytes), DHTID.from_bytes(sender_id_bytes)
+        key_node_id, sender_id = DHTID.from_bytes(
+            key_bytes), DHTID.from_bytes(sender_id_bytes)
         self.routing_table.register_request_from(sender, sender_id)
-        peer_ids = self.routing_table.get_nearest_neighbors(key_node_id, k=self.bucket_size, exclude=sender_id)
+        peer_ids = self.routing_table.get_nearest_neighbors(
+            key_node_id, k=self.bucket_size, exclude=sender_id)
         return [(bytes(peer_id), self.routing_table[peer_id]) for peer_id in peer_ids], bytes(self.node_id)
 
     async def call_find_node(self, recipient: Endpoint, key_node_id: DHTID) -> List[Tuple[DHTID, Endpoint]]:
@@ -77,9 +86,11 @@ class KademliaProtocol(RPCProtocol):
         """
         responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(key_node_id))
         if responded:
-            peers = [(DHTID.from_bytes(peer_id_bytes), tuple(addr)) for peer_id_bytes, addr in response[0]]
+            peers = [(DHTID.from_bytes(peer_id_bytes), tuple(addr))
+                     for peer_id_bytes, addr in response[0]]
             # Note: we convert addr from list to tuple here --^ because some msgpack versions convert tuples to lists
-            self.routing_table.register_request_to(recipient, DHTID.from_bytes(response[1]), responded=responded)
+            self.routing_table.register_request_to(
+                recipient, DHTID.from_bytes(response[1]), responded=responded)
             return peers
         return []
 
@@ -106,8 +117,10 @@ class KademliaProtocol(RPCProtocol):
         responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
         if responded:
             value, expiration_time, peers_bytes, recipient_id_bytes = response
-            peers = [(DHTID.from_bytes(peer_id_bytes), tuple(addr)) for peer_id_bytes, addr in peers_bytes]
-            self.routing_table.register_request_to(recipient, DHTID.from_bytes(recipient_id_bytes), responded=responded)
+            peers = [(DHTID.from_bytes(peer_id_bytes), tuple(addr))
+                     for peer_id_bytes, addr in peers_bytes]
+            self.routing_table.register_request_to(
+                recipient, DHTID.from_bytes(recipient_id_bytes), responded=responded)
             return value, expiration_time, peers
         return None, None, []
 
