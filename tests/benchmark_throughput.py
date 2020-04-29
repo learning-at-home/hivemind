@@ -100,7 +100,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
     print(f"Server parameters: num_experts={num_experts}, num_handlers={num_handlers}, max_batch_size={max_batch_size},"
           f" expert_cls={expert_cls}, hid_dim={hid_dim}, device={device}")
     print(f"Client parameters: num_clients={num_clients}, num_batches_per_client={num_batches_per_client}, "
-          "batch_size={batch_size}, backprop={backprop}")
+          f"batch_size={batch_size}, backprop={backprop}")
 
     print("Results: ")
     print(f"\tServer startup took {time_between('began_launching_server', 'server_ready') :.3f} s. "
