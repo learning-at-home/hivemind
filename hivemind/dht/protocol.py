@@ -91,14 +91,16 @@ class KademliaProtocol(RPCProtocol):
         :note: this is a deviation from Section 2.3 of the paper, original kademlia returner EITHER value OR neighbors
         :returns: (value or None if we have no value, nearest neighbors, our own dht id)
         """
-        return self.storage.get(DHTID.from_bytes(key_bytes)) + self.rpc_find_node(sender, sender_id_bytes, key_bytes)
+        maybe_value, maybe_expiration = self.storage.get(DHTID.from_bytes(key_bytes))
+        nearest_neighbors, my_id = self.rpc_find_node(sender, sender_id_bytes, key_bytes)
+        return maybe_value, maybe_expiration, nearest_neighbors, my_id
 
     async def call_find_value(self, recipient: Endpoint, key: BinaryDHTID) -> \
             Tuple[Optional[DHTValue], Optional[DHTExpiration], Dict[DHTID, Endpoint]]:
         """
         Ask a recipient to give you the value, if it has one, or nearest neighbors to your key.
         :returns: (optional value, optional expiration time, and neighbors)
-         value: whatever was the latest value stored by the recepient with that key (see DHTNode contract)
+         value: whatever was the latest value stored by the recipient with that key (see DHTNode contract)
          expiration time: expiration time of the returned value, None if no value was found
          neighbors:  a dictionary[node id => address] as per Section 2.3 of the paper;
         Note: if no response, returns None, None, {}
