@@ -7,9 +7,9 @@ import random
 import time
 import heapq
 from itertools import chain
-from typing import Tuple, Optional, List, Dict, Set, Union, Any
+from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
 
-from ..utils import Hostname, Port, Endpoint
+from ..utils import Hostname, Port, Endpoint, PickleSerializer
 
 
 class RoutingTable:
@@ -232,16 +232,25 @@ class DHTID(int):
         return super().__new__(cls, value)
 
     @classmethod
-    def generate(cls, seed: Optional[int] = None, nbits: int = 255):
+    def generate(cls, source: Optional[Any] = None, nbits: int = 255):
         """
         Generates random uid based on SHA1
+        :param source: if provided, converts this value to bytes and uses it as input for hashing function;
+            by default, generates a random dhtid from :nbits: random bits
         """
-        randbytes = (seed or random.getrandbits(nbits)).to_bytes(nbits, byteorder='big')
-        raw_uid = hashlib.sha1(randbytes).digest()
+        source = random.getrandbits(nbits).to_bytes(nbits, byteorder='big') if source is None else source
+        source = PickleSerializer.dumps(source) if not isinstance(source, bytes) else source
+        raw_uid = hashlib.sha1(source).digest()
         return cls(int(raw_uid.hex(), 16))
 
-    def xor_distance(self, other: DHTID) -> int:
-        """ Return a number which binary representation equals bitwise xor between the two DHTIDs """
+    def xor_distance(self, other: Union[DHTID, Sequence[DHTID]]) -> Union[int, Sequence[int]]:
+        """
+        :param other: one or multiple DHTIDs. If given multiple DHTIDs as other, this function
+         will compute distance from self to each of DHTIDs in other.
+        :return: a number or a list of numbers whose binary representations equal bitwise xor between DHTIDs.
+        """
+        if not isinstance(other, DHTID):
+            return list(map(self.xor_distance, other))  # TODO make some SIMD
         return int(self) ^ int(other)
 
     @classmethod

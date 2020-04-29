@@ -1,4 +1,4 @@
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List, Tuple, Dict
 from rpcudp.protocol import RPCProtocol
 
 from .routing import RoutingTable, DHTID, DHTValue, DHTExpiration, BinaryDHTID
@@ -58,30 +58,30 @@ class KademliaProtocol(RPCProtocol):
         return None
 
     def rpc_find_node(self, sender: Endpoint, sender_id_bytes: BinaryDHTID,
-                      key_bytes: BinaryDHTID) -> Tuple[List[Tuple[BinaryDHTID, Endpoint]], BinaryDHTID]:
+                      query_id_bytes: BinaryDHTID) -> Tuple[List[Tuple[BinaryDHTID, Endpoint]], BinaryDHTID]:
         """
         Someone wants to find :key_node: in the DHT. Give him k nearest neighbors from our routing table
         :returns: a list of pairs (node_id, address) of :bucket_size: nearest to key_node according to XOR distance,
          also returns our own node id for routing table maintenance
         """
-        key_node_id, sender_id = DHTID.from_bytes(key_bytes), DHTID.from_bytes(sender_id_bytes)
+        query_id, sender_id = DHTID.from_bytes(query_id_bytes), DHTID.from_bytes(sender_id_bytes)
         self.routing_table.register_request_from(sender, sender_id)
-        peer_ids = self.routing_table.get_nearest_neighbors(key_node_id, k=self.bucket_size, exclude=sender_id)
+        peer_ids = self.routing_table.get_nearest_neighbors(query_id, k=self.bucket_size, exclude=sender_id)
         return [(bytes(peer_id), self.routing_table[peer_id]) for peer_id in peer_ids], bytes(self.node_id)
 
-    async def call_find_node(self, recipient: Endpoint, key_node_id: DHTID) -> List[Tuple[DHTID, Endpoint]]:
+    async def call_find_node(self, recipient: Endpoint, query_id: DHTID) -> Dict[DHTID, Endpoint]:
         """
         Ask a recipient to give you nearest neighbors to key_node. If recipient knows key_node directly,
-         it will be returned as first of the neighbors; if recipient does not respond, return empty list.
-        :returns: a list of pairs (node id, address) as per Section 2.3 of the paper
+         it will be returned as first of the neighbors; if recipient does not respond, return empty dict.
+        :returns: a dicitionary[node id => address] as per Section 2.3 of the paper
         """
-        responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(key_node_id))
+        responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(query_id))
         if responded:
-            peers = [(DHTID.from_bytes(peer_id_bytes), tuple(addr)) for peer_id_bytes, addr in response[0]]
+            peers = {DHTID.from_bytes(peer_id_bytes): tuple(addr) for peer_id_bytes, addr in response[0]}
             # Note: we convert addr from list to tuple here --^ because some msgpack versions convert tuples to lists
             self.routing_table.register_request_to(recipient, DHTID.from_bytes(response[1]), responded=responded)
             return peers
-        return []
+        return {}
 
     def rpc_find_value(self, sender: Endpoint, sender_id_bytes: BinaryDHTID, key_bytes: BinaryDHTID) -> \
             Tuple[Optional[DHTValue], Optional[DHTExpiration], List[Tuple[BinaryDHTID, Endpoint]], BinaryDHTID]:
@@ -94,14 +94,14 @@ class KademliaProtocol(RPCProtocol):
         return self.storage.get(DHTID.from_bytes(key_bytes)) + self.rpc_find_node(sender, sender_id_bytes, key_bytes)
 
     async def call_find_value(self, recipient: Endpoint, key: BinaryDHTID) -> \
-            Tuple[Optional[DHTValue], Optional[DHTExpiration], List[Tuple[DHTID, Endpoint]]]:
+            Tuple[Optional[DHTValue], Optional[DHTExpiration], Dict[DHTID, Endpoint]]:
         """
         Ask a recipient to give you the value, if it has one, or nearest neighbors to your key.
         :returns: (optional value, optional expiration time, and neighbors)
          value: whatever was the latest value stored by the recepient with that key (see DHTNode contract)
          expiration time: expiration time of the returned value, None if no value was found
-         neighbors:  a list of pairs (node id, address) as per Section 2.3 of the paper;
-        Note: if no response, returns None, None, []
+         neighbors:  a dictionary[node id => address] as per Section 2.3 of the paper;
+        Note: if no response, returns None, None, {}
         """
         responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
         if responded:
@@ -109,7 +109,7 @@ class KademliaProtocol(RPCProtocol):
             peers = [(DHTID.from_bytes(peer_id_bytes), tuple(addr)) for peer_id_bytes, addr in peers_bytes]
             self.routing_table.register_request_to(recipient, DHTID.from_bytes(recipient_id_bytes), responded=responded)
             return value, expiration_time, peers
-        return None, None, []
+        return None, None, {}
 
 
 class LocalStorage(dict):
