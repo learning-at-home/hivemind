@@ -96,26 +96,20 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
     total_examples = batch_size * num_clients * num_batches_per_client
 
     print('\n' * 3)
-    print("Benchmark finished, status:".format(["Success", "Failure"][benchmarking_failed.is_set()]))
-    print("Server parameters: num_experts={}, num_handlers={}, max_batch_size={}, expert_cls={}, hid_dim={}, device={}"
-        .format(num_experts, num_handlers, max_batch_size, expert_cls, hid_dim, device))
-    print("Client parameters: num_clients={}, num_batches_per_client={}, batch_size={}, backprop={}"
-        .format(num_clients, num_batches_per_client, batch_size, backprop))
-
-    startup_time = time_between('began_launching_server', 'server_ready')
-    experts_time = time_between('began_launching_server', 'created_experts')
-    networking_time = time_between('created_experts', 'server_ready')
-    process_examples_time = time_between('server_ready', 'clients_finished')
-    overall_time = time_between('started', 'server_shutdown_finished')
-
-    stage = 'forward + backward' if backprop else 'forward'
+    print("Benchmark finished, status:" + ["Success", "Failure"][benchmarking_failed.is_set()])
+    print(f"Server parameters: num_experts={num_experts}, num_handlers={num_handlers}, max_batch_size={max_batch_size},"
+          f" expert_cls={expert_cls}, hid_dim={hid_dim}, device={device}")
+    print(f"Client parameters: num_clients={num_clients}, num_batches_per_client={num_batches_per_client}, "
+          "batch_size={batch_size}, backprop={backprop}")
 
     print("Results: ")
-    print("\tServer startup took {} s. ({} s. experts + {} s. networking)".format(startup_time, experts_time, networking_time, '.3f'))
-    print("\tProcessed {} examples in {}".format(total_examples, time_betweenprocess_examples_time, '.3f'))
-    print("\tThroughput for {} passes: {} samples / s.".format(stage, total_examples / process_examples_time, '.3f'))
-    print("\tBenchmarking took {} s.".format(overall_time, '.3f'))
-
+    print(f"\tServer startup took {time_between('began_launching_server', 'server_ready') :.3f} s. "
+          f"({time_between('began_launching_server', 'created_experts') :.3f} s. experts + "
+          f"{time_between('created_experts', 'server_ready') :.3f} s. networking)")
+    print(f"\tProcessed {total_examples} examples in {time_between('server_ready', 'clients_finished') :.3f}")
+    print(f"\tThroughput for {'forward + backward' if backprop else 'forward'} passes: "
+          f"{total_examples / time_between('server_ready', 'clients_finished') :.3f} samples / s.")
+    print(f"\tBenchmarking took {time_between('started', 'server_shutdown_finished') :.3f} s.")
     if benchmarking_failed.is_set():
         print("Note: benchmark code failed, timing/memory results only indicate time till failure!")
     print_device_info(device)
