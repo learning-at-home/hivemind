@@ -35,13 +35,15 @@ def test_kademlia_protocol():
         assert loop.run_until_complete(protocol.call_store(('127.0.0.1', peer1_port), key, value, expiration))
 
         # peer 1 must know about peer 2
-        (recv_id, recv_endpoint), = nodes_found = loop.run_until_complete(
+        nodes_found = loop.run_until_complete(
             protocol.call_find_node(('127.0.0.1', peer1_port), key))
+        (recv_id, recv_endpoint) = next(iter(nodes_found.items()))
         assert recv_id == peer2_id and recv_endpoint == ('127.0.0.1', peer2_port), \
             f"expected id={peer2_id}, port={('127.0.0.1', peer2_port)} but got {recv_id}, {recv_endpoint}"
 
         # peer 2 must know about peer 1
-        (recv_id, recv_endpoint), = loop.run_until_complete(protocol.call_find_node(('127.0.0.1', peer2_port), key))
+        nodes_found_2 = loop.run_until_complete(protocol.call_find_node(('127.0.0.1', peer2_port), key))
+        (recv_id, recv_endpoint) = next(iter(nodes_found_2.items()))
         assert recv_id == peer1_id and recv_endpoint == ('127.0.0.1', peer1_port), \
             f"expected id={peer1_id}, port={('127.0.0.1', peer1_port)} but got {recv_id}, {recv_endpoint}"
 
@@ -49,6 +51,7 @@ def test_kademlia_protocol():
             protocol.call_find_value(('127.0.0.1', peer1_port), key))
         assert recv_value == value and recv_expiration == expiration, "call_find_value expected " \
               f"{value} (expires by {expiration}) but got {recv_value} (expires by {recv_expiration})"
+        print(recv_peers, nodes_found)
         assert recv_peers == nodes_found, "call_find_value must return the same peers as call_find_node"
         print("Kademlia test finished sucessfully!")
 
