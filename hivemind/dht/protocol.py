@@ -131,7 +131,8 @@ class KademliaProtocol(RPCProtocol):
                 await self.call_ping(maybe_node_to_ping[1])  # [1]-th element is that node's endpoint
 
         else:  # outgoing request and peer did not respond
-            self.routing_table.remove_node_if_replaceable(node_id)
+            if node_id in self.routing_table:
+                del self.routing_table[node_id]
 
 
 class LocalStorage(dict):

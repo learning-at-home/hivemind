@@ -115,14 +115,6 @@ class RoutingTable:
         return f"{self.__class__.__name__}(node_id={self.node_id}, bucket_size={self.bucket_size}," \
                f" modulo={self.depth_modulo},\nbuckets=[\n{bucket_info})"
 
-    def remove_node_if_replaceable(self, node_id: DHTID) -> bool:
-        """ If the bucket that contains node_id has other replacement nodes, remove this node_id and add replacement """
-        bucket = self.buckets[self.get_bucket_index(node_id)]
-        if node_id in bucket and len(bucket.replacement_nodes) != 0:
-            del bucket[node_id]
-            return True
-        return False
-
 
 class KBucket:
     """
