@@ -2,12 +2,13 @@ import asyncio
 import time
 from itertools import chain
 from functools import partial
+from random import random
 from typing import Optional, Tuple, List, Dict
 from warnings import warn
 
 from .protocol import KademliaProtocol
-from .routing import DHTID, DHTValue, DHTExpiration, Endpoint, Port
-from ..utils import find_open_port
+from .routing import DHTID, DHTValue, DHTExpiration
+from ..utils import find_open_port, Endpoint, Port
 
 
 class DHTNode:
@@ -47,11 +48,10 @@ class DHTNode:
                  loop=None):
         self.id = node_id = node_id or DHTID.generate()
         self.port = port = port or find_open_port()
-        self.beam_size = beam_size
+        self.beam_size, self.staleness_timeout = beam_size, staleness_timeout
 
         loop = loop if loop is not None else asyncio.get_event_loop()
-        make_protocol = partial(KademliaProtocol, self.id, bucket_size=bucket_size, depth_modulo=modulo,
-                                staleness_timeout=staleness_timeout, wait_timeout=wait_timeout)
+        make_protocol = partial(KademliaProtocol, self.id, bucket_size, modulo, wait_timeout)
         self.transport, self.protocol = loop.create_datagram_endpoint(make_protocol, local_addr=('127.0.0.1', port))
 
         # bootstrap part 1: ping initial_peers, add each other to the routing table
@@ -97,6 +97,12 @@ class DHTNode:
         """
         raise NotImplementedError()
 
+    def refresh_table(self):
+        staleness_threshold = time.monotonic() - self.staleness_timeout
+        stale_buckets = [bucket for bucket in self.buckets if bucket.last_updated < staleness_threshold]
+        staleness_ids = [DHTID(random.randint(bucket.lower, bucket.upper)) for bucket in stale_buckets]
+
+        raise NotImplementedError("TODO")
 
 # TODO bmuller's kademlia updated node's bucket:
 # * on every rpc_find_node - for the node that is searched for
@@ -104,3 +110,7 @@ class DHTNode:
 # * on every refresh table - for lonely_buckets
 # * on save_state - for bootstrappable neighbors, some reason
 # * on server.get/set/set_digest - for a bucket that contains key
+
+# debt:
+# * make sure we ping least-recently-updated node in full bucket if someone else wants to replace him
+#   this should happen every time we add new node

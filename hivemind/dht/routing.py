@@ -9,7 +9,7 @@ import heapq
 from itertools import chain
 from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
 
-from ..utils import Hostname, Port, Endpoint, PickleSerializer
+from ..utils import Endpoint, PickleSerializer
 
 
 class RoutingTable:
@@ -18,44 +18,50 @@ class RoutingTable:
     :param node_id: node id used to measure distance
     :param bucket_size: parameter $k$ from Kademlia paper Section 2.2
     :param depth_modulo: parameter $b$ from Kademlia paper Section 2.2.
-    :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated for this many seconds
     :note: you can find a more detailed docstring for Node class, see node.py
     :note: kademlia paper refers to https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, staleness_timeout: float):
-        self.node_id, self.bucket_size = node_id, bucket_size
-        self.depth_modulo, self.staleness_timeout = depth_modulo, staleness_timeout
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int):
+        self.node_id, self.bucket_size, self.depth_modulo = node_id, bucket_size, depth_modulo
         self.buckets = [KBucket(node_id.MIN, node_id.MAX, bucket_size)]
-        self.nodes_to_ping: Set[Tuple[DHTID, Endpoint]] = set()
 
     def get_bucket_index(self, node_id: DHTID) -> int:
         """ Get the index of the bucket that the given node would fall into. """
-        # TODO use binsearch aka from bisect import bisect
+        # TODO use binsearch aka from bisect import bisect.
         for index, bucket in enumerate(self.buckets):
             if bucket.lower <= node_id < bucket.upper:
                 return index
         raise ValueError(f"Failed to get bucket for node_id={node_id}, this should not be possible.")
 
-    def try_add_node(self, node_id: DHTID, addr: Endpoint) -> bool:
+    def add_or_update_node(self, node_id: DHTID, addr: Endpoint) -> Optional[Tuple[DHTID, Endpoint]]:
         """
-        Add a node to the routing table, split buckets if necessary.
-        :returns: True if node was added (with or without splitting), False if node was rejected
+        Update routing table after an incoming request from :addr: (host:port) or outgoing request to :addr:
+        :returns: If we cannot add node_id to the routing table, return the least-recently-updated node (Section 2.2)
+        :note: KademliaProtocol calls this method for every incoming and outgoing request if there was a response.
+          If this method returned a node to be ping-ed, the protocol will ping it to check and either move it to
+          the start of the table or remove that node and replace it with
         """
         bucket_index = self.get_bucket_index(node_id)
         bucket = self.buckets[bucket_index]
 
-        if bucket.try_add_node(node_id, addr):
-            return True  # this will succeed unless the bucket is full
+        if bucket.add_or_update_node(node_id, addr):
+            return  # this will succeed unless the bucket is full
 
         # Per section 4.2 of paper, split if the bucket has node's own id in its range
         # or if bucket depth is not congruent to 0 mod $b$
         if bucket.has_in_range(self.node_id) or bucket.depth % self.depth_modulo != 0:
             self.split_bucket(bucket_index)
-            return self.try_add_node(node_id, addr)
+            return self.add_or_update_node(node_id, addr)
 
-        self.nodes_to_ping.add(bucket.get_least_recently_updated_node())
-        return False
+        # The bucket is full and won't split further. Return a node to ping (see this method's docstring)
+        return bucket.request_ping_node()
+
+    def split_bucket(self, index: int) -> None:
+        """ Split bucket range in two equal parts and reassign nodes to the appropriate half """
+        first, second = self.buckets[index].split()
+        self.buckets[index] = first
+        self.buckets.insert(index + 1, second)
 
     def __getitem__(self, node_id: DHTID) -> Endpoint:
         return self.buckets[self.get_bucket_index(node_id)][node_id]
@@ -69,12 +75,6 @@ class RoutingTable:
     def __delitem__(self, node_id: DHTID):
         node_bucket = self.buckets[self.get_bucket_index(node_id)]
         del node_bucket[node_id]
-
-    def split_bucket(self, index: int) -> None:
-        """ Split bucket range in two equal parts and reassign nodes to the appropriate half """
-        first, second = self.buckets[index].split()
-        self.buckets[index] = first
-        self.buckets.insert(index + 1, second)
 
     def get_nearest_neighbors(self, query_node_id: DHTID, k: int, exclude: Optional[DHTID] = None) -> List[DHTID]:
         """
@@ -110,35 +110,18 @@ class RoutingTable:
         nearest_neighbors = heapq.nsmallest(k + int(exclude is not None), all_nodes, key=query_node_id.xor_distance)
         return [node_id for node_id in nearest_neighbors if (exclude is None or node_id != exclude)]
 
-    # Protocol methods for DHTNode and KademliaProtocol
-
-    def register_request_from(self, sender: Endpoint, sender_node_id: Optional[DHTID]) -> None:
-        """ Update routing table on incoming request from host:port """
-        self.buckets[self.get_bucket_index(sender_node_id)].try_add_node(sender_node_id, sender)
-        #raise NotImplementedError("TODO")
-
-    def register_request_to(self, recepient: Endpoint, recipient_node_id: Optional[DHTID],
-                            *, responded: bool) -> None:
-        """ Update routing table upon receiving response from a remote node """
-        if responded:
-            if recipient_node_id in self.nodes_to_ping:
-                self.nodes_to_ping.remove(recipient_node_id) #TODO actually ping him
-            self.buckets[self.get_bucket_index(recipient_node_id)].try_add_node(recipient_node_id, recepient)
-        #raise NotImplementedError("TODO")
-
-    def get_nodes_to_refresh(self) -> List[Tuple[DHTID, Endpoint]]:
-        """ return a list of nodes that should be queried """
-        staleness_threshold = time.monotonic() - self.staleness_timeout
-        stale_buckets = [bucket for bucket in self.buckets if bucket.last_updated < staleness_threshold]
-        staleness_ids = [DHTID(random.randint(bucket.lower, bucket.upper)) for bucket in stale_buckets]
-
-
-        raise NotImplementedError("TODO")
-
     def __repr__(self):
         bucket_info = "\n".join(repr(bucket) for bucket in self.buckets)
         return f"{self.__class__.__name__}(node_id={self.node_id}, bucket_size={self.bucket_size}," \
-               f" modulo={self.depth_modulo}, timeout={self.staleness_timeout},\nbuckets=[\n{bucket_info})"
+               f" modulo={self.depth_modulo},\nbuckets=[\n{bucket_info})"
+
+    def remove_node_if_replaceable(self, node_id: DHTID) -> bool:
+        """ If the bucket that contains node_id has other replacement nodes, remove this node_id and add replacement """
+        bucket = self.buckets[self.get_bucket_index(node_id)]
+        if node_id in bucket and len(bucket.replacement_nodes) != 0:
+            del bucket[node_id]
+            return True
+        return False
 
 
 class KBucket:
@@ -151,25 +134,24 @@ class KBucket:
         self.lower, self.upper, self.size, self.depth = lower, upper, size, depth
         self.nodes_to_addr: Dict[DHTID, Endpoint] = {}
         self.replacement_nodes: Dict[DHTID, Endpoint] = {}
+        self.nodes_requested_for_ping: Set[DHTID] = set()
         self.last_updated = time.monotonic()
-
-    def register_update(self) -> None:
-        self.last_updated = time.monotonic()
-
-    def get_least_recently_updated_node(self) -> Tuple[DHTID, Endpoint]:
-        return next(iter(self.nodes_to_addr.items()))
 
     def has_in_range(self, node_id: DHTID):
         """ Check if node_id is between this bucket's lower and upper bounds """
         return self.lower <= node_id < self.upper
 
-    def try_add_node(self, node_id: DHTID, addr: Endpoint) -> bool:
+    def add_or_update_node(self, node_id: DHTID, addr: Endpoint) -> bool:
         """
-        Add node to KBucket, return True if successful, False if the bucket is full.
+        Add node to KBucket or update existing node, return True if successful, False if the bucket is full.
         If the bucket is full, keep track of node in a replacement list, per section 4.1 of the paper.
-        :param node_id: dht node identifier
+        :param node_id: dht node identifier that should be added or moved to the front of bucket
         :param addr: a pair of (hostname, port) associated with that node id
+        :note: this function has a side-effect of resetting KBucket.last_updated time
         """
+        if node_id in self.nodes_requested_for_ping:
+            self.nodes_requested_for_ping.remove(node_id)
+        self.last_updated = time.monotonic()
         if node_id in self.nodes_to_addr:
             del self.nodes_to_addr[node_id]
             self.nodes_to_addr[node_id] = addr
@@ -184,6 +166,12 @@ class KBucket:
 
     def get_nodes(self) -> List[DHTID]:
         return list(self.nodes_to_addr.keys())
+
+    def request_ping_node(self) -> Optional[Tuple[DHTID, Endpoint]]:
+        """ :returns: least-recently updated node that isn't already being pinged right now -- if such node exists """
+        for uid, endpoint in self.nodes_to_addr.items():
+            if uid not in self.nodes_requested_for_ping:
+                return uid, endpoint
 
     def __getitem__(self, node_id: DHTID) -> Endpoint:
         return self.nodes_to_addr[node_id] if node_id in self.nodes_to_addr else self.replacement_nodes[node_id]
@@ -210,10 +198,10 @@ class KBucket:
         midpoint = (self.lower + self.upper) // 2
         assert self.lower < midpoint < self.upper, f"Bucket to small to be split: [{self.lower}: {self.upper})"
         left = KBucket(self.lower, midpoint, self.size, depth=self.depth + 1)
-        right =KBucket(midpoint, self.upper, self.size, depth=self.depth + 1)
+        right = KBucket(midpoint, self.upper, self.size, depth=self.depth + 1)
         for node_id, addr in chain(self.nodes_to_addr.items(), self.replacement_nodes.items()):
             bucket = left if int(node_id) <= midpoint else right
-            bucket.try_add_node(node_id, addr)
+            bucket.add_or_update_node(node_id, addr)
         return left, right
 
     def __repr__(self):

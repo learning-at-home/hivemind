@@ -33,11 +33,11 @@ def test_ids_depth():
 
 def test_routing_table_basic():
     node_id = DHTID.generate()
-    routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5, staleness_timeout=300)
+    routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5)
 
     for phony_neighbor_port in random.sample(range(10000), 100):
         phony_id = DHTID.generate()
-        routing_table.try_add_node(phony_id, ('localhost', phony_neighbor_port))
+        routing_table.add_or_update_node(phony_id, ('localhost', phony_neighbor_port))
         assert routing_table[phony_id] == ('localhost', phony_neighbor_port)
 
     assert routing_table.buckets[0].lower == DHTID.MIN and routing_table.buckets[-1].upper == DHTID.MAX
@@ -54,9 +54,9 @@ def test_routing_table_parameters():
         (20,          1,      7,            15),
     ]:
         node_id = DHTID.generate()
-        routing_table = RoutingTable(node_id, bucket_size=bucket_size, depth_modulo=modulo, staleness_timeout=300)
+        routing_table = RoutingTable(node_id, bucket_size=bucket_size, depth_modulo=modulo)
         for phony_neighbor_port in random.sample(range(1_000_000), 10_000):
-            routing_table.try_add_node(DHTID.generate(), ('localhost', phony_neighbor_port))
+            routing_table.add_or_update_node(DHTID.generate(), ('localhost', phony_neighbor_port))
         for bucket in routing_table.buckets:
             assert len(bucket.replacement_nodes) == 0 or len(bucket.nodes_to_addr) <= bucket.size
         assert min_nbuckets <= len(routing_table.buckets) <= max_nbuckets, (
@@ -65,10 +65,10 @@ def test_routing_table_parameters():
 
 def test_routing_table_search():
     node_id = DHTID.generate()
-    routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5, staleness_timeout=300)
+    routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5)
     num_added = 0
     for phony_neighbor_port in random.sample(range(1_000_000), 10_000):
-        num_added += routing_table.try_add_node(DHTID.generate(), ('localhost', phony_neighbor_port))
+        num_added += routing_table.add_or_update_node(DHTID.generate(), ('localhost', phony_neighbor_port)) is None
     num_replacements = sum(len(bucket.replacement_nodes) for bucket in routing_table.buckets)
 
     all_active_neighbors = list(chain(

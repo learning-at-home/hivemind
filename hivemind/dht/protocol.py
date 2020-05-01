@@ -1,4 +1,5 @@
-from typing import Optional, Union, List, Tuple, Dict
+import asyncio
+from typing import Optional, List, Tuple, Dict
 from rpcudp.protocol import RPCProtocol
 
 from .routing import RoutingTable, DHTID, DHTValue, DHTExpiration, BinaryDHTID
@@ -19,29 +20,28 @@ class KademliaProtocol(RPCProtocol):
      Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int,
-                 staleness_timeout: float, wait_timeout: float):
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, wait_timeout: float):
         super().__init__(wait_timeout)
         self.node_id, self.bucket_size = node_id, bucket_size
-        self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo, staleness_timeout)
+        self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.storage = LocalStorage()
 
     def rpc_ping(self, sender: Endpoint, sender_id_bytes: BinaryDHTID) -> BinaryDHTID:
         """ Some dht node wants us to add it to our routing table. """
-        self.routing_table.register_request_from(sender, DHTID.from_bytes(sender_id_bytes))
+        asyncio.ensure_future(self.update_routing_table(DHTID.from_bytes(sender_id_bytes), sender))
         return bytes(self.node_id)
 
     async def call_ping(self, recipient: Endpoint) -> Optional[DHTID]:
         """ Get recipient's node id and add him to the routing table. If recipient doesn't respond, return None """
         responded, response = await self.ping(recipient, bytes(self.node_id))
         recipient_node_id = DHTID.from_bytes(response) if responded else None
-        self.routing_table.register_request_to(recipient, recipient_node_id, responded=responded)
+        asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
         return recipient_node_id
 
     def rpc_store(self, sender: Endpoint, sender_id_bytes: BinaryDHTID,
                   key_bytes: BinaryDHTID, value: DHTValue, expiration_time: DHTExpiration) -> Tuple[bool, BinaryDHTID]:
         """ Some node wants us to store this (key, value) pair """
-        self.routing_table.register_request_from(sender, DHTID.from_bytes(sender_id_bytes))
+        asyncio.ensure_future(self.update_routing_table(DHTID.from_bytes(sender_id_bytes), sender))
         store_accepted = self.storage.store(DHTID.from_bytes(key_bytes), value, expiration_time)
         return store_accepted, bytes(self.node_id)
 
@@ -53,8 +53,9 @@ class KademliaProtocol(RPCProtocol):
         """
         responded, response = await self.store(recipient, bytes(self.node_id), bytes(key), value, expiration_time)
         if responded:
-            self.routing_table.register_request_to(recipient, DHTID.from_bytes(response[1]), responded=responded)
-            return response[0]  # response[0] is True if an update was accepted, False if rejected
+            store_accepted, recipient_node_id = response[0], DHTID.from_bytes(response[1])
+            asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
+            return store_accepted
         return None
 
     def rpc_find_node(self, sender: Endpoint, sender_id_bytes: BinaryDHTID,
@@ -65,7 +66,7 @@ class KademliaProtocol(RPCProtocol):
          also returns our own node id for routing table maintenance
         """
         query_id, sender_id = DHTID.from_bytes(query_id_bytes), DHTID.from_bytes(sender_id_bytes)
-        self.routing_table.register_request_from(sender, sender_id)
+        asyncio.ensure_future(self.update_routing_table(sender_id, sender))
         peer_ids = self.routing_table.get_nearest_neighbors(query_id, k=self.bucket_size, exclude=sender_id)
         return [(bytes(peer_id), self.routing_table[peer_id]) for peer_id in peer_ids], bytes(self.node_id)
 
@@ -79,7 +80,8 @@ class KademliaProtocol(RPCProtocol):
         if responded:
             peers = {DHTID.from_bytes(peer_id_bytes): tuple(addr) for peer_id_bytes, addr in response[0]}
             # Note: we convert addr from list to tuple here --^ because some msgpack versions convert tuples to lists
-            self.routing_table.register_request_to(recipient, DHTID.from_bytes(response[1]), responded=responded)
+            recipient_node_id = DHTID.from_bytes(response[1])
+            asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
             return peers
         return {}
 
@@ -107,11 +109,29 @@ class KademliaProtocol(RPCProtocol):
         """
         responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
         if responded:
-            value, expiration_time, peers_bytes, recipient_id_bytes = response
+            (value, expiration_time, peers_bytes), recipient_id = response[:-1], DHTID.from_bytes(response[-1])
             peers = {DHTID.from_bytes(peer_id_bytes): tuple(addr) for peer_id_bytes, addr in peers_bytes}
-            self.routing_table.register_request_to(recipient, DHTID.from_bytes(recipient_id_bytes), responded=responded)
+            asyncio.ensure_future(self.update_routing_table(recipient_id, recipient, responded=responded))
             return value, expiration_time, peers
         return None, None, {}
+
+    async def update_routing_table(self, node_id: Optional[DHTID], addr: Endpoint, responded=True):
+        """
+        This method is called on every incoming AND outgoing request to update the routing table
+        :param addr: sender endpoint for incoming requests, recipient endpoint for outgoing requests
+        :param node_id: sender node id for incoming requests, recipient node id for outgoing requests
+        :param responded: for outgoing requests, this indicated whether recipient responded or not.
+          For incoming requests, this should always be True
+        """
+        if responded:  # incoming request or outgoing request with response
+            maybe_node_to_ping = self.routing_table.add_or_update_node(node_id, addr)
+            if maybe_node_to_ping is not None:
+                # we couldn't add new node because the table was full. Check if existing peers are alive (Section 2.2)
+                # ping one least-recently updated peer: if it won't respond, remove it from the table, else update it
+                await self.call_ping(maybe_node_to_ping[1])  # [1]-th element is that node's endpoint
+
+        else:  # outgoing request and peer did not respond
+            self.routing_table.remove_node_if_replaceable(node_id)
 
 
 class LocalStorage(dict):
