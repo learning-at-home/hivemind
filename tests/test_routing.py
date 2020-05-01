@@ -1,7 +1,7 @@
 import random
 import heapq
 import operator
-from itertools import chain
+from itertools import chain, zip_longest
 
 from hivemind.dht.routing import RoutingTable, DHTID
 from hivemind.utils.serializer import PickleSerializer
@@ -64,42 +64,47 @@ def test_routing_table_parameters():
 
 
 def test_routing_table_search():
-    node_id = DHTID.generate()
-    routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5)
-    num_added = 0
-    for phony_neighbor_port in random.sample(range(1_000_000), 10_000):
-        num_added += routing_table.add_or_update_node(DHTID.generate(), ('localhost', phony_neighbor_port)) is None
-    num_replacements = sum(len(bucket.replacement_nodes) for bucket in routing_table.buckets)
-
-    all_active_neighbors = list(chain(
-        *(bucket.nodes_to_addr.keys() for bucket in routing_table.buckets)
-    ))
-    assert 800 <= len(all_active_neighbors) <= 1100
-    assert len(all_active_neighbors) == num_added
-    assert num_added + num_replacements == 10_000
-
-    # random queries
-    for i in range(500):
-        k = random.randint(1, 100)
-        query_id = DHTID.generate()
-        exclude = query_id if random.random() < 0.5 else None
-        our_knn = routing_table.get_nearest_neighbors(query_id, k=k, exclude=exclude)
-        reference_knn = heapq.nsmallest(k, all_active_neighbors, key=query_id.xor_distance)
-        assert all(our == ref for our, ref in zip(our_knn, reference_knn))
-
-    # queries from table
-    for i in range(500):
-        k = random.randint(1, 100)
-        query_id = random.choice(all_active_neighbors)
-        our_knn = routing_table.get_nearest_neighbors(query_id, k=k, exclude=query_id)
-        reference_knn = heapq.nsmallest(
-            k, all_active_neighbors,
-            key=lambda uid: query_id.xor_distance(uid) if uid != query_id else float('inf'))
-
-        assert query_id not in our_knn
-        assert all(query_id.xor_distance(our) == query_id.xor_distance(ref)
-                   for our, ref in zip(our_knn, reference_knn))
-        assert routing_table.get_nearest_neighbors(query_id, k=k, exclude=None)[0] == query_id
+    for table_size, lower_active, upper_active in [
+        (10, 10, 10), (10_000, 800, 1100)
+    ]:
+        node_id = DHTID.generate()
+        routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5)
+        num_added = 0
+        for phony_neighbor_port in random.sample(range(1_000_000), table_size):
+            num_added += routing_table.add_or_update_node(DHTID.generate(), ('localhost', phony_neighbor_port)) is None
+        num_replacements = sum(len(bucket.replacement_nodes) for bucket in routing_table.buckets)
+    
+        all_active_neighbors = list(chain(
+            *(bucket.nodes_to_addr.keys() for bucket in routing_table.buckets)
+        ))
+        assert lower_active <= len(all_active_neighbors) <= upper_active
+        assert len(all_active_neighbors) == num_added
+        assert num_added + num_replacements == table_size
+    
+        # random queries
+        for i in range(500):
+            k = random.randint(1, 100)
+            query_id = DHTID.generate()
+            exclude = query_id if random.random() < 0.5 else None
+            our_knn, our_addrs = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=exclude))
+            reference_knn = heapq.nsmallest(k, all_active_neighbors, key=query_id.xor_distance)
+            assert all(our == ref for our, ref in zip_longest(our_knn, reference_knn))
+            assert all(our_addr == routing_table[our_node] for our_node, our_addr in zip(our_knn, our_addrs))
+    
+        # queries from table
+        for i in range(500):
+            k = random.randint(1, 100)
+            query_id = random.choice(all_active_neighbors)
+            our_knn, our_addrs = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=query_id))
+            reference_knn = heapq.nsmallest(
+                k + 1, all_active_neighbors,
+                key=lambda uid: query_id.xor_distance(uid))
+            if query_id in reference_knn:
+                reference_knn.remove(query_id)
+            assert len(our_knn) == len(reference_knn)
+            assert all(query_id.xor_distance(our) == query_id.xor_distance(ref)
+                       for our, ref in zip_longest(our_knn, reference_knn))
+            assert routing_table.get_nearest_neighbors(query_id, k=k, exclude=None)[0][0] == query_id
 
 
 def shared_prefix(*strings: str):

@@ -7,7 +7,7 @@ import random
 import time
 import heapq
 from itertools import chain
-from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
+from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence, Iterator, OrderedDict
 
 from ..utils import Endpoint, PickleSerializer
 
@@ -76,13 +76,14 @@ class RoutingTable:
         node_bucket = self.buckets[self.get_bucket_index(node_id)]
         del node_bucket[node_id]
 
-    def get_nearest_neighbors(self, query_node_id: DHTID, k: int, exclude: Optional[DHTID] = None) -> List[DHTID]:
+    def get_nearest_neighbors(
+            self, query_id: DHTID, k: int, exclude: Optional[DHTID] = None) -> List[Tuple[DHTID, Endpoint]]:
         """
         Find k nearest neighbors according to XOR distance
-        :param query_node_id: find neighbors of this node
+        :param query_id: find neighbors of this node
         :param k: find this many neighbors. If there aren't enough nodes in the table, returns all nodes
         :param exclude: if True, results will not contain query_node_id even if it is in table
-        :returns: a list of node_ids for up to k neighbors sorted from nearest to farthest
+        :returns: a list of tuples (node_id, endpoint) for up to k neighbors sorted from nearest to farthest
 
         :note: this is a semi-exhaustive search of nodes that takes O(n * log k) time.
             One can implement a more efficient knn search using a binary skip-tree in some
@@ -106,9 +107,17 @@ class RoutingTable:
             This results in O(num_nodes * bit_length) complexity for add and search
             Better yet: use binary tree with skips for O(num_nodes * log(num_nodes))
         """
-        all_nodes = chain(*map(KBucket.get_nodes, self.buckets))
-        nearest_neighbors = heapq.nsmallest(k + int(exclude is not None), all_nodes, key=query_node_id.xor_distance)
-        return [node_id for node_id in nearest_neighbors if (exclude is None or node_id != exclude)]
+        all_nodes: Iterator[Tuple[DHTID, Endpoint]] = chain(*self.buckets)  # uses KBucket.__iter__
+        nearest_nodes_with_addr: List[Tuple[DHTID, Endpoint]] = heapq.nsmallest(
+            k + int(bool(exclude)), all_nodes, key=lambda id_and_endpoint: query_id.xor_distance(id_and_endpoint[0]))
+        if exclude is not None:
+            for i, (node_i, addr_i) in enumerate(list(nearest_nodes_with_addr)):
+                if node_i == exclude:
+                    del nearest_nodes_with_addr[i]
+                    break
+            if len(nearest_nodes_with_addr) > k:
+                nearest_nodes_with_addr.pop()  # if excluded element is not among (k + 1) nearest, simply crop to k
+        return nearest_nodes_with_addr
 
     def __repr__(self):
         bucket_info = "\n".join(repr(bucket) for bucket in self.buckets)
@@ -156,9 +165,6 @@ class KBucket:
             return False
         return True
 
-    def get_nodes(self) -> List[DHTID]:
-        return list(self.nodes_to_addr.keys())
-
     def request_ping_node(self) -> Optional[Tuple[DHTID, Endpoint]]:
         """ :returns: least-recently updated node that isn't already being pinged right now -- if such node exists """
         for uid, endpoint in self.nodes_to_addr.items():
@@ -184,6 +190,10 @@ class KBucket:
 
     def __len__(self):
         return len(self.nodes_to_addr)
+
+    def __iter__(self):
+        return iter(self.nodes_to_addr.items())
+
 
     def split(self) -> Tuple[KBucket, KBucket]:
         """ Split bucket over midpoint, rounded down, assign nodes to according to their id """

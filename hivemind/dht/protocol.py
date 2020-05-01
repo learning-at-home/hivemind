@@ -65,10 +65,12 @@ class KademliaProtocol(RPCProtocol):
         :returns: a list of pairs (node_id, address) of :bucket_size: nearest to key_node according to XOR distance,
          also returns our own node id for routing table maintenance
         """
+        print('>' * 100, self.node_id, self.routing_table.buckets[0].nodes_to_addr.keys(), flush=True)
         query_id, sender_id = DHTID.from_bytes(query_id_bytes), DHTID.from_bytes(sender_id_bytes)
         asyncio.ensure_future(self.update_routing_table(sender_id, sender))
-        peer_ids = self.routing_table.get_nearest_neighbors(query_id, k=self.bucket_size, exclude=sender_id)
-        return [(bytes(peer_id), self.routing_table[peer_id]) for peer_id in peer_ids], bytes(self.node_id)
+        peer_ids_and_addr = self.routing_table.get_nearest_neighbors(query_id, k=self.bucket_size, exclude=sender_id)
+        print(peer_ids_and_addr, flush=True)
+        return [(bytes(peer_id), peer_addr) for peer_id, peer_addr in peer_ids_and_addr], bytes(self.node_id)
 
     async def call_find_node(self, recipient: Endpoint, query_id: DHTID) -> Dict[DHTID, Endpoint]:
         """
@@ -131,8 +133,9 @@ class KademliaProtocol(RPCProtocol):
                 await self.call_ping(maybe_node_to_ping[1])  # [1]-th element is that node's endpoint
 
         else:  # outgoing request and peer did not respond
-            if node_id in self.routing_table:
-                del self.routing_table[node_id]
+            #if node_id is not None and node_id in self.routing_table:
+            #    del self.routing_table[node_id]
+            pass
 
 
 class LocalStorage(dict):

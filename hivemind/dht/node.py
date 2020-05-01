@@ -8,7 +8,8 @@ from warnings import warn
 
 from .protocol import KademliaProtocol
 from .routing import DHTID, DHTValue, DHTExpiration
-from ..utils import find_open_port, Endpoint, Port
+from .search import beam_search
+from ..utils import find_open_port, Endpoint, Hostname, Port
 
 
 class DHTNode:
@@ -22,11 +23,12 @@ class DHTNode:
     :param bucket_size: (k) - max number of nodes in one k-bucket. Trying to add {k+1}st node will cause a bucket to
       either split in two buckets along the midpoint or reject the new node (but still save it as a replacement)
       Recommended value: $k$ is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
-    :param beam_size: (alpha) - the number of concurrent requests when performing beam search (find node/value)
-    :param modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of :depth_modulo:
-    :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated for this many seconds
+    :param num_replicas: (k) - number of nearest nodes that will be asked to store a given key, default = bucket_size
+    :param depth_modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of this value
     :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
+    :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
     :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
+    :param interface: provide 0.0.0.0 to operate over ipv4, :: to operate over ipv6, localhost to operate locally, etc.
 
     Note: Hivemind DHT is optimized to store temporary metadata that is regularly updated.
      For example, an expert alive timestamp that emitted by the Server responsible for that expert.
@@ -43,16 +45,22 @@ class DHTNode:
        if expiration time is greater than current time.monotonic(), DHTNode *may* return None
     """
 
-    def __init__(self, node_id: Optional[DHTID] = None, port: Port=None, initial_peers: Tuple[Endpoint, ...] = (),
-                 bucket_size=20, beam_size=3, modulo=5, staleness_timeout=600, wait_timeout=5, bootstrap_timeout=None,
-                 loop=None):
-        self.id = node_id = node_id or DHTID.generate()
-        self.port = port = port or find_open_port()
-        self.beam_size, self.staleness_timeout = beam_size, staleness_timeout
+    def __init__(
+            self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
+            bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5, wait_timeout: float = 5,
+            staleness_timeout: Optional[float] = 600, bootstrap_timeout: Optional[float] = None,
+            interface: Hostname = '0.0.0.0', loop=None):
+        self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
+        self.port = port = port if port is not None else find_open_port()
+        self.num_replicas = num_replicas if num_replicas is not None else bucket_size
+        self.staleness_timeout = staleness_timeout
 
+        # create kademlia protocol and make it listen to a port
         loop = loop if loop is not None else asyncio.get_event_loop()
-        make_protocol = partial(KademliaProtocol, self.id, bucket_size, modulo, wait_timeout)
-        self.transport, self.protocol = loop.create_datagram_endpoint(make_protocol, local_addr=('127.0.0.1', port))
+        make_protocol = partial(KademliaProtocol, self.node_id, bucket_size, depth_modulo, wait_timeout)
+        listener = loop.run_until_complete(loop.create_datagram_endpoint(make_protocol, local_addr=(interface, port)))
+        self.transport: asyncio.Transport = listener[0]
+        self.protocol: KademliaProtocol = listener[1]
 
         # bootstrap part 1: ping initial_peers, add each other to the routing table
         bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
@@ -73,13 +81,15 @@ class DHTNode:
             warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
 
         # bootstrap part 3: run beam search for my node id to add my own nearest neighbors to the routing table
-        self.find_nearest_nodes(query_id=self.id, initial_beam=peer_ids)
+        loop.run_until_complete(self.find_nearest_nodes(query_id=self.node_id))
 
-    def find_nearest_nodes(self, query_id: DHTID, initial_beam: Optional[List[DHTID]] = None) -> Dict[DHTID, Endpoint]:
-        """ TODO """
-        raise NotImplementedError()
+    async def find_nearest_nodes(self, query_id: DHTID, k_nearest: Optional[int] = None) -> Dict[DHTID, Endpoint]:
+        """ TODO description """
+        initial_peers = dict(self.protocol.routing_table.get_nearest_neighbors())
+        await beam_search(self.protocol, query_id, initial_peers, k_nearest)
 
-    def get(self, key: DHTID, sufficient_time: DHTExpiration = -float('inf')) -> \
+
+    async def get(self, key: DHTID, sufficient_time: DHTExpiration = -float('inf')) -> \
             Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
         :param key: traverse the DHT and find the value for this key (or None if it does not exist)
@@ -89,7 +99,7 @@ class DHTNode:
         """
         raise NotImplementedError()
 
-    def set(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
+    async def set(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
         Also cache (key, value, expiration_time) at all nodes you met along the way (see Section 2.1 end)
@@ -97,10 +107,13 @@ class DHTNode:
         """
         raise NotImplementedError()
 
-    def refresh_table(self):
+    async def refresh_stale_buckets(self):
         staleness_threshold = time.monotonic() - self.staleness_timeout
-        stale_buckets = [bucket for bucket in self.buckets if bucket.last_updated < staleness_threshold]
-        staleness_ids = [DHTID(random.randint(bucket.lower, bucket.upper)) for bucket in stale_buckets]
+        stale_buckets = [bucket for bucket in self.protocol.routing_table.buckets
+                         if bucket.last_updated < staleness_threshold]
+
+        refresh_ids = [DHTID(random.randint(bucket.lower, bucket.upper - 1)) for bucket in stale_buckets]
+        # note: we use bucket.upper - 1 because random.randint is inclusive w.r.t. both lower and upper bounds
 
         raise NotImplementedError("TODO")
 
