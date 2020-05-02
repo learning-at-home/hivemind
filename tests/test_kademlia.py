@@ -9,10 +9,6 @@ import hivemind.dht.protocol
 from hivemind.dht.node import DHTID, KademliaProtocol
 
 
-def test_dht_node():
-    pass
-
-
 def test_kademlia_protocol():
     try:
         # create the first peer
