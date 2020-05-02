@@ -194,7 +194,6 @@ class KBucket:
     def __iter__(self):
         return iter(self.nodes_to_addr.items())
 
-
     def split(self) -> Tuple[KBucket, KBucket]:
         """ Split bucket over midpoint, rounded down, assign nodes to according to their id """
         midpoint = (self.lower + self.upper) // 2
