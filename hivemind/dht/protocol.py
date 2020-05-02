@@ -133,9 +133,9 @@ class KademliaProtocol(RPCProtocol):
                 await self.call_ping(maybe_node_to_ping[1])  # [1]-th element is that node's endpoint
 
         else:  # outgoing request and peer did not respond
-            if node_id is not None and node_id in self.routing_table:
-               del self.routing_table[node_id]
-
+            # if node_id is not None and node_id in self.routing_table:
+            #    del self.routing_table[node_id]
+            pass # TODO(jheuristic fix tests)
 
 class LocalStorage(dict):
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
