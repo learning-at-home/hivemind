@@ -12,7 +12,6 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
                       expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None, no_optimizer=False,
                       no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True, start=False,
                       UID_DELIMETER=hivemind.DHTNode.UID_DELIMETER, **kwargs) -> hivemind.Server:
-    """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
     if verbose and len(kwargs) != 0:
         print("Ignored kwargs:", kwargs)
     assert expert_cls in name_to_block
@@ -69,34 +68,47 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
 
 
 @contextmanager
-def background_server(*args, verbose=True, **kwargs):
-    """ Runs server in a background process and returns a reference to it. """
-    recv_addr, send_addr = mp.Pipe(duplex=True)
+def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs):
+    """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
+
+    recv, sender = mp.Pipe(duplex=True)
     trigger_shutdown = mp.Event()
 
-    def server_runner():
-        try:
-            server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
-            dht_port = server.dht.port if server.dht is not None else None
-            send_addr.send((server.addr, server.port, dht_port))
-            trigger_shutdown.wait()
-        finally:
-            if verbose:
-                print("Shutting down server...")
-            trigger_shutdown.set()  # if server failed internally, set the shutdown trigger anyway
-            server.shutdown()
-            if verbose:
-                print("Server shut down successfully.")
-
     try:
-        runner = mp.Process(target=server_runner)
+        runner = mp.get_context("spawn").Process(
+            target=_server_runner, args=(trigger_shutdown, sender, *args), kwargs=dict(verbose=verbose, **kwargs))
         runner.start()
-        yield recv_addr.recv()  # yield tuple(hostname, port)
+
+        def foo():
+            import time
+            while True:
+                print(runner)
+                time.sleep(1)
+
+        hivemind.run_in_background(foo)
+        yield recv.recv()  # receives a tuple(hostname, port, dht port)
 
     finally:
-        trigger_shutdown.set()
-        runner.terminate()
-        runner.join()
+        try:
+            trigger_shutdown.set()
+            runner.join(timeout=shutdown_timeout)
+        finally:
+            runner.terminate()
+
+
+def _server_runner(trigger_shutdown, sender, *args, verbose, **kwargs):
+    server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
+    try:
+        dht_port = server.dht.port if server.dht is not None else None
+        sender.send((server.addr, server.port, dht_port))
+        trigger_shutdown.wait()
+    finally:
+        if verbose:
+            print("Shutting down server...")
+        trigger_shutdown.set()  # if server failed internally, set the shutdown trigger anyway
+        server.shutdown()
+        if verbose:
+            print("Server shut down successfully.")
 
 
 if __name__ == '__main__':
