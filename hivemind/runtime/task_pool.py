@@ -19,7 +19,7 @@ from ..utils import SharedFuture
 Task = namedtuple("Task", ("future", "args"))
 
 
-class TaskPoolBase(mp.Process):
+class TaskPoolBase(mp.context.ForkProcess):
     """ A pool that accepts tasks and forms batches for parallel processing, interacts with Runtime """
 
     def __init__(self, process_func: callable, daemon=True):
