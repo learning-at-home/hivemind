@@ -76,18 +76,9 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs):
 
     try:
         runner = mp.get_context("spawn").Process(
-            target=_server_runner, args=(trigger_shutdown, sender, *args), kwargs=dict(verbose=verbose, **kwargs))
+            target=_server_runner, args=('trigger_shutdown', sender, *args), kwargs=dict(verbose=verbose, **kwargs))
         runner.start()
 
-        # TODO <debugprint>
-        def foo():
-            import time
-            while True:
-                print(runner)
-                time.sleep(1)
-
-        hivemind.run_in_background(foo)
-        # TODO </debugprint>
         yield recv.recv()  # receives a tuple(hostname, port, dht port)
 
     finally:
@@ -103,7 +94,9 @@ def _server_runner(trigger_shutdown, sender, *args, verbose, **kwargs):
     try:
         dht_port = server.dht.port if server.dht is not None else None
         sender.send((server.addr, server.port, dht_port))
-        trigger_shutdown.wait()
+        import time; time.sleep(10)  # TODO YAY! the bug actually occurs only when awaiting trigger_shutdown
+        # trigger_shutdown.wait()    # because the parent process is not willing to share its file descriptor
+        #                              we can rewrite this using pipe instead of event or find something more elegant
     finally:
         if verbose:
             print("Shutting down server...")
