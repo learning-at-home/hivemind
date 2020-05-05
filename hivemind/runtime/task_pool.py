@@ -22,8 +22,8 @@ Task = namedtuple("Task", ("future", "args"))
 class TaskPoolBase(mp.Process):
     """ A pool that accepts tasks and forms batches for parallel processing, interacts with Runtime """
 
-    def __init__(self, process_func: callable):
-        super().__init__()
+    def __init__(self, process_func: callable, daemon=True):
+        super().__init__(daemon=daemon)
         self.process_func = process_func
         self._priority = mp.Value(ctypes.c_double, 1.0)  # higher priority = the more urgent to process this pool
 
@@ -66,9 +66,8 @@ class TaskPool(TaskPoolBase):
     """
 
     def __init__(self, process_func: callable, max_batch_size: int, min_batch_size=1,
-                 timeout=None, pool_size=None, prefetch_batches=1, uid=None, start=False):
-
-        super().__init__(process_func)
+                 timeout=None, pool_size=None, prefetch_batches=1, uid=None, daemon=True, start=False):
+        super().__init__(process_func, daemon=daemon)
         self.min_batch_size, self.max_batch_size, self.timeout = min_batch_size, max_batch_size, timeout
         self.uid = uid or uuid.uuid4()
         self.prefetch_batches = prefetch_batches
