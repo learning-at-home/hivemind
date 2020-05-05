@@ -79,6 +79,7 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs):
             target=_server_runner, args=(trigger_shutdown, sender, *args), kwargs=dict(verbose=verbose, **kwargs))
         runner.start()
 
+        # TODO <debugprint>
         def foo():
             import time
             while True:
@@ -86,6 +87,7 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs):
                 time.sleep(1)
 
         hivemind.run_in_background(foo)
+        # TODO </debugprint>
         yield recv.recv()  # receives a tuple(hostname, port, dht port)
 
     finally:
