@@ -87,3 +87,8 @@ def test_compute_expert_scores():
                     "compute_expert_scores returned incorrect score"
     finally:
         dht.shutdown()
+
+
+if __name__ == '__main__':
+    test_determinism()
+    test_determinism() #TODO remove
