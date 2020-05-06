@@ -51,7 +51,7 @@ def test_determinism():
     mask = torch.randint(0, 1, (32, 1024))
 
     with background_server(num_experts=1, device='cpu', expert_cls='det_dropout',
-                           no_optimizer=True, no_dht=True) as (localhost, server_port, dht_port):
+                           no_optimizer=True, no_dht=True) as (interface, server_port, dht_port):
         expert = hivemind.RemoteExpert(uid=f'expert.0', port=server_port)
 
         out = expert(xx, mask)
@@ -68,27 +68,24 @@ def test_compute_expert_scores():
     try:
         dht = hivemind.DHTNode(port=hivemind.find_open_port(), start=True)
         moe = hivemind.client.moe.RemoteMixtureOfExperts(
-            dht=dht, in_features=1024, grid_size=[40], k_best=4, k_min=1, timeout_after_k_min=1,
+            dht=dht, in_features=1024, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1,
             uid_prefix='expert')
         gx, gy = torch.randn(4, 5, requires_grad=True), torch.torch.randn(4, 3, requires_grad=True)
         ii = [[4, 0, 2], [3, 1, 1, 1, 3], [0], [3, 2]]
         jj = [[2, 2, 1], [0, 1, 2, 0, 1], [0], [1, 2]]
         batch_experts = [
-            [hivemind.RemoteExpert(uid=f'expert.{ii[b][e]}.{jj[b][e]}') for e in range(len(ii[b]))]
-            for b in range(len(ii))
+            [hivemind.RemoteExpert(uid=f'expert.{ii[batch_i][expert_i]}.{jj[batch_i][expert_i]}')
+             for expert_i in range(len(ii[batch_i]))]
+            for batch_i in range(len(ii))
         ]  # note: these experts do not exists on server, we use them only to test moe compute_expert_scores
         logits = moe.compute_expert_scores([gx, gy], batch_experts)
         torch.softmax(logits, dim=-1).norm(dim=-1).mean().backward()
         assert gx.grad.norm().item() > 0 and gy.grad.norm().item(), "compute_expert_scores didn't backprop"
 
-        for b in range(len(ii)):
-            for e in range(len(ii[b])):
-                assert torch.allclose(logits[b, e], gx[b, ii[b][e]] + gy[b, jj[b][e]]), "compute_expert_scores returned incorrect score"
+        for batch_i in range(len(ii)):
+            for expert_i in range(len(ii[batch_i])):
+                assert torch.allclose(logits[batch_i, expert_i],
+                                      gx[batch_i, ii[batch_i][expert_i]] + gy[batch_i, jj[batch_i][expert_i]]), \
+                    "compute_expert_scores returned incorrect score"
     finally:
         dht.shutdown()
-
-
-if __name__ == '__main__':
-    test_remote_module_call()
-    test_compute_expert_scores()
-    test_determinism()

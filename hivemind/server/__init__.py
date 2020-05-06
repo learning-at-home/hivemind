@@ -98,7 +98,8 @@ class Server(threading.Thread):
         sock.listen()
         sock.settimeout(self.update_period)
 
-        processes = [mp.Process(target=socket_loop, name=f"socket_loop-{i}", args=(sock, self.experts))
+        processes = [mp.context.ForkProcess(
+            target=socket_loop, name=f"socket_loop-{i}", args=(sock, self.experts), daemon=True)
                      for i in range(num_handlers)]
         return processes
 
