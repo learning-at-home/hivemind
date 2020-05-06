@@ -74,8 +74,9 @@ def test_compute_expert_scores():
         ii = [[4, 0, 2], [3, 1, 1, 1, 3], [0], [3, 2]]
         jj = [[2, 2, 1], [0, 1, 2, 0, 1], [0], [1, 2]]
         batch_experts = [
-            [hivemind.RemoteExpert(uid=f'expert.{ii[batch_i][e]}.{jj[batch_i][e]}') for e in range(len(ii[batch_i]))]
-            for b in range(len(ii))
+            [hivemind.RemoteExpert(uid=f'expert.{ii[batch_i][expert_i]}.{jj[batch_i][expert_i]}')
+             for expert_i in range(len(ii[batch_i]))]
+            for batch_i in range(len(ii))
         ]  # note: these experts do not exists on server, we use them only to test moe compute_expert_scores
         logits = moe.compute_expert_scores([gx, gy], batch_experts)
         torch.softmax(logits, dim=-1).norm(dim=-1).mean().backward()
