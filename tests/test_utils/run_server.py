@@ -70,37 +70,34 @@ def make_dummy_server(host='0.0.0.0', port=None, num_experts=1, expert_cls='ffn'
 @contextmanager
 def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs):
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
-
-    recv, sender = mp.Pipe(duplex=True)
-    trigger_shutdown = mp.Event()
+    pipe, runners_pipe = mp.Pipe(duplex=True)
+    runner = mp.get_context("spawn").Process(
+        target=_server_runner, args=(runners_pipe, *args), kwargs=dict(verbose=verbose, **kwargs))
 
     try:
-        runner = mp.get_context("spawn").Process(
-            target=_server_runner, args=('trigger_shutdown', sender, *args), kwargs=dict(verbose=verbose, **kwargs))
         runner.start()
-
-        yield recv.recv()  # receives a tuple(hostname, port, dht port)
-
+        yield pipe.recv()  # once the server is ready, runner will send us a tuple(hostname, port, dht port)
+        pipe.send('SHUTDOWN')  # on exit from context, send shutdown signal
     finally:
         try:
-            trigger_shutdown.set()
             runner.join(timeout=shutdown_timeout)
         finally:
+            if verbose:
+                print("Server failed to shutdown gracefully, terminating it the hard way...")
             runner.terminate()
+            if verbose:
+                print("Server terminated.")
 
 
-def _server_runner(trigger_shutdown, sender, *args, verbose, **kwargs):
+def _server_runner(pipe, *args, verbose, **kwargs):
     server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
     try:
         dht_port = server.dht.port if server.dht is not None else None
-        sender.send((server.addr, server.port, dht_port))
-        import time; time.sleep(10)  # TODO YAY! the bug actually occurs only when awaiting trigger_shutdown
-        # trigger_shutdown.wait()    # because the parent process is not willing to share its file descriptor
-        #                              we can rewrite this using pipe instead of event or find something more elegant
+        pipe.send((server.addr, server.port, dht_port))
+        pipe.recv()  # wait for shutdown signal
     finally:
         if verbose:
             print("Shutting down server...")
-        trigger_shutdown.set()  # if server failed internally, set the shutdown trigger anyway
         server.shutdown()
         if verbose:
             print("Server shut down successfully.")
