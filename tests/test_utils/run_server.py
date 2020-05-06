@@ -12,7 +12,28 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
                       num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
                       no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
                       UID_DELIMETER=hivemind.DHTNode.UID_DELIMETER, start=False, **kwargs) -> hivemind.Server:
-    """ Instantiate a server with several identical experts. See argparse comments below for details """
+    """
+    Instantiate a server with several identical experts. See argparse comments below for details
+    :param interface: 'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6
+    :param port: main server will listen to this port, default = find open port
+    :param num_experts: run this many identical experts
+    :param expert_cls: expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
+    :param hidden_dim: main dimension for expert_cls
+    :param num_handlers: server will use this many parallel processes to handle incoming requests
+    :param expert_prefix: all expert uids will be {expert_prefix}.{index}
+    :param expert_offset: expert uid will use indices in range(expert_offset, expert_offset + num_experts)
+    :param max_batch_size: total num examples in the same batch will not exceed this value
+    :param device: all experts will use this device in torch notation; default: cuda if available else cpu
+    :param no_optimizer: if specified, all optimizers use learning rate=0
+    :param no_dht: if specified, the server will not be attached to a dht
+    :param initial_peers: a list of peers that will introduce this node to the dht,
+      e.g. [("1.2.3.4", 1337), ("127.0.0.1", 4321)]'), default = no peers
+    :param dht_port:  DHT node will listen on this port, default = find open port
+    :param root_port: if this server does not have initial_peers, it will create a virtual dht node on this port.
+        You can then use this node as initial peer for subsequent servers.
+    :param verbose: whether to print server started / finished / terminated events
+    :param start: if True, starts server right away and returns when server is ready for requests
+    """
     if verbose and len(kwargs) != 0:
         print("Ignored kwargs:", kwargs)
     assert expert_cls in name_to_block
