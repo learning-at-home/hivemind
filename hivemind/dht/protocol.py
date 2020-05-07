@@ -65,11 +65,9 @@ class KademliaProtocol(RPCProtocol):
         :returns: a list of pairs (node_id, address) of :bucket_size: nearest to key_node according to XOR distance,
          also returns our own node id for routing table maintenance
         """
-        print('>' * 100, self.node_id, self.routing_table.buckets[0].nodes_to_addr.keys(), flush=True)
         query_id, sender_id = DHTID.from_bytes(query_id_bytes), DHTID.from_bytes(sender_id_bytes)
         asyncio.ensure_future(self.update_routing_table(sender_id, sender))
         peer_ids_and_addr = self.routing_table.get_nearest_neighbors(query_id, k=self.bucket_size, exclude=sender_id)
-        print(peer_ids_and_addr, flush=True)
         return [(bytes(peer_id), peer_addr) for peer_id, peer_addr in peer_ids_and_addr], bytes(self.node_id)
 
     async def call_find_node(self, recipient: Endpoint, query_id: DHTID) -> Dict[DHTID, Endpoint]:
