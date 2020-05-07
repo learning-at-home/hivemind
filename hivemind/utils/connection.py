@@ -4,6 +4,7 @@ from typing import Tuple
 
 Hostname, Port = str, int  # flavour types
 Endpoint = Tuple[Hostname, Port]  # https://networkengineering.stackexchange.com/a/9435
+LOCALHOST = '127.0.0.1'
 
 
 class Connection(AbstractContextManager):
