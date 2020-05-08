@@ -137,6 +137,7 @@ def test_beam_search_dht():
         if len(ref_nearest) > k_nearest:
             ref_nearest.pop()
 
+        assert nearest_nodes[0] == ref_nearest[0]
         accuracy_numerator += len(set.intersection(set(nearest_nodes), set(ref_nearest)))
         accuracy_denominator += k_nearest
 
