@@ -79,7 +79,7 @@ class RoutingTable:
     def get_nearest_neighbors(
             self, query_id: DHTID, k: int, exclude: Optional[DHTID] = None) -> List[Tuple[DHTID, Endpoint]]:
         """
-        Find k nearest neighbors according to XOR distance
+        Find k nearest neighbors from routing table according to XOR distance, does NOT include self.node_id
         :param query_id: find neighbors of this node
         :param k: find this many neighbors. If there aren't enough nodes in the table, returns all nodes
         :param exclude: if True, results will not contain query_node_id even if it is in table
