@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Optional, List, Tuple, Dict
 from rpcudp.protocol import RPCProtocol
 
@@ -136,14 +137,29 @@ class KademliaProtocol(RPCProtocol):
 
 
 class LocalStorage(dict):
+    def __init__(self, maxsize: Optional[int] = None, keep_expired: bool = True):
+        self.maxsize = maxsize or float("inf")
+        self.keep_expired = keep_expired
+        super().__init__()
+
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
         :returns: True if new value was stored, False it was rejected (current value is newer)
         """
+        if len(self) >= self.maxsize:
+            del self[min(self, key=lambda k:self[k][1])]
+        if key in self:
+            if self[key][1] < expiration_time:
+                self[key] = (value, expiration_time)
+                return True
+            return False
         self[key] = (value, expiration_time)
-        return True  # TODO implement actual local storage, test that the logic is correct
+        return True
 
     def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpiration]):
         """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
-        return self[key] if key in self else (None, None)
+        if key in self:
+            if self.keep_expired or self[key][1] >= time.monotonic():
+                return self[key]
+        return None, None
