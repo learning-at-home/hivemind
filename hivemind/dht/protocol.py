@@ -138,7 +138,7 @@ class KademliaProtocol(RPCProtocol):
 
 class LocalStorage(dict):
     def __init__(self, maxsize: Optional[int] = None, keep_expired: bool = True):
-        self.maxsize = maxsize
+        self.maxsize = maxsize or float("inf")
         self.keep_expired = keep_expired
         super().__init__()
 
