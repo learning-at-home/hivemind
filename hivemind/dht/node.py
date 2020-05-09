@@ -87,7 +87,7 @@ class DHTNode:
             # ... and maybe receive some values that we are meant to store (see protocol.update_routing_table)
             asyncio.ensure_future(self.beam_search(query_id=self.node_id), loop=loop)
 
-    async def get(self, key: DHTID, sufficient_time: DHTExpiration = -float('inf')) -> \
+    async def get(self, key: DHTID, sufficient_time: DHTExpiration = float('inf')) -> \
             Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
         :param key: traverse the DHT and find the value for this key (or None if it does not exist)
@@ -95,15 +95,31 @@ class DHTNode:
          value right away. By default, return the newest value found after beam search converges.
         :returns: value and its expiration time. If found nothing, returns (None, None)
         """
-        raise NotImplementedError()
+        beam_search_results = await self.beam_search(key, k_nearest=self.protocol.bucket_size)
+        tasks = [self.protocol.call_find_value(endpoint, key)
+                 for endpoint in beam_search_results.values()]
+        latest_time, latest_value = None, None
+        for task in asyncio.as_completed(tasks):
+            value, expiration_time, _ = await task
+            if expiration_time is None:
+                continue
+            if latest_time is None or expiration_time > latest_time:
+                latest_time, latest_value = expiration_time, value
+                if latest_time > sufficient_time:
+                    return latest_time, latest_value
+        return latest_time, latest_value
 
-    async def set(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
+    async def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
         Also cache (key, value, expiration_time) at all nodes you met along the way (see Section 2.1 end)
         TODO: if we found a newer value in the in the table, terminate immediately and throw a warning
         """
-        raise NotImplementedError()
+        beam_search_results = await self.beam_search(key, k_nearest=self.num_replicas)
+        tasks = [self.protocol.call_store(endpoint, key, value, expiration_time)
+                 for endpoint in beam_search_results.values()]
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        return any(done)
 
     async def refresh_stale_buckets(self):
         staleness_threshold = time.monotonic() - self.staleness_timeout
