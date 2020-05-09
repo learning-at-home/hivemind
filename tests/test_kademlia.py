@@ -10,6 +10,7 @@ import numpy as np
 import hivemind
 from typing import List, Dict
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, KademliaProtocol
+from hivemind.dht.protocol import LocalStorage
 
 
 def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping: Optional[hivemind.Endpoint] = None):
@@ -157,3 +158,27 @@ def test_beam_search_dht():
     assert len(nearest) == 1 and nearest[me.node_id] == (LOCALHOST, me.port)
     nearest = loop.run_until_complete(me.beam_search(DHTID.generate(), exclude_self=True))
     assert len(nearest) == 0
+
+
+def test_store():
+    d = LocalStorage()
+    d.store("key", "val", time.monotonic()+10)
+    assert d.get("key")[0] == "val", "Wrong value"
+    print("Test store passed")
+
+
+def test_get_expired():
+    d = LocalStorage(keep_expired=False)
+    d.store("key", "val", time.monotonic()+1)
+    time.sleep(2)
+    assert d.get("key") == (None, None), "Expired value must be deleted"
+    print("Test get expired passed")
+
+
+def test_store_maxsize():
+    d = LocalStorage(maxsize=1)
+    d.store("key1", "val1", time.monotonic() + 1)
+    d.store("key2", "val2", time.monotonic() + 2)
+    assert d.get("key1") == (None, None), "elder a value must be deleted"
+    assert d.get("key2")[0] == "val2", "Newer should be stored"
+    print("Test store maxsize passed")

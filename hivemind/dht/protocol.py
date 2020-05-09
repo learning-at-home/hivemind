@@ -160,9 +160,6 @@ class LocalStorage(dict):
     def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpiration]):
         """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
         if key in self:
-            if self[key][1] < time.monotonic():
-                if self.keep_expired:
-                    return self[key]
-            else:
+            if self.keep_expired or self[key][1] >= time.monotonic():
                 return self[key]
         return None, None
