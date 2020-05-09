@@ -24,8 +24,3 @@ def test_store_maxsize():
     assert d.get("key1") == (None, None), "elder a value must be deleted"
     assert d.get("key2")[0] == "val2", "Newer should be stored"
     print("Test store maxsize passed")
-
-
-test_get_expired()
-test_store()
-test_store_maxsize()
