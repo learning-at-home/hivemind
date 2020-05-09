@@ -88,7 +88,7 @@ def run_node(node_id, port, peers, ready: mp.Event):
     await_forever.result()  # process will exit only if event loop broke down
 
 
-def test_beam_search_dht():
+def test_dht():
     # create dht with 50 nodes + your 51-st node
     dht: Dict[Endpoint, DHTID] = {}
     processes: List[mp.Process] = []
@@ -153,11 +153,19 @@ def test_beam_search_dht():
     assert len(set.difference(set(nearest.keys()), set(all_node_ids) | {me.node_id})) == 0
 
     # test 5: node without peers
-    me = hivemind.dht.node.DHTNode()
-    nearest = loop.run_until_complete(me.beam_search(DHTID.generate()))
-    assert len(nearest) == 1 and nearest[me.node_id] == (LOCALHOST, me.port)
-    nearest = loop.run_until_complete(me.beam_search(DHTID.generate(), exclude_self=True))
+    other_node = hivemind.dht.node.DHTNode()
+    nearest = loop.run_until_complete(other_node.beam_search(DHTID.generate()))
+    assert len(nearest) == 1 and nearest[other_node.node_id] == (LOCALHOST, other_node.port)
+    nearest = loop.run_until_complete(other_node.beam_search(DHTID.generate(), exclude_self=True))
     assert len(nearest) == 0
+
+    # test 6 store and get value
+    key = DHTID.generate("key")
+    true_time = time.monotonic() + 1200
+    assert loop.run_until_complete(me.store(key, ["Value", 10], true_time))
+    expiration_time, val = loop.run_until_complete(me.get(key))
+    assert expiration_time == true_time, "Wrong time"
+    assert val == ["Value", 10], "Wrong value"
 
 
 def test_store():

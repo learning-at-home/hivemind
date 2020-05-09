@@ -98,7 +98,7 @@ class KademliaProtocol(RPCProtocol):
         nearest_neighbors, my_id = self.rpc_find_node(sender, sender_id_bytes, key_bytes)
         return maybe_value, maybe_expiration, nearest_neighbors, my_id
 
-    async def call_find_value(self, recipient: Endpoint, key: BinaryDHTID) -> \
+    async def call_find_value(self, recipient: Endpoint, key: DHTID) -> \
             Tuple[Optional[DHTValue], Optional[DHTExpiration], Dict[DHTID, Endpoint]]:
         """
         Ask a recipient to give you the value, if it has one, or nearest neighbors to your key.
