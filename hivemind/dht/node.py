@@ -107,7 +107,7 @@ class DHTNode:
                 latest_time, latest_value = expiration_time, value
                 if latest_time > sufficient_time:
                     return latest_time, latest_value
-        return latest_time, latest_value
+        return latest_value, latest_time
 
     async def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
