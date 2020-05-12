@@ -163,7 +163,7 @@ def test_dht():
     key = DHTID.generate("key")
     true_time = time.monotonic() + 1200
     assert loop.run_until_complete(me.store(key, ["Value", 10], true_time))
-    expiration_time, val = loop.run_until_complete(me.get(key))
+    val, expiration_time = loop.run_until_complete(me.get(key))
     assert expiration_time == true_time, "Wrong time"
     assert val == ["Value", 10], "Wrong value"
 
