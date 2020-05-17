@@ -1,7 +1,4 @@
 import argparse
-#%env CUDA_VISIBLE_DEVICES=
-import nest_asyncio
-nest_asyncio.apply()
 import time
 import asyncio
 import multiprocessing as mp
