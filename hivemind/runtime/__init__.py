@@ -34,6 +34,7 @@ class Runtime(threading.Thread):
     :param device: if specified, moves all experts and data to this device via .to(device=device).
       If you want to manually specify devices for each expert (in their forward pass), leave device=None (default)
     """
+
     def __init__(self, expert_backends: Dict[str, ExpertBackend], prefetch_batches=64, sender_threads: int = 1,
                  device: torch.device = None):
         super().__init__()
@@ -73,6 +74,7 @@ class Runtime(threading.Thread):
         for pool in self.pools:
             if pool.is_alive():
                 pool.terminate()
+                pool.join()
 
     def iterate_minibatches_from_pools(self, timeout=None):
         """
