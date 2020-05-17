@@ -13,7 +13,8 @@ from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, KademliaProto
 from hivemind.dht.protocol import LocalStorage
 
 
-def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping: Optional[hivemind.Endpoint] = None):
+def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event,
+                          ping: Optional[hivemind.Endpoint] = None):
     loop = asyncio.new_event_loop()
     protocol = partial(KademliaProtocol, dhtid, bucket_size=20, depth_modulo=5, wait_timeout=5)
     listen = loop.create_datagram_endpoint(protocol, local_addr=('127.0.0.1', port))
@@ -68,7 +69,7 @@ def test_kademlia_protocol():
         recv_value, recv_expiration, recv_peers = loop.run_until_complete(
             protocol.call_find_value(('127.0.0.1', peer1_port), key))
         assert recv_value == value and recv_expiration == expiration, "call_find_value expected " \
-              f"{value} (expires by {expiration}) but got {recv_value} (expires by {recv_expiration})"
+                                                                      f"{value} (expires by {expiration}) but got {recv_value} (expires by {recv_expiration})"
         print(recv_peers, nodes_found)
         assert recv_peers == nodes_found, "call_find_value must return the same peers as call_find_node"
         print("Kademlia test finished sucessfully!")
@@ -78,34 +79,51 @@ def test_kademlia_protocol():
         peer2_proc.terminate()
 
 
-def run_node(node_id, port, peers, ready: mp.Event):
+def run_node(node_id, port, peers, status_pipe: mp.Pipe):
     if asyncio.get_event_loop().is_running():
         asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
     asyncio.set_event_loop(asyncio.new_event_loop())
-    node = DHTNode(node_id, port, initial_peers=peers)
-    await_forever = hivemind.run_forever(asyncio.get_event_loop().run_forever)
-    ready.set()
-    await_forever.result()  # process will exit only if event loop broke down
+    try:
+        node = DHTNode(node_id, port, initial_peers=peers)
+        status_pipe.send('STARTED')
+        while True:
+            asyncio.get_event_loop().run_forever()
+    except BaseException as e:
+        status_pipe.send(e)  # report exception to master
+        if not isinstance(e, OSError):
+            raise e
 
 
 def test_dht():
     # create dht with 50 nodes + your 51-st node
     dht: Dict[Endpoint, DHTID] = {}
     processes: List[mp.Process] = []
+    port_fails, max_port_fails = 0, 10
 
-    for i in range(50):
+    while len(dht) < 50:
         node_id = DHTID.generate()
-        port = hivemind.find_open_port()
         peers = random.sample(dht.keys(), min(len(dht), 5))
-        ready = mp.Event()
-        proc = mp.Process(target=run_node, args=(node_id, port, peers, ready), daemon=True)
+        port = hivemind.find_open_port()
+        pipe_recv, pipe_send = mp.Pipe(duplex=False)
+        proc = mp.Process(target=run_node, args=(node_id, port, peers, pipe_send), daemon=True)
         proc.start()
-        ready.wait()
-        processes.append(proc)
-        dht[(LOCALHOST, port)] = node_id
+
+        status = pipe_recv.recv()
+        if status == 'STARTED':
+            processes.append(proc)
+            dht[(LOCALHOST, port)] = node_id
+        else:
+            assert isinstance(status, BaseException)
+            proc.terminate()
+            if isinstance(status, OSError):  # port already in use. It just happens sometimes.
+                port_fails += 1
+                if port_fails > max_port_fails:
+                    raise OSError("Too many 'Address already in use' errors.")
+            else:
+                raise ValueError(f"Failed to create node due to an error {status}, see traceback above")
 
     loop = asyncio.get_event_loop()
-    me = hivemind.dht.node.DHTNode(initial_peers=random.sample(peers, 5))
+    me = hivemind.dht.node.DHTNode(initial_peers=random.sample(peers, 5), port=0)  # port=0 means os-specified port
 
     # test 1: find self
     nearest = loop.run_until_complete(me.beam_search(query_id=me.node_id, k_nearest=1))
@@ -118,9 +136,11 @@ def test_dht():
         assert len(nearest) == 1 and next(iter(nearest.items())) == (query_id, ref_endpoint)
 
     # test 3: find neighbors to random nodes
-    accuracy_numerator = accuracy_denominator = 0
+    accuracy_numerator = accuracy_denominator = 0  # top-1 nearest neighbor accuracy
+    jaccard_numerator = jaccard_denominator = 0  # jaccard similarity aka intersection over union
     all_node_ids = list(dht.values())
-    for i in range(50):
+
+    for i in range(100):
         query_id = DHTID.generate()
         k_nearest = random.randint(1, 20)
         exclude_self = random.random() > 0.5
@@ -138,13 +158,18 @@ def test_dht():
         if len(ref_nearest) > k_nearest:
             ref_nearest.pop()
 
-        assert nearest_nodes[0] == ref_nearest[0]
-        accuracy_numerator += len(set.intersection(set(nearest_nodes), set(ref_nearest)))
-        accuracy_denominator += k_nearest
+        accuracy_numerator += nearest_nodes[0] == ref_nearest[0]
+        accuracy_denominator += 1
+
+        jaccard_numerator += len(set.intersection(set(nearest_nodes), set(ref_nearest)))
+        jaccard_denominator += k_nearest
 
     accuracy = accuracy_numerator / accuracy_denominator
-    assert accuracy > 0.95, f"Beam search accuracy only {accuracy} ({accuracy_numerator} out of {accuracy_denominator})"
-    print("Accuracy:", accuracy)  # should be 98-99%
+    print("Top-1 accuracy:", accuracy)  # should be 98-100%
+    jaccard_index = jaccard_numerator / jaccard_denominator
+    print("Jaccard index (intersection over union):", jaccard_index)  # should be 95-100%
+    assert accuracy >= 0.9, f"Top-1 accuracy only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
+    assert jaccard_index >= 0.9, f"Jaccard index only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
 
     # test 4: find all nodes
     nearest = loop.run_until_complete(
@@ -167,17 +192,21 @@ def test_dht():
     assert expiration_time == true_time, "Wrong time"
     assert val == ["Value", 10], "Wrong value"
 
+    # terminate remaining processes
+    for proc in processes:
+        proc.terminate()
+
 
 def test_store():
     d = LocalStorage()
-    d.store("key", "val", time.monotonic()+10)
+    d.store("key", "val", time.monotonic() + 10)
     assert d.get("key")[0] == "val", "Wrong value"
     print("Test store passed")
 
 
 def test_get_expired():
     d = LocalStorage(keep_expired=False)
-    d.store("key", "val", time.monotonic()+1)
+    d.store("key", "val", time.monotonic() + 1)
     time.sleep(2)
     assert d.get("key") == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
