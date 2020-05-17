@@ -1,5 +1,5 @@
-from contextlib import AbstractContextManager
-from socket import socket
+import socket
+from contextlib import AbstractContextManager, closing
 from typing import Tuple
 
 Hostname, Port = str, int  # flavour types
@@ -18,7 +18,7 @@ class Connection(AbstractContextManager):
 
     @staticmethod
     def create(host: str, port: int):
-        sock = socket()
+        sock = socket.socket()
         addr = (host, port)
         sock.connect(addr)
         return Connection(sock, addr)
@@ -60,10 +60,10 @@ class Connection(AbstractContextManager):
 
 def find_open_port():
     try:
-        sock = socket()
-        sock.bind(('', 0))
-        port = sock.getsockname()[1]
-        sock.close()
-        return port
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+            sock.bind(('', 0))
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.close()
+            return sock.getsockname()[1]
     except:
         raise ValueError("Could not find open port")
