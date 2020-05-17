@@ -206,7 +206,6 @@ class TaskPool(TaskPoolBase):
 
     def send_outputs_from_runtime(self, batch_index: int, batch_outputs: List[torch.Tensor]):
         """ send results for a processed batch, previously loaded through load_batch_to_runtime """
-        batch_outputs = [tensor.to(device='cpu') for tensor in batch_outputs]
         self.outputs_sender.send((batch_index, batch_outputs))
 
     def get_task_size(self, task: Task) -> int:

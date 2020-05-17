@@ -59,6 +59,7 @@ class Runtime(threading.Thread):
                 for pool, batch_index, batch in BackgroundGenerator(
                         self.iterate_minibatches_from_pools(), self.prefetch_batches):
                     outputs = pool.process_func(*batch)
+                    outputs = [tensor.to(device='cpu') for tensor in outputs]
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
                     progress.update(len(outputs[0]))
                     progress.desc = f'pool.uid={pool.uid} batch_size={len(outputs[0])}'
