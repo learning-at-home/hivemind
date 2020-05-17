@@ -48,11 +48,10 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
             mp.Process(
                 target=client_process, name=f'client_process-{i}',
                 args=(can_start, benchmarking_failed, port, num_experts, batch_size,
-                      hid_dim, num_batches_per_client, backprop))
+                      hid_dim, num_batches_per_client, backprop), daemon=True)
             for i in range(num_clients)]
 
         for client in clients:
-            client.daemon = True
             client.start()
 
         timestamps['launched_clients'] = timestamps['began_launching_server'] = time.perf_counter()
