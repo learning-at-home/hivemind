@@ -56,9 +56,8 @@ class SharedFuture(Future):
     def set_result(self, result):
         try:
             self.state, self._result = self.STATE_FINISHED, result
-            buf = PytorchSerializer.dumps((self.STATE_FINISHED, result))
             print(f'Sending {buf[:50]}')
-            self.connection.send(buf)
+            self.connection.send((self.STATE_FINISHED, result))
             return True
         except BrokenPipeError:
             return False
