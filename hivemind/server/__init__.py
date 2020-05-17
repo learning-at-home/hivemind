@@ -100,7 +100,6 @@ class Server(threading.Thread):
         asyncio.set_event_loop(loop)
 
         while True:
-
             try:
                 new_sock, addr = sock.accept()
                 new_sock.setblocking(False)
@@ -110,6 +109,9 @@ class Server(threading.Thread):
                 break
             except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
                 continue
+
+        sock.close()
+        loop.close()
 
     def shutdown(self):
         """
