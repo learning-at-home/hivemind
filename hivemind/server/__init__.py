@@ -100,9 +100,9 @@ class Server(threading.Thread):
         while True:
 
             try:
-                sock, addr = sock.accept()
-                sock.setblocking(False)
-                asyncio.run_coroutine_threadsafe(handle_connection((sock, addr), self.experts), loop)
+                new_sock, addr = sock.accept()
+                new_sock.setblocking(False)
+                asyncio.run_coroutine_threadsafe(handle_connection((new_sock, addr), self.experts), loop)
             except KeyboardInterrupt as e:
                 print(f'Socket loop has caught {type(e)}, exiting')
                 break
