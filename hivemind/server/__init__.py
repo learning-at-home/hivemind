@@ -103,7 +103,7 @@ class Server(threading.Thread):
                 try:
                     new_sock, addr = sock.accept()
                     new_sock.setblocking(False)
-                    asyncio.run(handle_connection((new_sock, addr), self.experts, pool, loop))
+                    asyncio.run(handle_connection((new_sock, addr), self.experts, pool))
                 except KeyboardInterrupt as e:
                     print(f'Socket loop has caught {type(e)}, exiting')
                     sock.close()
