@@ -109,9 +109,9 @@ class Server(threading.Thread):
                     break
                 except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
                     continue
-
-        sock.close()
-        loop.close()
+                finally:
+                    sock.close()
+                    loop.close()
 
     def shutdown(self):
         """
