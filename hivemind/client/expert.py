@@ -46,6 +46,7 @@ class RemoteExpert(nn.Module):
             connection = Connection.create(self.host, self.port)
             connection.send_raw('info', PytorchSerializer.dumps(self.uid))
             self._info = PytorchSerializer.loads(connection.recv_message()[1])
+            connection.conn.close()
         return self._info
 
     def extra_repr(self):
@@ -66,6 +67,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         connection = Connection.create(ctx.host, ctx.port)
         connection.send_raw('fwd_', PytorchSerializer.dumps((ctx.uid, inputs)))
         rtype, msg = connection.recv_message()
+        connection.conn.close()
         assert len(msg) != 0, "ExpertBackend.forward did not respond"
         return tuple(PytorchSerializer.loads(msg))  # flattened expert outputs
 
@@ -76,6 +78,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
         connection.send_raw('bwd_', PytorchSerializer.dumps((ctx.uid, payload)))
         rtype, msg = connection.recv_message()
+        connection.conn.close()
         assert len(msg) != 0, "ExpertBackend.backward did not respond"
         grad_inputs = PytorchSerializer.loads(msg)
         return (DUMMY, None, None, None, *grad_inputs)
