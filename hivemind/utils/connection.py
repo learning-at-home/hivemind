@@ -61,12 +61,12 @@ class AsyncConnection(Connection):
         return header, message
 
     async def recv_header(self):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         data = await loop.sock_recv(self.conn, self.header_size)
         return data.decode()
 
     async def recv_raw(self, max_package: int = 2048):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         raw_length = await loop.sock_recv(self.conn, self.payload_length_size)
         length = int.from_bytes(raw_length, byteorder='big')
         chunks = []
@@ -82,7 +82,7 @@ class AsyncConnection(Connection):
         return ret
 
     async def send_raw(self, header: str, content: bytes):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.sock_sendall(self.conn, header.encode())
         await loop.sock_sendall(self.conn, len(content).to_bytes(self.payload_length_size, byteorder='big'))
         await loop.sock_sendall(self.conn, content)
