@@ -27,12 +27,7 @@ class Connection(AbstractContextManager):
         self.conn.send(header.encode())
         self.conn.send(len(content).to_bytes(self.payload_length_size, byteorder='big'))
 
-        total_sent = 0
-        while total_sent < len(content):
-            sent = self.conn.send(content[total_sent:])
-            if sent == 0:
-                raise RuntimeError("socket connection broken")
-            total_sent = total_sent + sent
+        self.conn.sendall(content)
 
     def recv_header(self) -> str:
         return self.conn.recv(self.header_size).decode()
