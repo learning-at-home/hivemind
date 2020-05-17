@@ -85,6 +85,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
         for client in clients:
             if client.is_alive():
                 client.terminate()
+                client.join()
         server.shutdown()
         timestamps['server_shutdown_finished'] = time.perf_counter()
         server.join()
