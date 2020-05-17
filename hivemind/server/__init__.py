@@ -58,11 +58,9 @@ class Server(threading.Thread):
                                                   addr=self.addr, port=self.port, update_period=self.update_period)
             dht_handler_thread.start()
 
-        connection_handler_thread = threading.Thread(target=self._run_socket_loop).start()
+        self.connection_handler_thread = threading.Thread(target=self._run_socket_loop).start()
 
         self.runtime.run()
-
-        connection_handler_thread.join()
 
         if self.dht:
             dht_handler_thread.join()
@@ -124,4 +122,5 @@ class Server(threading.Thread):
         if self.dht is not None:
             self.dht.shutdown()
 
+        self.connection_handler_thread.shutdown()
         self.runtime.shutdown()
