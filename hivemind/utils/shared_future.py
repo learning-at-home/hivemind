@@ -2,6 +2,7 @@ import multiprocessing as mp
 import multiprocessing.connection
 from concurrent.futures import Future, CancelledError
 from warnings import warn
+import asyncio
 
 
 class SharedFuture(Future):
@@ -22,12 +23,16 @@ class SharedFuture(Future):
         connection1, connection2 = mp.Pipe()
         return cls(connection1), cls(connection2)
 
-    def _recv(self, timeout):
+    async def _recv(self, timeout):
+        loop = asyncio.get_running_loop()
+        reader = asyncio.StreamReader(loop=loop)
+        reader_protocol = asyncio.StreamReaderProtocol(reader)
+        await loop.connect_read_pipe(lambda: reader_protocol, self.connection)
         if self.state in (self.STATE_PENDING, self.STATE_RUNNING):
             if not self.connection.poll(timeout):
                 raise TimeoutError()
             try:
-                status, payload = self.connection.recv()
+                status, payload = await  reader.read()
             except BrokenPipeError as e:
                 status, payload = self.STATE_EXCEPTION, e
 
@@ -65,8 +70,8 @@ class SharedFuture(Future):
     def cancel(self):
         raise NotImplementedError()
 
-    def result(self, timeout=None):
-        self._recv(timeout)
+    async def result(self, timeout=None):
+        await self._recv(timeout)
         if self.state == self.STATE_FINISHED:
             return self._result
         elif self.state == self.STATE_EXCEPTION:
