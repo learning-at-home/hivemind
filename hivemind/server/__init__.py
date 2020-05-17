@@ -106,12 +106,11 @@ class Server(threading.Thread):
                     asyncio.run(handle_connection((new_sock, addr), self.experts, pool, loop))
                 except KeyboardInterrupt as e:
                     print(f'Socket loop has caught {type(e)}, exiting')
+                    sock.close()
+                    loop.close()
                     break
                 except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
                     continue
-                finally:
-                    sock.close()
-                    loop.close()
 
     def shutdown(self):
         """
