@@ -5,7 +5,7 @@ from hivemind.runtime.expert_backend import ExpertBackend
 from hivemind.utils import PytorchSerializer, Connection
 
 
-def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[str, ExpertBackend]):
+async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[str, ExpertBackend]):
     with Connection(*connection_tuple) as connection:
         try:
             header = connection.recv_header()
