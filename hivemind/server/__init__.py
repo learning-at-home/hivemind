@@ -58,9 +58,9 @@ class Server(threading.Thread):
                                                   addr=self.addr, port=self.port, update_period=self.update_period)
             dht_handler_thread.start()
 
-        self.runtime.run()
+        threading.Thread(target=self._run_socket_loop).start()
 
-        self._run_socket_loop()
+        self.runtime.run()
 
         if self.dht:
             dht_handler_thread.join()
