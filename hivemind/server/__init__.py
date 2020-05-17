@@ -1,6 +1,6 @@
 import multiprocessing as mp
-import os
 import asyncio
+from concurrent.futures import ProcessPoolExecutor
 import threading
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict, Optional
@@ -41,6 +41,7 @@ class Server(threading.Thread):
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
         self.runtime = Runtime(self.experts, **kwargs)
+        self.conn_handler_processes = conn_handler_processes
 
         if start:
             self.run_in_background(await_ready=True)
@@ -98,15 +99,16 @@ class Server(threading.Thread):
         asyncio.set_event_loop(loop)
 
         while True:
-            try:
-                new_sock, addr = sock.accept()
-                new_sock.setblocking(False)
-                asyncio.run(handle_connection((new_sock, addr), self.experts))
-            except KeyboardInterrupt as e:
-                print(f'Socket loop has caught {type(e)}, exiting')
-                break
-            except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
-                continue
+            with ProcessPoolExecutor(self.conn_handler_processes) as pool:
+                try:
+                    new_sock, addr = sock.accept()
+                    new_sock.setblocking(False)
+                    asyncio.run(handle_connection((new_sock, addr), self.experts, pool, loop))
+                except KeyboardInterrupt as e:
+                    print(f'Socket loop has caught {type(e)}, exiting')
+                    break
+                except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
+                    continue
 
         sock.close()
         loop.close()

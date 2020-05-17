@@ -5,11 +5,11 @@ from hivemind.runtime.expert_backend import ExpertBackend
 from hivemind.utils import PytorchSerializer, AsyncConnection
 
 
-async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[str, ExpertBackend]):
+async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[str, ExpertBackend], pool, loop):
     with AsyncConnection(*connection_tuple) as connection:
         try:
             header, raw_payload = await connection.recv_message()
-            payload = PytorchSerializer.loads(raw_payload)
+            payload = await loop.run_in_executor(pool, PytorchSerializer.loads, raw_payload)
 
             if header == 'fwd_':
                 uid, inputs = payload
@@ -23,7 +23,7 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
             else:
                 raise NotImplementedError(f"Unknown header: {header}")
 
-            raw_response = PytorchSerializer.dumps(response)
+            raw_response = await loop.run_in_executor(pool, PytorchSerializer.dumps, response)
             await connection.send_raw('rest', raw_response)
         except RuntimeError:
             # socket connection broken
