@@ -58,12 +58,12 @@ class Connection(AbstractContextManager):
         self.conn.close()
 
 
-def find_open_port():
+def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):
+    """ Finds a tcp port that can be occupied with a socket with *params and use *opt optimizations"""
     try:
-        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+        with closing(socket.socket(*params)) as sock:
             sock.bind(('', 0))
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.close()
+            sock.setsockopt(*opt)
             return sock.getsockname()[1]
-    except:
-        raise ValueError("Could not find open port")
+    except Exception as e:
+        raise e
