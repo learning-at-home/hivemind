@@ -23,8 +23,7 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
                 response = await loop.run_in_executor(pool, future.result)
             elif header == 'info':
                 uid = payload
-                fn = experts[uid].get_info
-                response = await loop.run_in_executor(pool, fn)
+                response = experts[uid].get_info()
             else:
                 raise NotImplementedError(f"Unknown header: {header}")
 
