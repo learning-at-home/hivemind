@@ -16,14 +16,14 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
             if header == 'fwd_':
                 uid, inputs = payload
                 future = experts[uid].forward_pool.submit_task(*inputs)
-                response = future.result()
+                response = await loop.run_in_executor(pool, future.result)
             elif header == 'bwd_':
                 uid, inputs_and_grad_outputs = payload
                 future = experts[uid].backward_pool.submit_task(*inputs_and_grad_outputs)
-                response = future.result()
+                response = await loop.run_in_executor(pool, future.result)
             elif header == 'info':
                 uid = payload
-                response = experts[uid].get_info()
+                future = await loop.run_in_executor(pool, experts[uid].get_info)
             else:
                 raise NotImplementedError(f"Unknown header: {header}")
 
