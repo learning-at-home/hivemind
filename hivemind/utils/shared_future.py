@@ -4,6 +4,8 @@ from concurrent.futures import Future, CancelledError
 from warnings import warn
 import asyncio
 
+from hivemind.utils import PytorchSerializer
+
 
 class SharedFuture(Future):
     """ Multiprocessing version of concurrent.futures.Future, interacts between two processes via Pipe """
@@ -32,7 +34,8 @@ class SharedFuture(Future):
             if not self.connection.poll(timeout):
                 raise TimeoutError()
             try:
-                status, payload = await  reader.read()
+                buf = await reader.read()
+                status, payload = PytorchSerializer.loads(buf)
             except BrokenPipeError as e:
                 status, payload = self.STATE_EXCEPTION, e
 
@@ -51,7 +54,7 @@ class SharedFuture(Future):
     def set_result(self, result):
         try:
             self.state, self._result = self.STATE_FINISHED, result
-            self.connection.send((self.STATE_FINISHED, result))
+            self.connection.send(PytorchSerializer.dumps((self.STATE_FINISHED, result)))
             return True
         except BrokenPipeError:
             return False
@@ -59,7 +62,7 @@ class SharedFuture(Future):
     def set_exception(self, exception: BaseException):
         try:
             self.state, self._exception = self.STATE_EXCEPTION, exception
-            self.connection.send((self.STATE_EXCEPTION, exception))
+            self.connection.send(PytorchSerializer.dumps((self.STATE_EXCEPTION, exception)))
             return True
         except BrokenPipeError:
             return False
