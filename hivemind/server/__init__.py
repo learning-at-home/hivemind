@@ -42,7 +42,7 @@ class Server(threading.Thread):
         self.addr, self.port = addr, port
         self.runtime = Runtime(self.experts, **kwargs)
         self.conn_handler_processes = conn_handler_processes
-        self.conn_handler_process = mp.Process(target=self._run_socket_loop)
+        self.conn_handler_process = mp.Process(target=_run_socket_loop, args=(self.port, self.conn_handler_processes, self.experts,))
 
         if start:
             self.run_in_background(await_ready=True)
@@ -89,35 +89,6 @@ class Server(threading.Thread):
         """
         return self.runtime.ready  # mp.Event that is true if self is ready to process batches
 
-    def _run_socket_loop(self):
-        sock = socket(AF_INET, SOCK_STREAM)
-        sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-        sock.bind(('', self.port))
-        sock.listen()
-        sock.setblocking(False)
-        sock.settimeout(self.update_period)
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        with ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn')) as pool:
-            loop.run_until_complete(self.run_socket_server(sock, pool))
-
-        sock.close()
-        loop.close()
-
-    async def run_socket_server(self, sock, pool):
-        while True:
-            try:
-                loop = asyncio.get_running_loop()
-                conn_tuple = await loop.sock_accept(sock)
-                loop.create_task(handle_connection(conn_tuple, self.experts, pool))
-            except KeyboardInterrupt as e:
-                print(f'Socket loop has caught {type(e)}, exiting')
-                break
-            except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
-                continue
-
     def shutdown(self):
         """
         Gracefully terminate a hivemind server, process-safe.
@@ -133,3 +104,33 @@ class Server(threading.Thread):
         self.conn_handler_process.join()
 
         self.runtime.shutdown()
+
+
+def _run_socket_loop(port, conn_handler_processes, experts):
+    sock = socket(AF_INET, SOCK_STREAM)
+    sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+    sock.bind(('', port))
+    sock.listen()
+    sock.setblocking(False)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    with ProcessPoolExecutor(conn_handler_processes, mp_context=mp.get_context('spawn')) as pool:
+        loop.run_until_complete(run_socket_server(sock, pool, experts))
+
+    sock.close()
+    loop.close()
+
+
+async def run_socket_server(sock, pool, experts):
+    while True:
+        try:
+            loop = asyncio.get_running_loop()
+            conn_tuple = await loop.sock_accept(sock)
+            loop.create_task(handle_connection(conn_tuple, experts, pool))
+        except KeyboardInterrupt as e:
+            print(f'Socket loop has caught {type(e)}, exiting')
+            break
+        except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
+            continue
