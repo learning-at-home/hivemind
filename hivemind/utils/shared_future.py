@@ -35,6 +35,7 @@ class SharedFuture(Future):
                 raise TimeoutError()
             try:
                 buf = await reader.read()
+                print(f'Received {buf}')
                 status, payload = PytorchSerializer.loads(buf)
             except BrokenPipeError as e:
                 status, payload = self.STATE_EXCEPTION, e
@@ -54,7 +55,9 @@ class SharedFuture(Future):
     def set_result(self, result):
         try:
             self.state, self._result = self.STATE_FINISHED, result
-            self.connection.send(PytorchSerializer.dumps((self.STATE_FINISHED, result)))
+            buf = PytorchSerializer.dumps((self.STATE_FINISHED, result))
+            print(f'Sending {buf}')
+            self.connection.send(buf)
             return True
         except BrokenPipeError:
             return False
