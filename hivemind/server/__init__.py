@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import asyncio
 import threading
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict, Optional
@@ -91,9 +92,20 @@ class Server(threading.Thread):
         sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
         sock.bind(('', self.port))
         sock.listen()
+        sock.setblocking(False)
         sock.settimeout(self.update_period)
 
-        socket_loop(socket, self.experts)
+        loop = asyncio.get_event_loop()
+
+        while True:
+
+            try:
+                asyncio.run_coroutine_threadsafe(handle_connection(sock.accept(), self.experts), loop)
+            except KeyboardInterrupt as e:
+                print(f'Socket loop has caught {type(e)}, exiting')
+                break
+            except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
+                continue
 
     def shutdown(self):
         """
@@ -107,16 +119,3 @@ class Server(threading.Thread):
             self.dht.shutdown()
 
         self.runtime.shutdown()
-
-
-def socket_loop(sock, experts):
-    """ catch connections, send tasks to processing, respond with results """
-    print(f'Spawned connection handler pid={os.getpid()}')
-    while True:
-        try:
-            handle_connection(sock.accept(), experts)
-        except KeyboardInterrupt as e:
-            print(f'Socket loop has caught {type(e)}, exiting')
-            break
-        except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
-            continue
