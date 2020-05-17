@@ -94,24 +94,29 @@ class Server(threading.Thread):
         sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
         sock.bind(('', self.port))
         sock.listen()
+        sock.setblocking(False)
         sock.settimeout(self.update_period)
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        while True:
-            with ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn')) as pool:
-                try:
-                    new_sock, addr = sock.accept()
-                    new_sock.setblocking(False)
-                    asyncio.run(handle_connection((new_sock, addr), self.experts, pool))
-                except KeyboardInterrupt as e:
-                    print(f'Socket loop has caught {type(e)}, exiting')
-                    break
-                except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
-                    continue
+        with ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn')) as pool:
+            loop.run_until_complete(self.run_socket_server(sock, pool))
+
         sock.close()
         loop.close()
+
+    async def run_socket_server(self, sock, pool):
+        while True:
+            try:
+                loop = asyncio.get_running_loop()
+                conn_tuple = await loop.sock_accept(sock)
+                loop.create_task(handle_connection(conn_tuple, self.experts, pool))
+            except KeyboardInterrupt as e:
+                print(f'Socket loop has caught {type(e)}, exiting')
+                break
+            except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
+                continue
 
     def shutdown(self):
         """
