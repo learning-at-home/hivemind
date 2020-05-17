@@ -41,6 +41,7 @@ class Server(threading.Thread):
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
         self.runtime = Runtime(self.experts, **kwargs)
+        self.connection_handler_thread = threading.Thread(target=self._run_socket_loop).start()
 
         if start:
             self.run_in_background(await_ready=True)
@@ -57,8 +58,6 @@ class Server(threading.Thread):
             dht_handler_thread = DHTHandlerThread(experts=self.experts, dht=self.dht,
                                                   addr=self.addr, port=self.port, update_period=self.update_period)
             dht_handler_thread.start()
-
-        self.connection_handler_thread = threading.Thread(target=self._run_socket_loop).start()
 
         self.runtime.run()
 
