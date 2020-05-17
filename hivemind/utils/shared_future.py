@@ -3,6 +3,7 @@ import multiprocessing.connection
 from concurrent.futures import Future, CancelledError
 from warnings import warn
 import asyncio
+import pickle
 
 from hivemind.utils import PytorchSerializer
 
@@ -36,7 +37,7 @@ class SharedFuture(Future):
             try:
                 buf = await reader.read()
                 print(f'Received {buf[:50]}')
-                status, payload = PytorchSerializer.loads(buf)
+                status, payload = pickle.loads(buf)
             except BrokenPipeError as e:
                 status, payload = self.STATE_EXCEPTION, e
 
@@ -65,7 +66,7 @@ class SharedFuture(Future):
     def set_exception(self, exception: BaseException):
         try:
             self.state, self._exception = self.STATE_EXCEPTION, exception
-            self.connection.send(PytorchSerializer.dumps((self.STATE_EXCEPTION, exception)))
+            self.connection.send((self.STATE_EXCEPTION, exception))
             return True
         except BrokenPipeError:
             return False
