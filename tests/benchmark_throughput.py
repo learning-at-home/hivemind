@@ -36,7 +36,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
     assert expert_cls in layers.name_to_block
     port = port or find_open_port()
     max_batch_size = max_batch_size or batch_size * 4
-    num_handlers = max(1, num_handlers or num_clients // 2)
+    num_handlers = max(1, num_handlers or num_clients // 32)
     benchmarking_failed = mp.Event()
     can_start = mp.Event()
     timestamps = dict(started=time.perf_counter())
