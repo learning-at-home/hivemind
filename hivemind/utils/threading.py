@@ -4,7 +4,7 @@ import time
 from typing import Optional, List
 
 num_threads = os.environ.get("HIVEMIND_THREADS", float('inf'))
-GLOBAL_EXECUTOR = ThreadPoolExecutor(max_workers=int(num_threads if not isinstance(num_threads, float)))
+GLOBAL_EXECUTOR = ThreadPoolExecutor(max_workers=int(num_threads) if not isinstance(num_threads, float) else num_threads)
 
 
 def run_in_background(func: callable, *args, **kwargs) -> Future:
