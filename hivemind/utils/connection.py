@@ -72,7 +72,7 @@ class AsyncConnection(Connection):
         chunks = []
         bytes_recd = 0
         while bytes_recd < length:
-            chunk = self.conn.recv(min(length - bytes_recd, max_package))
+            chunk = await loop.sock_recv(self.conn, min(length - bytes_recd, max_package))
             if chunk == b'':
                 raise RuntimeError("socket connection broken")
             chunks.append(chunk)
