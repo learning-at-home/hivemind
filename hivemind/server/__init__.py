@@ -100,7 +100,7 @@ class Server(threading.Thread):
         asyncio.set_event_loop(loop)
 
         while True:
-            with ProcessPoolExecutor(self.conn_handler_processes) as pool:
+            with ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn')) as pool:
                 try:
                     new_sock, addr = sock.accept()
                     new_sock.setblocking(False)
