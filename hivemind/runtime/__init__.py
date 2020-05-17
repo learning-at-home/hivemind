@@ -89,7 +89,7 @@ class Runtime(threading.Thread):
             while True:
                 # wait until at least one batch_receiver becomes available
                 ready_fds = selector.select()
-                ready_objects = {key.data for (key, events) in ready_fds}
+                ready_objects = [key.data for (key, events) in ready_fds]
                 if self.SHUTDOWN_TRIGGER in ready_objects:
                     break  # someone asked us to shutdown, break from the loop
 
