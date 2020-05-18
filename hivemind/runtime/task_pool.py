@@ -80,9 +80,9 @@ class TaskPool(TaskPoolBase):
         self.undispatched_task_timestamps = mp_manager.Queue()
 
         # interaction with Runtime
-        self.batch_receiver, self.batch_sender = torch.multiprocessing.Pipe(duplex=False)  # send/recv arrays that contain batch inputs
+        self.batch_receiver, self.batch_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain batch inputs
         self.batch_received = mp.Event()  # runtime can notify pool that it can send next batch
-        self.outputs_receiver, self.outputs_sender = torch.multiprocessing.Pipe(duplex=False)  # send/recv arrays that contain outputs
+        self.outputs_receiver, self.outputs_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain outputs
 
         if start:
             self.start()
@@ -135,6 +135,7 @@ class TaskPool(TaskPoolBase):
 
     def run(self, *args, **kwargs):
         logger.info(f'Starting pool {self.uid}')
+        torch.set_num_threads(1)
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
                                          name=f'{self.uid}-pool_output_loop')
