@@ -133,7 +133,7 @@ class KademliaProtocol(RPCProtocol):
 
         else:  # outgoing request and peer did not respond
             if node_id is not None and node_id in self.routing_table:
-               del self.routing_table[node_id]
+                del self.routing_table[node_id]
 
 
 class LocalStorage(dict):
