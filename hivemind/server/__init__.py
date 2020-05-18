@@ -42,7 +42,7 @@ class Server(threading.Thread):
         self.addr, self.port = addr, port
         self.runtime = Runtime(self.experts, **kwargs)
         self.conn_handler_processes = conn_handler_processes
-        self.conn_handler_process = threading.Thread(target=_run_socket_loop, args=(self.port, self.conn_handler_processes, self.experts))
+        self.conn_handler_process = mp.Process(target=_run_socket_loop, args=(self.port, self.conn_handler_processes, self.experts))
 
         if start:
             self.run_in_background(await_ready=True)
@@ -100,6 +100,7 @@ class Server(threading.Thread):
         if self.dht is not None:
             self.dht.shutdown()
 
+        self.conn_handler_process.terminate()
         self.conn_handler_process.join()
 
         self.runtime.shutdown()
