@@ -65,6 +65,7 @@ class Runtime(threading.Thread):
                     outputs = pool.process_func(*batch)
                     logger.info('Runtime processed batch, sending to pools')
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
+                    logger.info('Results sent, waiting for new batch')
                     # progress.update(len(outputs[0]))
                     # progress.desc = f'pool.uid={pool.uid} batch_size={len(outputs[0])}'
             finally:
