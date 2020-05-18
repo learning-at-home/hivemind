@@ -153,7 +153,7 @@ class DHTNode:
                       ids_to_distance.items() if peer_id != self.node_id]  # unvisited nodes, nearest-first heap
         heapq.heapify(candidates)
         top_results = [(-distance, peer) for distance, peer in
-                       heapq.nsmallest(beam_size, candidates)]  # fathest-first heap, at most beam_size elements
+                       heapq.nsmallest(beam_size, candidates)]  # farthest-first heap, at most beam_size elements
         heapq.heapify(top_results)
         if not exclude_self:
             heapq.heappush(top_results, (-query_id.xor_distance(self.node_id), self.node_id))
