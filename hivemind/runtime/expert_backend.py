@@ -1,4 +1,5 @@
 from typing import Dict, Sequence, Any, Tuple, Union
+from multiprocessing import Manager
 
 import torch
 from torch import nn
@@ -36,9 +37,11 @@ class ExpertBackend(nn.Module):
                  args_schema: Tuple[BatchTensorProto, ...] = None,
                  kwargs_schema: Dict[str, BatchTensorProto] = None,
                  outputs_schema: Union[BatchTensorProto, Tuple[BatchTensorProto, ...]] = None,
+                 mp_manager: Manager = None,
                  **kwargs):
         super().__init__()
         self.expert, self.opt, self.name = expert, opt, name
+        mp_manager = mp_manager or Manager()
 
         self.args_schema = args_schema = tuple(args_schema or ())
         self.kwargs_schema = kwargs_schema = dict(kwargs_schema or {})
@@ -55,8 +58,8 @@ class ExpertBackend(nn.Module):
         self.outputs_schema = outputs_schema
         self.forward_schema = (self.args_schema, self.kwargs_schema)
         self.backward_schema = (self.forward_schema, self.outputs_schema)  # original inputs and grad w.r.t. outputs
-        self.forward_pool = TaskPool(self.forward, uid=f'{self.name}_forward', **kwargs)
-        self.backward_pool = TaskPool(self.backward, uid=f'{self.name}_backward', **kwargs)
+        self.forward_pool = TaskPool(self.forward, uid=f'{self.name}_forward', mp_manager=mp_manager, **kwargs)
+        self.backward_pool = TaskPool(self.backward, uid=f'{self.name}_backward', mp_manager=mp_manager, **kwargs)
 
     def forward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """

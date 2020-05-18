@@ -5,6 +5,7 @@ import threading
 from collections import namedtuple
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict, Optional
+import logging
 
 from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
@@ -13,6 +14,8 @@ from ..runtime import Runtime, ExpertBackend
 from hivemind.runtime.task_pool import RemotePoolInterface
 
 ExpertData = namedtuple('ExpertData', ('forward_pool', 'backward_pool', 'metadata'))
+
+logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
 class Server(threading.Thread):

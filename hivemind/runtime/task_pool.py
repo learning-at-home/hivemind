@@ -65,7 +65,7 @@ class TaskPool(TaskPoolBase):
     :param start: if True, start automatically at the end of __init__
     """
 
-    def __init__(self, process_func: callable, max_batch_size: int, min_batch_size=1,
+    def __init__(self, process_func: callable, max_batch_size: int, mp_manager: mp.Manager, min_batch_size=1,
                  timeout=None, pool_size=None, prefetch_batches=1, uid=None, daemon=True, start=False):
         super().__init__(process_func, daemon=daemon)
         self.min_batch_size, self.max_batch_size, self.timeout = min_batch_size, max_batch_size, timeout
@@ -73,8 +73,8 @@ class TaskPool(TaskPoolBase):
         self.prefetch_batches = prefetch_batches
 
         # interaction with ConnectionHandlers
-        self.tasks = mp.Queue(maxsize=pool_size or 0)
-        self.undispatched_task_timestamps = mp.SimpleQueue()
+        self.tasks = mp_manager.Queue(maxsize=pool_size or 0)
+        self.undispatched_task_timestamps = mp_manager.Queue()
 
         # interaction with Runtime
         self.batch_receiver, self.batch_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain batch inputs

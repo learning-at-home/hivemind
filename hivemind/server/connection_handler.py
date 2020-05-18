@@ -29,6 +29,7 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
 
             raw_response = await loop.run_in_executor(pool, PytorchSerializer.dumps, response)
             await connection.send_raw('rest', raw_response)
-        except RuntimeError:
+        except RuntimeError as e:
+            raise e
             # socket connection broken
             pass
