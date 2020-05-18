@@ -2,10 +2,6 @@ import multiprocessing as mp
 import multiprocessing.connection
 from concurrent.futures import Future, CancelledError
 from warnings import warn
-import asyncio
-import pickle
-
-from hivemind.utils import PytorchSerializer
 
 
 class SharedFuture(Future):
@@ -26,18 +22,12 @@ class SharedFuture(Future):
         connection1, connection2 = mp.Pipe()
         return cls(connection1), cls(connection2)
 
-    async def _recv(self, timeout):
-        loop = asyncio.get_running_loop()
-        reader = asyncio.StreamReader(loop=loop)
-        reader_protocol = asyncio.StreamReaderProtocol(reader)
-        await loop.connect_read_pipe(lambda: reader_protocol, self.connection)
+    def _recv(self, timeout):
         if self.state in (self.STATE_PENDING, self.STATE_RUNNING):
             if not self.connection.poll(timeout):
                 raise TimeoutError()
             try:
-                buf = await reader.read()
-                print(f'Received {len(buf)}')
-                status, payload = PytorchSerializer.loads(buf)
+                status, payload = self.connection.recv()
             except BrokenPipeError as e:
                 status, payload = self.STATE_EXCEPTION, e
 
@@ -56,9 +46,7 @@ class SharedFuture(Future):
     def set_result(self, result):
         try:
             self.state, self._result = self.STATE_FINISHED, result
-            buf = PytorchSerializer.dumps((self.STATE_FINISHED, result))
-            print(f'Sending {len(buf)}')
-            self.connection.send_bytes(buf)
+            self.connection.send((self.STATE_FINISHED, result))
             return True
         except BrokenPipeError:
             return False
@@ -77,8 +65,8 @@ class SharedFuture(Future):
     def cancel(self):
         raise NotImplementedError()
 
-    async def result(self, timeout=None):
-        await self._recv(timeout)
+    def result(self, timeout=None):
+        self._recv(timeout)
         if self.state == self.STATE_FINISHED:
             return self._result
         elif self.state == self.STATE_EXCEPTION:

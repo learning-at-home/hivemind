@@ -2,6 +2,7 @@ import multiprocessing as mp
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 import threading
+from collections import namedtuple
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict, Optional
 
@@ -9,6 +10,8 @@ from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
 from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend
+
+ExpertData = namedtuple('ExpertData', ('forward_pool', 'backward_pool', 'metadata'))
 
 
 class Server(threading.Thread):
@@ -42,7 +45,10 @@ class Server(threading.Thread):
         self.addr, self.port = addr, port
         self.runtime = Runtime(self.experts, **kwargs)
         self.conn_handler_processes = conn_handler_processes
-        self.conn_handler_process = mp.Process(target=_run_socket_loop, args=(self.port, self.conn_handler_processes, self.experts))
+
+        data_for_expert = {uid: ExpertData(expert.forward_pool, expert.backward_pool, expert.get_info()) for uid, expert in self.experts}
+
+        self.conn_handler_process = mp.Process(target=_run_socket_loop, args=(self.port, self.conn_handler_processes, data_for_expert))
 
         if start:
             self.run_in_background(await_ready=True)
