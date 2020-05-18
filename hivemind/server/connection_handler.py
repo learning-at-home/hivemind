@@ -19,7 +19,7 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
                 response = await loop.run_in_executor(pool, future.result)
             elif header == 'bwd_':
                 uid, inputs_and_grad_outputs = payload
-                future = experts[uid].backward_pool.submit_task(*inputs_and_grad_outputs)
+                future = await loop.run_in_executor(pool, experts[uid].backward_pool.submit_task, *inputs_and_grad_outputs)
                 response = await loop.run_in_executor(pool, future.result)
             elif header == 'info':
                 uid = payload
