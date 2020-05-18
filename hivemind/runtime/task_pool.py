@@ -2,7 +2,7 @@
 Task pool is responsible for receiving tasks and grouping them together for processing (but not processing itself)
 """
 import ctypes
-import multiprocessing as mp
+import torch.multiprocessing as mp
 import os
 import threading
 import time
