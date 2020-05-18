@@ -126,7 +126,7 @@ def _run_socket_loop(port, conn_handler_processes, experts):
     asyncio.set_event_loop(loop)
 
     with ProcessPoolExecutor(conn_handler_processes) as pool:
-        loop.run_until_complete(run_socket_server(sock, pool, experts))
+        asyncio.run(run_socket_server(sock, pool, experts), debug=True)
 
     sock.close()
     loop.close()
