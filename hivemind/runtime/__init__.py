@@ -3,6 +3,7 @@ import threading
 from itertools import chain
 from selectors import DefaultSelector, EVENT_READ
 from typing import Dict
+import logging
 
 import torch
 import tqdm
@@ -10,6 +11,8 @@ from prefetch_generator import BackgroundGenerator
 
 from .expert_backend import ExpertBackend
 from .task_pool import TaskPool, TaskPoolBase
+
+logger = logging.getLogger(__name__)
 
 
 class Runtime(threading.Thread):
@@ -45,7 +48,7 @@ class Runtime(threading.Thread):
         self.ready = mp.Event()  # event is set iff server is currently running and ready to accept batches
 
     def run(self):
-        progress = tqdm.tqdm(bar_format='{desc}, {rate_fmt}')
+        # progress = tqdm.tqdm(bar_format='{desc}, {rate_fmt}')
         for pool in self.pools:
             if not pool.is_alive():
                 pool.start()
@@ -58,11 +61,12 @@ class Runtime(threading.Thread):
                 self.ready.set()
                 for pool, batch_index, batch in BackgroundGenerator(
                         self.iterate_minibatches_from_pools(), self.prefetch_batches):
+                    logger.info('Runtime obtained batch, processing')
                     outputs = pool.process_func(*batch)
-                    outputs = [tensor.to(device='cpu') for tensor in outputs]
+                    logger.info('Runtime processed batch, sending to pools')
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
-                    progress.update(len(outputs[0]))
-                    progress.desc = f'pool.uid={pool.uid} batch_size={len(outputs[0])}'
+                    # progress.update(len(outputs[0]))
+                    # progress.desc = f'pool.uid={pool.uid} batch_size={len(outputs[0])}'
             finally:
                 self.shutdown()
 
@@ -88,12 +92,14 @@ class Runtime(threading.Thread):
 
             while True:
                 # wait until at least one batch_receiver becomes available
+                logger.info('Waiting for batch receivers...')
                 ready_fds = selector.select()
+                logger.info('Obtained a list of ready pools')
                 ready_objects = [key.data for (key, events) in ready_fds]
                 if self.SHUTDOWN_TRIGGER in ready_objects:
                     break  # someone asked us to shutdown, break from the loop
-
-                pool = max(ready_objects, key=lambda pool: pool.priority)
-
-                batch_index, batch_tensors = pool.load_batch_to_runtime(timeout, self.device)
-                yield pool, batch_index, batch_tensors
+                logger.info('Selecting pool')
+                selected_pool = max(ready_objects, key=lambda pool: pool.priority)
+                logger.info('Selected pool with best priority')
+                batch_index, batch_tensors = selected_pool.load_batch_to_runtime(timeout, self.device)
+                yield selected_pool, batch_index, batch_tensors

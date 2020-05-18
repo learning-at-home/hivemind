@@ -4,6 +4,7 @@ import random
 import resource
 import sys
 import time
+import logging
 
 import torch
 from test_utils import layers, print_device_info

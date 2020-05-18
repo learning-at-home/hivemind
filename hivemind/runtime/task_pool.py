@@ -11,12 +11,15 @@ from collections import namedtuple
 from concurrent.futures import Future
 from queue import Empty
 from typing import List, Tuple, Dict, Any, Generator
+import logging
 
 import torch
 
 from ..utils import SharedFuture
 
 Task = namedtuple("Task", ("future", "args"))
+
+logger = logging.getLogger(__name__)
 
 
 class TaskPoolBase(mp.context.ForkProcess):
@@ -55,7 +58,7 @@ class TaskPool(TaskPoolBase):
     to process these batches and dispatches results back to request sources. Operates as a background process.
 
     :param process_func: function to be applied to every formed batch; called by Runtime
-        Note that process_func should accept only \*args Tensors and return a flat tuple of Tensors
+        Note that process_func should accept only *args Tensors and return a flat tuple of Tensors
     :param max_batch_size: process at most this many inputs in a batch (task contains have one or several inputs)
     :param min_batch_size: process at least this many inputs in a batch, otherwise wait for more
     :param timeout: wait for a subsequent task for at most this many seconds
@@ -131,7 +134,7 @@ class TaskPool(TaskPoolBase):
                 total_size += task_size
 
     def run(self, *args, **kwargs):
-        print(f'Starting pool, pid={os.getpid()}')
+        logger.info(f'Starting pool, pid={os.getpid()}')
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
                                          name=f'{self.uid}-pool_output_loop')
@@ -211,6 +214,7 @@ class TaskPool(TaskPoolBase):
 
     def send_outputs_from_runtime(self, batch_index: int, batch_outputs: List[torch.Tensor]):
         """ send results for a processed batch, previously loaded through load_batch_to_runtime """
+        batch_outputs = [tensor.to(device='cpu') for tensor in batch_outputs]
         self.outputs_sender.send((batch_index, batch_outputs))
 
     def get_task_size(self, task: Task) -> int:
