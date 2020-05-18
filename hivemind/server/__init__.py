@@ -57,7 +57,9 @@ class Server(threading.Thread):
                                            RemotePoolInterface(expert.backward_pool), expert.get_info())
                            for uid, expert in self.experts.items()}
 
-        self.conn_handler_process = mp.Process(target=_run_socket_loop, args=(self.port, self.conn_handler_processes, data_for_expert))
+        self.handler_ready = mp.Event()
+        self.conn_handler_process = mp.Process(target=_run_socket_loop,
+                                               args=(self.port, self.conn_handler_processes, data_for_expert, self.handler_ready))
 
         if start:
             self.run_in_background(await_ready=True)
@@ -76,7 +78,7 @@ class Server(threading.Thread):
             dht_handler_thread.start()
 
         self.conn_handler_process.start()
-
+        self.handler_ready.wait()
         self.runtime.run()
 
         if self.dht:
@@ -121,7 +123,7 @@ class Server(threading.Thread):
         self.runtime.shutdown()
 
 
-def _run_socket_loop(port, conn_handler_processes, experts):
+def _run_socket_loop(port, conn_handler_processes, experts, event: mp.Event):
     sock = socket(AF_INET, SOCK_STREAM)
     sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     sock.bind(('', port))
@@ -132,6 +134,7 @@ def _run_socket_loop(port, conn_handler_processes, experts):
     asyncio.set_event_loop(loop)
 
     with ProcessPoolExecutor(conn_handler_processes, mp_context=mp.get_context('spawn')) as pool:
+        event.set()
         asyncio.run(run_socket_server(sock, pool, experts))
 
     sock.close()
