@@ -10,6 +10,7 @@ from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
 from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend
+from hivemind.runtime.task_pool import RemotePoolInterface
 
 ExpertData = namedtuple('ExpertData', ('forward_pool', 'backward_pool', 'metadata'))
 
@@ -46,7 +47,8 @@ class Server(threading.Thread):
         self.runtime = Runtime(self.experts, **kwargs)
         self.conn_handler_processes = conn_handler_processes
 
-        data_for_expert = {uid: ExpertData(expert.forward_pool, expert.backward_pool, expert.get_info())
+        data_for_expert = {uid: ExpertData(RemotePoolInterface(expert.forward_pool),
+                                           RemotePoolInterface(expert.backward_pool), expert.get_info())
                            for uid, expert in self.experts.items()}
 
         self.conn_handler_process = mp.Process(target=_run_socket_loop, args=(self.port, self.conn_handler_processes, data_for_expert))

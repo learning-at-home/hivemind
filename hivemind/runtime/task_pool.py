@@ -116,6 +116,11 @@ class TaskPool(TaskPoolBase):
 
             task_size = self.get_task_size(task)
 
+            if task_size > self.max_batch_size:
+                exc = ValueError(f"Task size greater than max_batch_size ({self.max_batch_size}), it will never be finished")
+                task.future.set_exception(exc)
+                continue
+
             if total_size + task_size > self.max_batch_size:
                 yield batch
                 batch = []
@@ -211,3 +216,18 @@ class TaskPool(TaskPoolBase):
     def get_task_size(self, task: Task) -> int:
         """ compute task processing complexity (used for batching); defaults to batch size """
         return len(task.args[0]) if task.args else 1
+
+
+class RemotePoolInterface:
+    def __init__(self, pool):
+        self.tasks = pool.tasks
+        self.undispatched_task_timestamps = pool.undispatched_task_timestamps
+        self.max_batch_size = pool.max_batch_size
+
+    def submit_task(self, *args: torch.Tensor) -> Future:
+        """ Add task to this pool's queue, return Future for its output """
+        future1, future2 = SharedFuture.make_pair()
+        task = Task(future1, args)
+        self.tasks.put(task)
+        self.undispatched_task_timestamps.put(time.time())
+        return future2
