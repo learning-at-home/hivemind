@@ -37,7 +37,7 @@ class SharedFuture(Future):
             try:
                 buf = await reader.read()
                 print(f'Received {buf[:50]}')
-                status, payload = pickle.loads(buf)
+                status, payload = PytorchSerializer.loads(buf)
             except BrokenPipeError as e:
                 status, payload = self.STATE_EXCEPTION, e
 
