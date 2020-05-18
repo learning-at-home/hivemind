@@ -6,6 +6,9 @@ from collections import namedtuple
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict, Optional
 import logging
+import uvloop
+
+uvloop.install()
 
 from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
