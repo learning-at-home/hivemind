@@ -126,13 +126,13 @@ def test_dht():
     me = hivemind.dht.node.DHTNode(initial_peers=random.sample(peers, 5), port=0)  # port=0 means os-specified port
 
     # test 1: find self
-    nearest = loop.run_until_complete(me.beam_search(query_id=me.node_id, k_nearest=1))
+    nearest = loop.run_until_complete(me.find_nearest_nodes(query_id=me.node_id, k_nearest=1))
     assert len(nearest) == 1 and nearest[me.node_id] == (LOCALHOST, me.port)
 
     # test 2: find others
     for i in range(10):
         ref_endpoint, query_id = random.choice(list(dht.items()))
-        nearest = loop.run_until_complete(me.beam_search(query_id=query_id, k_nearest=1))
+        nearest = loop.run_until_complete(me.find_nearest_nodes(query_id=query_id, k_nearest=1))
         assert len(nearest) == 1 and next(iter(nearest.items())) == (query_id, ref_endpoint)
 
     # test 3: find neighbors to random nodes
@@ -145,7 +145,7 @@ def test_dht():
         k_nearest = random.randint(1, 20)
         exclude_self = random.random() > 0.5
         nearest = loop.run_until_complete(
-            me.beam_search(query_id=query_id, k_nearest=k_nearest, exclude_self=exclude_self))
+            me.find_nearest_nodes(query_id=query_id, k_nearest=k_nearest, exclude_self=exclude_self))
         nearest_nodes = list(nearest)  # keys from ordered dict
 
         assert len(nearest_nodes) == k_nearest, "beam search must return exactly k_nearest results"
@@ -173,15 +173,15 @@ def test_dht():
 
     # test 4: find all nodes
     nearest = loop.run_until_complete(
-        me.beam_search(query_id=DHTID.generate(), k_nearest=len(dht) + 100))
+        me.find_nearest_nodes(query_id=DHTID.generate(), k_nearest=len(dht) + 100))
     assert len(nearest) == len(dht) + 1
     assert len(set.difference(set(nearest.keys()), set(all_node_ids) | {me.node_id})) == 0
 
     # test 5: node without peers
     other_node = hivemind.dht.node.DHTNode()
-    nearest = loop.run_until_complete(other_node.beam_search(DHTID.generate()))
+    nearest = loop.run_until_complete(other_node.find_nearest_nodes(DHTID.generate()))
     assert len(nearest) == 1 and nearest[other_node.node_id] == (LOCALHOST, other_node.port)
-    nearest = loop.run_until_complete(other_node.beam_search(DHTID.generate(), exclude_self=True))
+    nearest = loop.run_until_complete(other_node.find_nearest_nodes(DHTID.generate(), exclude_self=True))
     assert len(nearest) == 0
 
     # test 6 store and get value
@@ -214,8 +214,8 @@ def test_get_expired():
 
 def test_store_maxsize():
     d = LocalStorage(maxsize=1)
-    d.store("key1", "val1", time.monotonic() + 1)
-    d.store("key2", "val2", time.monotonic() + 2)
-    assert d.get("key1") == (None, None), "elder a value must be deleted"
-    assert d.get("key2")[0] == "val2", "Newer should be stored"
+    d.store(DHTID.generate("key1"), "val1", time.monotonic() + 1)
+    d.store(DHTID.generate("key2"), "val2", time.monotonic() + 2)
+    assert d.get(DHTID.generate("key1")) == (None, None), "elder a value must be deleted"
+    assert d.get(DHTID.generate("key2"))[0] == "val2", "Newer should be stored"
     print("Test store maxsize passed")
