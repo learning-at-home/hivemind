@@ -1,4 +1,5 @@
 from typing import Tuple, Optional
+import socket
 
 import torch
 import torch.nn as nn
@@ -45,6 +46,7 @@ class RemoteExpert(nn.Module):
         if self._info is None:
             connection = Connection.create(self.host, self.port)
             connection.send_raw('info', PytorchSerializer.dumps(self.uid))
+            connection.conn.shutdown(socket.SHUT_WR)
             self._info = PytorchSerializer.loads(connection.recv_message()[1])
             connection.conn.close()
         return self._info
@@ -66,6 +68,7 @@ class _RemoteModuleCall(torch.autograd.Function):
 
         connection = Connection.create(ctx.host, ctx.port)
         connection.send_raw('fwd_', PytorchSerializer.dumps((ctx.uid, inputs)))
+        connection.conn.shutdown(socket.SHUT_WR)
         rtype, msg = connection.recv_message()
         connection.conn.close()
         assert len(msg) != 0, "ExpertBackend.forward did not respond"
@@ -77,6 +80,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         connection = Connection.create(ctx.host, ctx.port)
         payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
         connection.send_raw('bwd_', PytorchSerializer.dumps((ctx.uid, payload)))
+        connection.conn.shutdown(socket.SHUT_WR)
         rtype, msg = connection.recv_message()
         connection.conn.close()
         assert len(msg) != 0, "ExpertBackend.backward did not respond"
