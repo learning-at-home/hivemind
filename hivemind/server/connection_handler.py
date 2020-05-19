@@ -79,11 +79,7 @@ async def just_read_fn(reader: asyncio.StreamReader, writer: asyncio.StreamWrite
     logger.debug(f'{task_id} Sending the result')
 
     writer.write('rest'.encode())
-    await writer.drain()
     writer.write(len(raw_response).to_bytes(8, byteorder='big'))
-    await writer.drain()
     writer.write(raw_response)
     await writer.drain()
-    writer.close()
-    await writer.wait_closed()
     logger.debug(f'{task_id} Result sent')
