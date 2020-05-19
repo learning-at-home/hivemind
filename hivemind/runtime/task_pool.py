@@ -154,11 +154,11 @@ class TaskPool(TaskPoolBase):
         prev_num_tasks = 0  # number of tasks currently in shared buffer
         batch_index = max(pending_batches.keys(), default=0)
         batch_iterator = self.iterate_minibatches(*args, **kwargs)
-        self.batch_received.set()  # initial state: no batches/outputs pending
+        # self.batch_received.set()  # initial state: no batches/outputs pending
 
         while True:
             logger.info(f'Pool {self.uid}: waiting for runtime to receive next batch')
-            self.batch_received.wait()  # wait for runtime to receive (copy) previous batch
+            # self.batch_received.wait()  # wait for runtime to receive (copy) previous batch
             logger.info(f'Pool {self.uid}: batch received by runtime')
             # SIDE-EFFECT - compute pool priority from timestamp of earliest undispatched task
             # assumes that tasks are processed in the same order as they are created
@@ -178,7 +178,7 @@ class TaskPool(TaskPoolBase):
                 for i in range(len(batch_tasks[0].args))
             ]
             logger.info(f'Pool {self.uid}: aggregated tasks to inputs, sending new batch')
-            self.batch_received.clear()  # sending next batch...
+            # self.batch_received.clear()  # sending next batch...
             self.batch_sender.send((batch_index, batch_inputs))
             logger.info(f'Pool {self.uid}: sent batch to runtime')
             prev_num_tasks = len(batch_tasks)
@@ -213,7 +213,7 @@ class TaskPool(TaskPoolBase):
             raise TimeoutError()
 
         batch_index, batch_inputs = self.batch_receiver.recv()
-        self.batch_received.set()  # pool can now prepare next batch
+        # self.batch_received.set()  # pool can now prepare next batch
         batch_inputs = [tensor.to(device, non_blocking=True) for tensor in batch_inputs]
         return batch_index, batch_inputs
 
