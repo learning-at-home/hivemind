@@ -7,6 +7,7 @@ import logging
 
 from hivemind.runtime.expert_backend import ExpertBackend
 from hivemind.utils import PytorchSerializer, AsyncConnection
+from uuid import uuid4
 
 
 def shutdown(sock):
@@ -56,24 +57,25 @@ async def run_socket_server(sock, pool, experts):
 async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[str, ExpertBackend], pool):
     with AsyncConnection(*connection_tuple) as connection:
         try:
+            task_id = uuid4()[:5]
             loop = asyncio.get_running_loop()
-            logger.info('Receiving message from the connection')
+            logger.info(f'{task_id} Receiving message from the connection')
             header, raw_payload = await connection.recv_message()
-            logger.info('Message received, deserializing')
+            logger.info(f'{task_id} Message received, deserializing')
             payload = await loop.run_in_executor(pool, PytorchSerializer.loads, raw_payload)
-            logger.info('Payload deserialized, processing')
+            logger.info(f'{task_id} Payload deserialized, processing')
 
             if header == 'fwd_':
                 uid, inputs = payload
-                logger.info('Submitting task')
+                logger.info(f'{task_id} Submitting task')
                 future = await experts[uid].forward_pool.submit_task(*inputs)
-                logger.info('Awaiting result from backend')
+                logger.info(f'{task_id} Awaiting result from backend')
                 response = await future.result()
             elif header == 'bwd_':
                 uid, inputs_and_grad_outputs = payload
-                logger.info('Submitting task')
+                logger.info(f'{task_id} Submitting task')
                 future = await experts[uid].backward_pool.submit_task(*inputs_and_grad_outputs)
-                logger.info('Awaiting result from backend')
+                logger.info(f'{task_id} Awaiting result from backend')
                 response = await future.result()
             elif header == 'info':
                 uid = payload
@@ -81,11 +83,11 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
             else:
                 raise NotImplementedError(f"Unknown header: {header}")
 
-            logger.info('Serializing result')
+            logger.info(f'{task_id} Serializing result')
             raw_response = await loop.run_in_executor(pool, PytorchSerializer.dumps, response)
-            logger.info('Sending the result')
+            logger.info(f'{task_id} Sending the result')
             await connection.send_raw('rest', raw_response)
-            logger.info('Result sent')
+            logger.info(f'{task_id} Result sent')
         except RuntimeError as e:
             raise e
             # socket connection broken
