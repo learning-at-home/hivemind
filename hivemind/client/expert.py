@@ -84,8 +84,11 @@ class _RemoteModuleCall(torch.autograd.Function):
         rtype, msg = connection.recv_message()
         logger.info(f'{task_id} Received')
         connection.conn.close()
+        logger.info(f'{task_id} Connection closed')
         assert len(msg) != 0, "ExpertBackend.forward did not respond"
-        return tuple(PytorchSerializer.loads(msg))  # flattened expert outputs
+        outputs = tuple(PytorchSerializer.loads(msg))  # flattened expert outputs
+        logger.info(f'{task_id} Deserialized')
+        return outputs
 
     @staticmethod
     @once_differentiable
@@ -100,6 +103,8 @@ class _RemoteModuleCall(torch.autograd.Function):
         rtype, msg = connection.recv_message()
         logger.info(f'{task_id} Received')
         connection.conn.close()
+        logger.info(f'{task_id} Connection closed')
         assert len(msg) != 0, "ExpertBackend.backward did not respond"
         grad_inputs = PytorchSerializer.loads(msg)
+        logger.info(f'{task_id} Deserialized')
         return (DUMMY, None, None, None, *grad_inputs)
