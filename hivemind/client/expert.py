@@ -1,11 +1,14 @@
 from typing import Tuple, Optional
 import socket
+from uuid import uuid4
 
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
 from ..utils import nested_flatten, DUMMY, PytorchSerializer, nested_pack, nested_compare, Connection
+
+logger = logging.getLogger(__name__)
 
 
 class RemoteExpert(nn.Module):
@@ -45,8 +48,11 @@ class RemoteExpert(nn.Module):
     def info(self):
         if self._info is None:
             connection = Connection.create(self.host, self.port)
-            connection.send_raw('info', PytorchSerializer.dumps(self.uid))
+            task_id = str(uuid4())[:4]
+            logger.info(f'{task_id} Sending')
+            connection.send_raw('info', PytorchSerializer.dumps((task_id, self.uid)))
             connection.conn.shutdown(socket.SHUT_WR)
+            logger.info(f'{task_id} Waiting to get message back')
             self._info = PytorchSerializer.loads(connection.recv_message()[1])
             connection.conn.close()
         return self._info
@@ -67,8 +73,12 @@ class _RemoteModuleCall(torch.autograd.Function):
         ctx.save_for_backward(*inputs)
 
         connection = Connection.create(ctx.host, ctx.port)
-        connection.send_raw('fwd_', PytorchSerializer.dumps((ctx.uid, inputs)))
+
+        task_id = str(uuid4())[:4]
+        logger.info(f'{task_id} Sending')
+        connection.send_raw('fwd_', PytorchSerializer.dumps((task_id, ctx.uid, inputs)))
         connection.conn.shutdown(socket.SHUT_WR)
+        logger.info(f'{task_id} Waiting to get message back')
         rtype, msg = connection.recv_message()
         connection.conn.close()
         assert len(msg) != 0, "ExpertBackend.forward did not respond"
@@ -79,8 +89,11 @@ class _RemoteModuleCall(torch.autograd.Function):
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
         connection = Connection.create(ctx.host, ctx.port)
         payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
-        connection.send_raw('bwd_', PytorchSerializer.dumps((ctx.uid, payload)))
+        task_id = str(uuid4())[:4]
+        logger.info(f'{task_id} Sending')
+        connection.send_raw('bwd_', PytorchSerializer.dumps((task_id, ctx.uid, payload)))
         connection.conn.shutdown(socket.SHUT_WR)
+        logger.info(f'{task_id} Waiting to get message back')
         rtype, msg = connection.recv_message()
         connection.conn.close()
         assert len(msg) != 0, "ExpertBackend.backward did not respond"

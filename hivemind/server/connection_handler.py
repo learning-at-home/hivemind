@@ -35,15 +35,14 @@ class ConnectionHandler(mp.Process):
 
 
 async def just_read_fn(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, pool, experts):
-    task_id = str(uuid4())[:4]
-    logger.info(f'{task_id} Receiving message from the connection')
+    logger.info(f'Receiving message from the connection')
     data = await reader.read()
     header = data[:4].decode()
     length = int.from_bytes(data[4:12], byteorder='big')
     assert len(data) - 12 == length
     loop = asyncio.get_running_loop()
-    logger.info(f'{task_id} Message received, deserializing')
-    payload = await loop.run_in_executor(pool, PytorchSerializer.loads, data[12:])
+    logger.info(f'Message received, deserializing')
+    task_id, *payload = await loop.run_in_executor(pool, PytorchSerializer.loads, data[12:])
     logger.info(f'{task_id} Payload deserialized, processing')
 
     if header == 'fwd_':
@@ -59,7 +58,7 @@ async def just_read_fn(reader: asyncio.StreamReader, writer: asyncio.StreamWrite
         logger.info(f'{task_id} Awaiting result from backend')
         response = await future.result()
     elif header == 'info':
-        uid = payload
+        uid, = payload
         response = experts[uid].metadata
     else:
         raise NotImplementedError(f"Unknown header: {header}")
