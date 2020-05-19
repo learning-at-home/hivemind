@@ -6,6 +6,7 @@ import random
 
 import time
 import heapq
+from collections.abc import Iterable
 from itertools import chain
 from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence, Iterator
 
@@ -238,7 +239,7 @@ class DHTID(int):
          will compute distance from self to each of DHTIDs in other.
         :return: a number or a list of numbers whose binary representations equal bitwise xor between DHTIDs.
         """
-        if not isinstance(other, DHTID):
+        if isinstance(other, Iterable):
             return list(map(self.xor_distance, other))  # TODO make some SIMD
         return int(self) ^ int(other)
 
@@ -259,6 +260,11 @@ class DHTID(int):
 
     def __bytes__(self):
         return self.to_bytes()
+
+    @classmethod
+    def __call__(cls, source: Any):
+        """ Same as DHTID.generate(source=source) """
+        return cls.generate(source)
 
 
 DHTValue, DHTExpiration, BinaryDHTID = Any, float, bytes  # flavour types

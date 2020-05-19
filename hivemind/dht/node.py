@@ -1,5 +1,4 @@
 import asyncio
-import heapq
 import time
 from collections import OrderedDict
 from functools import partial
@@ -9,6 +8,7 @@ from warnings import warn
 
 from .protocol import KademliaProtocol
 from .routing import DHTID, DHTValue, DHTExpiration
+from .search import beam_search
 from ..utils import find_open_port, Endpoint, Hostname, Port, LOCALHOST
 
 
@@ -25,13 +25,12 @@ class DHTNode:
       Recommended value: $k$ is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
     :param num_replicas: (≈k) - number of nearest nodes that will be asked to store a given key, default = bucket_size
     :param depth_modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of this value
-    :param beam_size: (≈alpha) - beam search will not give up until it exhausts this many best nodes from the heap
     :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
     :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
     :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
     :param interface: provide 0.0.0.0 to operate over ipv4, :: to operate over ipv6, localhost to operate locally, etc.
 
-    Note: Hivemind DHT is optimized to store temporary metadata that is regularly updated.
+    :note: Hivemind DHT is optimized to store temporary metadata that is regularly updated.
      For example, an expert alive timestamp that emitted by the Server responsible for that expert.
      Such metadata does not require maintenance such as ensuring at least k hosts have it or (de)serialization in case
      of node shutdown. Instead, DHTNode is designed to reduce the latency of looking up such data.
@@ -48,12 +47,13 @@ class DHTNode:
 
     def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
                  bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5,
-                 beam_size: Optional[int] = None, wait_timeout: float = 5, staleness_timeout: Optional[float] = 600,
-                 bootstrap_timeout: Optional[float] = None, interface: Hostname = '0.0.0.0', loop=None):
+                 wait_timeout: float = 5, staleness_timeout: Optional[float] = 600,
+                 bootstrap_timeout: Optional[float] = None, cache_locally: bool = True, cache_nearest: int = 1,
+                 interface: Hostname = '0.0.0.0', loop=None):
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.port = port = port if port is not None else find_open_port()
         self.num_replicas = num_replicas if num_replicas is not None else bucket_size
-        self.beam_size = beam_size if beam_size is not None else bucket_size
+        self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
         self.staleness_timeout = staleness_timeout
 
         # create kademlia protocol and make it listen to a port
@@ -85,41 +85,109 @@ class DHTNode:
 
             # bootstrap part 3: run beam search for my node id to add my own nearest neighbors to the routing table
             # ... and maybe receive some values that we are meant to store (see protocol.update_routing_table)
-            asyncio.ensure_future(self.beam_search(query_id=self.node_id), loop=loop)
+            asyncio.ensure_future(self.find_nearest_nodes(query_id=self.node_id), loop=loop)
 
-    async def get(self, key: DHTID, sufficient_time: DHTExpiration = float('inf')) -> \
-            Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
+    async def find_nearest_nodes(self, query_id: DHTID, k_nearest: Optional[int] = None,
+                                 beam_size: Optional[int] = None, exclude_self: bool = False) -> Dict[DHTID, Endpoint]:
         """
-        :param key: traverse the DHT and find the value for this key (or None if it does not exist)
-        :param sufficient_time: if the search finds a value that expires after sufficient_time, it can return this
-         value right away. By default, return the newest value found after beam search converges.
-        :returns: value and its expiration time. If found nothing, returns (None, None)
+        Traverse the DHT and find :k_nearest: nodes to a given :query_id:, optionally :exclude_self: from the results.
+        :note: this is a thin wrapper over dht.search.beam_search, look there for more details
+        :returns: an ordered dictionary of [peer DHTID -> network Endpoint], ordered from nearest to farthest neighbor
         """
-        beam_search_results = await self.beam_search(key, k_nearest=self.protocol.bucket_size)
-        tasks = [self.protocol.call_find_value(endpoint, key)
-                 for endpoint in beam_search_results.values()]
-        latest_time, latest_value = None, None
-        for task in asyncio.as_completed(tasks):
-            value, expiration_time, _ = await task
-            if expiration_time is None:
-                continue
-            if latest_time is None or expiration_time > latest_time:
-                latest_time, latest_value = expiration_time, value
-                if latest_time > sufficient_time:
-                    return latest_time, latest_value
-        return latest_value, latest_time
+        k_nearest = k_nearest if k_nearest is not None else self.protocol.bucket_size
+        beam_size = beam_size if beam_size is not None else max(self.protocol.bucket_size, k_nearest)
+        node_to_addr = dict(
+            self.protocol.routing_table.get_nearest_neighbors(query_id, beam_size, exclude=self.node_id))
+
+        async def get_neighbors(node: DHTID) -> Tuple[List[DHTID], bool]:
+            peers: Dict[DHTID, Endpoint] = await self.protocol.call_find_node(node_to_addr[node], query_id)
+            node_to_addr.update(peers)
+            return list(peers.keys()), False  # False means "do not interrupt beam search"
+
+        nearest_nodes, visited_nodes = await beam_search(
+            query_id=query_id, initial_nodes=list(node_to_addr), k_nearest=k_nearest, beam_size=beam_size,
+            get_neighbors=get_neighbors, visited_nodes=(self.node_id,))
+
+        if not exclude_self:
+            nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query_id.xor_distance)[:k_nearest]
+            node_to_addr[self.node_id] = (LOCALHOST, self.port)
+
+        return OrderedDict((node, node_to_addr[node]) for node in nearest_nodes)
 
     async def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
         Also cache (key, value, expiration_time) at all nodes you met along the way (see Section 2.1 end)
-        TODO: if we found a newer value in the in the table, terminate immediately and throw a warning
+        :note: if store finds a newer value in the table, it will propagate this newer value instead of the original
+        :return: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        beam_search_results = await self.beam_search(key, k_nearest=self.num_replicas)
-        tasks = [self.protocol.call_store(endpoint, key, value, expiration_time)
-                 for endpoint in beam_search_results.values()]
+        nearest_node_to_addr = await self.find_nearest_nodes(key, k_nearest=self.num_replicas, exclude_self=True)
+        tasks = [asyncio.Task(self.protocol.call_store(endpoint, key, value, expiration_time))
+                 for endpoint in nearest_node_to_addr.values()]
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         return any(done)
+
+    async def get(self, key: DHTID, sufficient_expiration_time: Optional[DHTExpiration] = None,
+                  beam_size: Optional[int] = None) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
+        """
+        :param key: traverse the DHT and find the value for this key (or None if it does not exist)
+        :param sufficient_expiration_time: if the search finds a value that expires after this time,
+            default = time of call, find any value that did not expire by the time of call
+            If min_expiration_time=float('inf'), this method will find a value with _latest_ expiration
+        :returns: value and its expiration time. If nothing is found , returns (None, None).
+        :note: in order to check if get returned a value, please check (expiration_time is None)
+        """
+        sufficient_expiration_time = sufficient_expiration_time or time.monotonic()
+        beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
+        latest_value, latest_expiration = None, -float('inf')
+        node_to_addr, nodes_checked_for_value = dict(), set()
+
+        # Option A: value can be stored in our local cache
+        maybe_value, maybe_expiration = self.protocol.storage.get(key)
+        if maybe_expiration is not None and maybe_expiration > latest_expiration:
+            latest_value, latest_expiration = maybe_value, maybe_expiration
+            # TODO(jheuristic) we may want to run background beam search to update our cache
+        nodes_checked_for_value.add(self.node_id)
+
+        # Option B: go beam search the DHT
+        if latest_expiration < sufficient_expiration_time:
+            node_to_addr.update(
+                self.protocol.routing_table.get_nearest_neighbors(key, self.protocol.bucket_size, exclude=self.node_id))
+
+            async def get_neighbors(node: DHTID) -> Tuple[List[DHTID], bool]:
+                nonlocal latest_value, latest_expiration, node_to_addr, nodes_checked_for_value
+                maybe_value, maybe_expiration, peers = await self.protocol.call_find_value(node_to_addr[node], key=key)
+                nodes_checked_for_value.add(node)
+                node_to_addr.update(peers)
+                if maybe_expiration is not None and maybe_expiration > latest_expiration:
+                    latest_value, latest_expiration = maybe_value, maybe_expiration
+                should_interrupt = (latest_expiration >= sufficient_expiration_time)
+                return list(peers.keys()), should_interrupt
+
+            nearest_nodes, visited_nodes = await beam_search(
+                query_id=key, initial_nodes=list(node_to_addr), k_nearest=beam_size, beam_size=beam_size,
+                get_neighbors=get_neighbors, visited_nodes=nodes_checked_for_value)
+            # normally, by this point we will have found a sufficiently recent value in one of get_neighbors calls
+
+
+        # Option C: didn't find good-enough value in beam search, make a last-ditch effort to find it in unvisited nodes
+        if latest_expiration < sufficient_expiration_time:
+            nearest_unvisited_nodes = [node_id for node_id in nearest_nodes if node_id not in nodes_checked_for_value]
+            tasks = [self.protocol.call_find_value(node_to_addr[node_id], key) for node_id in nearest_unvisited_nodes]
+            pending_tasks = set(tasks)
+            for task in asyncio.as_completed(tasks):
+                pending_tasks.remove(task)
+                maybe_value, maybe_expiration, _ = await task
+                if maybe_expiration is not None and maybe_expiration > latest_expiration:
+                    latest_value, latest_expiration = maybe_value, maybe_expiration
+                    if latest_expiration >= sufficient_expiration_time:
+                        break
+            for task in pending_tasks:
+                task.close()
+
+        # step 4: we have not found entry with sufficient_expiration_time, but we may have found *something* older
+        # TODO(jheuristic) cache here once vsevolodpl is done with the storage - both to self and to nearest
+        return (latest_value, latest_expiration) if latest_expiration != -float('inf') else (None, None)
 
     async def refresh_stale_buckets(self):
         staleness_threshold = time.monotonic() - self.staleness_timeout
@@ -131,75 +199,7 @@ class DHTNode:
 
         raise NotImplementedError("TODO")
 
-    async def beam_search(self, query_id: DHTID, initial_peers: Optional[Dict[DHTID, Endpoint]] = None,
-                          k_nearest: Optional[int] = None, beam_size: Optional[int] = None,
-                          max_hops: Optional[int] = None, exclude_self: bool = False) -> Dict[DHTID, Endpoint]:
-        """ you see a lengthy description of how beam search works """
 
-        # infer defaults
-        if beam_size is not None and k_nearest is not None and k_nearest > beam_size:
-            warn(f"beam search: beam_size({beam_size}) is too small, setting it equal to k_nearest({k_nearest}).")
-        k_nearest = k_nearest if k_nearest is not None else self.protocol.bucket_size
-        beam_size = max(self.beam_size, (k_nearest if beam_size is None else beam_size))
-        max_hops = float('inf') if max_hops is None else max_hops
-        initial_peers = initial_peers or dict(self.protocol.routing_table.get_nearest_neighbors(query_id, k=beam_size))
-
-        # initialize beam search
-        ids_to_endpoint = dict(initial_peers)  # all nodes visited by this beam search
-        ids_to_endpoint[self.node_id] = (LOCALHOST, self.port)  # add self
-        ids_to_distance = dict(zip(initial_peers, query_id.xor_distance(initial_peers)))
-
-        candidates = [(distance, peer_id) for peer_id, distance in
-                      ids_to_distance.items() if peer_id != self.node_id]  # unvisited nodes, nearest-first heap
-        heapq.heapify(candidates)
-        top_results = [(-distance, peer) for distance, peer in
-                       heapq.nsmallest(beam_size, candidates)]  # farthest-first heap, at most beam_size elements
-        heapq.heapify(top_results)
-        if not exclude_self:
-            heapq.heappush(top_results, (-query_id.xor_distance(self.node_id), self.node_id))
-            while len(top_results) > beam_size:
-                heapq.heappop(top_results)
-
-        if len(top_results) == 0:
-            return {}
-
-        lower_bound = -heapq.nsmallest(1, top_results)[0][0]
-        num_hops = 0
-
-        while candidates:
-            dist, node_id = heapq.heappop(candidates)
-            if dist > lower_bound:
-                break
-
-            neighbor_ids_to_endpoint = await self.protocol.call_find_node(ids_to_endpoint[node_id], query_id)
-
-            # only consider neighbors that have not been visited before
-            neighbor_ids_to_endpoint = {node_id: endpoint for node_id, endpoint in neighbor_ids_to_endpoint.items()
-                                        if node_id not in ids_to_endpoint}
-
-            neighbor_ids = list(neighbor_ids_to_endpoint.keys())
-            if not neighbor_ids:
-                continue
-
-            neighbor_ids_to_distance = dict(zip(neighbor_ids, query_id.xor_distance(neighbor_ids)))
-
-            for neighbor_id, distance in neighbor_ids_to_distance.items():
-                if distance < lower_bound or len(top_results) < beam_size:
-                    heapq.heappush(candidates, (distance, neighbor_id))
-
-                    heapq_add_or_replace = heapq.heappush if len(top_results) < beam_size else heapq.heappushpop
-                    heapq_add_or_replace(top_results, (-distance, neighbor_id))
-
-                    lower_bound = -heapq.nsmallest(1, top_results)[0][0]
-
-            ids_to_distance.update(neighbor_ids_to_distance)
-            ids_to_endpoint.update(neighbor_ids_to_endpoint)
-
-            num_hops += 1
-            if num_hops >= max_hops:
-                break
-
-        return OrderedDict((node_id, ids_to_endpoint[node_id]) for _, node_id in heapq.nlargest(k_nearest, top_results))
 
 # TODO bmuller's kademlia updated node's bucket:
 # * on every rpc_find_node - for the node that is searched for
