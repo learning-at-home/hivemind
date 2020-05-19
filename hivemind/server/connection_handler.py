@@ -35,10 +35,10 @@ class ConnectionHandler(mp.Process):
         asyncio.set_event_loop(self.loop)
         self.loop.set_default_executor(ThreadPoolExecutor(1000))
         self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'))
-        asyncio.run(run_socket_server(self.sock, self.executor, self.experts))
-
-    def shutdown(self):
-        shutdown(self.sock)
+        just_read = lambda reader, writer: just_read_fn(reader, writer, self.executor, self.experts)
+        start_server_fn = asyncio.start_server(just_read, *self.addr)
+        self.loop.run_until_complete(start_server_fn)
+        self.loop.run_forever()
 
 
 async def run_socket_server(sock, pool, experts):
