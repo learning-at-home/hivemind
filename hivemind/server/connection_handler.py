@@ -32,7 +32,7 @@ class ConnectionHandler(mp.Process):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
-        self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'))
+        self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'), initializer=worker_init_fn)
         for signame in signal.SIGINT, signal.SIGTERM:
             self.loop.add_signal_handler(
                 signame,
