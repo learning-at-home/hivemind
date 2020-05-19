@@ -8,8 +8,7 @@ from functools import partial
 from hivemind.utils import PytorchSerializer
 
 
-def ask_exit(signame, loop, executor):
-    print("got signal %s: exit" % signame)
+def ask_exit(loop, executor):
     executor.shutdown()
     loop.stop()
 
@@ -30,10 +29,10 @@ class ConnectionHandler(mp.Process):
         # self.loop.set_default_executor(ThreadPoolExecutor(1000))
 
         self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'))
-        for signame in {'SIGINT', 'SIGTERM'}:
+        for signame in signal.SIGINT, signal.SIGTERM:
             self.loop.add_signal_handler(
-                getattr(signal, signame),
-                partial(ask_exit, signame, self.loop, self.executor))
+                signame,
+                partial(ask_exit, self.loop, self.executor))
         just_read = lambda reader, writer: just_read_fn(reader, writer, self.executor, self.experts)
         start_server_fn = asyncio.start_server(just_read, *self.addr)
         self.loop.run_until_complete(start_server_fn)
