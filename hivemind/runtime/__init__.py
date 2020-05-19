@@ -47,7 +47,6 @@ class Runtime(threading.Thread):
         self.ready = mp.Event()  # event is set iff server is currently running and ready to accept batches
 
     def run(self):
-        # progress = tqdm.tqdm(bar_format='{desc}, {rate_fmt}')
         for pool in self.pools:
             if not pool.is_alive():
                 pool.start()
@@ -55,19 +54,21 @@ class Runtime(threading.Thread):
             for expert_backend in self.expert_backends.values():
                 expert_backend.to(self.device)
 
+        batch_sizes = []
+
         with mp.pool.ThreadPool(self.sender_threads) as output_sender_pool:
             try:
                 self.ready.set()
                 for pool, batch_index, batch in BackgroundGenerator(
                         self.iterate_minibatches_from_pools(), self.prefetch_batches):
                     logger.info(f'Obtained batch size {batch[0].size(0)}, processing')
+                    batch_sizes.append(batch[0].size(0))
                     outputs = pool.process_func(*batch)
                     logger.debug('Processed batch, sending to pools')
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
                     logger.debug('Results sent, waiting for new batch')
-                    # progress.update(len(out”puts[0]))
-                    # progress.desc = f'pool.uid={pool.uid} batch_size={len(outputs[0])}'
             finally:
+                logger.info(f'Average batch size: {sum(batch_sizes) / len(batch_sizes)}')
                 self.shutdown()
 
     SHUTDOWN_TRIGGER = "RUNTIME SHUTDOWN TRIGGERED"
