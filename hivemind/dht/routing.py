@@ -7,7 +7,7 @@ import random
 import time
 import heapq
 from itertools import chain
-from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence, Iterator, OrderedDict
+from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence, Iterator
 
 from ..utils import Endpoint, PickleSerializer
 
@@ -232,7 +232,7 @@ class DHTID(int):
         raw_uid = hashlib.sha1(source).digest()
         return cls(int(raw_uid.hex(), 16))
 
-    def xor_distance(self, other: Union[DHTID, Sequence[DHTID]]) -> Union[int, Sequence[int]]:
+    def xor_distance(self, other: Union[DHTID, Sequence[DHTID]]) -> Union[int, List[int]]:
         """
         :param other: one or multiple DHTIDs. If given multiple DHTIDs as other, this function
          will compute distance from self to each of DHTIDs in other.
