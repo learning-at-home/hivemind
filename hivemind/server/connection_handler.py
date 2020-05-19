@@ -1,9 +1,59 @@
-from socket import socket
-from typing import Tuple, Dict
 import asyncio
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
+from typing import Tuple, Dict
+import signal
+
+import uvloop
 
 from hivemind.runtime.expert_backend import ExpertBackend
 from hivemind.utils import PytorchSerializer, AsyncConnection
+
+
+def shutdown(loop, executor, sock):
+    executor.shutdown()
+    for task in asyncio.Task.all_tasks():
+        task.cancel()
+    loop.stop()
+    sock.close()
+
+
+class ConnectionHandler(mp.Process):
+    def __init__(self, port, conn_handler_processes, experts):
+        super().__init__()
+        self.sock = socket(AF_INET, SOCK_STREAM)
+        self.sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+        self.sock.bind(('', port))
+        self.sock.listen()
+        self.sock.setblocking(False)
+        self.conn_handler_processes = conn_handler_processes
+        self.experts = experts
+
+        uvloop.install()
+
+    def run(self):
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'))
+        self.loop.add_signal_handler(signal.SIGINT, shutdown, self.loop, self.executor, self.sock)
+        asyncio.run(run_socket_server(self.sock, self.executor, self.experts))
+
+    def shutdown(self):
+        shutdown(self.loop, self.executor, self.sock)
+
+
+async def run_socket_server(sock, pool, experts):
+    while True:
+        try:
+            loop = asyncio.get_running_loop()
+            conn_tuple = await loop.sock_accept(sock)
+            loop.create_task(handle_connection(conn_tuple, experts, pool))
+        except KeyboardInterrupt as e:
+            print(f'Socket loop has caught {type(e)}, exiting')
+            break
+        except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
+            continue
 
 
 async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[str, ExpertBackend], pool):
