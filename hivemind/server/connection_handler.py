@@ -57,7 +57,7 @@ async def run_socket_server(sock, pool, experts):
 async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[str, ExpertBackend], pool):
     with AsyncConnection(*connection_tuple) as connection:
         try:
-            task_id = uuid4()[:5]
+            task_id = str(uuid4())[:4]
             loop = asyncio.get_running_loop()
             logger.info(f'{task_id} Receiving message from the connection')
             header, raw_payload = await connection.recv_message()
