@@ -110,6 +110,7 @@ class Server(threading.Thread):
         if self.dht is not None:
             self.dht.shutdown()
 
+        self.conn_handler_process.terminate()
         self.conn_handler_process.join()
 
         self.runtime.shutdown()
