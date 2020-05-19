@@ -5,17 +5,15 @@ from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeo
 from typing import Tuple, Dict
 import signal
 
-import uvloop
-
 from hivemind.runtime.expert_backend import ExpertBackend
 from hivemind.utils import PytorchSerializer, AsyncConnection
 
 
-def shutdown(loop, executor, sock):
+def shutdown(executor, sock):
     executor.shutdown()
     for task in asyncio.Task.all_tasks():
         task.cancel()
-    loop.stop()
+    # loop.stop()
     sock.close()
 
 
@@ -30,17 +28,15 @@ class ConnectionHandler(mp.Process):
         self.conn_handler_processes = conn_handler_processes
         self.experts = experts
 
-        uvloop.install()
-
     def run(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'))
-        self.loop.add_signal_handler(signal.SIGINT, shutdown, self.loop, self.executor, self.sock)
+        # self.loop.add_signal_handler(signal.SIGINT, shutdown, self.executor, self.sock)
         asyncio.run(run_socket_server(self.sock, self.executor, self.experts))
 
     def shutdown(self):
-        shutdown(self.loop, self.executor, self.sock)
+        shutdown(self.executor, self.sock)
 
 
 async def run_socket_server(sock, pool, experts):
@@ -65,12 +61,12 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
 
             if header == 'fwd_':
                 uid, inputs = payload
-                future = await loop.run_in_executor(pool, experts[uid].forward_pool.submit_task, *inputs)
-                response = await loop.run_in_executor(pool, future.result)
+                future = await experts[uid].forward_pool.submit_task(*inputs)
+                response = await future.result()
             elif header == 'bwd_':
                 uid, inputs_and_grad_outputs = payload
-                future = await loop.run_in_executor(pool, experts[uid].backward_pool.submit_task, *inputs_and_grad_outputs)
-                response = await loop.run_in_executor(pool, future.result)
+                future = await experts[uid].backward_pool.submit_task(*inputs_and_grad_outputs)
+                response = await future.result()
             elif header == 'info':
                 uid = payload
                 response = experts[uid].metadata

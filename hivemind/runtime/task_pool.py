@@ -4,6 +4,7 @@ Task pool is responsible for receiving tasks and grouping them together for proc
 import ctypes
 import multiprocessing as mp
 import os
+import asyncio
 import threading
 import time
 import uuid
@@ -232,10 +233,11 @@ class RemotePoolInterface:
         self.undispatched_task_timestamps = pool.undispatched_task_timestamps
         self.max_batch_size = pool.max_batch_size
 
-    def submit_task(self, *args: torch.Tensor) -> Future:
+    async def submit_task(self, *args: torch.Tensor) -> Future:
         """ Add task to this pool's queue, return Future for its output """
         future1, future2 = SharedFuture.make_pair()
         task = Task(future1, args)
-        self.tasks.put(task)
-        self.undispatched_task_timestamps.put(time.time())
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self.tasks.put, task)
+        await loop.run_in_executor(None, self.undispatched_task_timestamps.put, time.time())
         return future2
