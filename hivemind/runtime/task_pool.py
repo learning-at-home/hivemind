@@ -70,7 +70,7 @@ class TaskPool(TaskPoolBase):
     """
 
     def __init__(self, process_func: callable, max_batch_size: int, mp_manager: mp.Manager, min_batch_size=1,
-                 timeout=3, pool_size=None, prefetch_batches=1, uid=None, daemon=True, start=False):
+                 timeout=10, pool_size=None, prefetch_batches=1, uid=None, daemon=True, start=False):
         super().__init__(process_func, daemon=daemon)
         self.min_batch_size, self.max_batch_size, self.timeout = min_batch_size, max_batch_size, timeout
         self.uid = uid or uuid.uuid4()
