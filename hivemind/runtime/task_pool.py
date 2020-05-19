@@ -111,10 +111,10 @@ class TaskPool(TaskPoolBase):
                 batch = []
                 total_size = 0
             try:
-                logger.debug(f'Pool {self.uid}: getting next task')
+                logger.debug(f'{self.uid}: getting next task')
                 task = self.tasks.get(timeout=self.timeout)
             except Empty:
-                logger.warning(f"Pool {self.uid}: Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet")
+                logger.warning(f"{self.uid}: timeout reached but batch doesn't contain >={self.min_batch_size} elements")
                 continue
                 # exc = TimeoutError(f"Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet.")
                 # for task in batch:
@@ -166,9 +166,9 @@ class TaskPool(TaskPoolBase):
                 finished_task_timestamp = self.undispatched_task_timestamps.get()  # earlier timestamp = higher priority
                 if skip_i == prev_num_tasks - 1:
                     self.priority = finished_task_timestamp
-            logger.debug(f'Pool {self.uid}: getting next batch')
+            logger.debug(f'{self.uid}: getting next batch')
             batch_tasks = next(batch_iterator)
-            logger.debug(f'Pool {self.uid}: got next batch')
+            logger.debug(f'{self.uid}: got next batch')
             # save batch futures, _output_loop will deliver on them later
             pending_batches[batch_index] = batch_tasks
 
@@ -177,9 +177,9 @@ class TaskPool(TaskPoolBase):
                 torch.cat([task.args[i] for task in batch_tasks])
                 for i in range(len(batch_tasks[0].args))
             ]
-            logger.debug(f'Pool {self.uid}: aggregated tasks to inputs, sending new batch')
+            logger.debug(f'{self.uid}: aggregated tasks to inputs, sending new batch')
             self.batch_sender.send((batch_index, batch_inputs))
-            logger.debug(f'Pool {self.uid}: sent batch to runtime')
+            logger.debug(f'{self.uid}: sent batch to runtime')
             prev_num_tasks = len(batch_tasks)
             batch_index += 1
 
