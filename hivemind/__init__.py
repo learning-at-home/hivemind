@@ -1,10 +1,12 @@
 from .client import *
 from .dht import *
+from .runtime import *
 from .server import *
 from .utils import *
-from .runtime import *
+
+loglevel = os.getenv('LOGLEVEL', 'INFO')
 
 logging.basicConfig(format='[{asctime}.{msecs:.0f}][{levelname}][{name}.{funcName}:{lineno}] {message}', style='{',
-                    datefmt='%Y/%m/%d %H:%M:%S', level=logging.INFO)
+                    datefmt='%Y/%m/%d %H:%M:%S', level=loglevel)
 
 __version__ = '0.7.1'
