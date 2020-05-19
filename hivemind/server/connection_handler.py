@@ -29,6 +29,7 @@ class ConnectionHandler(mp.Process):
         self.experts = experts
 
     def run(self):
+        torch.set_num_threads(1)
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
