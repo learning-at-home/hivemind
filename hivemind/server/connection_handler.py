@@ -3,17 +3,14 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Tuple, Dict
-import signal
 
 from hivemind.runtime.expert_backend import ExpertBackend
 from hivemind.utils import PytorchSerializer, AsyncConnection
 
 
-def shutdown(executor, sock):
-    executor.shutdown()
+def shutdown(sock):
     for task in asyncio.Task.all_tasks():
         task.cancel()
-    # loop.stop()
     sock.close()
 
 
@@ -32,11 +29,10 @@ class ConnectionHandler(mp.Process):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'))
-        # self.loop.add_signal_handler(signal.SIGINT, shutdown, self.executor, self.sock)
         asyncio.run(run_socket_server(self.sock, self.executor, self.experts))
 
     def shutdown(self):
-        shutdown(self.executor, self.sock)
+        shutdown(self.sock)
 
 
 async def run_socket_server(sock, pool, experts):
