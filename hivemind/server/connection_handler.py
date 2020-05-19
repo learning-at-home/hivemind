@@ -1,12 +1,13 @@
 import asyncio
 import logging
 import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from uuid import uuid4
 import signal
+from concurrent.futures import ProcessPoolExecutor
 from functools import partial
-from hivemind.utils import PytorchSerializer
+
 import torch
+
+from hivemind.utils import PytorchSerializer
 
 
 def ask_exit(loop, executor):

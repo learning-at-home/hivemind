@@ -1,12 +1,11 @@
+import logging
 import multiprocessing as mp
 import threading
 from itertools import chain
 from selectors import DefaultSelector, EVENT_READ
 from typing import Dict
-import logging
 
 import torch
-import tqdm
 from prefetch_generator import BackgroundGenerator
 
 from .expert_backend import ExpertBackend
