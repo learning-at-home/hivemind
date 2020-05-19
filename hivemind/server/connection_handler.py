@@ -3,6 +3,7 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Tuple, Dict
+import logging
 
 from hivemind.runtime.expert_backend import ExpertBackend
 from hivemind.utils import PytorchSerializer, AsyncConnection
@@ -12,6 +13,9 @@ def shutdown(sock):
     for task in asyncio.Task.all_tasks():
         task.cancel()
     sock.close()
+
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionHandler(mp.Process):
@@ -53,16 +57,23 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
     with AsyncConnection(*connection_tuple) as connection:
         try:
             loop = asyncio.get_running_loop()
+            logger.info('Receiving message from the connection')
             header, raw_payload = await connection.recv_message()
+            logger.info('Message received, deserializing')
             payload = await loop.run_in_executor(pool, PytorchSerializer.loads, raw_payload)
+            logger.info('Payload deserialized, processing')
 
             if header == 'fwd_':
                 uid, inputs = payload
+                logger.info('Submitting task')
                 future = await experts[uid].forward_pool.submit_task(*inputs)
+                logger.info('Awaiting result from backend')
                 response = await future.result()
             elif header == 'bwd_':
                 uid, inputs_and_grad_outputs = payload
+                logger.info('Submitting task')
                 future = await experts[uid].backward_pool.submit_task(*inputs_and_grad_outputs)
+                logger.info('Awaiting result from backend')
                 response = await future.result()
             elif header == 'info':
                 uid = payload
@@ -70,7 +81,9 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
             else:
                 raise NotImplementedError(f"Unknown header: {header}")
 
+            logger.info('Serializing result')
             raw_response = await loop.run_in_executor(pool, PytorchSerializer.dumps, response)
+            logger.info('Sending the result')
             await connection.send_raw('rest', raw_response)
         except RuntimeError as e:
             raise e
