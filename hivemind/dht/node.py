@@ -49,7 +49,7 @@ class DHTNode:
                  bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5,
                  wait_timeout: float = 5, staleness_timeout: Optional[float] = 600,
                  bootstrap_timeout: Optional[float] = None, cache_locally: bool = True, cache_nearest: int = 1,
-                 interface: Hostname = '0.0.0.0', loop=None):
+                 interface: Hostname = '0.0.0.0'):
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.port = port = port if port is not None else find_open_port()
         self.num_replicas = num_replicas if num_replicas is not None else bucket_size
@@ -57,7 +57,7 @@ class DHTNode:
         self.staleness_timeout = staleness_timeout
 
         # create kademlia protocol and make it listen to a port
-        loop = loop if loop is not None else asyncio.get_event_loop()
+        loop = asyncio.get_event_loop()
         make_protocol = partial(KademliaProtocol, self.node_id, bucket_size, depth_modulo, wait_timeout)
         listener = loop.run_until_complete(loop.create_datagram_endpoint(make_protocol, local_addr=(interface, port)))
         self.transport: asyncio.Transport = listener[0]
@@ -74,7 +74,7 @@ class DHTNode:
             # bootstrap part 2: gather all peers who responded within bootstrap_timeout, but at least one peer
             if remaining_tasks:
                 finished_in_time, stragglers = loop.run_until_complete(
-                    asyncio.wait(remaining_tasks, timeout=bootstrap_timeout - time_to_first_response, loop=loop))
+                    asyncio.wait(remaining_tasks, timeout=bootstrap_timeout - time_to_first_response))
                 for straggler in stragglers:
                     straggler.cancel()
                 finished_tasks |= finished_in_time
@@ -85,7 +85,7 @@ class DHTNode:
 
             # bootstrap part 3: run beam search for my node id to add my own nearest neighbors to the routing table
             # ... and maybe receive some values that we are meant to store (see protocol.update_routing_table)
-            asyncio.ensure_future(self.find_nearest_nodes(query_id=self.node_id), loop=loop)
+            loop.run_until_complete(self.find_nearest_nodes(query_id=self.node_id))
 
     async def find_nearest_nodes(self, query_id: DHTID, k_nearest: Optional[int] = None,
                                  beam_size: Optional[int] = None, exclude_self: bool = False) -> Dict[DHTID, Endpoint]:
