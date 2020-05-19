@@ -85,6 +85,7 @@ async def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[
             raw_response = await loop.run_in_executor(pool, PytorchSerializer.dumps, response)
             logger.info('Sending the result')
             await connection.send_raw('rest', raw_response)
+            logger.info('Result sent')
         except RuntimeError as e:
             raise e
             # socket connection broken
