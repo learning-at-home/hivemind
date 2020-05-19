@@ -1,6 +1,6 @@
 import asyncio
 import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Tuple, Dict
 
@@ -28,6 +28,7 @@ class ConnectionHandler(mp.Process):
     def run(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
+        self.loop.set_default_executor(ThreadPoolExecutor(1000))
         self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'))
         asyncio.run(run_socket_server(self.sock, self.executor, self.experts))
 
