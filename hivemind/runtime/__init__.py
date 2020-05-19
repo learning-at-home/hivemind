@@ -61,12 +61,12 @@ class Runtime(threading.Thread):
                 self.ready.set()
                 for pool, batch_index, batch in BackgroundGenerator(
                         self.iterate_minibatches_from_pools(), self.prefetch_batches):
-                    logger.info('Runtime obtained batch, processing')
+                    logger.info(f'Runtime obtained batch size {batch[0].size(0)}, processing')
                     outputs = pool.process_func(*batch)
-                    logger.info('Runtime processed batch, sending to pools')
+                    logger.debug('Runtime processed batch, sending to pools')
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
-                    logger.info('Results sent, waiting for new batch')
-                    # progress.update(len(outputs[0]))
+                    logger.debug('Results sent, waiting for new batch')
+                    # progress.update(len(out”puts[0]))
                     # progress.desc = f'pool.uid={pool.uid} batch_size={len(outputs[0])}'
             finally:
                 self.shutdown()
@@ -93,14 +93,14 @@ class Runtime(threading.Thread):
 
             while True:
                 # wait until at least one batch_receiver becomes available
-                logger.info('Waiting for batch receivers...')
+                logger.debug('Waiting for batch receivers...')
                 ready_fds = selector.select()
-                logger.info('Obtained a list of ready pools')
+                logger.debug('Obtained a list of ready pools')
                 ready_objects = [key.data for (key, events) in ready_fds]
                 if self.SHUTDOWN_TRIGGER in ready_objects:
                     break  # someone asked us to shutdown, break from the loop
-                logger.info('Selecting pool')
+                logger.debug('Selecting pool')
                 selected_pool = max(ready_objects, key=lambda pool: pool.priority)
-                logger.info('Selected pool with best priority')
+                logger.debug('Selected pool with best priority')
                 batch_index, batch_tensors = selected_pool.load_batch_to_runtime(timeout, self.device)
                 yield selected_pool, batch_index, batch_tensors

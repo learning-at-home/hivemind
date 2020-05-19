@@ -111,7 +111,7 @@ class TaskPool(TaskPoolBase):
                 batch = []
                 total_size = 0
             try:
-                logger.info(f'Pool {self.uid}: getting next task')
+                logger.debug(f'Pool {self.uid}: getting next task')
                 task = self.tasks.get(timeout=self.timeout)
             except Empty:
                 logger.warning(f"Pool {self.uid}: Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet")
@@ -138,7 +138,7 @@ class TaskPool(TaskPoolBase):
                 total_size += task_size
 
     def run(self, *args, **kwargs):
-        logger.info(f'Starting pool {self.uid}')
+        logger.debug(f'Starting pool {self.uid}')
         torch.set_num_threads(1)
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
@@ -160,18 +160,15 @@ class TaskPool(TaskPoolBase):
         # self.batch_received.set()  # initial state: no batches/outputs pending
 
         while True:
-            logger.info(f'Pool {self.uid}: waiting for runtime to receive next batch')
-            # self.batch_received.wait()  # wait for runtime to receive (copy) previous batch
-            logger.info(f'Pool {self.uid}: batch received by runtime')
             # SIDE-EFFECT - compute pool priority from timestamp of earliest undispatched task
             # assumes that tasks are processed in the same order as they are created
             for skip_i in range(prev_num_tasks):
                 finished_task_timestamp = self.undispatched_task_timestamps.get()  # earlier timestamp = higher priority
                 if skip_i == prev_num_tasks - 1:
                     self.priority = finished_task_timestamp
-            logger.info(f'Pool {self.uid}: getting next batch')
+            logger.debug(f'Pool {self.uid}: getting next batch')
             batch_tasks = next(batch_iterator)
-            logger.info(f'Pool {self.uid}: got next batch')
+            logger.debug(f'Pool {self.uid}: got next batch')
             # save batch futures, _output_loop will deliver on them later
             pending_batches[batch_index] = batch_tasks
 
@@ -180,10 +177,9 @@ class TaskPool(TaskPoolBase):
                 torch.cat([task.args[i] for task in batch_tasks])
                 for i in range(len(batch_tasks[0].args))
             ]
-            logger.info(f'Pool {self.uid}: aggregated tasks to inputs, sending new batch')
-            # self.batch_received.clear()  # sending next batch...
+            logger.debug(f'Pool {self.uid}: aggregated tasks to inputs, sending new batch')
             self.batch_sender.send((batch_index, batch_inputs))
-            logger.info(f'Pool {self.uid}: sent batch to runtime')
+            logger.debug(f'Pool {self.uid}: sent batch to runtime')
             prev_num_tasks = len(batch_tasks)
             batch_index += 1
 

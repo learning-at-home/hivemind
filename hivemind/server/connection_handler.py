@@ -45,27 +45,27 @@ class ConnectionHandler(mp.Process):
 
 
 async def just_read_fn(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, pool, experts):
-    logger.info(f'Receiving message from the connection')
+    logger.debug(f'Receiving message from the connection')
     data = await reader.read()
     header = data[:4].decode()
     length = int.from_bytes(data[4:12], byteorder='big')
     assert len(data) - 12 == length
     loop = asyncio.get_running_loop()
-    logger.info(f'Message received, deserializing')
+    logger.debug(f'Message received, deserializing')
     task_id, *payload = await loop.run_in_executor(pool, PytorchSerializer.loads, data[12:])
-    logger.info(f'{task_id} Payload deserialized, processing')
+    logger.debug(f'{task_id} Payload deserialized, processing')
 
     if header == 'fwd_':
         uid, inputs = payload
-        logger.info(f'{task_id} Submitting task')
+        logger.debug(f'{task_id} Submitting task')
         future = await experts[uid].forward_pool.submit_task(*inputs)
-        logger.info(f'{task_id} Awaiting result from backend')
+        logger.debug(f'{task_id} Awaiting result from backend')
         response = await future.result()
     elif header == 'bwd_':
         uid, inputs_and_grad_outputs = payload
-        logger.info(f'{task_id} Submitting task')
+        logger.debug(f'{task_id} Submitting task')
         future = await experts[uid].backward_pool.submit_task(*inputs_and_grad_outputs)
-        logger.info(f'{task_id} Awaiting result from backend')
+        logger.debug(f'{task_id} Awaiting result from backend')
         response = await future.result()
     elif header == 'info':
         uid, = payload
@@ -73,9 +73,9 @@ async def just_read_fn(reader: asyncio.StreamReader, writer: asyncio.StreamWrite
     else:
         raise NotImplementedError(f"Unknown header: {header}")
 
-    logger.info(f'{task_id} Serializing result')
+    logger.debug(f'{task_id} Serializing result')
     raw_response = await loop.run_in_executor(pool, PytorchSerializer.dumps, response)
-    logger.info(f'{task_id} Sending the result')
+    logger.debug(f'{task_id} Sending the result')
 
     writer.write('rest'.encode())
     await writer.drain()
@@ -85,4 +85,4 @@ async def just_read_fn(reader: asyncio.StreamReader, writer: asyncio.StreamWrite
     await writer.drain()
     writer.close()
     await writer.wait_closed()
-    logger.info(f'{task_id} Result sent')
+    logger.debug(f'{task_id} Result sent')
