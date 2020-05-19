@@ -122,7 +122,7 @@ class DHTNode:
         :return: True if store succeeds, False if it fails (due to no response or newer value)
         """
         nearest_node_to_addr = await self.find_nearest_nodes(key, k_nearest=self.num_replicas, exclude_self=True)
-        tasks = [asyncio.Task(self.protocol.call_store(endpoint, key, value, expiration_time))
+        tasks = [asyncio.create_task(self.protocol.call_store(endpoint, key, value, expiration_time))
                  for endpoint in nearest_node_to_addr.values()]
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         return any(done)
