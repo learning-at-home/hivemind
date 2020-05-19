@@ -70,7 +70,7 @@ class TaskPool(TaskPoolBase):
     """
 
     def __init__(self, process_func: callable, max_batch_size: int, mp_manager: mp.Manager, min_batch_size=1,
-                 timeout=None, pool_size=None, prefetch_batches=1, uid=None, daemon=True, start=False):
+                 timeout=3, pool_size=None, prefetch_batches=1, uid=None, daemon=True, start=False):
         super().__init__(process_func, daemon=daemon)
         self.min_batch_size, self.max_batch_size, self.timeout = min_batch_size, max_batch_size, timeout
         self.uid = uid or uuid.uuid4()
@@ -111,12 +111,15 @@ class TaskPool(TaskPoolBase):
                 batch = []
                 total_size = 0
             try:
+                logger.info(f'Pool {self.uid}: getting next task')
                 task = self.tasks.get(timeout=self.timeout)
             except Empty:
-                exc = TimeoutError(f"Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet.")
-                for task in batch:
-                    task.future.set_exception(exc)
-                raise exc
+                logger.warning(f"Pool {self.uid}: Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet")
+                continue
+                # exc = TimeoutError(f"Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet.")
+                # for task in batch:
+                #     task.future.set_exception(exc)
+                # raise exc
 
             task_size = self.get_task_size(task)
 
