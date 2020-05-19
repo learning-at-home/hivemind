@@ -6,6 +6,7 @@ from uuid import uuid4
 import signal
 from functools import partial
 from hivemind.utils import PytorchSerializer
+import torch
 
 
 def ask_exit(loop, executor):
@@ -14,6 +15,10 @@ def ask_exit(loop, executor):
 
 
 logger = logging.getLogger(__name__)
+
+
+def worker_init_fn():
+    torch.set_num_threads(1)
 
 
 class ConnectionHandler(mp.Process):
@@ -26,7 +31,6 @@ class ConnectionHandler(mp.Process):
     def run(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        # self.loop.set_default_executor(ThreadPoolExecutor(1000))
 
         self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'))
         for signame in signal.SIGINT, signal.SIGTERM:
