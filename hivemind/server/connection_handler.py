@@ -17,10 +17,6 @@ def ask_exit(loop, executor):
 logger = logging.getLogger(__name__)
 
 
-def worker_init_fn():
-    torch.set_num_threads(1)
-
-
 class ConnectionHandler(mp.Process):
     def __init__(self, port, conn_handler_processes, experts):
         super().__init__()
@@ -32,7 +28,7 @@ class ConnectionHandler(mp.Process):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
-        self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'), initializer=worker_init_fn)
+        self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'))
         for signame in signal.SIGINT, signal.SIGTERM:
             self.loop.add_signal_handler(
                 signame,
