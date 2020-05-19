@@ -185,10 +185,9 @@ def test_dht():
     assert len(nearest) == 0
 
     # test 6 store and get value
-    key = DHTID.generate("key")
     true_time = time.monotonic() + 1200
-    assert loop.run_until_complete(me.store(key, ["Value", 10], true_time))
-    val, expiration_time = loop.run_until_complete(me.get(key))
+    assert loop.run_until_complete(me.store("mykey", ["Value", 10], true_time))
+    val, expiration_time = loop.run_until_complete(me.get("mykey"))
     assert expiration_time == true_time, "Wrong time"
     assert val == ["Value", 10], "Wrong value"
 
@@ -199,16 +198,16 @@ def test_dht():
 
 def test_store():
     d = LocalStorage()
-    d.store("key", "val", time.monotonic() + 10)
-    assert d.get("key")[0] == "val", "Wrong value"
+    d.store(DHTID.generate("key"), "val", time.monotonic() + 10)
+    assert d.get(DHTID.generate("key"))[0] == "val", "Wrong value"
     print("Test store passed")
 
 
 def test_get_expired():
     d = LocalStorage(keep_expired=False)
-    d.store("key", "val", time.monotonic() + 1)
+    d.store(DHTID.generate("key"), "val", time.monotonic() + 1)
     time.sleep(2)
-    assert d.get("key") == (None, None), "Expired value must be deleted"
+    assert d.get(DHTID.generate("key")) == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
 
 

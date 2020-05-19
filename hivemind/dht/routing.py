@@ -262,4 +262,4 @@ class DHTID(int):
         return self.to_bytes()
 
 
-DHTValue, DHTExpiration, BinaryDHTID = Any, float, bytes  # flavour types
+DHTKey, DHTValue, DHTExpiration, BinaryDHTID = Any, Any, float, bytes  # flavour types
