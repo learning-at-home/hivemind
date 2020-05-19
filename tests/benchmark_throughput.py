@@ -4,13 +4,12 @@ import random
 import resource
 import sys
 import time
-import logging
 
 import torch
 from test_utils import layers, print_device_info
-from hivemind import find_open_port
 
 import hivemind
+from hivemind import find_open_port
 
 
 def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
@@ -38,7 +37,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
     assert expert_cls in layers.name_to_block
     port = port or find_open_port()
     max_batch_size = max_batch_size or batch_size * 4
-    num_handlers = max(1, num_handlers or num_clients // 2)
+    num_handlers = max(1, num_handlers or num_clients // 32)
     benchmarking_failed = mp.Event()
     can_start = mp.Event()
     timestamps = dict(started=time.perf_counter())
