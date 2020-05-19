@@ -55,6 +55,7 @@ class RemoteExpert(nn.Module):
             connection.conn.shutdown(socket.SHUT_WR)
             logger.info(f'{task_id} Waiting to get message back')
             self._info = PytorchSerializer.loads(connection.recv_message()[1])
+            logger.info(f'{task_id} Received')
             connection.conn.close()
         return self._info
 
@@ -81,6 +82,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         connection.conn.shutdown(socket.SHUT_WR)
         logger.info(f'{task_id} Waiting to get message back')
         rtype, msg = connection.recv_message()
+        logger.info(f'{task_id} Received')
         connection.conn.close()
         assert len(msg) != 0, "ExpertBackend.forward did not respond"
         return tuple(PytorchSerializer.loads(msg))  # flattened expert outputs
@@ -96,6 +98,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         connection.conn.shutdown(socket.SHUT_WR)
         logger.info(f'{task_id} Waiting to get message back')
         rtype, msg = connection.recv_message()
+        logger.info(f'{task_id} Received')
         connection.conn.close()
         assert len(msg) != 0, "ExpertBackend.backward did not respond"
         grad_inputs = PytorchSerializer.loads(msg)
