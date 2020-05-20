@@ -144,8 +144,9 @@ class LocalStorage(dict):
         super().__init__()
 
     def remove_outdated(self):
-        while self.expiration_heap[0][0] < time.monotonic():
-            del self[heapq.heappop(self.expiration_heap)[1]]
+        if self.expiration_heap:
+            while self.expiration_heap[0][0] < time.monotonic():
+                del self[heapq.heappop(self.expiration_heap)[1]]
 
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
