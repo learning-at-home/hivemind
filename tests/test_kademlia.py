@@ -205,17 +205,8 @@ def test_store():
 
 
 def test_get_expired():
-    d = LocalStorage(keep_expired=False)
+    d = LocalStorage()
     d.store("key", "val", time.monotonic() + 1)
     time.sleep(2)
     assert d.get("key") == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
-
-
-def test_store_maxsize():
-    d = LocalStorage(maxsize=1)
-    d.store("key1", "val1", time.monotonic() + 1)
-    d.store("key2", "val2", time.monotonic() + 2)
-    assert d.get("key1") == (None, None), "elder a value must be deleted"
-    assert d.get("key2")[0] == "val2", "Newer should be stored"
-    print("Test store maxsize passed")

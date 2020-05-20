@@ -1,5 +1,6 @@
 import asyncio
 import time
+import heapq
 from typing import Optional, List, Tuple, Dict
 from rpcudp.protocol import RPCProtocol
 
@@ -137,29 +138,33 @@ class KademliaProtocol(RPCProtocol):
 
 
 class LocalStorage(dict):
-    def __init__(self, maxsize: Optional[int] = None, keep_expired: bool = True):
+    def __init__(self, maxsize: Optional[int] = None):
         self.maxsize = maxsize or float("inf")
-        self.keep_expired = keep_expired
+        self.expiration_heap = []
         super().__init__()
+
+    def remove_outdated(self):
+        while self.expiration_heap[0][0] < time.unixtime():
+            del self[heapq.heappop(self.expiration_heap)[1]]
 
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
         :returns: True if new value was stored, False it was rejected (current value is newer)
         """
-        if len(self) >= self.maxsize:
-            del self[min(self, key=lambda k:self[k][1])]
         if key in self:
             if self[key][1] < expiration_time:
                 self[key] = (value, expiration_time)
                 return True
             return False
         self[key] = (value, expiration_time)
+        heapq.heappush(self.expiration_heap, (expiration_time, key))
+        self.remove_outdated()
         return True
 
     def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpiration]):
         """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
+        self.remove_outdated()
         if key in self:
-            if self.keep_expired or self[key][1] >= time.monotonic():
-                return self[key]
+            return self[key]
         return None, None
