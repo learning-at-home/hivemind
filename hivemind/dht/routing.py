@@ -6,8 +6,9 @@ import random
 
 import time
 import heapq
+from collections.abc import Iterable
 from itertools import chain
-from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence, Iterator, OrderedDict
+from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence, Iterator
 
 from ..utils import Endpoint, PickleSerializer
 
@@ -232,13 +233,13 @@ class DHTID(int):
         raw_uid = hashlib.sha1(source).digest()
         return cls(int(raw_uid.hex(), 16))
 
-    def xor_distance(self, other: Union[DHTID, Sequence[DHTID]]) -> Union[int, Sequence[int]]:
+    def xor_distance(self, other: Union[DHTID, Sequence[DHTID]]) -> Union[int, List[int]]:
         """
         :param other: one or multiple DHTIDs. If given multiple DHTIDs as other, this function
          will compute distance from self to each of DHTIDs in other.
         :return: a number or a list of numbers whose binary representations equal bitwise xor between DHTIDs.
         """
-        if not isinstance(other, DHTID):
+        if isinstance(other, Iterable):
             return list(map(self.xor_distance, other))  # TODO make some SIMD
         return int(self) ^ int(other)
 
@@ -261,4 +262,4 @@ class DHTID(int):
         return self.to_bytes()
 
 
-DHTValue, DHTExpiration, BinaryDHTID = Any, float, bytes  # flavour types
+DHTKey, DHTValue, DHTExpiration, BinaryDHTID = Any, Any, float, bytes  # flavour types
