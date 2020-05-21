@@ -137,7 +137,7 @@ class KademliaProtocol(RPCProtocol):
                 del self.routing_table[node_id]
 
 
-class LocalStorage(dict):
+class LocalStorage:
     def __init__(self, maxsize: Optional[int] = None):
         self.maxsize = maxsize or float("inf")
         self.data = dict()
@@ -150,7 +150,7 @@ class LocalStorage(dict):
             heap_entry = heapq.heappop(self.expiration_heap)
             key = heap_entry[1]
             if self.key_to_heap[key] != heap_entry:
-                del self[key], self.key_to_heap[key]
+                del self.data[key], self.key_to_heap[key]
 
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
