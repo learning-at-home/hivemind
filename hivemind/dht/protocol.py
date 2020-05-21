@@ -149,7 +149,8 @@ class LocalStorage:
         while self.expiration_heap and self.expiration_heap[0][0] < time.monotonic():
             heap_entry = heapq.heappop(self.expiration_heap)
             key = heap_entry[1]
-            if self.key_to_heap[key] != heap_entry:
+            print(self.key_to_heap[key], heap_entry)
+            if self.key_to_heap[key] == heap_entry:
                 del self.data[key], self.key_to_heap[key]
 
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
@@ -159,19 +160,18 @@ class LocalStorage:
         """
         self.key_to_heap[key] = (expiration_time, key)
         heapq.heappush(self.expiration_heap, (expiration_time, key))
-        self.data[key] = (value, expiration_time)
-        if key in self:
+        if key in self.data:
             if self.data[key][1] < expiration_time:
                 self.data[key] = (value, expiration_time)
                 return True
             return False
-        self[key] = (value, expiration_time)
+        self.data[key] = (value, expiration_time)
         self.remove_outdated()
         return True
 
     def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpiration]):
         """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
         self.remove_outdated()
-        if key in self:
-            return self[key]
+        if key in self.data:
+            return self.data[key]
         return None, None
