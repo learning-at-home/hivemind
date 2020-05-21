@@ -237,13 +237,13 @@ def test_get_expired_cache():
     d = LocalStorage()
     d.store_cache("key", "val", time.monotonic() + 1)
     time.sleep(2)
-    assert d.get_cached("key")[0] == (None, None), "Expired value must be deleted"
+    assert d.get_cached("key") == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
 
 
 def test_get_empty_cache():
     d = LocalStorage()
-    assert d.get_cached("key")[0] == (None, None), "Expired value must be deleted"
+    assert d.get_cached("key") == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
 
 
