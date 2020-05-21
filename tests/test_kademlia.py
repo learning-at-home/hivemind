@@ -198,23 +198,37 @@ def test_dht():
 
 def test_store():
     d = LocalStorage()
-    d.store(DHTID.generate("key"), "val", time.monotonic() + 10)
-    assert d.get(DHTID.generate("key"))[0] == "val", "Wrong value"
+    d.store("key", "val", time.monotonic() + 10)
+    assert d.get("key")[0] == "val", "Wrong value"
     print("Test store passed")
 
 
 def test_get_expired():
-    d = LocalStorage(keep_expired=False)
-    d.store(DHTID.generate("key"), "val", time.monotonic() + 1)
+    d = LocalStorage()
+    d.store("key", "val", time.monotonic() + 1)
     time.sleep(2)
-    assert d.get(DHTID.generate("key")) == (None, None), "Expired value must be deleted"
+    assert d.get("key") == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
 
 
-def test_store_maxsize():
+def test_get_empty():
+    d = LocalStorage()
+    assert d.get("key") == (None, None), "Expired value must be deleted"
+    print("Test get expired passed")
+
+
+def test_change_expiration_time():
+    d = LocalStorage()
+    d.store("key", "val1", time.monotonic() + 2)
+    d.store("key", "val2", time.monotonic()+200)
+    time.sleep(4)
+    assert d.get("key")[0] == "val2", "Value must be changed, but still kept in table"
+    print("Test change expiration time passed")
+
+
+def test_maxsize_cache():
     d = LocalStorage(maxsize=1)
-    d.store(DHTID.generate("key1"), "val1", time.monotonic() + 1)
-    d.store(DHTID.generate("key2"), "val2", time.monotonic() + 2)
-    assert d.get(DHTID.generate("key1")) == (None, None), "elder a value must be deleted"
-    assert d.get(DHTID.generate("key2"))[0] == "val2", "Newer should be stored"
-    print("Test store maxsize passed")
+    d.store("key1", "val1", time.monotonic() + 1)
+    d.store("key2", "val2", time.monotonic() + 200)
+    assert d.get("key2")[0] == "val2", "Value with bigger exp. time must be kept"
+    assert d.get("key1")[0] is None, "Value with less exp time, must be deleted"

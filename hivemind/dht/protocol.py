@@ -1,5 +1,6 @@
 import asyncio
 import time
+import heapq
 from typing import Optional, List, Tuple, Dict
 from rpcudp.protocol import RPCProtocol
 
@@ -21,11 +22,13 @@ class KademliaProtocol(RPCProtocol):
      Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, wait_timeout: float):
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int,
+                 wait_timeout: float, cache_size: Optional[int] = None):
         super().__init__(wait_timeout)
         self.node_id, self.bucket_size = node_id, bucket_size
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.storage = LocalStorage()
+        self.cache = LocalStorage(maxsize=cache_size)
 
     def rpc_ping(self, sender: Endpoint, sender_id_bytes: BinaryDHTID) -> BinaryDHTID:
         """ Some dht node wants us to add it to our routing table. """
@@ -39,20 +42,24 @@ class KademliaProtocol(RPCProtocol):
         asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
         return recipient_node_id
 
-    def rpc_store(self, sender: Endpoint, sender_id_bytes: BinaryDHTID,
-                  key_bytes: BinaryDHTID, value: DHTValue, expiration_time: DHTExpiration) -> Tuple[bool, BinaryDHTID]:
+    def rpc_store(self, sender: Endpoint, sender_id_bytes: BinaryDHTID, key_bytes: BinaryDHTID,
+                  value: DHTValue, expiration_time: DHTExpiration, in_cache: bool) -> Tuple[bool, BinaryDHTID]:
         """ Some node wants us to store this (key, value) pair """
         asyncio.ensure_future(self.update_routing_table(DHTID.from_bytes(sender_id_bytes), sender))
-        store_accepted = self.storage.store(DHTID.from_bytes(key_bytes), value, expiration_time)
+        if in_cache:
+            store_accepted = self.cache.store(DHTID.from_bytes(key_bytes), value, expiration_time)
+        else:
+            store_accepted = self.storage.store(DHTID.from_bytes(key_bytes), value, expiration_time)
         return store_accepted, bytes(self.node_id)
 
     async def call_store(self, recipient: Endpoint, key: DHTID, value: DHTValue,
-                         expiration_time: DHTExpiration) -> Optional[bool]:
+                         expiration_time: DHTExpiration, in_cache: bool = False) -> Optional[bool]:
         """
         Ask a recipient to store (key, value) pair until expiration time or update their older value
         :returns: True if value was accepted, False if it was rejected (recipient has newer value), None if no response
         """
-        responded, response = await self.store(recipient, bytes(self.node_id), bytes(key), value, expiration_time)
+        responded, response = await self.store(recipient, bytes(self.node_id), bytes(key),
+                                               value, expiration_time, in_cache)
         if responded:
             store_accepted, recipient_node_id = response[0], DHTID.from_bytes(response[1])
             asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
@@ -95,6 +102,9 @@ class KademliaProtocol(RPCProtocol):
         :returns: (value or None if we have no value, nearest neighbors, our own dht id)
         """
         maybe_value, maybe_expiration = self.storage.get(DHTID.from_bytes(key_bytes))
+        cached_value, cached_expiration = self.cache.get(DHTID.from_bytes(key_bytes))
+        if (cached_expiration or -float('inf')) > (maybe_expiration or -float('inf')):
+            maybe_value, maybe_expiration = cached_value, cached_expiration
         nearest_neighbors, my_id = self.rpc_find_node(sender, sender_id_bytes, key_bytes)
         return maybe_value, maybe_expiration, nearest_neighbors, my_id
 
@@ -136,30 +146,42 @@ class KademliaProtocol(RPCProtocol):
                 del self.routing_table[node_id]
 
 
-class LocalStorage(dict):
-    def __init__(self, maxsize: Optional[int] = None, keep_expired: bool = True):
-        self.maxsize = maxsize or float("inf")
-        self.keep_expired = keep_expired
-        super().__init__()
+class LocalStorage:
+    def __init__(self, maxsize: Optional[int] = None):
+        self.cache_size = maxsize or float("inf")
+        self.data = dict()
+        self.expiration_heap = []
+        self.key_to_heap = dict()
+
+    def remove_outdated(self):
+        while self.expiration_heap and (self.expiration_heap[0][0] < time.monotonic()
+                                        or len(self.expiration_heap) > self.cache_size):
+            heap_entry = heapq.heappop(self.expiration_heap)
+            key = heap_entry[1]
+            if self.key_to_heap[key] == heap_entry:
+                del self.data[key], self.key_to_heap[key]
 
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
         :returns: True if new value was stored, False it was rejected (current value is newer)
         """
-        if len(self) >= self.maxsize:
-            del self[min(self, key=lambda k:self[k][1])]
-        if key in self:
-            if self[key][1] < expiration_time:
-                self[key] = (value, expiration_time)
+        if expiration_time < time.monotonic():
+            return False
+        self.key_to_heap[key] = (expiration_time, key)
+        heapq.heappush(self.expiration_heap, (expiration_time, key))
+        if key in self.data:
+            if self.data[key][1] < expiration_time:
+                self.data[key] = (value, expiration_time)
                 return True
             return False
-        self[key] = (value, expiration_time)
+        self.data[key] = (value, expiration_time)
+        self.remove_outdated()
         return True
 
     def get(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpiration]):
         """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
-        if key in self:
-            if self.keep_expired or self[key][1] >= time.monotonic():
-                return self[key]
+        self.remove_outdated()
+        if key in self.data:
+            return self.data[key]
         return None, None
