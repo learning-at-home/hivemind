@@ -143,21 +143,33 @@ class LocalStorage:
         self.data = dict()
         self.expiration_heap = []
         self.key_to_heap = dict()
-        super().__init__()
+
+        self.cache_data = dict()
+        self.cache_heap = []
+        self.cache_key_to_heap = dict()
 
     def remove_outdated(self):
         while self.expiration_heap and self.expiration_heap[0][0] < time.monotonic():
             heap_entry = heapq.heappop(self.expiration_heap)
             key = heap_entry[1]
-            print(self.key_to_heap[key], heap_entry)
             if self.key_to_heap[key] == heap_entry:
                 del self.data[key], self.key_to_heap[key]
+
+    def remove_outdated_cache(self):
+        while self.expiration_heap and (self.expiration_heap[0][0] < time.monotonic()
+                                        or len(self.cache_heap) >= self.maxsize):
+            heap_entry = heapq.heappop(self.cache_heap)
+            key = heap_entry[1]
+            if self.cache_key_to_heap[key] == heap_entry:
+                del self.cache_data[key], self.cache_key_to_heap[key]
 
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
         :returns: True if new value was stored, False it was rejected (current value is newer)
         """
+        if expiration_time < time.monotonic():
+            return False
         self.key_to_heap[key] = (expiration_time, key)
         heapq.heappush(self.expiration_heap, (expiration_time, key))
         if key in self.data:
@@ -174,4 +186,24 @@ class LocalStorage:
         self.remove_outdated()
         if key in self.data:
             return self.data[key]
+        return None, None
+
+    def store_cache(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
+        if expiration_time < time.monotonic():
+            return False
+        self.cache_key_to_heap[key] = (expiration_time, key)
+        heapq.heappush(self.cache_heap, (expiration_time, key))
+        if key in self.cache_data:
+            if self.cache_data[key][1] < expiration_time:
+                self.cache_data[key] = (value, expiration_time)
+                return True
+            return False
+        self.cache_data[key] = (value, expiration_time)
+        self.remove_outdated_cache()
+        return True
+
+    def get_cached(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpiration]):
+        self.remove_outdated_cache()
+        if key in self.cache_data:
+            return self.cache_data[key]
         return None, None
