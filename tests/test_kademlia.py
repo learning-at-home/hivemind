@@ -209,3 +209,17 @@ def test_get_expired():
     time.sleep(2)
     assert d.get("key") == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
+
+
+def test_get_empty():
+    d = LocalStorage()
+    assert d.get("key") == (None, None), "Expired value must be deleted"
+    print("Test get expired passed")
+
+
+def test_change_expiration_time():
+    d = LocalStorage()
+    d.store("key", "val1", time.monotonic() + 1)
+    d.store("key", "val2", time.monotonic()+200)
+    time.sleep(2)
+    assert d.get("key") == "val2", "Value must be changed, but still kept in table"
