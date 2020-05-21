@@ -140,26 +140,32 @@ class KademliaProtocol(RPCProtocol):
 class LocalStorage(dict):
     def __init__(self, maxsize: Optional[int] = None):
         self.maxsize = maxsize or float("inf")
+        self.data = dict()
         self.expiration_heap = []
+        self.key_to_heap = dict()
         super().__init__()
 
     def remove_outdated(self):
         while self.expiration_heap and self.expiration_heap[0][0] < time.monotonic():
-            del self[heapq.heappop(self.expiration_heap)[1]]
+            heap_entry = heapq.heappop(self.expiration_heap)
+            key = heap_entry[1]
+            if self.key_to_heap[key] != heap_entry:
+                del self[key], self.key_to_heap[key]
 
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
         :returns: True if new value was stored, False it was rejected (current value is newer)
         """
+        self.key_to_heap[key] = (expiration_time, key)
+        heapq.heappush(self.expiration_heap, (expiration_time, key))
+        self.data[key] = (value, expiration_time)
         if key in self:
-            if self[key][1] < expiration_time:
-                self[key] = (value, expiration_time)
-                # TODO: change expiration_time in self.expiration_heap when it changes
+            if self.data[key][1] < expiration_time:
+                self.data[key] = (value, expiration_time)
                 return True
             return False
         self[key] = (value, expiration_time)
-        heapq.heappush(self.expiration_heap, (expiration_time, key))
         self.remove_outdated()
         return True
 
