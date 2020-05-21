@@ -219,9 +219,9 @@ def test_get_empty():
 
 def test_change_expiration_time():
     d = LocalStorage()
-    d.store("key", "val1", time.monotonic() + 1)
+    d.store("key", "val1", time.monotonic() + 2)
     d.store("key", "val2", time.monotonic()+200)
-    time.sleep(2)
+    time.sleep(4)
     assert d.get("key") == "val2", "Value must be changed, but still kept in table"
     print("Test change expiration time passed")
 
