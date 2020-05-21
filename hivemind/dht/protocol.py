@@ -157,7 +157,7 @@ class LocalStorage:
 
     def remove_outdated_cache(self):
         while self.cache_heap and (self.cache_heap[0][0] < time.monotonic()
-                                   or len(self.cache_heap) >= self.maxsize):
+                                   or len(self.cache_heap) > self.maxsize):
             heap_entry = heapq.heappop(self.cache_heap)
             key = heap_entry[1]
             if self.cache_key_to_heap[key] == heap_entry:
