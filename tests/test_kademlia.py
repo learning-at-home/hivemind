@@ -226,39 +226,9 @@ def test_change_expiration_time():
     print("Test change expiration time passed")
 
 
-def test_store_cache():
-    d = LocalStorage()
-    d.store_cache("key", "val", time.monotonic() + 10)
-    assert d.get_cached("key")[0] == "val", "Wrong value"
-    print("Test store passed")
-
-
-def test_get_expired_cache():
-    d = LocalStorage()
-    d.store_cache("key", "val", time.monotonic() + 1)
-    time.sleep(2)
-    assert d.get_cached("key") == (None, None), "Expired value must be deleted"
-    print("Test get expired passed")
-
-
-def test_get_empty_cache():
-    d = LocalStorage()
-    assert d.get_cached("key") == (None, None), "Expired value must be deleted"
-    print("Test get expired passed")
-
-
-def test_change_expiration_time_cache():
-    d = LocalStorage()
-    d.store_cache("key", "val1", time.monotonic() + 1)
-    d.store_cache("key", "val2", time.monotonic()+200)
-    time.sleep(2)
-    assert d.get_cached("key")[0] == "val2", "Value must be changed, but still kept in table"
-    print("Test change expiration time in cache passed")
-
-
 def test_maxsize_cache():
     d = LocalStorage(maxsize=1)
-    d.store_cache("key1", "val1", time.monotonic() + 1)
-    d.store_cache("key2", "val2", time.monotonic() + 200)
-    assert d.get_cached("key2")[0] == "val2", "Value with bigger exp. time must be kept"
-    assert d.get_cached("key1")[0] is None, "Value with less exp time, must be deleted"
+    d.store("key1", "val1", time.monotonic() + 1)
+    d.store("key2", "val2", time.monotonic() + 200)
+    assert d.get("key2")[0] == "val2", "Value with bigger exp. time must be kept"
+    assert d.get("key1")[0] is None, "Value with less exp time, must be deleted"
