@@ -257,7 +257,7 @@ def test_change_expiration_time_cache():
 
 
 def test_maxsize_cache():
-    d = LocalStorage(cache_size=1)
+    d = LocalStorage(maxsize=1)
     d.store_cache("key1", "val1", time.monotonic() + 1)
     d.store_cache("key2", "val2", time.monotonic() + 200)
     assert d.get_cached("key2")[0] == "val2", "Value with bigger exp. time must be kept"

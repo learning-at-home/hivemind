@@ -22,11 +22,12 @@ class KademliaProtocol(RPCProtocol):
      Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, wait_timeout: float):
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, wait_timeout: float, cache_size = None):
         super().__init__(wait_timeout)
         self.node_id, self.bucket_size = node_id, bucket_size
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.storage = LocalStorage()
+        self.cache = LocalStorage(maxsize=cache_size)
 
     def rpc_ping(self, sender: Endpoint, sender_id_bytes: BinaryDHTID) -> BinaryDHTID:
         """ Some dht node wants us to add it to our routing table. """
@@ -138,30 +139,19 @@ class KademliaProtocol(RPCProtocol):
 
 
 class LocalStorage:
-    def __init__(self, cache_size: Optional[int] = None):
-        self.cache_size = cache_size or float("inf")
+    def __init__(self, maxsize: Optional[int] = None):
+        self.cache_size = maxsize or float("inf")
         self.data = dict()
         self.expiration_heap = []
         self.key_to_heap = dict()
 
-        self.cache_data = dict()
-        self.cache_heap = []
-        self.cache_key_to_heap = dict()
-
     def remove_outdated(self):
-        while self.expiration_heap and self.expiration_heap[0][0] < time.monotonic():
+        while self.expiration_heap and (self.expiration_heap[0][0] < time.monotonic()
+                                        or len(self.expiration_heap) > self.cache_size):
             heap_entry = heapq.heappop(self.expiration_heap)
             key = heap_entry[1]
             if self.key_to_heap[key] == heap_entry:
                 del self.data[key], self.key_to_heap[key]
-
-    def remove_outdated_cache(self):
-        while self.cache_heap and (self.cache_heap[0][0] < time.monotonic()
-                                   or len(self.cache_heap) > self.cache_size):
-            heap_entry = heapq.heappop(self.cache_heap)
-            key = heap_entry[1]
-            if self.cache_key_to_heap[key] == heap_entry:
-                del self.cache_data[key], self.cache_key_to_heap[key]
 
     def store(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
@@ -186,24 +176,4 @@ class LocalStorage:
         self.remove_outdated()
         if key in self.data:
             return self.data[key]
-        return None, None
-
-    def store_cache(self, key: DHTID, value: DHTValue, expiration_time: DHTExpiration) -> bool:
-        if expiration_time < time.monotonic():
-            return False
-        self.cache_key_to_heap[key] = (expiration_time, key)
-        heapq.heappush(self.cache_heap, (expiration_time, key))
-        if key in self.cache_data:
-            if self.cache_data[key][1] < expiration_time:
-                self.cache_data[key] = (value, expiration_time)
-                return True
-            return False
-        self.cache_data[key] = (value, expiration_time)
-        self.remove_outdated_cache()
-        return True
-
-    def get_cached(self, key: DHTID) -> (Optional[DHTValue], Optional[DHTExpiration]):
-        self.remove_outdated_cache()
-        if key in self.cache_data:
-            return self.cache_data[key]
         return None, None
