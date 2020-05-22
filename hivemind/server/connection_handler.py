@@ -1,7 +1,8 @@
 import asyncio
 import multiprocessing as mp
 import signal
-from concurrent.futures import ProcessPoolExecutor
+from socket import socket
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from functools import partial
 import os
 
@@ -32,17 +33,20 @@ class ConnectionHandler(mp.Process):
 
     def run(self):
         torch.set_num_threads(1)
-        print(os.getpid())
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
         self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('forkserver'),
                                             initializer=worker_init_fn)
+        self.loop.set_default_executor(ThreadPoolExecutor(2 * self.conn_handler_processes))
+        sock = socket()
+        sock.bind(self.addr)
+        sock.setblocking(False)
         for signame in signal.SIGINT, signal.SIGTERM:
             self.loop.add_signal_handler(
                 signame,
                 partial(ask_exit, self.loop, self.executor))
-        start_server_fn = asyncio.start_server(partial(handle_connection, pool=self.executor, experts=self.experts), *self.addr)
+        start_server_fn = asyncio.start_server(partial(handle_connection, pool=self.executor, experts=self.experts), sock=sock)
         self.loop.run_until_complete(start_server_fn)
         self.ready.set()
         self.loop.run_forever()
