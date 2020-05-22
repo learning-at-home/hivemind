@@ -3,6 +3,7 @@ import multiprocessing as mp
 import signal
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
+import os
 
 import torch
 
@@ -31,6 +32,7 @@ class ConnectionHandler(mp.Process):
 
     def run(self):
         torch.set_num_threads(1)
+        print(os.getpid())
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
@@ -40,19 +42,16 @@ class ConnectionHandler(mp.Process):
             self.loop.add_signal_handler(
                 signame,
                 partial(ask_exit, self.loop, self.executor))
-        just_read = lambda reader, writer: just_read_fn(reader, writer, self.executor, self.experts)
-        start_server_fn = asyncio.start_server(just_read, *self.addr)
+        start_server_fn = asyncio.start_server(partial(handle_connection, pool=self.executor, experts=self.experts), *self.addr)
         self.loop.run_until_complete(start_server_fn)
         self.ready.set()
         self.loop.run_forever()
 
 
-async def just_read_fn(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, pool, experts):
+async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, pool, experts):
     logger.debug(f'Receiving message from the connection')
     data = await reader.read()
     header = data[:4].decode()
-    length = int.from_bytes(data[4:12], byteorder='big')
-    assert len(data) - 12 == length
     loop = asyncio.get_running_loop()
     logger.debug(f'Message received, deserializing')
     task_id, *payload = await loop.run_in_executor(pool, PytorchSerializer.loads, data[12:])
