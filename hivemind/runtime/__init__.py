@@ -1,4 +1,3 @@
-import logging
 import multiprocessing as mp
 import threading
 from itertools import chain
@@ -8,10 +7,11 @@ from typing import Dict
 import torch
 from prefetch_generator import BackgroundGenerator
 
+from hivemind.utils import get_logger
 from .expert_backend import ExpertBackend
 from .task_pool import TaskPool, TaskPoolBase
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Runtime(threading.Thread):

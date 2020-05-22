@@ -1,15 +1,14 @@
-from typing import Tuple, Optional
 import socket
+from typing import Tuple, Optional
 from uuid import uuid4
-import logging
 
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-from ..utils import nested_flatten, DUMMY, PytorchSerializer, nested_pack, nested_compare, Connection
+from hivemind.utils import get_logger, nested_flatten, DUMMY, PytorchSerializer, nested_pack, nested_compare, Connection
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RemoteExpert(nn.Module):

@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import multiprocessing as mp
 import signal
 from concurrent.futures import ProcessPoolExecutor
@@ -7,7 +6,7 @@ from functools import partial
 
 import torch
 
-from hivemind.utils import PytorchSerializer
+from hivemind.utils import PytorchSerializer, get_logger
 
 
 def ask_exit(loop, executor):
@@ -15,7 +14,7 @@ def ask_exit(loop, executor):
     loop.stop()
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def worker_init_fn():
@@ -35,7 +34,8 @@ class ConnectionHandler(mp.Process):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
-        self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('spawn'), initializer=worker_init_fn)
+        self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('forkserver'),
+                                            initializer=worker_init_fn)
         for signame in signal.SIGINT, signal.SIGTERM:
             self.loop.add_signal_handler(
                 signame,

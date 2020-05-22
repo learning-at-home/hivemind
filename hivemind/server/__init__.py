@@ -3,7 +3,6 @@ import multiprocessing as mp
 import threading
 from collections import namedtuple
 from typing import Dict, Optional
-import logging
 
 from .connection_handler import ConnectionHandler
 from .dht_handler import DHTHandlerThread
@@ -12,8 +11,6 @@ from ..runtime import Runtime, ExpertBackend
 from hivemind.runtime.task_pool import RemotePoolInterface
 
 ExpertData = namedtuple('ExpertData', ('forward_pool', 'backward_pool', 'metadata'))
-
-logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
 class Server(threading.Thread):

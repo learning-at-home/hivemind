@@ -1,10 +1,9 @@
 """
 Task pool is responsible for receiving tasks and grouping them together for processing (but not processing itself)
 """
+import asyncio
 import ctypes
 import multiprocessing as mp
-import os
-import asyncio
 import threading
 import time
 import uuid
@@ -12,15 +11,14 @@ from collections import namedtuple
 from concurrent.futures import Future
 from queue import Empty
 from typing import List, Tuple, Dict, Any, Generator
-import logging
 
 import torch
 
-from ..utils import SharedFuture
+from hivemind.utils import SharedFuture, get_logger
 
 Task = namedtuple("Task", ("future", "args"))
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TaskPoolBase(mp.context.ForkProcess):
@@ -78,7 +76,7 @@ class TaskPool(TaskPoolBase):
 
         # interaction with ConnectionHandlers
         self.tasks = mp_manager.Queue(maxsize=pool_size or 0)
-        self.undispatched_task_timestamps = mp_manager.Queue()
+        self.undispatched_task_timestamps = mp.SimpleQueue()
 
         # interaction with Runtime
         self.batch_receiver, self.batch_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain batch inputs
