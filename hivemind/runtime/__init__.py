@@ -61,7 +61,7 @@ class Runtime(threading.Thread):
                 self.ready.set()
                 for pool, batch_index, batch in BackgroundGenerator(
                         self.iterate_minibatches_from_pools(), self.prefetch_batches):
-                    logger.info(f'Obtained batch size {batch[0].size(0)}, processing')
+                    logger.debug(f'Obtained batch size {batch[0].size(0)}, processing')
                     batch_sizes.append(batch[0].size(0))
                     outputs = pool.process_func(*batch)
                     logger.debug('Processed batch, sending to pools')
