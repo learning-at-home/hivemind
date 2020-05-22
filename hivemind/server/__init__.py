@@ -71,6 +71,7 @@ class Server(threading.Thread):
             dht_handler_thread.start()
 
         self.conn_handler_process.start()
+        self.conn_handler_process.ready.wait()
 
         self.runtime.run()
 
