@@ -36,41 +36,42 @@ class ConnectionHandler(mp.Process):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
-        self.executor = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('forkserver'),
-                                            initializer=worker_init_fn)
-        self.loop.set_default_executor(ThreadPoolExecutor(2 * self.conn_handler_processes))
+        process_pool = ProcessPoolExecutor(self.conn_handler_processes, mp_context=mp.get_context('forkserver'),
+                                           initializer=worker_init_fn)
+        thread_ppol = ThreadPoolExecutor(self.conn_handler_processes * 2)
         sock = socket()
         sock.bind(self.addr)
         sock.setblocking(False)
         for signame in signal.SIGINT, signal.SIGTERM:
             self.loop.add_signal_handler(
                 signame,
-                partial(ask_exit, self.loop, self.executor))
-        start_server_fn = asyncio.start_server(partial(handle_connection, pool=self.executor, experts=self.experts), sock=sock)
+                partial(ask_exit, self.loop, process_pool))
+        handle_connection_coro = partial(handle_connection, process_pool=process_pool, thread_pool=thread_ppol, experts=self.experts)
+        start_server_fn = asyncio.start_server(handle_connection_coro, sock=sock)
         self.loop.run_until_complete(start_server_fn)
         self.ready.set()
         self.loop.run_forever()
 
 
-async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, pool, experts):
+async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, process_pool, thread_pool, experts):
     logger.debug(f'Receiving message from the connection')
     data = await reader.read()
     header = data[:4].decode()
     loop = asyncio.get_running_loop()
     logger.debug(f'Message received, deserializing')
-    task_id, *payload = await loop.run_in_executor(pool, PytorchSerializer.loads, data[12:])
+    task_id, *payload = await loop.run_in_executor(process_pool, PytorchSerializer.loads, data[12:])
     logger.debug(f'{task_id} Payload deserialized, processing')
 
     if header == 'fwd_':
         uid, inputs = payload
         logger.debug(f'{task_id} Submitting task')
-        future = await experts[uid].forward_pool.submit_task(*inputs)
+        future = await experts[uid].forward_pool.submit_task(inputs, executor=thread_pool)
         logger.debug(f'{task_id} Awaiting result from backend')
         response = await future.result()
     elif header == 'bwd_':
         uid, inputs_and_grad_outputs = payload
         logger.debug(f'{task_id} Submitting task')
-        future = await experts[uid].backward_pool.submit_task(*inputs_and_grad_outputs)
+        future = await experts[uid].backward_pool.submit_task(inputs_and_grad_outputs, executor=thread_pool)
         logger.debug(f'{task_id} Awaiting result from backend')
         response = await future.result()
     elif header == 'info':
@@ -80,7 +81,7 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
         raise NotImplementedError(f"Unknown header: {header}")
 
     logger.debug(f'{task_id} Serializing result')
-    raw_response = await loop.run_in_executor(pool, PytorchSerializer.dumps, response)
+    raw_response = await loop.run_in_executor(process_pool, PytorchSerializer.dumps, response)
     logger.debug(f'{task_id} Sending the result')
 
     writer.write('rest'.encode())
