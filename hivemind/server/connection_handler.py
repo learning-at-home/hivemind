@@ -50,33 +50,30 @@ async def read_message(reader: asyncio.StreamReader):
 
 
 async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, thread_pool, experts):
-    # logger.debug(f'Receiving message from the connection')
-
     header, destination, payload = await read_message(reader)
-    # logger.debug(f'Message received, deserializing')
-    # task_id = str(uuid4())[:4]
+    task_id = str(uuid4())[:4]
 
     if header == 'fwd_':
-        # logger.debug(f'{task_id} Submitting task')
+        logger.debug(f'{task_id} Submitting task')
         future = await experts[destination].forward_pool.submit_task(payload, executor=thread_pool)
-        # logger.debug(f'{task_id} Awaiting result from backend')
+        logger.debug(f'{task_id} Awaiting result from backend')
         response = await future.result()
     elif header == 'bwd_':
-        # logger.debug(f'{task_id} Submitting task')
+        logger.debug(f'{task_id} Submitting task')
         future = await experts[destination].backward_pool.submit_task(payload, executor=thread_pool)
-        # logger.debug(f'{task_id} Awaiting result from backend')
+        logger.debug(f'{task_id} Awaiting result from backend')
         response = await future.result()
     elif header == 'info':
         response = experts[destination].metadata
     else:
         raise NotImplementedError(f"Unknown header: {header}")
 
-    # logger.debug(f'{task_id} Sending the result')
+    logger.debug(f'{task_id} Sending the result')
     payload = ('rest'.encode()
                + int(0).to_bytes(DESTINATION_LENGTH_SIZE, byteorder='big')
                + len(response).to_bytes(PAYLOAD_LENGTH_SIZE, byteorder='big')
                + response)
 
     writer.write(payload)
-    # await writer.drain()
-    # logger.debug(f'{task_id} Result sent')
+    await writer.drain()
+    logger.debug(f'{task_id} Result sent')
