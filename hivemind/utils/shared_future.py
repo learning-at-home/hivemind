@@ -32,6 +32,7 @@ class SharedFuture(Future):
                 raise TimeoutError()
             try:
                 status, payload = await loop.run_in_executor(None, self.connection.recv)
+                loop.run_in_executor(None, self.connection.close)
             except BrokenPipeError as e:
                 status, payload = self.STATE_EXCEPTION, e
 
@@ -51,6 +52,7 @@ class SharedFuture(Future):
         try:
             self.state, self._result = self.STATE_FINISHED, result
             self.connection.send((self.STATE_FINISHED, result))
+            self.connection.close()
             return True
         except BrokenPipeError:
             return False
@@ -59,6 +61,7 @@ class SharedFuture(Future):
         try:
             self.state, self._exception = self.STATE_EXCEPTION, exception
             self.connection.send((self.STATE_EXCEPTION, exception))
+            self.connection.close()
             return True
         except BrokenPipeError:
             return False

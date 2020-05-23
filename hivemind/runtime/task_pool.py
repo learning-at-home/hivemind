@@ -14,7 +14,7 @@ from typing import List, Tuple, Dict, Any, Generator
 
 import torch
 
-from hivemind.utils import SharedFuture, get_logger
+from hivemind.utils import SharedFuture, get_logger, PytorchSerializer
 
 Task = namedtuple("Task", ("future", "args"))
 
@@ -110,7 +110,8 @@ class TaskPool(TaskPoolBase):
                 total_size = 0
             try:
                 logger.debug(f'{self.uid}: getting next task')
-                task = self.tasks.get(timeout=self.timeout)
+                task_binary = self.tasks.get(timeout=self.timeout)
+                task = Task(task_binary.future, PytorchSerializer.loads(task_binary.args))
             except Empty:
                 logger.warning(f"{self.uid}: timeout reached but batch doesn't contain >={self.min_batch_size} elements")
                 continue
@@ -137,7 +138,6 @@ class TaskPool(TaskPoolBase):
 
     def run(self, *args, **kwargs):
         logger.debug(f'Starting pool {self.uid}')
-        torch.set_num_threads(1)
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
                                          name=f'{self.uid}-pool_output_loop')
@@ -198,7 +198,7 @@ class TaskPool(TaskPoolBase):
 
             # dispatch results to futures
             for task, task_outputs in zip(batch_tasks, outputs_per_task):
-                task.future.set_result(tuple(task_outputs))
+                task.future.set_result(PytorchSerializer.dumps(tuple(task_outputs)))
 
     @property
     def empty(self):

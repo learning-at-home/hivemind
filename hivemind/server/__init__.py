@@ -9,6 +9,7 @@ from .dht_handler import DHTHandlerThread
 from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend
 from hivemind.runtime.task_pool import RemotePoolInterface
+from hivemind.utils import PytorchSerializer
 
 ExpertData = namedtuple('ExpertData', ('forward_pool', 'backward_pool', 'metadata'))
 

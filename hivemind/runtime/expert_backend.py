@@ -1,11 +1,11 @@
-from typing import Dict, Sequence, Any, Tuple, Union
 from multiprocessing import Manager
+from typing import Dict, Sequence, Any, Tuple, Union
 
 import torch
 from torch import nn
 
 from .task_pool import TaskPool
-from ..utils import nested_flatten, nested_pack, nested_compare, BatchTensorProto, DUMMY_BATCH_SIZE, nested_map
+from ..utils import nested_flatten, nested_pack, nested_compare, BatchTensorProto, DUMMY_BATCH_SIZE, nested_map, PytorchSerializer
 
 
 class ExpertBackend(nn.Module):
@@ -132,8 +132,8 @@ class ExpertBackend(nn.Module):
 
     def get_info(self) -> Dict[str, Any]:
         """ Get expert parameters and stats. Used by RemoteExpert to check shapes and for DMoE orchestration. """
-        return dict(forward_schema=self.forward_schema, outputs_schema=self.outputs_schema,
-                    keyword_names=tuple(self.kwargs_schema.keys()))
+        return PytorchSerializer.dumps(dict(forward_schema=self.forward_schema, outputs_schema=self.outputs_schema,
+                                            keyword_names=tuple(self.kwargs_schema.keys())))
 
     def get_pools(self) -> Sequence[TaskPool]:
         """ return all pools that should be processed by ``Runtime`` """

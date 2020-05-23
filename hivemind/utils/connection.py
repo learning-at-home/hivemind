@@ -1,7 +1,10 @@
 import socket
 from contextlib import AbstractContextManager, closing
 from typing import Tuple
-import asyncio
+
+HEADER_SIZE = 4  # number of characters in all headers
+DESTINATION_LENGTH_SIZE = 4
+PAYLOAD_LENGTH_SIZE = 8  # number of bytes used to encode payload length
 
 Hostname, Port = str, int  # flavour types
 Endpoint = Tuple[Hostname, Port]  # https://networkengineering.stackexchange.com/a/9435
@@ -9,9 +12,6 @@ LOCALHOST = '127.0.0.1'
 
 
 class Connection(AbstractContextManager):
-    header_size = 4  # number of characters in all headers
-    payload_length_size = 8  # number of bytes used to encode payload length
-
     __slots__ = ('conn', 'addr')
 
     def __init__(self, conn: socket, addr: Endpoint):
@@ -24,17 +24,23 @@ class Connection(AbstractContextManager):
         sock.connect(addr)
         return Connection(sock, addr)
 
-    def send_raw(self, header: str, content: bytes):
-        self.conn.send(header.encode())
-        self.conn.send(len(content).to_bytes(self.payload_length_size, byteorder='big'))
-
+    def send_raw(self, header: str, destination: str, content: bytes):
+        assert len(header) == HEADER_SIZE
+        self.conn.sendall(header.encode())
+        self.conn.sendall(len(destination).to_bytes(DESTINATION_LENGTH_SIZE, byteorder='big'))
+        self.conn.sendall(destination.encode())
+        self.conn.sendall(len(content).to_bytes(PAYLOAD_LENGTH_SIZE, byteorder='big'))
         self.conn.sendall(content)
 
     def recv_header(self) -> str:
-        return self.conn.recv(self.header_size).decode()
+        return self.conn.recv(HEADER_SIZE).decode()
+
+    def recv_destination(self) -> str:
+        length = int.from_bytes(self.conn.recv(DESTINATION_LENGTH_SIZE), byteorder='big')
+        return self.conn.recv(length).decode()
 
     def recv_raw(self, max_package: int = 2048) -> bytes:
-        length = int.from_bytes(self.conn.recv(self.payload_length_size), byteorder='big')
+        length = int.from_bytes(self.conn.recv(PAYLOAD_LENGTH_SIZE), byteorder='big')
         chunks = []
         bytes_recd = 0
         while bytes_recd < length:
@@ -47,8 +53,8 @@ class Connection(AbstractContextManager):
         assert len(ret) == length
         return ret
 
-    def recv_message(self) -> Tuple[str, bytes]:
-        return self.recv_header(), self.recv_raw()
+    def recv_message(self) -> Tuple[str, str, bytes]:
+        return self.recv_header(), self.recv_destination(), self.recv_raw()
 
     def __exit__(self, *exc_info):
         self.conn.close()

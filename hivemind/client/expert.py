@@ -1,6 +1,5 @@
 import socket
 from typing import Tuple, Optional
-from uuid import uuid4
 
 import torch
 import torch.nn as nn
@@ -48,13 +47,9 @@ class RemoteExpert(nn.Module):
     def info(self):
         if self._info is None:
             connection = Connection.create(self.host, self.port)
-            task_id = str(uuid4())[:4]
-            logger.debug(f'{task_id} Sending')
-            connection.send_raw('info', PytorchSerializer.dumps((task_id, self.uid)))
+            connection.send_raw('info', self.uid, PytorchSerializer.dumps(()))
             connection.conn.shutdown(socket.SHUT_WR)
-            logger.debug(f'{task_id} Waiting to get message back')
-            self._info = PytorchSerializer.loads(connection.recv_message()[1])
-            logger.debug(f'{task_id} Received')
+            self._info = PytorchSerializer.loads(connection.recv_message()[2])
             connection.conn.close()
         return self._info
 
@@ -75,18 +70,12 @@ class _RemoteModuleCall(torch.autograd.Function):
 
         connection = Connection.create(ctx.host, ctx.port)
 
-        task_id = str(uuid4())[:4]
-        logger.debug(f'{task_id} Sending')
-        connection.send_raw('fwd_', PytorchSerializer.dumps((task_id, ctx.uid, inputs)))
+        connection.send_raw('fwd_', ctx.uid, PytorchSerializer.dumps(inputs))
         connection.conn.shutdown(socket.SHUT_WR)
-        logger.debug(f'{task_id} Waiting to get message back')
-        rtype, msg = connection.recv_message()
-        logger.debug(f'{task_id} Received')
+        rtype, dest, msg = connection.recv_message()
         connection.conn.close()
-        logger.debug(f'{task_id} Connection closed')
         assert len(msg) != 0, "ExpertBackend.forward did not respond"
         outputs = tuple(PytorchSerializer.loads(msg))  # flattened expert outputs
-        logger.debug(f'{task_id} Deserialized')
         return outputs
 
     @staticmethod
@@ -94,16 +83,11 @@ class _RemoteModuleCall(torch.autograd.Function):
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
         connection = Connection.create(ctx.host, ctx.port)
         payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
-        task_id = str(uuid4())[:4]
-        logger.debug(f'{task_id} Sending')
-        connection.send_raw('bwd_', PytorchSerializer.dumps((task_id, ctx.uid, payload)))
+
+        connection.send_raw('bwd_', ctx.uid, PytorchSerializer.dumps(payload))
         connection.conn.shutdown(socket.SHUT_WR)
-        logger.debug(f'{task_id} Waiting to get message back')
-        rtype, msg = connection.recv_message()
-        logger.debug(f'{task_id} Received')
+        rtype, dest, msg = connection.recv_message()
         connection.conn.close()
-        logger.debug(f'{task_id} Connection closed')
         assert len(msg) != 0, "ExpertBackend.backward did not respond"
         grad_inputs = PytorchSerializer.loads(msg)
-        logger.debug(f'{task_id} Deserialized')
         return (DUMMY, None, None, None, *grad_inputs)
