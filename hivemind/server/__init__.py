@@ -1,15 +1,13 @@
 import multiprocessing as mp
-
 import threading
 from collections import namedtuple
 from typing import Dict, Optional
 
+from hivemind.runtime.task_pool import RemotePoolInterface
 from .connection_handler import ConnectionHandler
 from .dht_handler import DHTHandlerThread
 from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend
-from hivemind.runtime.task_pool import RemotePoolInterface
-from hivemind.utils import PytorchSerializer
 
 ExpertData = namedtuple('ExpertData', ('forward_pool', 'backward_pool', 'metadata'))
 
@@ -50,7 +48,7 @@ class Server(threading.Thread):
                                            RemotePoolInterface(expert.backward_pool), expert.get_info())
                            for uid, expert in self.experts.items()}
 
-        self.conn_handler_process = ConnectionHandler(self.port, self.conn_handler_processes, data_for_expert)
+        self.conn_handler_process = ConnectionHandler(self.addr, self.port, self.conn_handler_processes, data_for_expert)
 
         if start:
             self.run_in_background(await_ready=True)

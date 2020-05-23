@@ -23,18 +23,22 @@ class SharedFuture(Future):
         connection1, connection2 = mp.Pipe()
         return cls(connection1), cls(connection2)
 
-    async def _recv(self, timeout):
+    def poll_and_recv(self, timeout):
+        available = self.connection.poll(timeout)
+        if not available:
+            raise TimeoutError
+        try:
+            status, payload = self.connection.recv()
+            self.connection.close()
+        except BrokenPipeError as e:
+            status, payload = self.STATE_EXCEPTION, e
+        return status, payload
+
+    async def _recv(self, timeout, executor):
         loop = asyncio.get_running_loop()
 
         if self.state in (self.STATE_PENDING, self.STATE_RUNNING):
-            available = await loop.run_in_executor(None, self.connection.poll, timeout)
-            if not available:
-                raise TimeoutError()
-            try:
-                status, payload = await loop.run_in_executor(None, self.connection.recv)
-                loop.run_in_executor(None, self.connection.close)
-            except BrokenPipeError as e:
-                status, payload = self.STATE_EXCEPTION, e
+            status, payload = await loop.run_in_executor(executor, self.poll_and_recv, timeout)
 
             assert status in self.STATES
             self.state = status
@@ -72,8 +76,8 @@ class SharedFuture(Future):
     def cancel(self):
         raise NotImplementedError()
 
-    async def result(self, timeout=None):
-        await self._recv(timeout)
+    async def result(self, timeout=None, executor=None):
+        await self._recv(timeout, executor)
         if self.state == self.STATE_FINISHED:
             return self._result
         elif self.state == self.STATE_EXCEPTION:

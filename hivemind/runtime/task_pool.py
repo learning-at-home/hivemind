@@ -199,7 +199,7 @@ class TaskPool(TaskPoolBase):
 
             # dispatch results to futures
             for task, task_outputs in zip(batch_tasks, outputs_per_task):
-                task.future.set_result(PytorchSerializer.dumps(tuple(task_outputs)))
+                task.future.set_result(PytorchSerializer.dumps(task_outputs))
 
     @property
     def empty(self):
@@ -236,6 +236,9 @@ class RemotePoolInterface:
         future1, future2 = SharedFuture.make_pair()
         task = Task(future1, args)
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(executor, self.tasks.put, task)
-        await loop.run_in_executor(executor, self.undispatched_task_timestamps.put, time.time())
+        await loop.run_in_executor(executor, self.put_task_with_time, task)
         return future2
+
+    def put_task_with_time(self, task):
+        self.tasks.put(task)
+        self.undispatched_task_timestamps.put(time.time())
