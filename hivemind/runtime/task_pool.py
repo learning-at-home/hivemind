@@ -68,7 +68,7 @@ class TaskPool(TaskPoolBase):
     """
 
     def __init__(self, process_func: callable, max_batch_size: int, mp_manager: mp.Manager, min_batch_size=1,
-                 timeout=10, pool_size=None, prefetch_batches=1, uid=None, daemon=True, start=False):
+                 timeout=None, pool_size=None, prefetch_batches=1, uid=None, daemon=True, start=False):
         super().__init__(process_func, daemon=daemon)
         self.min_batch_size, self.max_batch_size, self.timeout = min_batch_size, max_batch_size, timeout
         self.uid = uid or uuid.uuid4()
@@ -137,6 +137,7 @@ class TaskPool(TaskPoolBase):
                 total_size += task_size
 
     def run(self, *args, **kwargs):
+        torch.set_num_threads(1)
         logger.debug(f'Starting pool {self.uid}')
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
