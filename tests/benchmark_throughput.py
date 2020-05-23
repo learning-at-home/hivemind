@@ -29,15 +29,15 @@ def client_process(can_start, benchmarking_failed, port, num_experts, batch_size
         raise e
 
 
-def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=256, num_batches_per_client=16,
-                         expert_cls='ffn', hid_dim=1024, batch_size=32, max_batch_size=2048, backprop=True,
+def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num_batches_per_client=16,
+                         expert_cls='ffn', hid_dim=1024, batch_size=2048, max_batch_size=None, backprop=True,
                          device=None, port=None):
     assert not hasattr(torch.cuda, 'is_initialized') or not torch.cuda.is_initialized() \
            or torch.device(device) == torch.device('cpu')
     assert expert_cls in layers.name_to_block
     port = port or find_open_port()
     max_batch_size = max_batch_size or batch_size * 4
-    num_handlers = max(1, num_handlers or num_clients // 32)
+    num_handlers = max(1, num_handlers or num_clients // 2)
     benchmarking_failed = mp.Event()
     can_start = mp.Event()
     timestamps = dict(started=time.perf_counter())
