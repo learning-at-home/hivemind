@@ -13,9 +13,11 @@ import time
 import warnings
 from typing import Tuple, List, Optional
 
+from .node import DHTNode, DHTID, DHTExpiration
+from .routing import get_dht_time
+
 from ..client import RemoteExpert
 from ..utils import SharedFuture, find_open_port, Hostname, Port, run_in_background
-from .node import DHTNode, DHTID, DHTExpiration
 
 
 class DHT(mp.Process):
@@ -76,7 +78,7 @@ class DHT(mp.Process):
     def get_experts(self, uids: List[str], expiration=None) -> List[Optional[RemoteExpert]]:
         """
         :param uids: find experts with these ids from across the DHT
-        :param expiration: returns experts that expire no sooner than this (based on time.time()), default = now
+        :param expiration: returns experts that expire no sooner than this (based on get_dht_time), default = now
         :returns: a list of [RemoteExpert if found else None]
         """
         future, _future = SharedFuture.make_pair()
@@ -85,7 +87,7 @@ class DHT(mp.Process):
 
     def _get_experts(self, uids: List[str], expiration: Optional[DHTExpiration], future: SharedFuture):
         loop = asyncio.get_event_loop()
-        expiration = expiration or time.monotonic()  # TODO time.time()
+        expiration = expiration or get_dht_time()
 
         lookup_futures = [loop.create_task(self.node.get(self.make_key('expert', uid), expiration)) for uid in uids]
 
@@ -113,7 +115,7 @@ class DHT(mp.Process):
     def _declare_experts(self, uids: List[str], addr: str, port: int, done_event: Optional[mp.Event]):
         assert self.node is not None, "This method should only be accessed from inside .run method"
         loop = asyncio.get_event_loop()
-        expiration_time = time.monotonic() + self.EXPIRATION
+        expiration_time = get_dht_time() + self.EXPIRATION
         unique_prefixes = set()
         futures = []
 

@@ -1,5 +1,4 @@
 import asyncio
-import time
 from collections import OrderedDict
 from functools import partial
 from random import random
@@ -7,7 +6,7 @@ from typing import Optional, Tuple, List, Dict
 from warnings import warn
 
 from .protocol import KademliaProtocol
-from .routing import DHTID, DHTValue, DHTExpiration, DHTKey
+from .routing import DHTID, DHTValue, DHTExpiration, DHTKey, get_dht_time
 from .search import beam_search
 from ..utils import find_open_port, Endpoint, Hostname, Port, LOCALHOST
 
@@ -35,14 +34,14 @@ class DHTNode:
      Such metadata does not require maintenance such as ensuring at least k hosts have it or (de)serialization in case
      of node shutdown. Instead, DHTNode is designed to reduce the latency of looking up such data.
 
-    Every (key, value) pair in this DHT has expiration_time - float number computed wth time.monotonic().
+    Every (key, value) pair in this DHT has expiration_time - float number computed as get_dht_time(), default: UnixTime
     Informally, dht nodes always prefer values with higher expiration_time and may delete any value past its expiration.
 
     Formally, DHTNode follows this contract:
       - when asked to store(key, value, expiration_time), a node must store (key, value) at least until expiration_time
        unless it already stores that key with greater or equal expiration_time - if so, node must keep the previous key
       - when asked to get(key), a node must return the value with highest expiration time IF that time has not come yet
-       if expiration time is greater than current time.monotonic(), DHTNode *may* return None
+       if expiration time is greater than current get_dht_time(), DHTNode *may* return None
     """
 
     def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
@@ -66,11 +65,11 @@ class DHTNode:
         if initial_peers:
             # bootstrap part 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
-            began_bootstrap_time = time.monotonic()
+            began_bootstrap_time = get_dht_time()
             ping_tasks = map(self.protocol.call_ping, initial_peers)
             finished_tasks, remaining_tasks = loop.run_until_complete(
                 asyncio.wait(ping_tasks, timeout=wait_timeout, return_when=asyncio.FIRST_COMPLETED))
-            time_to_first_response = time.monotonic() - began_bootstrap_time
+            time_to_first_response = get_dht_time() - began_bootstrap_time
             # bootstrap part 2: gather all peers who responded within bootstrap_timeout, but at least one peer
             if remaining_tasks:
                 finished_in_time, stragglers = loop.run_until_complete(
@@ -138,7 +137,7 @@ class DHTNode:
         :note: in order to check if get returned a value, please check (expiration_time is None)
         """
         key_id = DHTID.generate(key)
-        sufficient_expiration_time = sufficient_expiration_time or time.monotonic()
+        sufficient_expiration_time = sufficient_expiration_time or get_dht_time()
         beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
         latest_value, latest_expiration = None, -float('inf')
         node_to_addr, nodes_checked_for_value = dict(), set()
@@ -190,7 +189,7 @@ class DHTNode:
         return (latest_value, latest_expiration) if latest_expiration != -float('inf') else (None, None)
 
     async def refresh_stale_buckets(self):
-        staleness_threshold = time.monotonic() - self.staleness_timeout
+        staleness_threshold = get_dht_time() - self.staleness_timeout
         stale_buckets = [bucket for bucket in self.protocol.routing_table.buckets
                          if bucket.last_updated < staleness_threshold]
 

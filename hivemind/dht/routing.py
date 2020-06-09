@@ -137,7 +137,7 @@ class KBucket:
         self.nodes_to_addr: Dict[DHTID, Endpoint] = {}
         self.replacement_nodes: Dict[DHTID, Endpoint] = {}
         self.nodes_requested_for_ping: Set[DHTID] = set()
-        self.last_updated = time.monotonic()
+        self.last_updated = get_dht_time()
 
     def has_in_range(self, node_id: DHTID):
         """ Check if node_id is between this bucket's lower and upper bounds """
@@ -153,7 +153,7 @@ class KBucket:
         """
         if node_id in self.nodes_requested_for_ping:
             self.nodes_requested_for_ping.remove(node_id)
-        self.last_updated = time.monotonic()
+        self.last_updated = get_dht_time()
         if node_id in self.nodes_to_addr:
             del self.nodes_to_addr[node_id]
             self.nodes_to_addr[node_id] = addr
@@ -263,3 +263,4 @@ class DHTID(int):
 
 
 DHTKey, DHTValue, DHTExpiration, BinaryDHTID = Any, Any, float, bytes  # flavour types
+get_dht_time = time.time  # time used by all dht functionality. You can replace this with any infrastructure-wide time

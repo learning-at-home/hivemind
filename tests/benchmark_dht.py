@@ -3,14 +3,12 @@ import time
 import asyncio
 import multiprocessing as mp
 import random
-import heapq
-from functools import partial
-from typing import Optional
-import numpy as np
 
 import hivemind
 from typing import List, Dict
-from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, KademliaProtocol
+
+from hivemind import get_dht_time
+from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST
 
 
 def run_benchmark_node(node_id, port, peers, ready: mp.Event, request_perod,
@@ -23,20 +21,20 @@ def run_benchmark_node(node_id, port, peers, ready: mp.Event, request_perod,
     await_forever = hivemind.run_forever(asyncio.get_event_loop().run_forever)
     ready.set()
     dht_loaded.wait()
-    start = time.monotonic()
-    while time.monotonic() < start + time_to_test:
+    start = time.perf_counter()
+    while time.perf_counter() < start + time_to_test:
         query_id = DHTID.generate()
         store_value = random.randint(0, 256)
 
-        store_time = time.monotonic()
+        store_time = time.perf_counter()
         success_store = asyncio.run_coroutine_threadsafe(
-            node.store(query_id, store_value, store_time + expiration_time), loop).result()
-        store_time = time.monotonic() - store_time
+            node.store(query_id, store_value, get_dht_time() + expiration_time), loop).result()
+        store_time = time.perf_counter() - store_time
         if success_store:
             time.sleep(wait_before_read)
-            get_time = time.monotonic()
+            get_time = time.perf_counter()
             get_value, get_time_expiration = asyncio.run_coroutine_threadsafe(node.get(query_id), loop).result()
-            get_time = time.monotonic() - get_time
+            get_time = time.perf_counter() - get_time
             success_get = (get_value == store_value)
             statistics.put((success_store, store_time, success_get, get_time))
         else:

@@ -9,6 +9,8 @@ import numpy as np
 
 import hivemind
 from typing import List, Dict
+
+from hivemind import get_dht_time
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, KademliaProtocol
 from hivemind.dht.protocol import LocalStorage
 
@@ -50,7 +52,7 @@ def test_kademlia_protocol():
 
         assert loop.run_until_complete(protocol.call_ping(('127.0.0.1', peer1_port))) == peer1_id
 
-        key, value, expiration = DHTID.generate(), [123, {'ololo': 'pyshpysh'}], time.monotonic() + 1e3
+        key, value, expiration = DHTID.generate(), [123, {'ololo': 'pyshpysh'}], get_dht_time() + 1e3
         assert loop.run_until_complete(protocol.call_store(('127.0.0.1', peer1_port), key, value, expiration))
 
         # peer 1 must know about peer 2
@@ -185,7 +187,7 @@ def test_dht():
     assert len(nearest) == 0
 
     # test 6 store and get value
-    true_time = time.monotonic() + 1200
+    true_time = get_dht_time() + 1200
     assert loop.run_until_complete(me.store("mykey", ["Value", 10], true_time))
     val, expiration_time = loop.run_until_complete(me.get("mykey"))
     assert expiration_time == true_time, "Wrong time"
@@ -198,14 +200,14 @@ def test_dht():
 
 def test_store():
     d = LocalStorage()
-    d.store(DHTID.generate("key"), "val", time.monotonic() + 10)
+    d.store(DHTID.generate("key"), "val", get_dht_time() + 10)
     assert d.get(DHTID.generate("key"))[0] == "val", "Wrong value"
     print("Test store passed")
 
 
 def test_get_expired():
     d = LocalStorage(keep_expired=False)
-    d.store(DHTID.generate("key"), "val", time.monotonic() + 1)
+    d.store(DHTID.generate("key"), "val", get_dht_time() + 1)
     time.sleep(2)
     assert d.get(DHTID.generate("key")) == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
@@ -213,8 +215,8 @@ def test_get_expired():
 
 def test_store_maxsize():
     d = LocalStorage(maxsize=1)
-    d.store(DHTID.generate("key1"), "val1", time.monotonic() + 1)
-    d.store(DHTID.generate("key2"), "val2", time.monotonic() + 2)
+    d.store(DHTID.generate("key1"), "val1", get_dht_time() + 1)
+    d.store(DHTID.generate("key2"), "val2", get_dht_time() + 2)
     assert d.get(DHTID.generate("key1")) == (None, None), "elder a value must be deleted"
     assert d.get(DHTID.generate("key2"))[0] == "val2", "Newer should be stored"
     print("Test store maxsize passed")
