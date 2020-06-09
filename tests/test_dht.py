@@ -3,12 +3,15 @@ import asyncio
 import multiprocessing as mp
 import random
 import heapq
+import uuid
 from functools import partial
 from typing import Optional
 import numpy as np
 
 import hivemind
 from typing import List, Dict
+
+from hivemind import get_dht_time
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, KademliaProtocol
 from hivemind.dht.protocol import LocalStorage
 
@@ -50,7 +53,7 @@ def test_kademlia_protocol():
 
         assert loop.run_until_complete(protocol.call_ping(('127.0.0.1', peer1_port))) == peer1_id
 
-        key, value, expiration = DHTID.generate(), [123, {'ololo': 'pyshpysh'}], time.monotonic() + 1e3
+        key, value, expiration = DHTID.generate(), [123, {'ololo': 'pyshpysh'}], get_dht_time() + 1e3
         assert loop.run_until_complete(protocol.call_store(('127.0.0.1', peer1_port), key, value, expiration))
 
         # peer 1 must know about peer 2
@@ -185,7 +188,7 @@ def test_dht():
     assert len(nearest) == 0
 
     # test 6 store and get value
-    true_time = time.monotonic() + 1200
+    true_time = get_dht_time() + 1200
     assert loop.run_until_complete(me.store("mykey", ["Value", 10], true_time))
     val, expiration_time = loop.run_until_complete(me.get("mykey"))
     assert expiration_time == true_time, "Wrong time"
@@ -196,16 +199,31 @@ def test_dht():
         proc.terminate()
 
 
+# def test_hivemind_dht():#TODO(jheuristic)
+#     peers = [hivemind.dht.DHT(start=True)]
+#     for i in range(10):
+#         neighbors_i = [node.port for node in random.sample(peers, min(3, len(peers)))]
+#         peers.append(hivemind.DHT(*neighbors_i, start=True))
+#
+#     you: hivemind.dht.DHT = random.choice(peers)
+#     theguyshetoldyounottoworryabout: hivemind.dht.DHT = random.choice(peers)
+#
+#     expert_uids = [str(uuid.uuid4()) for _ in range(1024)]
+#     batch_size = 100
+#     for batch_start in range(0, len(expert_uids), batch_size):
+#         you.declare_experts(expert_uids[batch_start: batch_start + batch_size], 'localhost', 1234)
+
+
 def test_store():
     d = LocalStorage()
-    d.store("key", "val", time.monotonic() + 10)
+    d.store("key", "val", get_dht_time() + 10)
     assert d.get("key")[0] == "val", "Wrong value"
     print("Test store passed")
 
 
 def test_get_expired():
     d = LocalStorage()
-    d.store("key", "val", time.monotonic() + 1)
+    d.store("key", "val", get_dht_time() + 1)
     time.sleep(2)
     assert d.get("key") == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
@@ -219,8 +237,8 @@ def test_get_empty():
 
 def test_change_expiration_time():
     d = LocalStorage()
-    d.store("key", "val1", time.monotonic() + 2)
-    d.store("key", "val2", time.monotonic()+200)
+    d.store("key", "val1", get_dht_time() + 2)
+    d.store("key", "val2", get_dht_time() + 200)
     time.sleep(4)
     assert d.get("key")[0] == "val2", "Value must be changed, but still kept in table"
     print("Test change expiration time passed")
@@ -228,7 +246,7 @@ def test_change_expiration_time():
 
 def test_maxsize_cache():
     d = LocalStorage(maxsize=1)
-    d.store("key1", "val1", time.monotonic() + 1)
-    d.store("key2", "val2", time.monotonic() + 200)
+    d.store("key1", "val1", get_dht_time() + 1)
+    d.store("key2", "val2", get_dht_time() + 200)
     assert d.get("key2")[0] == "val2", "Value with bigger exp. time must be kept"
     assert d.get("key1")[0] is None, "Value with less exp time, must be deleted"

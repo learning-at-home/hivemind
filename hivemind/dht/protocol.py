@@ -1,10 +1,9 @@
 import asyncio
-import time
 import heapq
 from typing import Optional, List, Tuple, Dict
 from rpcudp.protocol import RPCProtocol
 
-from .routing import RoutingTable, DHTID, DHTValue, DHTExpiration, BinaryDHTID
+from .routing import RoutingTable, DHTID, DHTValue, DHTExpiration, BinaryDHTID, get_dht_time
 from ..utils import Endpoint
 
 
@@ -154,7 +153,7 @@ class LocalStorage:
         self.key_to_heap = dict()
 
     def remove_outdated(self):
-        while self.expiration_heap and (self.expiration_heap[0][0] < time.monotonic()
+        while self.expiration_heap and (self.expiration_heap[0][0] < get_dht_time()
                                         or len(self.expiration_heap) > self.cache_size):
             heap_entry = heapq.heappop(self.expiration_heap)
             key = heap_entry[1]
@@ -166,7 +165,7 @@ class LocalStorage:
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
         :returns: True if new value was stored, False it was rejected (current value is newer)
         """
-        if expiration_time < time.monotonic():
+        if expiration_time < get_dht_time():
             return False
         self.key_to_heap[key] = (expiration_time, key)
         heapq.heappush(self.expiration_heap, (expiration_time, key))
