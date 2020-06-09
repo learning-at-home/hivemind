@@ -134,7 +134,7 @@ class DHT(mp.Process):
                 self.node.store(self.make_key('prefix', prefix), True, expiration_time), loop))
 
         if future is not None:
-            future.set_result([coro.result() for coro in coroutines]) # wait for all coroutings to finish
+            future.set_result([coro.result() for coro in coroutines])  # wait for all coroutings to finish
 
     def first_k_active(self, prefixes: List[str], k: int, max_prefetch=None):
         """

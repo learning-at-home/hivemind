@@ -199,20 +199,31 @@ def test_dht():
         proc.terminate()
 
 
-# def test_hivemind_dht():#TODO(jheuristic)
-#     peers = [hivemind.dht.DHT(start=True)]
-#     for i in range(10):
-#         neighbors_i = [node.port for node in random.sample(peers, min(3, len(peers)))]
-#         peers.append(hivemind.DHT(*neighbors_i, start=True))
-#
-#     you: hivemind.dht.DHT = random.choice(peers)
-#     theguyshetoldyounottoworryabout: hivemind.dht.DHT = random.choice(peers)
-#
-#     expert_uids = [str(uuid.uuid4()) for _ in range(1024)]
-#     batch_size = 100
-#     for batch_start in range(0, len(expert_uids), batch_size):
-#         you.declare_experts(expert_uids[batch_start: batch_start + batch_size], 'localhost', 1234)
+def test_hivemind_dht():
+    peers = [hivemind.dht.DHT(start=True)]
+    for i in range(10):
+        neighbors_i = [('localhost', node.port) for node in random.sample(peers, min(3, len(peers)))]
+        peers.append(hivemind.DHT(*neighbors_i, start=True))
 
+    you: hivemind.dht.DHT = random.choice(peers)
+    theguyshetoldyounottoworryabout: hivemind.dht.DHT = random.choice(peers)
+
+    expert_uids = [str(uuid.uuid4()) for _ in range(110)]
+    batch_size = 10
+    for batch_start in range(0, len(expert_uids), batch_size):
+        you.declare_experts(expert_uids[batch_start: batch_start + batch_size], 'localhost', 1234)
+
+    found = theguyshetoldyounottoworryabout.get_experts(random.sample(expert_uids, 5) + ['foo', 'bar'])
+    assert all(res is not None for res in found[:-2]), "Could not find some existing experts"
+    assert all(res is None for res in found[-2:]), "Found non-existing experts"
+
+    that_guys_expert, that_guys_port = str(uuid.uuid4()), random.randint(1000, 9999)
+    theguyshetoldyounottoworryabout.declare_experts([that_guys_expert], 'that_host', that_guys_port)
+    you_notfound, you_found = you.get_experts(['foobar', that_guys_expert])
+    assert isinstance(you_found, hivemind.RemoteExpert)
+    assert you_found.host == 'that_host', you_found.port == that_guys_port
+    for peer in peers:
+        peer.shutdown()
 
 def test_store():
     d = LocalStorage()
