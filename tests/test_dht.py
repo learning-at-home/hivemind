@@ -5,6 +5,7 @@ import random
 import heapq
 import uuid
 from functools import partial
+from itertools import chain
 from typing import Optional
 import numpy as np
 
@@ -222,8 +223,20 @@ def test_hivemind_dht():
     you_notfound, you_found = you.get_experts(['foobar', that_guys_expert])
     assert isinstance(you_found, hivemind.RemoteExpert)
     assert you_found.host == 'that_host', you_found.port == that_guys_port
+
+    # test first_k_active
+    assert theguyshetoldyounottoworryabout.first_k_active(expert_uids, k=10) == expert_uids[:10]
+
+    some_permuted_experts = random.sample(expert_uids, k=32)
+    assert theguyshetoldyounottoworryabout.first_k_active(some_permuted_experts, k=32) == some_permuted_experts
+    assert theguyshetoldyounottoworryabout.first_k_active(some_permuted_experts, k=1) == some_permuted_experts[:1]
+    fake_and_real_experts = list(chain(*zip(
+        [str(uuid.uuid4()) for _ in some_permuted_experts], some_permuted_experts)))
+    assert theguyshetoldyounottoworryabout.first_k_active(fake_and_real_experts, k=9) == some_permuted_experts[:9]
+
     for peer in peers:
         peer.shutdown()
+
 
 def test_store():
     d = LocalStorage()
