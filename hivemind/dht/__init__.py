@@ -88,11 +88,12 @@ class DHT(mp.Process):
         loop = asyncio.get_event_loop()
         expiration = expiration or get_dht_time()
 
-        lookup_futures = [loop.create_task(self.node.get(self.make_key('expert', uid), expiration)) for uid in uids]
+        lookup_futures = [asyncio.run_coroutine_threadsafe(
+            self.node.get(self.make_key('expert', uid), expiration), loop) for uid in uids]
 
         experts: List[Optional[RemoteExpert]] = [None] * len(uids)
-        for i, (uid, task) in enumerate(zip(uids, lookup_futures)):
-            maybe_result, maybe_expiration = future.result()
+        for i, (uid, lookup) in enumerate(zip(uids, lookup_futures)):
+            maybe_result, maybe_expiration = lookup.result()
             if maybe_expiration is not None:  # if we found a value
                 experts[i] = RemoteExpert(uid=uid, host=maybe_result[0], port=maybe_result[1])
 
@@ -119,15 +120,16 @@ class DHT(mp.Process):
         futures = []
 
         for uid in uids:
-            futures.append(loop.create_task(
-                self.node.store(self.make_key('expert', uid), value=(addr, port), expiration_time=expiration_time)))
+            futures.append(asyncio.run_coroutine_threadsafe(
+                self.node.store(self.make_key('expert', uid), value=(addr, port),
+                                expiration_time=expiration_time),
+                loop))
             uid_parts = uid.split(self.UID_DELIMETER)
             unique_prefixes.update([self.UID_DELIMETER.join(uid_parts[:i + 1]) for i in range(len(uid_parts))])
 
         for prefix in unique_prefixes:
             futures.append(asyncio.run_coroutine_threadsafe(
-                self.node.store(self.make_key('prefix', prefix), True, expiration_time),
-                loop))
+                self.node.store(self.make_key('prefix', prefix), True, expiration_time), loop))
 
         if done_event is not None:
             for future in futures:
@@ -152,7 +154,7 @@ class DHT(mp.Process):
         assert self.node is not None, "This method should only be accessed from inside .run method"
         max_prefetch = max_prefetch or len(prefixes)
         loop = asyncio.get_event_loop()
-        lookup_prefetch = [loop.create_task(self.node.get(self.make_key('prefix', prefix)))
+        lookup_prefetch = [asyncio.run_coroutine_threadsafe(self.node.get(self.make_key('prefix', prefix)), loop)
                            for prefix in prefixes[:max_prefetch]]
         active_prefixes = []
 
@@ -170,7 +172,8 @@ class DHT(mp.Process):
             # pre-dispatch the next request in line
             if len(lookup_prefetch) < len(prefixes):
                 lookup_prefetch.append(
-                    loop.create_task(self.server.get(self.make_key('prefix', prefixes[len(lookup_prefetch)]))))
+                    asyncio.run_coroutine_threadsafe(
+                        self.node.get(self.make_key('prefix', prefixes[len(lookup_prefetch)])), loop))
 
         # could not find enough active prefixes; return what we can
         future.set_result(active_prefixes)
