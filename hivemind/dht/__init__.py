@@ -99,28 +99,30 @@ class DHT(mp.Process):
 
         future.set_result(experts)
 
-    def declare_experts(self, uids: List[str], addr, port, wait_timeout=0):
+    def declare_experts(self, uids: List[str], addr, port, wait=True, timeout=None) -> Optional[List[bool]]:
         """
         Make experts available to DHT; update timestamps if already available
         :param uids: a list of expert ids to update
         :param addr: hostname that can be used to call this expert
         :param port: port that can be used to call this expert
-        :param wait_timeout: if wait_timeout > 0, waits for the procedure to finish
+        :param wait: if True, awaits for declaration to finish, otherwise runs in background
+        :param timeout: waits for the procedure to finish, None means wait indeninitely
+        :returns: if wait, returns a list of booleans, (True = store succeeded, False = store rejected)
         """
-        done_event = mp.Event() if wait_timeout else None
-        self.pipe.send(('_declare_experts', [], dict(uids=list(uids), addr=addr, port=port, done_event=done_event)))
-        if done_event is not None:
-            done_event.wait(wait_timeout)
+        future, _future = SharedFuture.make_pair() if wait else (None, None)
+        self.pipe.send(('_declare_experts', [], dict(uids=list(uids), addr=addr, port=port, future=_future)))
+        if wait:
+            return future.result(timeout)
 
-    def _declare_experts(self, uids: List[str], addr: str, port: int, done_event: Optional[mp.Event]):
+    def _declare_experts(self, uids: List[str], addr: str, port: int, future: Optional[SharedFuture]):
         assert self.node is not None, "This method should only be accessed from inside .run method"
         loop = asyncio.get_event_loop()
         expiration_time = get_dht_time() + self.EXPIRATION
         unique_prefixes = set()
-        futures = []
+        coroutines = []
 
         for uid in uids:
-            futures.append(asyncio.run_coroutine_threadsafe(
+            coroutines.append(asyncio.run_coroutine_threadsafe(
                 self.node.store(self.make_key('expert', uid), value=(addr, port),
                                 expiration_time=expiration_time),
                 loop))
@@ -128,13 +130,11 @@ class DHT(mp.Process):
             unique_prefixes.update([self.UID_DELIMETER.join(uid_parts[:i + 1]) for i in range(len(uid_parts))])
 
         for prefix in unique_prefixes:
-            futures.append(asyncio.run_coroutine_threadsafe(
+            coroutines.append(asyncio.run_coroutine_threadsafe(
                 self.node.store(self.make_key('prefix', prefix), True, expiration_time), loop))
 
-        if done_event is not None:
-            for future in futures:
-                future.result()
-            done_event.set()
+        if future is not None:
+            future.set_result([coro.result() for coro in coroutines]) # wait for all coroutings to finish
 
     def first_k_active(self, prefixes: List[str], k: int, max_prefetch=None):
         """
