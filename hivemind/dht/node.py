@@ -118,10 +118,8 @@ class DHTNode:
         """
         Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
         Also cache (key, value, expiration_time) at all nodes you met along the way (see Section 2.1 end)
-        :note: if store finds a newer value in the table, it will propagate this newer value instead of the original
         :return: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        #TODO(jheuristic) if store finds a newer value, stop immediately and re-store that newer value
         key_id = DHTID.generate(key)
         nearest_node_to_addr = await self.find_nearest_nodes(key_id, k_nearest=self.num_replicas, exclude_self=True)
         tasks = [asyncio.create_task(self.protocol.call_store(endpoint, key_id, value, expiration_time))

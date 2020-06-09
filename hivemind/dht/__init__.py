@@ -8,15 +8,14 @@ The code in this module is a modified version of https://github.com/bmuller/kade
 Brian, if you're reading this: THANK YOU! you're awesome :)
 """
 import asyncio
-import datetime
 import multiprocessing as mp
+import time
 import warnings
 from typing import Tuple, List, Optional
 
-from kademlia.network import Server
-
-from hivemind.client import RemoteExpert
-from hivemind.utils import run_forever, SharedFuture, PickleSerializer, find_open_port, Hostname, Port
+from ..client import RemoteExpert
+from ..utils import SharedFuture, find_open_port, Hostname, Port, run_in_background
+from .node import DHTNode, DHTID, DHTExpiration
 
 
 class DHT(mp.Process):
@@ -26,29 +25,32 @@ class DHT(mp.Process):
     :param port: a port where DHT will listen to incoming connections. Defaults to hivemind.utils.find_open_port
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
+    :param node_params: any other params will be forwarded to DHTNode upon creation
     """
     UID_DELIMETER = '.'  # splits expert uids over this delimeter
-    HEARTBEAT_EXPIRATION = 120  # expert is inactive iff it fails to post timestamp for *this many seconds*
+    EXPIRATION = 120  # anything written to DHT is considered expired after this many seconds
     make_key = "{}::{}".format
 
     def __init__(self, *initial_peers: Tuple[Hostname, Port], port: Optional[Port] = None,
-                 start: bool, daemon: bool = True):
+                 start: bool, daemon: bool = True, **node_params):
         super().__init__()
         port = find_open_port() if port is None else port
-        self.port, self.initial_peers = port, initial_peers
+        self.node: Optional[DHTNode] = None  # to be initialized in self.run
+        self.port, self.initial_peers, self.node_params = port, initial_peers, node_params
         self._pipe, self.pipe = mp.Pipe(duplex=False)
         self.ready = mp.Event()
-        self.server = Server()
         self.daemon = daemon
         if start:
             self.run_in_background(await_ready=True)
 
     def run(self) -> None:
+        if asyncio.get_event_loop().is_running():
+            asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(self.server.listen(self.port))
-        loop.run_until_complete(self.server.bootstrap(self.initial_peers))
-        run_forever(loop.run_forever)
+
+        self.node = DHTNode(initial_peers=list(self.initial_peers), port=self.port, **self.node_params)
+        run_in_background(loop.run_forever)
         self.ready.set()
 
         while True:
@@ -71,24 +73,27 @@ class DHT(mp.Process):
         else:
             warnings.warn("DHT shutdown has no effect: dht process is already not alive")
 
-    def get_experts(self, uids: List[str], heartbeat_expiration=HEARTBEAT_EXPIRATION) -> List[Optional[RemoteExpert]]:
-        """ Find experts across DHT using their ids; Return a list of [RemoteExpert if found else None]"""
+    def get_experts(self, uids: List[str], expiration=None) -> List[Optional[RemoteExpert]]:
+        """
+        :param uids: find experts with these ids from across the DHT
+        :param expiration: returns experts that expire no sooner than this (based on time.time()), default = now
+        :returns: a list of [RemoteExpert if found else None]
+        """
         future, _future = SharedFuture.make_pair()
-        self.pipe.send(('_get_experts', [], dict(uids=uids, heartbeat_expiration=heartbeat_expiration, future=_future)))
+        self.pipe.send(('_get_experts', [], dict(uids=uids, expiration=expiration, future=_future)))
         return future.result()
 
-    def _get_experts(self, uids: List[str], heartbeat_expiration: float, future: SharedFuture):
+    def _get_experts(self, uids: List[str], expiration: Optional[DHTExpiration], future: SharedFuture):
         loop = asyncio.get_event_loop()
-        lookup_futures = [asyncio.run_coroutine_threadsafe(
-            self.server.get(self.make_key('expert', uid)), loop) for uid in uids]
-        current_time = datetime.datetime.now()
+        expiration = expiration or time.monotonic()  # TODO time.time()
 
-        experts = [None] * len(uids)
-        for i, (uid, lookup) in enumerate(zip(uids, lookup_futures)):
-            if lookup.result() is not None:
-                (host, port), timestamp = PickleSerializer.loads(lookup.result())
-                if (current_time - timestamp).total_seconds() <= heartbeat_expiration:
-                    experts[i] = RemoteExpert(uid=uid, host=host, port=port)
+        lookup_futures = [loop.create_task(self.node.get(self.make_key('expert', uid), expiration)) for uid in uids]
+
+        experts: List[Optional[RemoteExpert]] = [None] * len(uids)
+        for i, (uid, task) in enumerate(zip(uids, lookup_futures)):
+            maybe_result, maybe_expiration = future.result()
+            if maybe_expiration is not None:  # if we found a value
+                experts[i] = RemoteExpert(uid=uid, host=maybe_result[0], port=maybe_result[1])
 
         future.set_result(experts)
 
@@ -106,63 +111,65 @@ class DHT(mp.Process):
             done_event.wait(wait_timeout)
 
     def _declare_experts(self, uids: List[str], addr: str, port: int, done_event: Optional[mp.Event]):
+        assert self.node is not None, "This method should only be accessed from inside .run method"
         loop = asyncio.get_event_loop()
-        timestamp = datetime.datetime.now()
-        expert_metadata = PickleSerializer.dumps(((addr, port), timestamp))
-        prefix_metadata = PickleSerializer.dumps(timestamp)
-
+        expiration_time = time.monotonic() + self.EXPIRATION
         unique_prefixes = set()
+        futures = []
 
         for uid in uids:
-            asyncio.run_coroutine_threadsafe(self.server.set(self.make_key('expert', uid), expert_metadata), loop)
+            futures.append(loop.create_task(
+                self.node.store(self.make_key('expert', uid), value=(addr, port), expiration_time=expiration_time)))
             uid_parts = uid.split(self.UID_DELIMETER)
             unique_prefixes.update([self.UID_DELIMETER.join(uid_parts[:i + 1]) for i in range(len(uid_parts))])
 
         for prefix in unique_prefixes:
-            asyncio.run_coroutine_threadsafe(self.server.set(self.make_key('prefix', prefix), prefix_metadata), loop)
+            futures.append(asyncio.run_coroutine_threadsafe(
+                self.node.store(self.make_key('prefix', prefix), True, expiration_time),
+                loop))
 
         if done_event is not None:
+            for future in futures:
+                future.result()
             done_event.set()
 
-    def first_k_active(self, prefixes: List[str], k: int, heartbeat_expiration=HEARTBEAT_EXPIRATION, max_prefetch=None):
+    def first_k_active(self, prefixes: List[str], k: int, max_prefetch=None):
         """
         Find k prefixes with active experts; may return less if there aren't enough; used for DMoE beam search
         :param prefixes: a list of uid prefixes ordered from highest to lowest priority
         :param k: return at most *this many* active prefixes
-        :param heartbeat_expiration: consider expert active if his last heartbeat was sent at most this many seconds ago
         :param max_prefetch: pre-dispatch up to *this many* asynchronous expert requests, defaults to pre-dispatch = k
         :returns: a list of at most :k: prefixes that have at least one active expert each;
         """
+        assert isinstance(prefixes, (list, tuple)), "please provide a list/tuple of prefixes as the first argument"
         future, _future = SharedFuture.make_pair()
-        self.pipe.send(('_first_k_active', [], dict(prefixes=prefixes, k=k, heartbeat_expiration=heartbeat_expiration,
-                                                    max_prefetch=max_prefetch or k, future=_future)))
+        self.pipe.send(('_first_k_active', [],
+                        dict(prefixes=prefixes, k=k, max_prefetch=max_prefetch or k, future=_future)))
         return future.result()
 
-    def _first_k_active(self, prefixes: List[str], k, heartbeat_expiration, max_prefetch, future: SharedFuture):
+    def _first_k_active(self, prefixes: List[str], k: int, max_prefetch: Optional[int], future: SharedFuture):
+        assert self.node is not None, "This method should only be accessed from inside .run method"
+        max_prefetch = max_prefetch or len(prefixes)
         loop = asyncio.get_event_loop()
-        lookup_prefetch = [asyncio.run_coroutine_threadsafe(
-            self.server.get(self.make_key('prefix', prefix)), loop) for prefix in prefixes[:max_prefetch]]
-        current_time = datetime.datetime.now()
-
+        lookup_prefetch = [loop.create_task(self.node.get(self.make_key('prefix', prefix)))
+                           for prefix in prefixes[:max_prefetch]]
         active_prefixes = []
 
         for i, prefix in enumerate(prefixes):
-            lookup = lookup_prefetch[i]
+            _, maybe_expiration = lookup_prefetch[i].result()
 
-            if lookup.result() is not None:
-                timestamp = PickleSerializer.loads(lookup.result())
-                if (current_time - timestamp).total_seconds() <= heartbeat_expiration:
-                    active_prefixes.append(prefix)
-                    if len(active_prefixes) >= k:
-                        future.set_result(active_prefixes)
-                        return
+            if maybe_expiration is not None:
+                active_prefixes.append(prefix)
+                if len(active_prefixes) >= k:
+                    future.set_result(active_prefixes)
+                    for task in lookup_prefetch[i:]:
+                        task.cancel()
+                    return
 
             # pre-dispatch the next request in line
             if len(lookup_prefetch) < len(prefixes):
                 lookup_prefetch.append(
-                    asyncio.run_coroutine_threadsafe(self.server.get(
-                        self.make_key('prefix', prefixes[len(lookup_prefetch)])), loop)
-                )
+                    loop.create_task(self.server.get(self.make_key('prefix', prefixes[len(lookup_prefetch)]))))
 
         # could not find enough active prefixes; return what we can
         future.set_result(active_prefixes)
