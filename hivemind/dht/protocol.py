@@ -144,6 +144,16 @@ class KademliaProtocol(RPCProtocol):
             if node_id is not None and node_id in self.routing_table:
                 del self.routing_table[node_id]
 
+    def _accept_response(self, msg_id, data, address):
+        """ Override for RPCProtocol._accept_response to handle cancelled tasks """
+        future, timeout = self._outstanding[msg_id]
+        if future.cancelled():
+            timeout.cancel()
+            del self._outstanding[msg_id]
+        else:
+            super()._accept_response(msg_id, data, address)
+
+
 
 class LocalStorage:
     def __init__(self, maxsize: Optional[int] = None):
