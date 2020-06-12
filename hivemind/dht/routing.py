@@ -230,7 +230,7 @@ class DHTID(int):
         """
         source = random.getrandbits(nbits).to_bytes(nbits, byteorder='big') if source is None else source
         source = PickleSerializer.dumps(source) if not isinstance(source, bytes) else source
-        raw_uid = hashlib.sha1(source).digest()
+        raw_uid = cls.HASH_FUNC(source).digest()
         return cls(int(raw_uid.hex(), 16))
 
     def xor_distance(self, other: Union[DHTID, Sequence[DHTID]]) -> Union[int, List[int]]:
