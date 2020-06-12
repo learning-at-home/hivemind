@@ -139,13 +139,16 @@ class DHTNode:
         key_id = DHTID.generate(key)
         sufficient_expiration_time = sufficient_expiration_time or get_dht_time()
         beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
-        latest_value, latest_expiration = None, -float('inf')
+        latest_value, latest_expiration, latest_node_id = None, -float('inf'), None
         node_to_addr, nodes_checked_for_value = dict(), set()
+        should_cache = False  # True if found value in DHT that is newer than local value
 
         # Option A: value can be stored in our local cache
         maybe_value, maybe_expiration = self.protocol.storage.get(key_id)
+        if maybe_expiration is None:
+            maybe_value, maybe_expiration = self.protocol.cache.get(key_id)
         if maybe_expiration is not None and maybe_expiration > latest_expiration:
-            latest_value, latest_expiration = maybe_value, maybe_expiration
+            latest_value, latest_expiration, latest_node_id = maybe_value, maybe_expiration, self.node_id
             # TODO(jheuristic) we may want to run background beam search to update our cache
         nodes_checked_for_value.add(self.node_id)
 
@@ -157,10 +160,10 @@ class DHTNode:
             async def get_neighbors(node: DHTID) -> Tuple[List[DHTID], bool]:
                 nonlocal latest_value, latest_expiration, node_to_addr, nodes_checked_for_value
                 maybe_value, maybe_expiration, peers = await self.protocol.call_find_value(node_to_addr[node], key_id)
-                nodes_checked_for_value.add(node)
                 node_to_addr.update(peers)
+                nodes_checked_for_value.add(node)
                 if maybe_expiration is not None and maybe_expiration > latest_expiration:
-                    latest_value, latest_expiration = maybe_value, maybe_expiration
+                    latest_value, latest_expiration, latest_node_id = maybe_value, maybe_expiration, node
                 should_interrupt = (latest_expiration >= sufficient_expiration_time)
                 return list(peers.keys()), should_interrupt
 
@@ -168,6 +171,7 @@ class DHTNode:
                 query_id=key_id, initial_nodes=list(node_to_addr), k_nearest=beam_size, beam_size=beam_size,
                 get_neighbors=get_neighbors, visited_nodes=nodes_checked_for_value)
             # normally, by this point we will have found a sufficiently recent value in one of get_neighbors calls
+            should_cache = latest_expiration >= sufficient_expiration_time  # if we found a newer value, cache it later
 
         # Option C: didn't find good-enough value in beam search, make a last-ditch effort to find it in unvisited nodes
         if latest_expiration < sufficient_expiration_time:
@@ -183,30 +187,20 @@ class DHTNode:
                         break
             for task in pending_tasks:
                 task.close()
+            should_cache = latest_expiration >= sufficient_expiration_time  # if we found a newer value, cache it later
 
         # step 4: we have not found entry with sufficient_expiration_time, but we may have found *something* older
-        # TODO(jheuristic) cache here once vsevolodpl is done with the storage - both to self and to nearest
+        if should_cache and self.cache_locally:
+            self.protocol.cache.store(key_id, latest_value, latest_expiration)
+        if should_cache and self.cache_nearest:
+            num_cached_nodes = 0
+            for node_id in nearest_nodes:
+                if node_id == latest_node_id:
+                    continue
+                asyncio.create_task(self.protocol.call_store(
+                    node_to_addr[node_id], key_id, latest_value, latest_expiration, in_cache=True))
+                num_cached_nodes += 1
+                if num_cached_nodes >= self.cache_nearest:
+                    break
+
         return (latest_value, latest_expiration) if latest_expiration != -float('inf') else (None, None)
-
-    async def refresh_stale_buckets(self):
-        staleness_threshold = get_dht_time() - self.staleness_timeout
-        stale_buckets = [bucket for bucket in self.protocol.routing_table.buckets
-                         if bucket.last_updated < staleness_threshold]
-
-        refresh_ids = [DHTID(random.randint(bucket.lower, bucket.upper - 1)) for bucket in stale_buckets]
-        # note: we use bucket.upper - 1 because random.randint is inclusive w.r.t. both lower and upper bounds
-
-        raise NotImplementedError("TODO")
-
-
-
-# TODO bmuller's kademlia updated node's bucket:
-# * on every rpc_find_node - for the node that is searched for
-# * on every welcome_if_new - for the new node
-# * on every refresh table - for lonely_buckets
-# * on save_state - for bootstrappable neighbors, some reason
-# * on server.get/set/set_digest - for a bucket that contains key
-
-# debt:
-# * make sure we ping least-recently-updated node in full bucket if someone else wants to replace him
-#   this should happen every time we add new node
