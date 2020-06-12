@@ -1,13 +1,12 @@
 import asyncio
 from collections import OrderedDict
 from functools import partial
-from random import random
 from typing import Optional, Tuple, List, Dict
 from warnings import warn
 
 from .protocol import KademliaProtocol
 from .routing import DHTID, DHTValue, DHTExpiration, DHTKey, get_dht_time
-from .search import beam_search
+from .search import traverse_dht
 from ..utils import find_open_port, Endpoint, Hostname, Port, LOCALHOST
 
 
@@ -103,7 +102,7 @@ class DHTNode:
             node_to_addr.update(peers)
             return list(peers.keys()), False  # False means "do not interrupt beam search"
 
-        nearest_nodes, visited_nodes = await beam_search(
+        nearest_nodes, visited_nodes = await traverse_dht(
             query_id=query_id, initial_nodes=list(node_to_addr), k_nearest=k_nearest, beam_size=beam_size,
             get_neighbors=get_neighbors, visited_nodes=(self.node_id,))
 
@@ -167,7 +166,7 @@ class DHTNode:
                 should_interrupt = (latest_expiration >= sufficient_expiration_time)
                 return list(peers.keys()), should_interrupt
 
-            nearest_nodes, visited_nodes = await beam_search(
+            nearest_nodes, visited_nodes = await traverse_dht(
                 query_id=key_id, initial_nodes=list(node_to_addr), k_nearest=beam_size, beam_size=beam_size,
                 get_neighbors=get_neighbors, visited_nodes=nodes_checked_for_value)
             # normally, by this point we will have found a sufficiently recent value in one of get_neighbors calls

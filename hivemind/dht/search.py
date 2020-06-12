@@ -5,9 +5,9 @@ from warnings import warn
 from .routing import DHTID
 
 
-async def beam_search(query_id: DHTID, initial_nodes: Collection[DHTID], k_nearest: int, beam_size: int,
-                      get_neighbors: Callable[[DHTID], Awaitable[Tuple[Collection[DHTID], bool]]],
-                      visited_nodes: Collection[DHTID] = ()) -> Tuple[List[DHTID], Set[DHTID]]:
+async def traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID], k_nearest: int, beam_size: int,
+                       get_neighbors: Callable[[DHTID], Awaitable[Tuple[Collection[DHTID], bool]]],
+                       visited_nodes: Collection[DHTID] = ()) -> Tuple[List[DHTID], Set[DHTID]]:
     """
     Asynchronous beam search over the DHT. Not meant to be called by the user, please use DHTNode.store/get instead.
     Traverse the DHT graph using get_neighbors function, find up to k_nearest nodes according to DHTID.xor_distance.
