@@ -35,11 +35,11 @@ do something complex with it, please contact us by opening an issue (less prefer
 - **`Runtime`** (`hivemind/runtime/__init__.py`) aggregates batches
   and performs inference/training of experts according to their priority.
 - **`Server`** (`hivemind/server/__init__.py`) wraps runtime and
-  periodically uploads experts into `DHTNode`.
+  periodically uploads experts into `DHT`.
 
 **DHT:**
 
-- **`DHTNode`**(`hivemind/dht/__init__.py`) is a node of
+- **`DHT`**(`hivemind/dht/__init__.py`) is a node of
   Kademlia-based DHT that stores metadata used by trainer and runtime.
 
 ## Limitations

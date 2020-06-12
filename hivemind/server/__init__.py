@@ -2,11 +2,11 @@ import multiprocessing as mp
 import os
 import threading
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
-from typing import Dict
+from typing import Dict, Optional
 
 from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
-from ..dht import DHTNode
+from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend
 
 
@@ -20,7 +20,7 @@ class Server(threading.Thread):
      - publishes updates to expert status every :update_period: seconds
      - follows orders from HivemindController - if it exists
 
-    :type dht: DHTNode or None. Server with dht=None will NOT be visible from DHT,
+    :type dht: DHT or None. Server with dht=None will NOT be visible from DHT,
      but it will still support accessing experts directly with RemoteExpert(uid=UID, host=IPADDR, port=PORT).
     :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
     :param addr: server's dht address that determines how it can be accessed. Default is local connections only.
@@ -33,7 +33,7 @@ class Server(threading.Thread):
         is ready (see .ready below)
     """
 
-    def __init__(self, dht: DHTNode, expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
+    def __init__(self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
                  port: int = 8080, conn_handler_processes: int = 1, update_period: int = 30, start=False,
                  **kwargs):
         super().__init__()

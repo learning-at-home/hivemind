@@ -1,6 +1,10 @@
-from contextlib import AbstractContextManager
-from socket import socket
+import socket
+from contextlib import AbstractContextManager, closing
 from typing import Tuple
+
+Hostname, Port = str, int  # flavour types
+Endpoint = Tuple[Hostname, Port]  # https://networkengineering.stackexchange.com/a/9435
+LOCALHOST = '127.0.0.1'
 
 
 class Connection(AbstractContextManager):
@@ -9,12 +13,12 @@ class Connection(AbstractContextManager):
 
     __slots__ = ('conn', 'addr')
 
-    def __init__(self, conn: socket, addr: Tuple[str, int]):
+    def __init__(self, conn: socket, addr: Endpoint):
         self.conn, self.addr = conn, addr
 
     @staticmethod
     def create(host: str, port: int):
-        sock = socket()
+        sock = socket.socket()
         addr = (host, port)
         sock.connect(addr)
         return Connection(sock, addr)
@@ -54,10 +58,12 @@ class Connection(AbstractContextManager):
         self.conn.close()
 
 
-def find_open_port():
+def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):
+    """ Finds a tcp port that can be occupied with a socket with *params and use *opt options """
     try:
-        sock = socket()
-        sock.bind(('', 0))
-        return sock.getsockname()[1]
-    except:
-        raise ValueError("Could not find open port")
+        with closing(socket.socket(*params)) as sock:
+            sock.bind(('', 0))
+            sock.setsockopt(*opt)
+            return sock.getsockname()[1]
+    except Exception as e:
+        raise e
