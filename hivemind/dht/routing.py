@@ -110,7 +110,7 @@ class RoutingTable:
         """
         all_nodes: Iterator[Tuple[DHTID, Endpoint]] = chain(*self.buckets)  # uses KBucket.__iter__
         nearest_nodes_with_addr: List[Tuple[DHTID, Endpoint]] = heapq.nsmallest(
-            k + int(bool(exclude)), all_nodes, key=lambda id_and_endpoint: query_id.xor_distance(id_and_endpoint[0]))
+            k + int(exclude is not None), all_nodes, lambda id_and_endpoint: query_id.xor_distance(id_and_endpoint[0]))
         if exclude is not None:
             for i, (node_i, addr_i) in enumerate(list(nearest_nodes_with_addr)):
                 if node_i == exclude:
