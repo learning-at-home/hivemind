@@ -14,7 +14,7 @@ async def traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID], k_near
     Approximate time complexity: O(T * log T) where T = (path_to_true_nearest + beam_size) * mean_num_neighbors
 
     :param query_id: search query, find k_nearest neighbors of this DHTID
-    :param initial_nodes: nodes used to pre-populate beam search heap, e.g. [my_own_DHTID, *maybe_some_peers]
+    :param initial_nodes: nodes used to pre-populate beam search heap, e.g. [my_own_DHTID, ...maybe_some_peers]
     :param k_nearest: find up to this many nearest neighbors. If there are less nodes in the DHT, return all nodes
     :param beam_size: beam search will not give up until it exhausts this many nearest nodes (to query_id) from the heap
         Recommended value: A beam size of k_nearest * (2-5) will yield near-perfect results.
