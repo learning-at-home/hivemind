@@ -20,6 +20,7 @@ API documentation:
 
   modules/client.rst
   modules/server.rst
+  modules/dht.rst
 
 Indices and tables
 ==================

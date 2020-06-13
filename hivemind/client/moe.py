@@ -147,7 +147,13 @@ class RemoteMixtureOfExperts(nn.Module):
 
     def compute_expert_scores(
             self, grid_scores: List[torch.Tensor], batch_experts: List[List[RemoteExpert]]) -> torch.Tensor:
-        """ TODO(jheuristic) docstring here """
+        """
+        Compute scores for each expert by adding up grid scores, autograd-friendly
+        :param grid_scores: list of torch tensors, i-th tensor contains scores for i-th grid dimension
+        :param batch_experts: list(batch) of lists(k) of up to k experts selected for this batch
+        :returns: a tensor of scores, float32[batch_size, k]
+        :note: if some rows in batch have less than max number of experts, their scores will be padded with -inf
+        """
         expert_counts = list(map(len, batch_experts))
         batch_size = len(batch_experts)
         max_num_experts = max(expert_counts)

@@ -16,6 +16,7 @@ from ..utils import Endpoint, PickleSerializer
 class RoutingTable:
     """
     A data structure that contains DHT peers bucketed according to their distance to node_id
+
     :param node_id: node id used to measure distance
     :param bucket_size: parameter $k$ from Kademlia paper Section 2.2
     :param depth_modulo: parameter $b$ from Kademlia paper Section 2.2.
@@ -38,6 +39,7 @@ class RoutingTable:
     def add_or_update_node(self, node_id: DHTID, addr: Endpoint) -> Optional[Tuple[DHTID, Endpoint]]:
         """
         Update routing table after an incoming request from :addr: (host:port) or outgoing request to :addr:
+
         :returns: If we cannot add node_id to the routing table, return the least-recently-updated node (Section 2.2)
         :note: KademliaProtocol calls this method for every incoming and outgoing request if there was a response.
           If this method returned a node to be ping-ed, the protocol will ping it to check and either move it to
@@ -81,6 +83,7 @@ class RoutingTable:
             self, query_id: DHTID, k: int, exclude: Optional[DHTID] = None) -> List[Tuple[DHTID, Endpoint]]:
         """
         Find k nearest neighbors from routing table according to XOR distance, does NOT include self.node_id
+
         :param query_id: find neighbors of this node
         :param k: find this many neighbors. If there aren't enough nodes in the table, returns all nodes
         :param exclude: if True, results will not contain query_node_id even if it is in table
@@ -147,6 +150,7 @@ class KBucket:
         """
         Add node to KBucket or update existing node, return True if successful, False if the bucket is full.
         If the bucket is full, keep track of node in a replacement list, per section 4.1 of the paper.
+
         :param node_id: dht node identifier that should be added or moved to the front of bucket
         :param addr: a pair of (hostname, port) associated with that node id
         :note: this function has a side-effect of resetting KBucket.last_updated time
@@ -225,6 +229,7 @@ class DHTID(int):
     def generate(cls, source: Optional[Any] = None, nbits: int = 255):
         """
         Generates random uid based on SHA1
+
         :param source: if provided, converts this value to bytes and uses it as input for hashing function;
             by default, generates a random dhtid from :nbits: random bits
         """
@@ -249,11 +254,13 @@ class DHTID(int):
         return len(os.path.commonprefix(ids_bits))
 
     def to_bytes(self, length=HASH_NBYTES, byteorder='big', *, signed=False) -> bytes:
+        """ A standard way to serialize DHTID into bytes """
         return super().to_bytes(length, byteorder, signed=signed)
 
     @classmethod
-    def from_bytes(self, bytes, byteorder='big', *, signed=False) -> DHTID:
-        return DHTID(super().from_bytes(bytes, byteorder=byteorder, signed=signed))
+    def from_bytes(cls, raw: bytes, byteorder='big', *, signed=False) -> DHTID:
+        """ reverse of to_bytes """
+        return DHTID(super().from_bytes(raw, byteorder=byteorder, signed=signed))
 
     def __repr__(self):
         return f"{self.__class__.__name__}({hex(self)})"

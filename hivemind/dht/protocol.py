@@ -55,6 +55,7 @@ class KademliaProtocol(RPCProtocol):
                          expiration_time: DHTExpiration, in_cache: bool = False) -> Optional[bool]:
         """
         Ask a recipient to store (key, value) pair until expiration time or update their older value
+
         :returns: True if value was accepted, False if it was rejected (recipient has newer value), None if no response
         """
         responded, response = await self.store(recipient, bytes(self.node_id), bytes(key),
@@ -69,6 +70,7 @@ class KademliaProtocol(RPCProtocol):
                       query_id_bytes: BinaryDHTID) -> Tuple[List[Tuple[BinaryDHTID, Endpoint]], BinaryDHTID]:
         """
         Someone wants to find :key_node: in the DHT. Give him k nearest neighbors from our routing table
+
         :returns: a list of pairs (node_id, address) of :bucket_size: nearest to key_node according to XOR distance,
          also returns our own node id for routing table maintenance
         """
@@ -81,6 +83,7 @@ class KademliaProtocol(RPCProtocol):
         """
         Ask a recipient to give you nearest neighbors to key_node. If recipient knows key_node directly,
          it will be returned as first of the neighbors; if recipient does not respond, return empty dict.
+
         :returns: a dicitionary[node id => address] as per Section 2.3 of the paper
         """
         responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(query_id))
@@ -97,8 +100,9 @@ class KademliaProtocol(RPCProtocol):
         """
         Someone wants to find value corresponding to key. If we have the value, return the value and its expiration time
          Either way, return :bucket_size: nearest neighbors to that node.
-        :note: this is a deviation from Section 2.3 of the paper, original kademlia returner EITHER value OR neighbors
+
         :returns: (value or None if we have no value, nearest neighbors, our own dht id)
+        :note: this is a deviation from Section 2.3 of the paper, original kademlia returner EITHER value OR neighbors
         """
         maybe_value, maybe_expiration = self.storage.get(DHTID.from_bytes(key_bytes))
         cached_value, cached_expiration = self.cache.get(DHTID.from_bytes(key_bytes))
@@ -111,11 +115,12 @@ class KademliaProtocol(RPCProtocol):
             Tuple[Optional[DHTValue], Optional[DHTExpiration], Dict[DHTID, Endpoint]]:
         """
         Ask a recipient to give you the value, if it has one, or nearest neighbors to your key.
+
         :returns: (optional value, optional expiration time, and neighbors)
          value: whatever was the latest value stored by the recipient with that key (see DHTNode contract)
          expiration time: expiration time of the returned value, None if no value was found
          neighbors:  a dictionary[node id => address] as per Section 2.3 of the paper;
-        Note: if no response, returns None, None, {}
+        :note: if no response, returns None, None, {}
         """
         responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
         if responded:
@@ -128,6 +133,7 @@ class KademliaProtocol(RPCProtocol):
     async def update_routing_table(self, node_id: Optional[DHTID], addr: Endpoint, responded=True):
         """
         This method is called on every incoming AND outgoing request to update the routing table
+
         :param addr: sender endpoint for incoming requests, recipient endpoint for outgoing requests
         :param node_id: sender node id for incoming requests, recipient node id for outgoing requests
         :param responded: for outgoing requests, this indicated whether recipient responded or not.
