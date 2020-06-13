@@ -1,6 +1,6 @@
 """
 This sub-module implements a node in a Kademlia-based DHT. The code is organized as follows:
- * class DHT (below) - high-level class for model training. Runs DHTNode in a background process.
+ * class HivemindDHT (below) - high-level class for model training. Runs DHTNode in a background process.
  * class DHTNode (node.py) - an asyncio implementation of dht server, stores AND gets keys. Asyncio-based.
  * class KademliaProtocol (protocol.py) - an rpc protocol to request data from dht nodes. Asyncio-based.
 
@@ -23,7 +23,7 @@ class HivemindDHT(mp.Process):
     """
     A high-level interface to hivemind DHT. Runs a dht node in a background process.
     :param initial_peers: one or multiple pairs of (host, port) pointing to active DHT peers. Default: no peers
-    :param port: a port where DHT will listen to incoming connections. Defaults to hivemind.utils.find_open_port
+    :param port: a port where DHT node will listen to incoming connections. Defaults to hivemind.utils.find_open_port
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
     :param node_params: any other params will be forwarded to DHTNode upon creation
@@ -60,7 +60,7 @@ class HivemindDHT(mp.Process):
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
-        Starts DHT in a background process. if await_ready, this method will wait until background dht
+        Starts HivemindDHT in a background process. if await_ready, this method will wait until background dht
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()
