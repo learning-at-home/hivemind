@@ -91,8 +91,9 @@ class DHTNode:
                                  beam_size: Optional[int] = None, exclude_self: bool = False) -> Dict[DHTID, Endpoint]:
         """
         Traverse the DHT and find :k_nearest: nodes to a given :query_id:, optionally :exclude_self: from the results.
-        :note: this is a thin wrapper over dht.search.beam_search, look there for more details
+
         :returns: an ordered dictionary of [peer DHTID -> network Endpoint], ordered from nearest to farthest neighbor
+        :note: this is a thin wrapper over dht.search.traverse_dht, look there for more details
         """
         k_nearest = k_nearest if k_nearest is not None else self.protocol.bucket_size
         beam_size = beam_size if beam_size is not None else max(self.protocol.bucket_size, k_nearest)
@@ -118,7 +119,8 @@ class DHTNode:
         """
         Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
         Also cache (key, value, expiration_time) at all nodes you met along the way (see Section 2.1 end)
-        :return: True if store succeeds, False if it fails (due to no response or newer value)
+
+        :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
         key_id = DHTID.generate(key)
         nearest_node_to_addr = await self.find_nearest_nodes(key_id, k_nearest=self.num_replicas, exclude_self=True)

@@ -46,6 +46,7 @@ class HivemindDHT(mp.Process):
             self.run_in_background(await_ready=True)
 
     def run(self) -> None:
+        """ Serve DHT forever. This function will not return until DHT node is shut down """
         if asyncio.get_event_loop().is_running():
             asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
         loop = asyncio.new_event_loop()
@@ -103,6 +104,7 @@ class HivemindDHT(mp.Process):
     def declare_experts(self, uids: List[str], addr, port, wait=True, timeout=None) -> Optional[List[bool]]:
         """
         Make experts available to DHT; update timestamps if already available
+
         :param uids: a list of expert ids to update
         :param addr: hostname that can be used to call this expert
         :param port: port that can be used to call this expert
@@ -140,6 +142,7 @@ class HivemindDHT(mp.Process):
     def first_k_active(self, prefixes: List[str], k: int, max_prefetch=None):
         """
         Find k prefixes with active experts; may return less if there aren't enough; used for DMoE beam search
+
         :param prefixes: a list of uid prefixes ordered from highest to lowest priority
         :param k: return at most *this many* active prefixes
         :param max_prefetch: pre-dispatch up to *this many* asynchronous expert requests, defaults to pre-dispatch = k
