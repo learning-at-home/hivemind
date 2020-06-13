@@ -19,7 +19,7 @@ from ..client import RemoteExpert
 from ..utils import SharedFuture, find_open_port, Hostname, Port, run_in_background
 
 
-class DHT(mp.Process):
+class HivemindDHT(mp.Process):
     """
     A high-level interface to hivemind DHT. Runs a dht node in a background process.
     :param initial_peers: one or multiple pairs of (host, port) pointing to active DHT peers. Default: no peers
