@@ -29,7 +29,7 @@ class DHTNode:
     :param interface: provide 0.0.0.0 to operate over ipv4, :: to operate over ipv6, localhost to operate locally, etc.
 
     :note: Hivemind DHT is optimized to store temporary metadata that is regularly updated.
-     For example, an expert alive timestamp that emitted by the Server responsible for that expert.
+     For example, an expert alive timestamp that emitted by the HivemindServer responsible for that expert.
      Such metadata does not require maintenance such as ensuring at least k hosts have it or (de)serialization in case
      of node shutdown. Instead, DHTNode is designed to reduce the latency of looking up such data.
 

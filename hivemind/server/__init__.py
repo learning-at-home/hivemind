@@ -12,7 +12,7 @@ from ..runtime import Runtime, ExpertBackend
 
 class HivemindServer(threading.Thread):
     """
-    Server allows you to host "experts" - pytorch sub-networks used by Decentralized Mixture of Experts.
+    HivemindServer allows you to host "experts" - pytorch sub-networks used by Decentralized Mixture of Experts.
     After creation, a server should be started: see Server.run or Server.run_in_background.
 
     A working server does 3 things:
@@ -20,7 +20,7 @@ class HivemindServer(threading.Thread):
      - publishes updates to expert status every :update_period: seconds
      - follows orders from HivemindController - if it exists
 
-    :type dht: HivemindDHT or None. Server with dht=None will NOT be visible from DHT,
+    :type dht: HivemindDHT or None. HivemindServer with dht=None will NOT be visible from DHT,
      but it will still support accessing experts directly with RemoteExpert(uid=UID, host=IPADDR, port=PORT).
     :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
     :param addr: server's dht address that determines how it can be accessed. Default is local connections only.
@@ -47,7 +47,7 @@ class HivemindServer(threading.Thread):
 
     def run(self):
         """
-        Starts Server in the current thread. Initializes dht if necessary, starts connection handlers,
+        Starts HivemindServer in the current thread. Initializes dht if necessary, starts connection handlers,
         runs Runtime (self.runtime) to process incoming requests.
         """
         if self.dht:
@@ -71,7 +71,7 @@ class HivemindServer(threading.Thread):
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
-        Starts Server in a background thread. if await_ready, this method will wait until background server
+        Starts HivemindServer in a background thread. if await_ready, this method will wait until background server
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()
