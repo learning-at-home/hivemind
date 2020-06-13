@@ -1,6 +1,6 @@
 import asyncio
 import heapq
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, Iterator
 from rpcudp.protocol import RPCProtocol
 
 from .routing import RoutingTable, DHTID, DHTValue, DHTExpiration, BinaryDHTID, get_dht_time
@@ -21,10 +21,10 @@ class KademliaProtocol(RPCProtocol):
      Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int,
-                 wait_timeout: float, cache_size: Optional[int] = None):
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, wait_timeout: float,
+                 num_replicas: Optional[int] = None, cache_size: Optional[int] = None):
         super().__init__(wait_timeout)
-        self.node_id, self.bucket_size = node_id, bucket_size
+        self.node_id, self.bucket_size, self.num_replicas = node_id, bucket_size, num_replicas or self.bucket_size
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.storage = LocalStorage()
         self.cache = LocalStorage(maxsize=cache_size)
@@ -134,11 +134,23 @@ class KademliaProtocol(RPCProtocol):
           For incoming requests, this should always be True
         """
         if responded:  # incoming request or outgoing request with response
+            if node_id not in self.routing_table:
+                # we just met a new node, maybe we know some values that it *should* store
+                for key, value, expiration in self.storage.items():
+                    neighbors = self.routing_table.get_nearest_neighbors(key, self.num_replicas, exclude=self.node_id)
+                    if neighbors:
+                        nearest_distance = neighbors[0][0].xor_distance(key)
+                        farthest_distance = neighbors[-1][0].xor_distance(key)
+                        new_node_should_store = node_id.xor_distance(key) < farthest_distance
+                        this_node_is_responsible = self.node_id.xor_distance(key) < nearest_distance
+                    if not neighbors or (new_node_should_store and this_node_is_responsible):
+                        asyncio.create_task(self.call_store(addr, key, value, expiration))
+
             maybe_node_to_ping = self.routing_table.add_or_update_node(node_id, addr)
             if maybe_node_to_ping is not None:
                 # we couldn't add new node because the table was full. Check if existing peers are alive (Section 2.2)
                 # ping one least-recently updated peer: if it won't respond, remove it from the table, else update it
-                await self.call_ping(maybe_node_to_ping[1])  # [1]-th element is that node's endpoint
+                asyncio.create_task(self.call_ping(maybe_node_to_ping[1]))  # [1]-th element is that node's endpoint
 
         else:  # outgoing request and peer did not respond
             if node_id is not None and node_id in self.routing_table:
@@ -152,7 +164,6 @@ class KademliaProtocol(RPCProtocol):
             del self._outstanding[msg_id]
         else:
             super()._accept_response(msg_id, data, address)
-
 
 
 class LocalStorage:
@@ -194,3 +205,8 @@ class LocalStorage:
         if key in self.data:
             return self.data[key]
         return None, None
+
+    def items(self) -> Iterator[Tuple[DHTID, DHTValue, DHTExpiration]]:
+        """ Iterate over (key, value, expiration_time) tuples stored in this storage """
+        self.remove_outdated()
+        return ((key, value, expiration) for key, (value, expiration) in self.data.items())
