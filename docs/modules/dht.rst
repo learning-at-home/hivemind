@@ -11,6 +11,7 @@
 
 .. autoclass:: HivemindDHT
    :members:
+   :exclude-members: make_key
    :member-order: bysource
 
 .. autoclass:: DHTNode

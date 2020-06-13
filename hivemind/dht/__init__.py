@@ -22,6 +22,7 @@ from ..utils import SharedFuture, find_open_port, Hostname, Port, run_in_backgro
 class HivemindDHT(mp.Process):
     """
     A high-level interface to hivemind DHT. Runs a dht node in a background process.
+
     :param initial_peers: one or multiple pairs of (host, port) pointing to active DHT peers. Default: no peers
     :param port: a port where DHT node will listen to incoming connections. Defaults to hivemind.utils.find_open_port
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start

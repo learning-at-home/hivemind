@@ -37,10 +37,12 @@ class DHTNode:
     Informally, dht nodes always prefer values with higher expiration_time and may delete any value past its expiration.
 
     Formally, DHTNode follows this contract:
-      - when asked to store(key, value, expiration_time), a node must store (key, value) at least until expiration_time
-       unless it already stores that key with greater or equal expiration_time - if so, node must keep the previous key
-      - when asked to get(key), a node must return the value with highest expiration time IF that time has not come yet
-       if expiration time is greater than current get_dht_time(), DHTNode *may* return None
+
+    - when asked to store(key, value, expiration_time), a node must store (key, value) at least until expiration_time
+      unless it already stores that key with greater or equal expiration_time - if so, node must keep the previous key
+    - when asked to get(key), a node must return the value with highest expiration time IF that time has not come yet
+      if expiration time is greater than current get_dht_time(), DHTNode *may* return None
+
     """
 
     def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),

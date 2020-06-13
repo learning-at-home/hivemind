@@ -97,6 +97,7 @@ class TaskPool(TaskPoolBase):
         return future2
 
     def iterate_minibatches(self, *args, **kwargs):
+        """ Form minibatches by grouping one or more tasks together up to self.max_batch_size """
         batch = []
         total_size = 0
 
