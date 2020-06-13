@@ -10,7 +10,7 @@ from ..dht import HivemindDHT
 from ..runtime import Runtime, ExpertBackend
 
 
-class Server(threading.Thread):
+class HivemindServer(threading.Thread):
     """
     Server allows you to host "experts" - pytorch sub-networks used by Decentralized Mixture of Experts.
     After creation, a server should be started: see Server.run or Server.run_in_background.

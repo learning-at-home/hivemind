@@ -11,7 +11,7 @@ from .layers import name_to_block, name_to_input
 def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024,
                       num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
                       no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
-                      UID_DELIMETER=hivemind.HivemindDHT.UID_DELIMETER, start=False, **kwargs) -> hivemind.Server:
+                      UID_DELIMETER=hivemind.HivemindDHT.UID_DELIMETER, start=False, **kwargs) -> hivemind.HivemindServer:
     """
     Instantiate a server with several identical experts. See argparse comments below for details
     :param interface: 'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6
@@ -77,7 +77,7 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
                                                      max_batch_size=max_batch_size,
                                                      )
     # actually start server
-    server = hivemind.Server(
+    server = hivemind.HivemindServer(
         dht, experts, addr=interface, port=port or hivemind.find_open_port(),
         conn_handler_processes=num_handlers, device=device)
 
