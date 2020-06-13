@@ -1,4 +1,5 @@
 import asyncio
+import random
 from collections import OrderedDict
 from functools import partial
 from typing import Optional, Tuple, List, Dict
@@ -25,6 +26,7 @@ class DHTNode:
     :param depth_modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of this value
     :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
     :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
+        if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
     :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
     :param interface: provide 0.0.0.0 to operate over ipv4, :: to operate over ipv6, localhost to operate locally, etc.
 
@@ -45,7 +47,7 @@ class DHTNode:
 
     def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
                  bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5,
-                 wait_timeout: float = 5, staleness_timeout: Optional[float] = 600,
+                 wait_timeout: float = 5, staleness_timeout: Optional[float] = None,
                  bootstrap_timeout: Optional[float] = None, cache_locally: bool = True, cache_nearest: int = 1,
                  interface: Hostname = '0.0.0.0'):
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
@@ -83,7 +85,10 @@ class DHTNode:
 
             # bootstrap part 3: run beam search for my node id to add my own nearest neighbors to the routing table
             # ... and maybe receive some values that we are meant to store (see protocol.update_routing_table)
-            loop.run_until_complete(self.find_nearest_nodes(query_id=self.node_id))
+            loop.create_task(self.find_nearest_nodes(query_id=self.node_id))
+
+        if self.staleness_timeout is not None:
+            loop.create_task(self._refresh_routing_table(period=self.staleness_timeout))
 
     async def find_nearest_nodes(self, query_id: DHTID, k_nearest: Optional[int] = None,
                                  beam_size: Optional[int] = None, exclude_self: bool = False) -> Dict[DHTID, Endpoint]:
@@ -203,3 +208,16 @@ class DHTNode:
                     break
 
         return (latest_value, latest_expiration) if latest_expiration != -float('inf') else (None, None)
+
+    async def _refresh_routing_table(self, *, period: Optional[float]) -> None:
+        """ Tries to find new nodes for buckets that were unused for more than self.staleness_timeout """
+        while period is not None:  # if None run once, otherwise run forever
+            refresh_time = get_dht_time()
+            staleness_threshold = refresh_time - self.staleness_timeout
+            stale_buckets = [bucket for bucket in self.protocol.routing_table.buckets
+                             if bucket.last_updated < staleness_threshold]
+            for bucket in stale_buckets:
+                refresh_id = DHTID(random.randint(bucket.lower, bucket.upper - 1))
+                await self.find_nearest_nodes(refresh_id)
+
+            await asyncio.sleep(max(0.0, period - (get_dht_time() - refresh_time)))
