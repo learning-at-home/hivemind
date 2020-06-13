@@ -1,6 +1,6 @@
 """
 This sub-module implements a node in a Kademlia-based DHT. The code is organized as follows:
- * class HivemindDHT (below) - high-level class for model training. Runs DHTNode in a background process.
+ * class DHT (below) - high-level class for model training. Runs DHTNode in a background process.
  * class DHTNode (node.py) - an asyncio implementation of dht server, stores AND gets keys. Asyncio-based.
  * class KademliaProtocol (protocol.py) - an rpc protocol to request data from dht nodes. Asyncio-based.
 
@@ -19,7 +19,7 @@ from ..client import RemoteExpert
 from ..utils import SharedFuture, find_open_port, Hostname, Port, run_in_background
 
 
-class HivemindDHT(mp.Process):
+class DHT(mp.Process):
     """
     A high-level interface to hivemind DHT. Runs a dht node in a background process.
 
@@ -62,7 +62,7 @@ class HivemindDHT(mp.Process):
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
-        Starts HivemindDHT in a background process. if await_ready, this method will wait until background dht
+        Starts DHT in a background process. if await_ready, this method will wait until background dht
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()

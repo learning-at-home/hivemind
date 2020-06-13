@@ -5,7 +5,7 @@
 
 .. currentmodule:: hivemind.server
 
-.. autoclass:: HivemindServer
+.. autoclass:: Server
    :members:
    :member-order: bysource
 

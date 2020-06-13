@@ -1,11 +1,11 @@
 import threading
 import time
 
-from ..dht import HivemindDHT
+from ..dht import DHT
 
 
 class DHTHandlerThread(threading.Thread):
-    def __init__(self, experts, dht: HivemindDHT,
+    def __init__(self, experts, dht: DHT,
                  update_period: int = 5, addr: str = '127.0.0.1', port: int = 8080):
         super(DHTHandlerThread, self).__init__()
         self.port = port

@@ -11,7 +11,7 @@ from .layers import name_to_block, name_to_input
 def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024,
                       num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
                       no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
-                      UID_DELIMETER=hivemind.HivemindDHT.UID_DELIMETER, start=False, **kwargs) -> hivemind.HivemindServer:
+                      UID_DELIMETER=hivemind.DHT.UID_DELIMETER, start=False, **kwargs) -> hivemind.Server:
     """
     Instantiate a server with several identical experts. See argparse comments below for details
     :param interface: 'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6
@@ -45,7 +45,7 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
     if not no_dht:
         if not len(initial_peers):
             print("No initial peers provided. Starting additional dht as an initial peer.")
-            dht_root = hivemind.HivemindDHT(
+            dht_root = hivemind.DHT(
                 *initial_peers, port=root_port or hivemind.find_open_port(), start=True)
             print(f"Initializing DHT with port {dht_root.port}")
             initial_peers = (('localhost', dht_root.port),)
@@ -54,7 +54,7 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
             if root_port is not None:
                 print(f"Warning: root_port={root_port} will not be used since we already have peers.")
 
-        dht = hivemind.HivemindDHT(
+        dht = hivemind.DHT(
             *initial_peers, port=dht_port or hivemind.find_open_port(), start=True)
         if verbose:
             print(f"Running dht node on port {dht.port}")
@@ -77,7 +77,7 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
                                                      max_batch_size=max_batch_size,
                                                      )
     # actually start server
-    server = hivemind.HivemindServer(
+    server = hivemind.Server(
         dht, experts, addr=interface, port=port or hivemind.find_open_port(),
         conn_handler_processes=num_handlers, device=device)
 

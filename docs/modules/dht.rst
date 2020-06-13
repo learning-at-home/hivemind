@@ -9,7 +9,7 @@
 .. currentmodule:: hivemind.dht
 
 
-.. autoclass:: HivemindDHT
+.. autoclass:: DHT
    :members:
    :exclude-members: make_key
    :member-order: bysource

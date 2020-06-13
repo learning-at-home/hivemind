@@ -201,13 +201,13 @@ def test_dht():
 
 
 def test_hivemind_dht():
-    peers = [hivemind.dht.HivemindDHT(start=True)]
+    peers = [hivemind.dht.DHT(start=True)]
     for i in range(10):
         neighbors_i = [('localhost', node.port) for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(hivemind.HivemindDHT(*neighbors_i, start=True))
+        peers.append(hivemind.DHT(*neighbors_i, start=True))
 
-    you: hivemind.dht.HivemindDHT = random.choice(peers)
-    theguyshetoldyounottoworryabout: hivemind.dht.HivemindDHT = random.choice(peers)
+    you: hivemind.dht.DHT = random.choice(peers)
+    theguyshetoldyounottoworryabout: hivemind.dht.DHT = random.choice(peers)
 
     expert_uids = [str(uuid.uuid4()) for _ in range(110)]
     batch_size = 10

@@ -66,7 +66,7 @@ def test_determinism():
 
 def test_compute_expert_scores():
     try:
-        dht = hivemind.HivemindDHT(port=hivemind.find_open_port(), start=True)
+        dht = hivemind.DHT(port=hivemind.find_open_port(), start=True)
         moe = hivemind.client.moe.RemoteMixtureOfExperts(
             dht=dht, in_features=1024, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1,
             uid_prefix='expert')
