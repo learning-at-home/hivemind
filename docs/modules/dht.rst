@@ -36,6 +36,7 @@
 
 .. autoclass:: DHTID
    :members:
+   :exclude-members: HASH_FUNC
    :member-order: bysource
 
 .. currentmodule:: hivemind.dht.search
