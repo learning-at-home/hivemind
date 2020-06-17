@@ -16,7 +16,7 @@ jobs:
           command: sudo python setup.py develop
           name: setup
       - run:
-          command: nosetests tests/*
+          command: pytest ./tests --full-trace
           name: tests
       - run:
           command: python tests/benchmark_throughput.py --preset minimalistic
