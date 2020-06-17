@@ -28,6 +28,10 @@ class DHTNode:
     :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
         if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
     :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
+    :param cache_locally: if True, caches all values (stored or found) in a node-local cache
+    :param cache_nearest: if above 0, whenever DHTNode finds a value, it will also store (cache) this value on this many
+        nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet.
+    :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
     :param interface: provide 0.0.0.0 to operate over ipv4, :: to operate over ipv6, localhost to operate locally, etc.
 
     :note: Hivemind DHT is optimized to store temporary metadata that is regularly updated.
@@ -50,8 +54,8 @@ class DHTNode:
     def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
                  bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5,
                  wait_timeout: float = 5, staleness_timeout: Optional[float] = None,
-                 bootstrap_timeout: Optional[float] = None, cache_locally: bool = True, cache_nearest: int = 1,
-                 interface: Hostname = '0.0.0.0'):
+                 cache_locally: bool = True, cache_nearest: int = 1, cache_size=None,
+                 bootstrap_timeout: Optional[float] = None, interface: Hostname = '0.0.0.0'):
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.port = port = port if port is not None else find_open_port()
         self.num_replicas = num_replicas if num_replicas is not None else bucket_size
@@ -60,7 +64,8 @@ class DHTNode:
 
         # create kademlia protocol and make it listen to a port
         loop = asyncio.get_event_loop()
-        make_protocol = partial(KademliaProtocol, self.node_id, bucket_size, depth_modulo, wait_timeout)
+        make_protocol = partial(KademliaProtocol,
+                                self.node_id, bucket_size, depth_modulo, wait_timeout, num_replicas, cache_size)
         listener = loop.run_until_complete(loop.create_datagram_endpoint(make_protocol, local_addr=(interface, port)))
         self.transport: asyncio.Transport = listener[0]
         self.protocol: KademliaProtocol = listener[1]
