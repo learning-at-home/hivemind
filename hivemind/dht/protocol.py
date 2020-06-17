@@ -37,7 +37,7 @@ class KademliaProtocol(RPCProtocol):
 
     async def call_ping(self, recipient: Endpoint) -> Optional[DHTID]:
         """ Get recipient's node id and add him to the routing table. If recipient doesn't respond, return None """
-        with self.rpc_semaphore:
+        async with self.rpc_semaphore:
             responded, response = await self.ping(recipient, bytes(self.node_id))
         recipient_node_id = DHTID.from_bytes(response) if responded else None
         asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
@@ -60,7 +60,7 @@ class KademliaProtocol(RPCProtocol):
 
         :returns: True if value was accepted, False if it was rejected (recipient has newer value), None if no response
         """
-        with self.rpc_semaphore:
+        async with self.rpc_semaphore:
             responded, response = await self.store(recipient, bytes(self.node_id), bytes(key),
                                                    value, expiration_time, in_cache)
         if responded:
@@ -89,7 +89,7 @@ class KademliaProtocol(RPCProtocol):
 
         :returns: a dicitionary[node id => address] as per Section 2.3 of the paper
         """
-        with self.rpc_semaphore:
+        async with self.rpc_semaphore:
             responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(query_id))
         if responded:
             peers = {DHTID.from_bytes(peer_id_bytes): tuple(addr) for peer_id_bytes, addr in response[0]}
@@ -126,7 +126,7 @@ class KademliaProtocol(RPCProtocol):
          neighbors:  a dictionary[node id => address] as per Section 2.3 of the paper;
         :note: if no response, returns None, None, {}
         """
-        with self.rpc_semaphore:
+        async with self.rpc_semaphore:
             responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
         if responded:
             (value, expiration_time, peers_bytes), recipient_id = response[:-1], DHTID.from_bytes(response[-1])
