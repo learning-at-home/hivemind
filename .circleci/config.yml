@@ -10,13 +10,13 @@ jobs:
       - checkout
       - python/load-cache
       - python/install-deps
-      - run: sudo pip install codecov
+      - run: sudo pip install codecov pytest
       - python/save-cache
       - run:
           command: sudo python setup.py develop
           name: setup
       - run:
-          command: nosetests tests/*
+          command: pytest ./tests --full-trace
           name: tests
       - run:
           command: python tests/benchmark_throughput.py --preset minimalistic
