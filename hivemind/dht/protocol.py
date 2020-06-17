@@ -24,7 +24,7 @@ class KademliaProtocol(RPCProtocol):
     def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, wait_timeout: float,
                  num_replicas: Optional[int] = None, cache_size: Optional[int] = None):
         super().__init__(wait_timeout)
-        self.node_id, self.bucket_size, self.num_replicas = node_id, bucket_size, num_replicas or self.bucket_size
+        self.node_id, self.bucket_size, self.num_replicas = node_id, bucket_size, num_replicas or bucket_size
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.storage = LocalStorage()
         self.cache = LocalStorage(maxsize=cache_size)
