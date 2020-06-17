@@ -10,7 +10,7 @@ jobs:
       - checkout
       - python/load-cache
       - python/install-deps
-      - run: sudo pip install codecov
+      - run: sudo pip install codecov pytest
       - python/save-cache
       - run:
           command: sudo python setup.py develop
