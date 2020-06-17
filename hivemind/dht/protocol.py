@@ -22,9 +22,10 @@ class KademliaProtocol(RPCProtocol):
     """
 
     def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, wait_timeout: float,
-                 num_replicas: Optional[int] = None, cache_size: Optional[int] = None):
+                 max_concurrent_rpc: int, num_replicas: Optional[int] = None, cache_size: Optional[int] = None):
         super().__init__(wait_timeout)
         self.node_id, self.bucket_size, self.num_replicas = node_id, bucket_size, num_replicas or bucket_size
+        self.rpc_semaphore = asyncio.BoundedSemaphore(value=max_concurrent_rpc)
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.storage = LocalStorage()
         self.cache = LocalStorage(maxsize=cache_size)
@@ -36,7 +37,8 @@ class KademliaProtocol(RPCProtocol):
 
     async def call_ping(self, recipient: Endpoint) -> Optional[DHTID]:
         """ Get recipient's node id and add him to the routing table. If recipient doesn't respond, return None """
-        responded, response = await self.ping(recipient, bytes(self.node_id))
+        with self.rpc_semaphore:
+            responded, response = await self.ping(recipient, bytes(self.node_id))
         recipient_node_id = DHTID.from_bytes(response) if responded else None
         asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
         return recipient_node_id
@@ -58,8 +60,9 @@ class KademliaProtocol(RPCProtocol):
 
         :returns: True if value was accepted, False if it was rejected (recipient has newer value), None if no response
         """
-        responded, response = await self.store(recipient, bytes(self.node_id), bytes(key),
-                                               value, expiration_time, in_cache)
+        with self.rpc_semaphore:
+            responded, response = await self.store(recipient, bytes(self.node_id), bytes(key),
+                                                   value, expiration_time, in_cache)
         if responded:
             store_accepted, recipient_node_id = response[0], DHTID.from_bytes(response[1])
             asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
@@ -86,7 +89,8 @@ class KademliaProtocol(RPCProtocol):
 
         :returns: a dicitionary[node id => address] as per Section 2.3 of the paper
         """
-        responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(query_id))
+        with self.rpc_semaphore:
+            responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(query_id))
         if responded:
             peers = {DHTID.from_bytes(peer_id_bytes): tuple(addr) for peer_id_bytes, addr in response[0]}
             # Note: we convert addr from list to tuple here --^ because some msgpack versions convert tuples to lists
@@ -122,7 +126,8 @@ class KademliaProtocol(RPCProtocol):
          neighbors:  a dictionary[node id => address] as per Section 2.3 of the paper;
         :note: if no response, returns None, None, {}
         """
-        responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
+        with self.rpc_semaphore:
+            responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
         if responded:
             (value, expiration_time, peers_bytes), recipient_id = response[:-1], DHTID.from_bytes(response[-1])
             peers = {DHTID.from_bytes(peer_id_bytes): tuple(addr) for peer_id_bytes, addr in peers_bytes}
