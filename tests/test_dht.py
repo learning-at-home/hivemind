@@ -20,7 +20,7 @@ from hivemind.dht.protocol import LocalStorage
 def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event,
                           ping: Optional[hivemind.Endpoint] = None):
     loop = asyncio.new_event_loop()
-    protocol = partial(KademliaProtocol, dhtid, bucket_size=20, depth_modulo=5, wait_timeout=5, max_concurrent_rpc=192)
+    protocol = partial(KademliaProtocol, dhtid, bucket_size=20, depth_modulo=5, wait_timeout=5, max_concurrent_rpc=128)
     listen = loop.create_datagram_endpoint(protocol, local_addr=('127.0.0.1', port))
     transport, protocol = loop.run_until_complete(listen)
     print(f"Started peer id={protocol.node_id} port={port}", flush=True)
@@ -48,7 +48,7 @@ def test_kademlia_protocol():
         port = hivemind.find_open_port()
         loop = asyncio.new_event_loop()
         protocol = partial(KademliaProtocol, DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5,
-                           max_concurrent_rpc=192)
+                           max_concurrent_rpc=128)
         listen = loop.create_datagram_endpoint(protocol, local_addr=('127.0.0.1', port))
         transport, protocol = loop.run_until_complete(listen)
         print(f"Self id={protocol.node_id} port={port}", flush=True)

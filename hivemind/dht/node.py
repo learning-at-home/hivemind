@@ -55,7 +55,7 @@ class DHTNode:
 
     def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
                  bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5,
-                 max_concurrent_rpc: int = 64, wait_timeout: float = 5, staleness_timeout: Optional[float] = None,
+                 max_concurrent_rpc: int = 128, wait_timeout: float = 5, staleness_timeout: Optional[float] = None,
                  bootstrap_timeout: Optional[float] = None, cache_locally: bool = True, cache_nearest: int = 1,
                  cache_size=None, interface: Hostname = '0.0.0.0'):
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
