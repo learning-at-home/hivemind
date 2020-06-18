@@ -142,7 +142,7 @@ class KademliaProtocol(RPCProtocol):
         if responded:  # incoming request or outgoing request with response
             if node_id not in self.routing_table:
                 # we just met a new node, maybe we know some values that it *should* store
-                for key, value, expiration in self.storage.items():
+                for key, value, expiration in list(self.storage.items()):
                     neighbors = self.routing_table.get_nearest_neighbors(key, self.num_replicas, exclude=self.node_id)
                     if neighbors:
                         nearest_distance = neighbors[0][0].xor_distance(key)
