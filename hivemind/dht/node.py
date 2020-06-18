@@ -80,7 +80,7 @@ class DHTNode:
             finished_ping_tasks, remaining_ping_tasks = loop.run_until_complete(
                 asyncio.wait(ping_tasks, return_when=asyncio.FIRST_COMPLETED))
 
-            # stage 2: gather remaining peers who respond within bootstrap_timeout
+            # stage 2: gather remaining peers (those who respond within bootstrap_timeout)
             if remaining_ping_tasks:
                 finished_in_time, stragglers = loop.run_until_complete(
                     asyncio.wait(remaining_ping_tasks, timeout=bootstrap_timeout - get_dht_time() + start_time))
