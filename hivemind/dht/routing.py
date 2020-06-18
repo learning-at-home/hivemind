@@ -193,6 +193,9 @@ class KBucket:
                 newnode_id, newnode = self.replacement_nodes.popitem()
                 self.nodes_to_addr[newnode_id] = newnode
 
+    def __contains__(self, node_id: DHTID):
+        return node_id in self.nodes_to_addr or node_id in self.replacement_nodes
+
     def __len__(self):
         return len(self.nodes_to_addr)
 
