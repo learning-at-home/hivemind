@@ -73,18 +73,14 @@ class DHTNode:
         self.protocol: KademliaProtocol = listener[1]
 
         if initial_peers:
-            # ping initial_peers, add each other to the routing table
+            # stage 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
             start_time = get_dht_time()
             ping_tasks = map(self.protocol.call_ping, initial_peers)
             finished_ping_tasks, remaining_ping_tasks = loop.run_until_complete(
                 asyncio.wait(ping_tasks, return_when=asyncio.FIRST_COMPLETED))
 
-            # after first peer responded, use that peer to find my own nearest neighbors and populate the routing table
-            # ... and maybe receive some values that we are meant to store (see protocol.update_routing_table)
-            traverse_dht_task = loop.create_task(self.find_nearest_nodes(query_id=self.node_id))
-
-            # gather remaining peers who respond within bootstrap_timeout
+            # stage 2: gather remaining peers who respond within bootstrap_timeout
             if remaining_ping_tasks:
                 finished_in_time, stragglers = loop.run_until_complete(
                     asyncio.wait(remaining_ping_tasks, timeout=bootstrap_timeout - get_dht_time() + start_time))
@@ -95,10 +91,12 @@ class DHTNode:
             if not finished_ping_tasks:
                 warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
 
-            # await beam search task within bootstrap_timeout (note: don't use wait_for to avoid cancelling beam search)
-            loop.run_until_complete(asyncio.wait(
-                [traverse_dht_task, asyncio.sleep(bootstrap_timeout - get_dht_time() + start_time)],
-                return_when=asyncio.FIRST_COMPLETED))
+            # stage 3: traverse dht to find my own nearest neighbors and populate the routing table
+            # ... maybe receive some values that we are meant to store (see protocol.update_routing_table)
+            # note: using asyncio.wait instead of wait_for because wait_for cancels task on timeout
+            loop.run_until_complete(asyncio.wait([loop.create_task(self.find_nearest_nodes(query_id=self.node_id)),
+                                                  asyncio.sleep(bootstrap_timeout - get_dht_time() + start_time)],
+                                                 return_when=asyncio.FIRST_COMPLETED))
 
         if self.staleness_timeout is not None:
             loop.create_task(self._refresh_routing_table(period=self.staleness_timeout))
