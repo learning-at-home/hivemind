@@ -73,28 +73,32 @@ class DHTNode:
         self.protocol: KademliaProtocol = listener[1]
 
         if initial_peers:
-            # bootstrap part 1: ping initial_peers, add each other to the routing table
+            # ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
-            began_bootstrap_time = get_dht_time()
+            start_time = get_dht_time()
             ping_tasks = map(self.protocol.call_ping, initial_peers)
-            finished_tasks, remaining_tasks = loop.run_until_complete(
-                asyncio.wait(ping_tasks, timeout=wait_timeout, return_when=asyncio.FIRST_COMPLETED))
-            time_to_first_response = get_dht_time() - began_bootstrap_time
-            # bootstrap part 2: gather all peers who responded within bootstrap_timeout, but at least one peer
-            if remaining_tasks:
+            finished_ping_tasks, remaining_ping_tasks = loop.run_until_complete(
+                asyncio.wait(ping_tasks, return_when=asyncio.FIRST_COMPLETED))
+
+            # after first peer responded, use that peer to find my own nearest neighbors and populate the routing table
+            # ... and maybe receive some values that we are meant to store (see protocol.update_routing_table)
+            traverse_dht_task = loop.create_task(self.find_nearest_nodes(query_id=self.node_id))
+
+            # gather remaining peers who respond within bootstrap_timeout
+            if remaining_ping_tasks:
                 finished_in_time, stragglers = loop.run_until_complete(
-                    asyncio.wait(remaining_tasks, timeout=bootstrap_timeout - time_to_first_response))
+                    asyncio.wait(remaining_ping_tasks, timeout=bootstrap_timeout - get_dht_time() + start_time))
                 for straggler in stragglers:
                     straggler.cancel()
-                finished_tasks |= finished_in_time
+                finished_ping_tasks |= finished_in_time
 
-            peer_ids = [task.result() for task in finished_tasks if task.result() is not None]
-            if len(peer_ids) == 0 and len(initial_peers) != 0:
+            if not finished_ping_tasks:
                 warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
 
-            # bootstrap part 3: run beam search for my node id to add my own nearest neighbors to the routing table
-            # ... and maybe receive some values that we are meant to store (see protocol.update_routing_table)
-            loop.create_task(self.find_nearest_nodes(query_id=self.node_id))
+            # await beam search task within bootstrap_timeout (note: don't use wait_for to avoid cancelling beam search)
+            loop.run_until_complete(asyncio.wait(
+                [traverse_dht_task, asyncio.sleep(bootstrap_timeout - get_dht_time() + start_time)],
+                return_when=asyncio.FIRST_COMPLETED))
 
         if self.staleness_timeout is not None:
             loop.create_task(self._refresh_routing_table(period=self.staleness_timeout))
