@@ -245,7 +245,7 @@ class DHTID(int):
         :return: a number or a list of numbers whose binary representations equal bitwise xor between DHTIDs.
         """
         if isinstance(other, Iterable):
-            return list(map(self.xor_distance, other))  # TODO make some SIMD
+            return list(map(self.xor_distance, other))
         return int(self) ^ int(other)
 
     @classmethod
