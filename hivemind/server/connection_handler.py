@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import socket
 from uuid import uuid4
+import os
 
 from hivemind.utils import get_logger
 from hivemind.utils.connection import HEADER_SIZE, DESTINATION_LENGTH_SIZE, PAYLOAD_LENGTH_SIZE
@@ -20,16 +21,16 @@ class ConnectionHandler(mp.Process):
         self.ready = mp.Event()
 
     def run(self):
+        logger.info(f'Starting, pid {os.getpid()}')
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        thread_pool = ThreadPoolExecutor(10)
         thread_pool_send = ThreadPoolExecutor(10)
 
         sock = socket.socket()
         sock.bind(self.addr)
         sock.setblocking(False)
 
-        handle_connection_coro = partial(handle_connection, thread_pool=thread_pool_send, thread_pool2=thread_pool, experts=self.experts)
+        handle_connection_coro = partial(handle_connection, thread_pool=thread_pool_send, thread_pool2=None, experts=self.experts)
         start_server_fn = asyncio.start_server(handle_connection_coro, sock=sock)
         self.loop.run_until_complete(start_server_fn)
         self.ready.set()

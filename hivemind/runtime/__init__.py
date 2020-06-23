@@ -3,6 +3,7 @@ import threading
 from itertools import chain
 from selectors import DefaultSelector, EVENT_READ
 from typing import Dict
+import os
 
 import torch
 from prefetch_generator import BackgroundGenerator
@@ -58,6 +59,7 @@ class Runtime(threading.Thread):
 
         with mp.pool.ThreadPool(self.sender_threads) as output_sender_pool:
             try:
+                logger.info(f'Starting, pid {os.getpid()}')
                 self.ready.set()
                 for pool, batch_index, batch in BackgroundGenerator(
                         self.iterate_minibatches_from_pools(), self.prefetch_batches):
@@ -93,10 +95,10 @@ class Runtime(threading.Thread):
 
             while True:
                 # wait until at least one batch_receiver becomes available
-                logger.debug('Waiting for batch receivers...')
+                logger.debug('Waiting for batch receivers')
                 ready_fds = selector.select()
                 logger.debug('Obtained a list of ready pools')
-                ready_objects = [key.data for (key, events) in ready_fds]
+                ready_objects = {key.data for key, events in ready_fds}
                 if self.SHUTDOWN_TRIGGER in ready_objects:
                     break  # someone asked us to shutdown, break from the loop
                 logger.debug('Selecting pool')

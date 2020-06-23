@@ -80,7 +80,6 @@ class TaskPool(TaskPoolBase):
 
         # interaction with Runtime
         self.batch_receiver, self.batch_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain batch inputs
-        self.batch_received = mp.Event()  # runtime can notify pool that it can send next batch
         self.outputs_receiver, self.outputs_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain outputs
 
         if start:
@@ -156,7 +155,6 @@ class TaskPool(TaskPoolBase):
         prev_num_tasks = 0  # number of tasks currently in shared buffer
         batch_index = max(pending_batches.keys(), default=0)
         batch_iterator = self.iterate_minibatches(*args, **kwargs)
-        # self.batch_received.set()  # initial state: no batches/outputs pending
 
         while True:
             # SIDE-EFFECT - compute pool priority from timestamp of earliest undispatched task
@@ -211,7 +209,6 @@ class TaskPool(TaskPoolBase):
             raise TimeoutError()
 
         batch_index, batch_inputs = self.batch_receiver.recv()
-        # self.batch_received.set()  # pool can now prepare next batch
         batch_inputs = [tensor.to(device, non_blocking=True) for tensor in batch_inputs]
         return batch_index, batch_inputs
 
