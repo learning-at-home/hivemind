@@ -6,12 +6,12 @@ DUMMY_BATCH_SIZE = 3  # used for dummy runs only
 
 
 @dataclass(init=True, repr=True, frozen=True)
-class ProtoBase:
+class BaseDescriptor:
     pass
 
 
 @dataclass(init=True, repr=True, frozen=True)
-class TensorProto(ProtoBase):
+class TensorDescriptor(BaseDescriptor):
     size: tuple
     dtype: torch.dtype = None
     layout: torch.layout = torch.strided
@@ -34,7 +34,7 @@ class TensorProto(ProtoBase):
 
 
 @dataclass(repr=True, frozen=True)
-class BatchTensorProto(TensorProto):
+class BatchTensorDescriptor(TensorDescriptor):
     """ torch Tensor with a variable 0-th dimension, used to describe batched data """
 
     def __init__(self, *instance_size, **kwargs):  # compatibility: allow initializing with *size
