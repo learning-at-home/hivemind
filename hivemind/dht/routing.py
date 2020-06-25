@@ -174,6 +174,7 @@ class KBucket:
         """ :returns: least-recently updated node that isn't already being pinged right now -- if such node exists """
         for uid, endpoint in self.nodes_to_addr.items():
             if uid not in self.nodes_requested_for_ping:
+                self.nodes_requested_for_ping.add(uid)
                 return uid, endpoint
 
     def __getitem__(self, node_id: DHTID) -> Endpoint:
