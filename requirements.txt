@@ -7,4 +7,4 @@ rpcudp>=4.0.0
 prefetch_generator>=1.0.1
 pytest
 grpcio>=1.31.0
-grpc_tools>=1.0.0
+grpcio-tools>=1.30.0
