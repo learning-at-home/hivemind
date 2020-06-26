@@ -177,8 +177,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 "DHTProtocol: response is not aligned with keys"
             return {
                 key: (value, expiration, dict(zip(map(DHTID.from_bytes, peers.node_ids), peers.endpoints)))
-                for key, value, expiration, peers in zip(keys, response.values, response.expiration, response.nearest)
-            }
+                for key, value, expiration, peers in zip(keys, response.values, response.expiration, response.nearest)}
         except grpc.experimental.aio.AioRpcError as error:
             logging.info(f"DHTProtocol failed to store at {peer}: {error.code()}")
             asyncio.ensure_future(self.update_routing_table(self.routing_table.get_id(peer), peer, responded=False))
