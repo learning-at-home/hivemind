@@ -1,14 +1,27 @@
+"""
+Utilities for running GRPC services: compile protobuf, patch legacy versions, etc
+"""
 import functools
 import os
 import sys
 import tempfile
-import grpc_tools.protoc
+from warnings import warn
 from typing import Tuple
-from types import ModuleType
+from argparse import Namespace
+import grpc_tools.protoc
+
+try:
+    import grpc.experimental.aio
+    grpc.experimental.aio.init_grpc_aio()
+    assert not hasattr(grpc, 'aio')
+    grpc.aio = grpc.experimental.aio
+except:
+    warn("Note: grpc.aio is already included into master, please replace the code "
+         "that caused this warning with 'import grpc.aio'")
 
 
 @functools.lru_cache(maxsize=None)
-def compile_grpc(proto: str, *args: str) -> Tuple[ModuleType, ModuleType]:
+def compile_grpc(proto: str, *args: str) -> Tuple[Namespace, Namespace]:
     """
     Compiles and loads grpc protocol defined by protobuf string
 

@@ -66,6 +66,12 @@ class RoutingTable:
         self.buckets[index] = first
         self.buckets.insert(index + 1, second)
 
+    def get(self, node_id: DHTID, default=None) -> Optional[Endpoint]:
+        return self[node_id] if node_id in self else default
+
+    def get_id(self, peer: Endpoint, default=None) -> Optional[DHTID]:
+        return None #TODO(jheuristic)
+
     def __getitem__(self, node_id: DHTID) -> Endpoint:
         return self.buckets[self.get_bucket_index(node_id)][node_id]
 
@@ -273,5 +279,5 @@ class DHTID(int):
         return self.to_bytes()
 
 
-DHTKey, DHTValue, DHTExpiration, BinaryDHTID = Any, Any, float, bytes  # flavour types
+DHTKey, BinaryDHTValue, DHTExpiration, BinaryDHTID = Any, bytes, float, bytes  # flavour types
 get_dht_time = time.time  # time used by all dht functionality. You can replace this with any infrastructure-wide time

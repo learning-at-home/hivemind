@@ -6,7 +6,7 @@ from typing import Optional, Tuple, List, Dict
 from warnings import warn
 
 from .protocol import KademliaProtocol
-from .routing import DHTID, DHTValue, DHTExpiration, DHTKey, get_dht_time
+from .routing import DHTID, BinaryDHTValue, DHTExpiration, DHTKey, get_dht_time
 from .search import traverse_dht
 from ..utils import find_open_port, Endpoint, Hostname, Port, LOCALHOST
 
@@ -129,7 +129,7 @@ class DHTNode:
 
         return OrderedDict((node, node_to_addr[node]) for node in nearest_nodes)
 
-    async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration) -> bool:
+    async def store(self, key: DHTKey, value: BinaryDHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
         Also cache (key, value, expiration_time) at all nodes you met along the way (see Section 2.1 end)
@@ -144,7 +144,7 @@ class DHTNode:
         return any(done)
 
     async def get(self, key: DHTKey, sufficient_expiration_time: Optional[DHTExpiration] = None,
-                  beam_size: Optional[int] = None) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
+                  beam_size: Optional[int] = None) -> Tuple[Optional[BinaryDHTValue], Optional[DHTExpiration]]:
         """
         :param key: traverse the DHT and find the value for this key (or return None if it does not exist)
         :param sufficient_expiration_time: if the search finds a value that expires after this time,
