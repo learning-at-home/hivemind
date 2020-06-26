@@ -26,7 +26,7 @@ message StoreRequest {
     repeated bytes keys = 1;          // keys in the form of DHTID.generate(raw_key).to_bytes()
     repeated bytes values = 2;        // values for i-th key, serialized with msgpack
     repeated double expiration = 3;   // expirations for i-th key (type = DHTExpiration)
-    repeated bool in_cache = 4        // if in_cache[i], store i-th key in cache, else store normally
+    repeated bool in_cache = 4;       // if in_cache[i], store i-th key in cache, else store normally
     NodeInfo peer = 5;                // (optional) sender's own node info, same behavior as in DHT.rpc_ping
 }
 
