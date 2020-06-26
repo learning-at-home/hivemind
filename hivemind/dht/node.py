@@ -49,7 +49,7 @@ class DHTNode:
     DHT nodes always prefer values with higher expiration time and may delete any value past its expiration.
 
     Compared to Kademlia RPC protocol, hivemind DHT has 3 RPCs:
-    * ping - request peer's identifier and update routing table (same as Kademlia PING)
+    * ping - request peer's identifier and update routing table (same as Kademlia PING RPC)
     * store - send several (key, value, expiration) pairs to the same peer (like Kademlia STORE, but in bulk)
     * find - request one or several keys, get values & expiration (if peer finds it locally) and :bucket_size: of
       nearest peers from recipient's routing table (ordered nearest-to-farthest, not including recipient itself)
