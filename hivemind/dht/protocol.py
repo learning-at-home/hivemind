@@ -9,7 +9,6 @@ from .routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, BinaryD
 from ..utils import Endpoint, compile_grpc
 import grpc, grpc.experimental.aio
 
-grpc.experimental.aio.init_grpc_aio()
 with open(os.path.join(os.path.dirname(__file__), 'dht.proto'), 'r') as f_proto:
     dht_pb2, dht_grpc = compile_grpc(f_proto.read())
 
@@ -41,6 +40,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
         if listen:  # set up server to process incoming rpc requests
             assert start is not None, "Please specify start=True or False (when listen=True)"
+            grpc.experimental.aio.init_grpc_aio()
             self.grpc_server = grpc.experimental.aio.server(**kwargs)
             dht_grpc.add_DHTServicer_to_server(self, self.grpc_server)
 

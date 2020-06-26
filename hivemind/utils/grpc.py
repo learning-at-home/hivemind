@@ -10,15 +10,6 @@ from typing import Tuple
 from argparse import Namespace
 import grpc_tools.protoc
 
-try:
-    import grpc.experimental.aio
-    grpc.experimental.aio.init_grpc_aio()
-    assert not hasattr(grpc, 'aio')
-    grpc.aio = grpc.experimental.aio
-except:
-    warn("Note: grpc.aio is already included into master, please replace the code "
-         "that caused this warning with 'import grpc.aio'")
-
 
 @functools.lru_cache(maxsize=None)
 def compile_grpc(proto: str, *args: str) -> Tuple[Namespace, Namespace]:
