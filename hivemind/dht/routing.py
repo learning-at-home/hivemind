@@ -41,7 +41,7 @@ class RoutingTable:
         Update routing table after an incoming request from :addr: (host:port) or outgoing request to :addr:
 
         :returns: If we cannot add node_id to the routing table, return the least-recently-updated node (Section 2.2)
-        :note: KademliaProtocol calls this method for every incoming and outgoing request if there was a response.
+        :note: DHTProtocol calls this method for every incoming and outgoing request if there was a response.
           If this method returned a node to be ping-ed, the protocol will ping it to check and either move it to
           the start of the table or remove that node and replace it with
         """
