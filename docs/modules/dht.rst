@@ -20,7 +20,7 @@
 
 .. currentmodule:: hivemind.dht.protocol
 
-.. autoclass:: KademliaProtocol
+.. autoclass:: DHTProtocol
    :members:
    :member-order: bysource
 

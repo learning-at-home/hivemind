@@ -13,7 +13,7 @@ from ..utils import find_open_port, Endpoint, Port, LOCALHOST, MSGPackSerializer
 class DHTNode:
     """
     A low-level class that represents a DHT participant.
-    Each DHTNode has an identifier, a local storage and access too other nodes via KademliaProtocol.
+    Each DHTNode has an identifier, a local storage and access too other nodes via DHTProtocol.
 
     :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
     :param port: port to which this DHTNode will listen, by default find some open port
@@ -23,7 +23,7 @@ class DHTNode:
       Recommended value: $k$ is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
     :param num_replicas: (≈k) - number of nearest nodes that will be asked to store a given key, default = bucket_size
     :param depth_modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of this value
-    :param max_requests: maximum number of outgoing RPC requests emitted by KademliaProtocol in parallel
+    :param max_requests: maximum number of outgoing RPC requests emitted by DHTProtocol in parallel
       Reduce this value if your RPC requests register no response despite the peer sending the response.
     :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
     :param refresh_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
@@ -35,10 +35,10 @@ class DHTNode:
     :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
     :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
       if False, this node will refuse any incoming request, effectively being only a "client"
-    :param listen_on: network interface for incoming RPCs, e.g. "0.0.0.0:1337" or "localhost:*" or "[::]:7654"
+    :param listen_on: network interface for incoming RPCs, e.g. "0.0.0.0:1337" or "localhost:\*" or "[::]:7654"
     :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
       see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
-    :param kwargs: extra parameters used in grpc.aio.server(**kwargs)
+    :param kwargs: extra parameters used in grpc.aio.server
 
     :note: Hivemind DHT is optimized to store a lot of temporary metadata that is regularly updated.
      For example, an expert alive timestamp that emitted by the Server responsible for that expert.
@@ -49,13 +49,15 @@ class DHTNode:
     DHT nodes always prefer values with higher expiration time and may delete any value past its expiration.
 
     Compared to Kademlia RPC protocol, hivemind DHT has 3 RPCs:
+
     * ping - request peer's identifier and update routing table (same as Kademlia PING RPC)
     * store - send several (key, value, expiration) pairs to the same peer (like Kademlia STORE, but in bulk)
     * find - request one or several keys, get values & expiration (if peer finds it locally) and :bucket_size: of
-      nearest peers from recipient's routing table (ordered nearest-to-farthest, not including recipient itself)
-      This RPC is a mixture between Kademlia FIND_NODE and FIND_VALUE with multiple keys per call.
+        nearest peers from recipient's routing table (ordered nearest-to-farthest, not including recipient itself)
+        This RPC is a mixture between Kademlia FIND_NODE and FIND_VALUE with multiple keys per call.
 
     Formally, DHTNode follows the following contract:
+
     - when asked to get(key), a node must find and return a value with highest expiration time that it found across DHT
       IF that time has not come yet. if expiration time is smaller than current get_dht_time(), node may return None;
     - when requested to store(key: value, expiration), a node must store (key => value) at until expiration time
@@ -63,6 +65,7 @@ class DHTNode:
       has the same key with newer expiration, the older key will not be stored. Return True if stored, False if refused;
     - when requested to store(key: value, expiration, in_cache=True), stores (key => value) in a separate "cache".
       Cache operates same as regular storage, but it has a limited size and evicts least recently used nodes when full;
+
     """
 
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
