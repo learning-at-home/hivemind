@@ -6,12 +6,12 @@ DUMMY_BATCH_SIZE = 3  # used for dummy runs only
 
 
 @dataclass(init=True, repr=True, frozen=True)
-class BaseDescriptor:
+class DescriptorBase:
     pass
 
 
 @dataclass(init=True, repr=True, frozen=True)
-class TensorDescriptor(BaseDescriptor):
+class TensorDescriptor(DescriptorBase):
     size: tuple
     dtype: torch.dtype = None
     layout: torch.layout = torch.strided
