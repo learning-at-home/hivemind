@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import heapq
 import asyncio
@@ -29,7 +30,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
     def __init__(
             self, node_id: DHTID, bucket_size: int, depth_modulo: int, num_replicas: int, wait_timeout: float,
-            cache_size: Optional[int] = None, listen=True, listen_on='0.0.0.0:*', start: Optional[bool] = None,
+            cache_size: Optional[int] = None, listen=True, listen_on='0.0.0.0:*',
             channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         super().__init__()
         self.node_id, self.bucket_size, self.num_replicas = node_id, bucket_size, num_replicas
@@ -39,26 +40,40 @@ class DHTProtocol(dht_grpc.DHTServicer):
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
 
         if listen:  # set up server to process incoming rpc requests
-            assert start is not None, "Please specify start=True or False (when listen=True)"
+            assert asyncio.get_event_loop().is_running(), "DHTProtocol should be created inside a running event loop" \
+              " (e.g. inside async function). Alternatively, you can use DHTProtocol.create from non-asyncio code"
+
             grpc.experimental.aio.init_grpc_aio()
-            self.grpc_server = grpc.experimental.aio.server(**kwargs)
-            dht_grpc.add_DHTServicer_to_server(self, self.grpc_server)
+            self.server = grpc.experimental.aio.server(**kwargs)
+            dht_grpc.add_DHTServicer_to_server(self, self.server)
 
-            found_port = self.grpc_server.add_insecure_port(listen_on)
+            found_port = self.server.add_insecure_port(listen_on)
             assert found_port != 0, f"Failed to listen to {listen_on}"
-            self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes(), rpc_port=found_port)
+            self.port = found_port
 
-            if start:
-                assert not asyncio.get_event_loop().is_running(), \
-                    "Event loop already running, please start manually via await protocol.grpc_server.start()"
-                assert asyncio.run(self.grpc_server.start()) != 0
+            self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes(), rpc_port=found_port)
+            asyncio.ensure_future(self.server.start())
 
         else:  # not listening to incoming requests, client-only mode
             # note: use empty node_info so peers wont add you to their routing tables
-            self.node_info, self.grpc_server, self.port = dht_pb2.NodeInfo(), None, None
-            if start is not None or listen_on != '0.0.0.0:*' or len(kwargs) != 0:
-                warn(f"DHTProtocol has no server (due to listen=False), start, listen_on"
+            self.node_info, self.server, self.port = dht_pb2.NodeInfo(), None, None
+            if listen_on != '0.0.0.0:*' or len(kwargs) != 0:
+                warn(f"DHTProtocol has no server (due to listen=False), listen_on"
                      f"and kwargs have no effect (unused kwargs: {kwargs})")
+
+    @staticmethod
+    def create(*args, loop=None, **kwargs) -> DHTProtocol:
+        """ Create and return an initialized DHTProtocol outside asynchronous context. Same params as DHTProtocol """
+        async def _create():
+            return DHTProtocol(*args, **kwargs)
+        return (loop or asyncio.get_event_loop()).run_until_complete(_create())
+
+    async def shutdown(self, timeout=None):
+        """ Process existing requests, close all connections and stop the server """
+        if self.grpc_server:
+            await grpc.Server.wait_for_termination(timeout)
+        else:
+            warn("DHTProtocol has no server (due to listen=False), it doesn't need to be shut down")
 
     def _get(self, peer: Endpoint) -> dht_grpc.DHTStub:
         """ get a DHTStub that sends requests to a given peer """
@@ -114,8 +129,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         expiration = [expiration] * len(keys) if isinstance(expiration, DHTExpiration) else expiration
         keys, values, expiration, in_cache = map(list, [keys, values, expiration, in_cache])
         assert len(keys) == len(values) == len(expiration) == len(in_cache), "Data is not aligned"
-        store_request = dht_pb2.StoreRequest(keys=keys, values=values, expiration=expiration,
-                                             in_cache=in_cache, peer=self.node_info)
+        store_request = dht_pb2.StoreRequest(keys=list(map(DHTID.to_bytes, keys)), values=values,
+                                             expiration=expiration, in_cache=in_cache, peer=self.node_info)
         try:
             response = await self._get(peer).rpc_store(store_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
@@ -152,9 +167,9 @@ class DHTProtocol(dht_grpc.DHTServicer):
          If peer didn't respond, returns None
         """
         keys = list(keys)
-        find_request = dht_pb2.FindRequest(keys=list(map(DHTID.from_bytes, keys)), peer=self.node_info)
+        find_request = dht_pb2.FindRequest(keys=list(map(DHTID.to_bytes, keys)), peer=self.node_info)
         try:
-            response = await self._get(peer).rpc_store(find_request, timeout=self.wait_timeout)
+            response = await self._get(peer).rpc_find(find_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.ensure_future(self.update_routing_table(peer_id, peer, responded=True))
@@ -168,7 +183,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             logging.info(f"DHTProtocol failed to store at {peer}: {error.code()}")
             asyncio.ensure_future(self.update_routing_table(self.routing_table.get_id(peer), peer, responded=False))
 
-    def rpc_find(self, request: dht_pb2.FindRequest, context: grpc.ServicerContext) -> dht_pb2.FindResponse:
+    async def rpc_find(self, request: dht_pb2.FindRequest, context: grpc.ServicerContext) -> dht_pb2.FindResponse:
         """
         Someone wants to find keys in the DHT. For all keys that we have locally, return value and expiration
         Also return :bucket_size: nearest neighbors from our routing table for each key (whether or not we found value)
