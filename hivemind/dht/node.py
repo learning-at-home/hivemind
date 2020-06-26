@@ -104,7 +104,7 @@ class DHTNode:
                 finished_ping_tasks |= finished_in_time
 
             if not finished_ping_tasks:
-                warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")#TODO aiologger
+                warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")  #TODO aiologger
 
             # stage 3: traverse dht to find my own nearest neighbors and populate the routing table
             # ... maybe receive some values that we are meant to store (see protocol.update_routing_table)
@@ -177,7 +177,7 @@ class DHTNode:
         sufficient_expiration_time = sufficient_expiration_time or get_dht_time()
         beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
         latest_value_bytes, latest_expiration, latest_node_id = b'', -float('inf'), None
-        node_to_addr, nodes_checked_for_value = dict(), set()
+        node_to_addr, nodes_checked_for_value, nearest_nodes = dict(), set(), []
         should_cache = False  # True if found value in DHT that is newer than local value
 
         # Option A: value can be stored in our local cache
