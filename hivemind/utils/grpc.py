@@ -5,7 +5,6 @@ import functools
 import os
 import sys
 import tempfile
-from warnings import warn
 from typing import Tuple
 from argparse import Namespace
 import grpc_tools.protoc
