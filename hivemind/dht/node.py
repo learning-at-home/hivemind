@@ -1,7 +1,6 @@
 import asyncio
 import random
 from collections import OrderedDict
-from functools import partial
 from typing import Optional, Tuple, List, Dict
 from warnings import warn
 
@@ -24,19 +23,21 @@ class DHTNode:
       Recommended value: $k$ is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
     :param num_replicas: (≈k) - number of nearest nodes that will be asked to store a given key, default = bucket_size
     :param depth_modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of this value
+    :param max_concurrent_rpc: maximum number of outgoing RPC requests emitted by KademliaProtocol in parallel
+      Reduce this value if your RPC requests register no response despite the peer sending the response.
     :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
     :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
-        if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
+      if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
     :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
     :param cache_locally: if True, caches all values (stored or found) in a node-local cache
     :param cache_nearest: if above 0, whenever DHTNode finds a value, it will also store (cache) this value on this many
-        nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet.
+      nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet.
     :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
     :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
-        if False, this node will refuse any incoming request, effectively being only a "client"
+      if False, this node will refuse any incoming request, effectively being only a "client"
     :param listen_on: network interface for incoming RPCs, e.g. "0.0.0.0:1337" or "localhost:*" or "[::]:7654"
     :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
-        see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
+      see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
     :param kwargs: extra parameters used in grpc.aio.server(**kwargs)
 
     :note: Hivemind DHT is optimized to store a lot of temporary metadata that is regularly updated.
@@ -67,9 +68,10 @@ class DHTNode:
 
     def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
                  bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5,
-                 max_concurrent_rpc: int = 128, wait_timeout: float = 5, staleness_timeout: Optional[float] = None,
+                 max_concurrent_rpc: int = 0, wait_timeout: float = 5, staleness_timeout: Optional[float] = None,
                  bootstrap_timeout: Optional[float] = None, cache_locally: bool = True, cache_nearest: int = 1,
                  cache_size=None, listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs):
+        assert max_concurrent_rpc == 0, "TODO(jheuristic) implement congestion!"
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.port = port = port if port is not None else find_open_port()
         self.num_replicas = num_replicas if num_replicas is not None else bucket_size
