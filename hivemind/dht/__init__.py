@@ -2,7 +2,7 @@
 This sub-module implements a node in a Kademlia-based DHT. The code is organized as follows:
  * class DHT (below) - high-level class for model training. Runs DHTNode in a background process.
  * class DHTNode (node.py) - an asyncio implementation of dht server, stores AND gets keys. Asyncio-based.
- * class KademliaProtocol (protocol.py) - an rpc protocol to request data from dht nodes. Asyncio-based.
+ * class DHTProtocol (protocol.py) - an rpc protocol to request data from dht nodes. Asyncio-based.
 
 The code in this module is a modified version of https://github.com/bmuller/kademlia
 Brian, if you're reading this: THANK YOU! you're awesome :)
