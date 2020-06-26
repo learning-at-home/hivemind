@@ -5,10 +5,10 @@ from functools import partial
 from typing import Optional, Tuple, List, Dict
 from warnings import warn
 
-from .protocol import KademliaProtocol
+from .protocol import DHTProtocol
 from .routing import DHTID, BinaryDHTValue, DHTExpiration, DHTKey, get_dht_time
 from .search import traverse_dht
-from ..utils import find_open_port, Endpoint, Hostname, Port, LOCALHOST
+from ..utils import find_open_port, Endpoint, Port, LOCALHOST
 
 
 class DHTNode:
@@ -24,8 +24,6 @@ class DHTNode:
       Recommended value: $k$ is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
     :param num_replicas: (≈k) - number of nearest nodes that will be asked to store a given key, default = bucket_size
     :param depth_modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of this value
-    :param max_concurrent_rpc: maximum number of outgoing RPC requests emitted by KademliaProtocol in parallel
-        Reduce this value if your RPC requests register no response despite the peer sending the response.
     :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
     :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
         if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
@@ -34,55 +32,68 @@ class DHTNode:
     :param cache_nearest: if above 0, whenever DHTNode finds a value, it will also store (cache) this value on this many
         nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet.
     :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
-    :param interface: provide 0.0.0.0 to operate over ipv4, :: to operate over ipv6, localhost to operate locally, etc.
+    :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
+        if False, this node will refuse any incoming request, effectively being only a "client"
+    :param listen_on: network interface for incoming RPCs, e.g. "0.0.0.0:1337" or "localhost:*" or "[::]:7654"
+    :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
+        see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
+    :param kwargs: extra parameters used in grpc.aio.server(**kwargs)
 
-    :note: Hivemind DHT is optimized to store temporary metadata that is regularly updated.
+    :note: Hivemind DHT is optimized to store a lot of temporary metadata that is regularly updated.
      For example, an expert alive timestamp that emitted by the Server responsible for that expert.
-     Such metadata does not require maintenance such as ensuring at least k hosts have it or (de)serialization in case
-     of node shutdown. Instead, DHTNode is designed to reduce the latency of looking up such data.
+     Such metadata does not require regular maintenance by peers, persistence on shutdown.
+     Instead, DHTNode is designed to rapidly send bulk data and resolve conflicts.
 
-    Every (key, value) pair in this DHT has expiration_time - float number computed as get_dht_time(), default: UnixTime
-    Informally, dht nodes always prefer values with higher expiration_time and may delete any value past its expiration.
+    Every (key, value) pair in this DHT has an expiration time - float computed as get_dht_time(), UnixTime by default
+    DHT nodes always prefer values with higher expiration time and may delete any value past its expiration.
 
-    Formally, DHTNode follows this contract:
+    Compared to Kademlia RPC protocol, hivemind DHT has 3 RPCs:
+    * ping - request peer's identifier and update routing table (same as Kademlia PING)
+    * store - send several (key, value, expiration) pairs to the same peer (like Kademlia STORE, but in bulk)
+    * find - request one or several keys, get values & expiration (if peer finds it locally) and :bucket_size: of
+      nearest peers from recipient's routing table (ordered nearest-to-farthest, not including recipient itself)
+      This RPC is a mixture between Kademlia FIND_NODE and FIND_VALUE with multiple keys per call.
 
-    - when asked to store(key, value, expiration_time), a node must store (key, value) at least until expiration_time
-      unless it already stores that key with greater or equal expiration_time - if so, node must keep the previous key
-    - when asked to get(key), a node must return the value with highest expiration time IF that time has not come yet
-      if expiration time is greater than current get_dht_time(), DHTNode *may* return None
 
+    Formally, DHTNode follows the following contract:
+    - when asked to get(key), a node must find and return a value with highest expiration time that it found across DHT
+      IF that time has not come yet. if expiration time is smaller than current get_dht_time(), node may return None;
+    - when requested to store(key: value, expiration), a node must store (key => value) at until expiration time
+      or until DHTNode gets the same key with greater expiration time. If a node is asked to store a key but it already
+      has the same key with newer expiration, the older key will not be stored. Return True if stored, False if refused;
+    - when requested to store(key: value, expiration, in_cache=True), stores (key => value) in a separate "cache".
+      Cache operates same as regular storage, but it has a limited size and evicts least recently used nodes when full;
     """
 
     def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
                  bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5,
                  max_concurrent_rpc: int = 128, wait_timeout: float = 5, staleness_timeout: Optional[float] = None,
                  bootstrap_timeout: Optional[float] = None, cache_locally: bool = True, cache_nearest: int = 1,
-                 cache_size=None, interface: Hostname = '0.0.0.0'):
+                 cache_size=None, listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs):
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.port = port = port if port is not None else find_open_port()
         self.num_replicas = num_replicas if num_replicas is not None else bucket_size
         self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
         self.staleness_timeout = staleness_timeout
 
-        # create kademlia protocol and make it listen to a port
-        loop = asyncio.get_event_loop()
-        make_protocol = partial(KademliaProtocol, self.node_id, bucket_size, depth_modulo, wait_timeout,
-                                max_concurrent_rpc, num_replicas, cache_size)
-        listener = loop.run_until_complete(loop.create_datagram_endpoint(make_protocol, local_addr=(interface, port)))
-        self.transport: asyncio.Transport = listener[0]
-        self.protocol: KademliaProtocol = listener[1]
+        # create dht protocol it listen to a port
+        assert not asyncio.get_event_loop().is_running(), "The event loop is already running. Please stop it or " \
+            "create a new event loop. In jupyter, use nest_asyncio and create an additional event loop for DHT. "
+
+        self.protocol = DHTProtocol(self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
+                                    cache_size, listen, listen_on, start=True if listen else None, **kwargs)
 
         if initial_peers:
             # stage 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
             start_time = get_dht_time()
             ping_tasks = map(self.protocol.call_ping, initial_peers)
-            finished_ping_tasks, remaining_ping_tasks = loop.run_until_complete(
+            finished_ping_tasks, remaining_ping_tasks = asyncio.run(
                 asyncio.wait(ping_tasks, return_when=asyncio.FIRST_COMPLETED))
 
             # stage 2: gather remaining peers (those who respond within bootstrap_timeout)
             if remaining_ping_tasks:
-                finished_in_time, stragglers = loop.run_until_complete(
+                finished_in_time, stragglers = asyncio.run(
                     asyncio.wait(remaining_ping_tasks, timeout=bootstrap_timeout - get_dht_time() + start_time))
                 for straggler in stragglers:
                     straggler.cancel()
@@ -94,12 +105,12 @@ class DHTNode:
             # stage 3: traverse dht to find my own nearest neighbors and populate the routing table
             # ... maybe receive some values that we are meant to store (see protocol.update_routing_table)
             # note: using asyncio.wait instead of wait_for because wait_for cancels task on timeout
-            loop.run_until_complete(asyncio.wait([loop.create_task(self.find_nearest_nodes(query_id=self.node_id)),
-                                                  asyncio.sleep(bootstrap_timeout - get_dht_time() + start_time)],
-                                                 return_when=asyncio.FIRST_COMPLETED))
+            asyncio.run(asyncio.wait([asyncio.create_task(self.find_nearest_nodes(query_id=self.node_id)),
+                                      asyncio.sleep(bootstrap_timeout - get_dht_time() + start_time)],
+                                     return_when=asyncio.FIRST_COMPLETED))
 
         if self.staleness_timeout is not None:
-            loop.create_task(self._refresh_routing_table(period=self.staleness_timeout))
+            asyncio.create_task(self._refresh_routing_table(period=self.staleness_timeout))
 
     async def find_nearest_nodes(self, query_id: DHTID, k_nearest: Optional[int] = None,
                                  beam_size: Optional[int] = None, exclude_self: bool = False) -> Dict[DHTID, Endpoint]:

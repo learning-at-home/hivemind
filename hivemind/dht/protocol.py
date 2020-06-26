@@ -14,18 +14,10 @@ with open(os.path.join(os.path.dirname(__file__), 'dht.proto'), 'r') as f_proto:
     dht_pb2, dht_grpc = compile_grpc(f_proto.read())
 
 
-#TODO copy docstrings
-#     :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
-#        see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
-#     :param listen: if True, TODO
-#     :param listen_on: TODO
-#     :param kwargs: extra parameters used in grpc.aio.server(**kwargs)
-#     :note: this is a deviation from Section 2.3 of the paper, original kademlia returner EITHER value OR neighbors
-
 class DHTProtocol(dht_grpc.DHTServicer):
     """
     A protocol that allows DHT nodes to request keys/neighbors from other DHT nodes.
-    As a side-effect, KademliaProtocol also maintains a routing table as described in
+    As a side-effect, DHTProtocol also maintains a routing table as described in
     https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
 
     See DHTNode (node.py) for a more detailed description.
@@ -236,8 +228,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
 
 class LocalStorage:
+    """ Local dictionary that maintains up to :maxsize: tuples of (key, value, expiration) """
     def __init__(self, maxsize: Optional[int] = None):
-        """ Local storage that maintains up to :maxsize: tuples of (key, value, expiration) """
         self.cache_size = maxsize or float("inf")
         self.data = dict()
         self.expiration_heap = []
