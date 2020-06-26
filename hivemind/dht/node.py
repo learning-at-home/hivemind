@@ -5,9 +5,9 @@ from typing import Optional, Tuple, List, Dict
 from warnings import warn
 
 from .protocol import DHTProtocol
-from .routing import DHTID, BinaryDHTValue, DHTExpiration, DHTKey, get_dht_time
+from .routing import DHTID, BinaryDHTValue, DHTExpiration, DHTKey, get_dht_time, DHTValue
 from .search import traverse_dht
-from ..utils import find_open_port, Endpoint, Port, LOCALHOST
+from ..utils import find_open_port, Endpoint, Port, LOCALHOST, MSGPackSerializer
 
 
 class DHTNode:
@@ -23,10 +23,10 @@ class DHTNode:
       Recommended value: $k$ is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
     :param num_replicas: (≈k) - number of nearest nodes that will be asked to store a given key, default = bucket_size
     :param depth_modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of this value
-    :param max_concurrent_rpc: maximum number of outgoing RPC requests emitted by KademliaProtocol in parallel
+    :param max_requests: maximum number of outgoing RPC requests emitted by KademliaProtocol in parallel
       Reduce this value if your RPC requests register no response despite the peer sending the response.
     :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
-    :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
+    :param refresh_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
       if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
     :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
     :param cache_locally: if True, caches all values (stored or found) in a node-local cache
@@ -65,17 +65,20 @@ class DHTNode:
       Cache operates same as regular storage, but it has a limited size and evicts least recently used nodes when full;
     """
 
-    def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
-                 bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5,
-                 max_concurrent_rpc: int = 0, wait_timeout: float = 5, staleness_timeout: Optional[float] = None,
-                 bootstrap_timeout: Optional[float] = None, cache_locally: bool = True, cache_nearest: int = 1,
-                 cache_size=None, listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs):
-        assert max_concurrent_rpc == 0, "TODO(jheuristic) implement congestion!"
+    serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
+
+    def __init__(
+            self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
+            bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5, max_requests: int = 0,
+            wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
+            cache_locally: bool = True, cache_nearest: int = 1, cache_size=None,
+            listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs):
+        assert max_requests == 0, "TODO(jheuristic) implement congestion!"
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.port = port = port if port is not None else find_open_port()
         self.num_replicas = num_replicas if num_replicas is not None else bucket_size
         self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
-        self.staleness_timeout = staleness_timeout
+        self.staleness_timeout = refresh_timeout
 
         # create dht protocol it listen to a port
         assert not asyncio.get_event_loop().is_running(), "The event loop is already running. Please stop it or " \
@@ -101,19 +104,19 @@ class DHTNode:
                 finished_ping_tasks |= finished_in_time
 
             if not finished_ping_tasks:
-                warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
+                warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")#TODO aiologger
 
             # stage 3: traverse dht to find my own nearest neighbors and populate the routing table
             # ... maybe receive some values that we are meant to store (see protocol.update_routing_table)
             # note: using asyncio.wait instead of wait_for because wait_for cancels task on timeout
-            asyncio.run(asyncio.wait([asyncio.create_task(self.find_nearest_nodes(query_id=self.node_id)),
+            asyncio.run(asyncio.wait([asyncio.create_task(self.find_nearest_nodes(key_id=self.node_id)),
                                       asyncio.sleep(bootstrap_timeout - get_dht_time() + start_time)],
                                      return_when=asyncio.FIRST_COMPLETED))
 
         if self.staleness_timeout is not None:
             asyncio.create_task(self._refresh_routing_table(period=self.staleness_timeout))
 
-    async def find_nearest_nodes(self, query_id: DHTID, k_nearest: Optional[int] = None,
+    async def find_nearest_nodes(self, key_id: DHTID, k_nearest: Optional[int] = None,
                                  beam_size: Optional[int] = None, exclude_self: bool = False) -> Dict[DHTID, Endpoint]:
         """
         Traverse the DHT and find :k_nearest: nodes to a given :query_id:, optionally :exclude_self: from the results.
@@ -124,51 +127,56 @@ class DHTNode:
         k_nearest = k_nearest if k_nearest is not None else self.protocol.bucket_size
         beam_size = beam_size if beam_size is not None else max(self.protocol.bucket_size, k_nearest)
         node_to_addr = dict(
-            self.protocol.routing_table.get_nearest_neighbors(query_id, beam_size, exclude=self.node_id))
+            self.protocol.routing_table.get_nearest_neighbors(key_id, beam_size, exclude=self.node_id))
 
-        async def get_neighbors(node: DHTID) -> Tuple[List[DHTID], bool]:
-            peers: Dict[DHTID, Endpoint] = await self.protocol.call_find_node(node_to_addr[node], query_id)
+        async def get_neighbors(node_id: DHTID) -> Tuple[List[DHTID], bool]:
+            response = await self.protocol.call_find(node_to_addr[node_id], [key_id])
+            if not response or key_id not in response:
+                return [], False  # False means "do not interrupt search"
+
+            peers: Dict[DHTID, Endpoint] = response[key_id][-1]
             node_to_addr.update(peers)
-            return list(peers.keys()), False  # False means "do not interrupt beam search"
+            return list(peers.keys()), False  # False means "do not interrupt search"
 
         nearest_nodes, visited_nodes = await traverse_dht(
-            query_id=query_id, initial_nodes=list(node_to_addr), k_nearest=k_nearest, beam_size=beam_size,
+            query_id=key_id, initial_nodes=list(node_to_addr), k_nearest=k_nearest, beam_size=beam_size,
             get_neighbors=get_neighbors, visited_nodes=(self.node_id,))
 
         if not exclude_self:
-            nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query_id.xor_distance)[:k_nearest]
+            nearest_nodes = sorted(nearest_nodes + [self.node_id], key=key_id.xor_distance)[:k_nearest]
             node_to_addr[self.node_id] = (LOCALHOST, self.port)
 
         return OrderedDict((node, node_to_addr[node]) for node in nearest_nodes)
 
-    async def store(self, key: DHTKey, value: BinaryDHTValue, expiration_time: DHTExpiration) -> bool:
+    async def store(self, key: DHTKey, value: BinaryDHTValue, expiration: DHTExpiration) -> bool:
         """
         Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
-        Also cache (key, value, expiration_time) at all nodes you met along the way (see Section 2.1 end)
+        Optionally cache (key, value, expiration) on nodes you met along the way (see Section 2.1 end) TODO(jheuristic)
 
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        key_id = DHTID.generate(key)
+        key_id, value_bytes = DHTID.generate(source=key), self.serializer.dumps(value)
         nearest_node_to_addr = await self.find_nearest_nodes(key_id, k_nearest=self.num_replicas, exclude_self=True)
-        tasks = [asyncio.create_task(self.protocol.call_store(endpoint, key_id, value, expiration_time))
+        tasks = [asyncio.create_task(self.protocol.call_store(endpoint, [key_id], [value_bytes], [expiration]))
                  for endpoint in nearest_node_to_addr.values()]
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        return any(done)
+        return any(store_ok for response in done for store_ok in response)
 
     async def get(self, key: DHTKey, sufficient_expiration_time: Optional[DHTExpiration] = None,
-                  beam_size: Optional[int] = None) -> Tuple[Optional[BinaryDHTValue], Optional[DHTExpiration]]:
+                  beam_size: Optional[int] = None) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
         :param key: traverse the DHT and find the value for this key (or return None if it does not exist)
         :param sufficient_expiration_time: if the search finds a value that expires after this time,
             default = time of call, find any value that did not expire by the time of call
             If min_expiration_time=float('inf'), this method will find a value with _latest_ expiration
+        :param beam_size: maintains up to this many nearest nodes when crawling dht, default beam_size = bucket_size
         :returns: value and its expiration time. If nothing is found , returns (None, None).
         :note: in order to check if get returned a value, please check (expiration_time is None)
         """
         key_id = DHTID.generate(key)
         sufficient_expiration_time = sufficient_expiration_time or get_dht_time()
         beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
-        latest_value, latest_expiration, latest_node_id = None, -float('inf'), None
+        latest_value_bytes, latest_expiration, latest_node_id = b'', -float('inf'), None
         node_to_addr, nodes_checked_for_value = dict(), set()
         should_cache = False  # True if found value in DHT that is newer than local value
 
@@ -177,7 +185,7 @@ class DHTNode:
         if maybe_expiration is None:
             maybe_value, maybe_expiration = self.protocol.cache.get(key_id)
         if maybe_expiration is not None and maybe_expiration > latest_expiration:
-            latest_value, latest_expiration, latest_node_id = maybe_value, maybe_expiration, self.node_id
+            latest_value_bytes, latest_expiration, latest_node_id = maybe_value, maybe_expiration, self.node_id
             # TODO(jheuristic) we may want to run background beam search to update our cache
         nodes_checked_for_value.add(self.node_id)
 
@@ -187,12 +195,16 @@ class DHTNode:
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
             async def get_neighbors(node: DHTID) -> Tuple[List[DHTID], bool]:
-                nonlocal latest_value, latest_expiration, node_to_addr, nodes_checked_for_value
-                maybe_value, maybe_expiration, peers = await self.protocol.call_find_value(node_to_addr[node], key_id)
-                node_to_addr.update(peers)
+                nonlocal latest_value_bytes, latest_expiration, node_to_addr, nodes_checked_for_value
+                response = await self.protocol.call_find(node_to_addr[node], [key_id])
                 nodes_checked_for_value.add(node)
+                if not response or key_id not in response:
+                    return [], False
+
+                maybe_value, maybe_expiration, peers = response[key_id]
+                node_to_addr.update(peers)
                 if maybe_expiration is not None and maybe_expiration > latest_expiration:
-                    latest_value, latest_expiration, latest_node_id = maybe_value, maybe_expiration, node
+                    latest_value_bytes, latest_expiration, latest_node_id = maybe_value, maybe_expiration, node
                 should_interrupt = (latest_expiration >= sufficient_expiration_time)
                 return list(peers.keys()), should_interrupt
 
@@ -205,13 +217,14 @@ class DHTNode:
         # Option C: didn't find good-enough value in beam search, make a last-ditch effort to find it in unvisited nodes
         if latest_expiration < sufficient_expiration_time:
             nearest_unvisited = [node_id for node_id in nearest_nodes if node_id not in nodes_checked_for_value]
-            tasks = [self.protocol.call_find_value(node_to_addr[node_id], key_id) for node_id in nearest_unvisited]
+            tasks = [self.protocol.call_find(node_to_addr[node_id], [key_id]) for node_id in nearest_unvisited]
             pending_tasks = set(tasks)
             for task in asyncio.as_completed(tasks):
                 pending_tasks.remove(task)
-                maybe_value, maybe_expiration, _ = await task
+                if not task.result() or key_id not in task.result():
+                    maybe_value, maybe_expiration, _ = task.result()[key_id]
                 if maybe_expiration is not None and maybe_expiration > latest_expiration:
-                    latest_value, latest_expiration = maybe_value, maybe_expiration
+                    latest_value_bytes, latest_expiration = maybe_value, maybe_expiration
                     if latest_expiration >= sufficient_expiration_time:
                         break
             for task in pending_tasks:
@@ -220,19 +233,21 @@ class DHTNode:
 
         # step 4: we have not found entry with sufficient_expiration_time, but we may have found *something* older
         if should_cache and self.cache_locally:
-            self.protocol.cache.store(key_id, latest_value, latest_expiration)
+            self.protocol.cache.store(key_id, latest_value_bytes, latest_expiration)
         if should_cache and self.cache_nearest:
             num_cached_nodes = 0
             for node_id in nearest_nodes:
                 if node_id == latest_node_id:
                     continue
                 asyncio.create_task(self.protocol.call_store(
-                    node_to_addr[node_id], key_id, latest_value, latest_expiration, in_cache=True))
+                    node_to_addr[node_id], [key_id], [latest_value_bytes], [latest_expiration], in_cache=True))
                 num_cached_nodes += 1
                 if num_cached_nodes >= self.cache_nearest:
                     break
-
-        return (latest_value, latest_expiration) if latest_expiration != -float('inf') else (None, None)
+        if latest_expiration != -float('inf'):
+            return self.serializer.loads(latest_value_bytes), latest_expiration
+        else:
+            return None, None
 
     async def _refresh_routing_table(self, *, period: Optional[float]) -> None:
         """ Tries to find new nodes for buckets that were unused for more than self.staleness_timeout """

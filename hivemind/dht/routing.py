@@ -279,5 +279,5 @@ class DHTID(int):
         return self.to_bytes()
 
 
-DHTKey, BinaryDHTValue, DHTExpiration, BinaryDHTID = Any, bytes, float, bytes  # flavour types
+DHTKey, DHTValue, DHTExpiration, BinaryDHTID, BinaryDHTValue, = Any, Any, float, bytes, bytes  # flavour types
 get_dht_time = time.time  # time used by all dht functionality. You can replace this with any infrastructure-wide time

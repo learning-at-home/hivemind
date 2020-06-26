@@ -131,13 +131,13 @@ def test_dht():
     me = hivemind.dht.node.DHTNode(initial_peers=random.sample(peers, 5), port=0)  # port=0 means os-specified port
 
     # test 1: find self
-    nearest = loop.run_until_complete(me.find_nearest_nodes(query_id=me.node_id, k_nearest=1))
+    nearest = loop.run_until_complete(me.find_nearest_nodes(key_id=me.node_id, k_nearest=1))
     assert len(nearest) == 1 and nearest[me.node_id] == (LOCALHOST, me.port)
 
     # test 2: find others
     for i in range(10):
         ref_endpoint, query_id = random.choice(list(dht.items()))
-        nearest = loop.run_until_complete(me.find_nearest_nodes(query_id=query_id, k_nearest=1))
+        nearest = loop.run_until_complete(me.find_nearest_nodes(key_id=query_id, k_nearest=1))
         assert len(nearest) == 1 and next(iter(nearest.items())) == (query_id, ref_endpoint)
 
     # test 3: find neighbors to random nodes
@@ -150,7 +150,7 @@ def test_dht():
         k_nearest = random.randint(1, 20)
         exclude_self = random.random() > 0.5
         nearest = loop.run_until_complete(
-            me.find_nearest_nodes(query_id=query_id, k_nearest=k_nearest, exclude_self=exclude_self))
+            me.find_nearest_nodes(key_id=query_id, k_nearest=k_nearest, exclude_self=exclude_self))
         nearest_nodes = list(nearest)  # keys from ordered dict
 
         assert len(nearest_nodes) == k_nearest, "beam search must return exactly k_nearest results"
@@ -178,7 +178,7 @@ def test_dht():
 
     # test 4: find all nodes
     nearest = loop.run_until_complete(
-        me.find_nearest_nodes(query_id=DHTID.generate(), k_nearest=len(dht) + 100))
+        me.find_nearest_nodes(key_id=DHTID.generate(), k_nearest=len(dht) + 100))
     assert len(nearest) == len(dht) + 1
     assert len(set.difference(set(nearest.keys()), set(all_node_ids) | {me.node_id})) == 0
 
