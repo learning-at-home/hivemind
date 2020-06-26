@@ -55,7 +55,6 @@ class DHTNode:
       nearest peers from recipient's routing table (ordered nearest-to-farthest, not including recipient itself)
       This RPC is a mixture between Kademlia FIND_NODE and FIND_VALUE with multiple keys per call.
 
-
     Formally, DHTNode follows the following contract:
     - when asked to get(key), a node must find and return a value with highest expiration time that it found across DHT
       IF that time has not come yet. if expiration time is smaller than current get_dht_time(), node may return None;
