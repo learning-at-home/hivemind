@@ -18,11 +18,11 @@ class DHTNode:
     :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
     :param port: port to which this DHTNode will listen, by default find some open port
     :param initial_peers: connects to these peers to populate routing table, defaults to no peers
-    :param bucket_size: (k) - max number of nodes in one k-bucket. Trying to add {k+1}st node will cause a bucket to
+    :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
       either split in two buckets along the midpoint or reject the new node (but still save it as a replacement)
-      Recommended value: $k$ is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
-    :param num_replicas: (≈k) - number of nearest nodes that will be asked to store a given key, default = bucket_size
-    :param depth_modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of this value
+      Recommended value: k is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
+    :param num_replicas: number of nearest nodes that will be asked to store a given key, default = bucket_size (≈k)
+    :param depth_modulo: kademlia can split bucket if it contains root OR up to the nearest multiple of this value (≈b)
     :param max_requests: maximum number of outgoing RPC requests emitted by DHTProtocol in parallel
       Reduce this value if your RPC requests register no response despite the peer sending the response.
     :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
