@@ -112,11 +112,11 @@ def run_node(node_id, peers, status_pipe: mp.Pipe):
 
 
 def test_dht():
-    # create dht with 20 nodes + your 21-st node
+    # create dht with 50 nodes + your 51-st node
     dht: Dict[Endpoint, DHTID] = {}
     processes: List[mp.Process] = []
 
-    for i in range(20):
+    for i in range(50):
         node_id = DHTID.generate()
         peers = random.sample(dht.keys(), min(len(dht), 5))
         pipe_recv, pipe_send = mp.Pipe(duplex=False)
@@ -149,7 +149,7 @@ def test_dht():
         jaccard_numerator = jaccard_denominator = 0  # jaccard similarity aka intersection over union
         all_node_ids = list(dht.values())
 
-        for i in range(10):
+        for i in range(100):
             query_id = DHTID.generate()
             k_nearest = random.randint(1, 20)
             exclude_self = random.random() > 0.5
