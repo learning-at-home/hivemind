@@ -8,7 +8,7 @@ from warnings import warn
 from .protocol import DHTProtocol
 from .routing import DHTID, BinaryDHTValue, DHTExpiration, DHTKey, get_dht_time, DHTValue
 from .search import traverse_dht
-from ..utils import find_open_port, Endpoint, Port, LOCALHOST, MSGPackSerializer
+from ..utils import Endpoint, LOCALHOST, MSGPackSerializer
 
 
 class DHTNode:

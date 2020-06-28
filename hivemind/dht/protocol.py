@@ -6,7 +6,7 @@ import logging
 import urllib.parse
 from typing import Optional, List, Tuple, Dict, Iterator, Any, Sequence, Union
 from warnings import warn
-from .routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, BinaryDHTID, get_dht_time
+from .routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, get_dht_time
 from ..utils import Endpoint, compile_grpc
 import grpc, grpc.experimental.aio
 

@@ -10,7 +10,7 @@ Brian, if you're reading this: THANK YOU! you're awesome :)
 import asyncio
 import multiprocessing as mp
 import warnings
-from typing import Tuple, List, Optional
+from typing import List, Optional
 
 from .node import DHTNode, DHTID, DHTExpiration
 from .routing import get_dht_time
