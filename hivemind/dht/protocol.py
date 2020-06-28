@@ -214,7 +214,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         :param responded: for outgoing requests, this indicated whether recipient responded or not.
           For incoming requests, this should always be True
         """
-        node_id = node_id or self.routing_table.get_id(peer_endpoint)
+        node_id = node_id if node_id is not None else self.routing_table.get_id(peer_endpoint)
         if responded:  # incoming request or outgoing request with response
             if node_id not in self.routing_table:
                 # we just met a new node, maybe we know some values that it *should* store
