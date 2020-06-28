@@ -211,7 +211,7 @@ class DHTNode:
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
             async def get_neighbors(node: DHTID) -> Tuple[List[DHTID], bool]:
-                nonlocal latest_value_bytes, latest_expiration, node_to_addr, nodes_checked_for_value
+                nonlocal latest_value_bytes, latest_expiration, latest_node_id, node_to_addr, nodes_checked_for_value
                 response = await self.protocol.call_find(node_to_addr[node], [key_id])
                 nodes_checked_for_value.add(node)
                 if not response or key_id not in response:
