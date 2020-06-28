@@ -18,7 +18,7 @@ def test_remote_module_call():
     logits = torch.randn(3, requires_grad=True)
     random_proj = torch.randn_like(xx)
 
-    with background_server(num_experts=num_experts, device='cpu',
+    with background_server(num_experts=num_experts, device='cpu', num_handlers=1,
                            no_optimizer=True, no_dht=True) as (localhost, server_port, dht_port):
         experts = [hivemind.RemoteExpert(uid=f'expert.{i}', port=server_port) for i in range(num_experts)]
         moe_output, = hivemind.client.moe._RemoteMoECall.apply(
@@ -50,7 +50,7 @@ def test_determinism():
     xx = torch.randn(32, 1024, requires_grad=True)
     mask = torch.randint(0, 1, (32, 1024))
 
-    with background_server(num_experts=1, device='cpu', expert_cls='det_dropout',
+    with background_server(num_experts=1, device='cpu', expert_cls='det_dropout', num_handlers=1,
                            no_optimizer=True, no_dht=True) as (interface, server_port, dht_port):
         expert = hivemind.RemoteExpert(uid=f'expert.0', port=server_port)
 
