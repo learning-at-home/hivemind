@@ -1,6 +1,6 @@
 from .client import *
 from .dht import *
-from .server import *
+from .server import Server
 from .utils import *
 from .runtime import *
 

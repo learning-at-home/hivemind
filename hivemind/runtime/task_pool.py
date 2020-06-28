@@ -14,8 +14,9 @@ from typing import List, Tuple, Dict, Any, Generator
 
 import torch
 
-from ..utils import SharedFuture
+from hivemind.utils import SharedFuture, get_logger
 
+logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))
 
 
@@ -78,7 +79,6 @@ class TaskPool(TaskPoolBase):
 
         # interaction with Runtime
         self.batch_receiver, self.batch_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain batch inputs
-        self.batch_received = mp.Event()  # runtime can notify pool that it can send next batch
         self.outputs_receiver, self.outputs_sender = mp.Pipe(duplex=False)  # send/recv arrays that contain outputs
 
         if start:
@@ -126,7 +126,7 @@ class TaskPool(TaskPoolBase):
                 total_size += task_size
 
     def run(self, *args, **kwargs):
-        print(f'Starting pool, pid={os.getpid()}')
+        logger.info(f'Starting {self.uid}, pid={os.getpid()}')
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
                                          name=f'{self.uid}-pool_output_loop')
@@ -144,11 +144,8 @@ class TaskPool(TaskPoolBase):
         prev_num_tasks = 0  # number of tasks currently in shared buffer
         batch_index = max(pending_batches.keys(), default=0)
         batch_iterator = self.iterate_minibatches(*args, **kwargs)
-        self.batch_received.set()  # initial state: no batches/outputs pending
 
         while True:
-            self.batch_received.wait()  # wait for runtime to receive (copy) previous batch
-
             # SIDE-EFFECT - compute pool priority from timestamp of earliest undispatched task
             # assumes that tasks are processed in the same order as they are created
             for skip_i in range(prev_num_tasks):
@@ -166,7 +163,6 @@ class TaskPool(TaskPoolBase):
                 for i in range(len(batch_tasks[0].args))
             ]
 
-            self.batch_received.clear()  # sending next batch...
             self.batch_sender.send((batch_index, batch_inputs))
             prev_num_tasks = len(batch_tasks)
             batch_index += 1
@@ -200,7 +196,6 @@ class TaskPool(TaskPoolBase):
             raise TimeoutError()
 
         batch_index, batch_inputs = self.batch_receiver.recv()
-        self.batch_received.set()  # pool can now prepare next batch
         batch_inputs = [tensor.to(device, non_blocking=True) for tensor in batch_inputs]
         return batch_index, batch_inputs
 

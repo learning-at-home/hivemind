@@ -10,6 +10,9 @@ from prefetch_generator import BackgroundGenerator
 
 from .expert_backend import ExpertBackend
 from .task_pool import TaskPool, TaskPoolBase
+from hivemind.utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class Runtime(threading.Thread):
@@ -34,6 +37,7 @@ class Runtime(threading.Thread):
     :param device: if specified, moves all experts and data to this device via .to(device=device).
       If you want to manually specify devices for each expert (in their forward pass), leave device=None (default)
     """
+
     def __init__(self, expert_backends: Dict[str, ExpertBackend], prefetch_batches=64, sender_threads: int = 1,
                  device: torch.device = None):
         super().__init__()
@@ -44,7 +48,6 @@ class Runtime(threading.Thread):
         self.ready = mp.Event()  # event is set iff server is currently running and ready to accept batches
 
     def run(self):
-        progress = tqdm.tqdm(bar_format='{desc}, {rate_fmt}')
         for pool in self.pools:
             if not pool.is_alive():
                 pool.start()
@@ -55,12 +58,12 @@ class Runtime(threading.Thread):
         with mp.pool.ThreadPool(self.sender_threads) as output_sender_pool:
             try:
                 self.ready.set()
+                logger.info('Started')
                 for pool, batch_index, batch in BackgroundGenerator(
                         self.iterate_minibatches_from_pools(), self.prefetch_batches):
                     outputs = pool.process_func(*batch)
+                    logger.info(f'Pool {pool.uid}: batch processed, size {outputs[0].size(0)}')
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
-                    progress.update(len(outputs[0]))
-                    progress.desc = f'pool.uid={pool.uid} batch_size={len(outputs[0])}'
             finally:
                 self.shutdown()
 

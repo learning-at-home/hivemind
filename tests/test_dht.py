@@ -112,11 +112,11 @@ def run_node(node_id, peers, status_pipe: mp.Pipe):
 
 
 def test_dht():
-    # create dht with 50 nodes + your 51-st node
+    # create dht with 20 nodes + your 21-st node
     dht: Dict[Endpoint, DHTID] = {}
     processes: List[mp.Process] = []
 
-    for i in range(50):
+    for i in range(20):
         node_id = DHTID.generate()
         peers = random.sample(dht.keys(), min(len(dht), 5))
         pipe_recv, pipe_send = mp.Pipe(duplex=False)
@@ -149,7 +149,7 @@ def test_dht():
         jaccard_numerator = jaccard_denominator = 0  # jaccard similarity aka intersection over union
         all_node_ids = list(dht.values())
 
-        for i in range(100):
+        for i in range(10):
             query_id = DHTID.generate()
             k_nearest = random.randint(1, 20)
             exclude_self = random.random() > 0.5
@@ -250,15 +250,15 @@ def test_hivemind_dht():
 
 def test_store():
     d = LocalStorage()
-    d.store(DHTID.generate("key"), b"val", get_dht_time() + 10)
+    d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.5)
     assert d.get(DHTID.generate("key"))[0] == b"val", "Wrong value"
     print("Test store passed")
 
 
 def test_get_expired():
     d = LocalStorage()
-    d.store(DHTID.generate("key"), b"val", get_dht_time() + 1)
-    time.sleep(2)
+    d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.1)
+    time.sleep(0.5)
     assert d.get(DHTID.generate("key")) == (None, None), "Expired value must be deleted"
     print("Test get expired passed")
 
@@ -273,7 +273,7 @@ def test_change_expiration_time():
     d = LocalStorage()
     d.store(DHTID.generate("key"), b"val1", get_dht_time() + 2)
     d.store(DHTID.generate("key"), b"val2", get_dht_time() + 200)
-    time.sleep(4)
+    time.sleep(1)
     assert d.get(DHTID.generate("key"))[0] == b"val2", "Value must be changed, but still kept in table"
     print("Test change expiration time passed")
 
