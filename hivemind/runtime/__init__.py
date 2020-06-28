@@ -58,13 +58,15 @@ class Runtime(threading.Thread):
         with mp.pool.ThreadPool(self.sender_threads) as output_sender_pool:
             try:
                 self.ready.set()
-                logger.info('Started')
+                logger.info("Started")
                 for pool, batch_index, batch in BackgroundGenerator(
                         self.iterate_minibatches_from_pools(), self.prefetch_batches):
+                    logger.debug(f"Processing batch {batch_index} from pool {pool.uid}")
                     outputs = pool.process_func(*batch)
-                    logger.info(f'Pool {pool.uid}: batch processed, size {outputs[0].size(0)}')
+                    logger.info(f"Pool {pool.uid}: batch {batch_index} processed, size {outputs[0].size(0)}")
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
             finally:
+                logger.info("Shutting down")
                 self.shutdown()
 
     SHUTDOWN_TRIGGER = "RUNTIME SHUTDOWN TRIGGERED"
@@ -88,12 +90,16 @@ class Runtime(threading.Thread):
 
             while True:
                 # wait until at least one batch_receiver becomes available
+                logger.debug("Waiting for inputs from task pools")
                 ready_fds = selector.select()
                 ready_objects = {key.data for (key, events) in ready_fds}
                 if self.SHUTDOWN_TRIGGER in ready_objects:
                     break  # someone asked us to shutdown, break from the loop
 
+                logger.debug("Choosing the pool with highest priority")
                 pool = max(ready_objects, key=lambda pool: pool.priority)
 
+                logger.debug(f"Loading batch from {pool.uid}")
                 batch_index, batch_tensors = pool.load_batch_to_runtime(timeout, self.device)
+                logger.debug(f"Loaded batch from {pool.uid}")
                 yield pool, batch_index, batch_tensors

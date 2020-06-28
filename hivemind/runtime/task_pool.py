@@ -107,12 +107,11 @@ class TaskPool(TaskPoolBase):
                 batch = []
                 total_size = 0
             try:
+                logger.debug(f"{self.uid} getting next task")
                 task = self.tasks.get(timeout=self.timeout)
             except Empty:
-                exc = TimeoutError(f"Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet.")
-                for task in batch:
-                    task.future.set_exception(exc)
-                raise exc
+                logger.warning(f"Timeout reached but batch doesn't contain >={self.min_batch_size} elements yet")
+                continue
 
             task_size = self.get_task_size(task)
 
@@ -126,10 +125,10 @@ class TaskPool(TaskPoolBase):
                 total_size += task_size
 
     def run(self, *args, **kwargs):
-        logger.info(f'Starting {self.uid}, pid={os.getpid()}')
+        logger.info(f'{self.uid} starting, pid={os.getpid()}')
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
-                                         name=f'{self.uid}-pool_output_loop')
+                                         name=f'{self.uid}_output')
         try:
             output_thread.start()
             self._pool_input_loop(pending_batches, *args, **kwargs)
@@ -153,17 +152,21 @@ class TaskPool(TaskPoolBase):
                 if skip_i == prev_num_tasks - 1:
                     self.priority = finished_task_timestamp
 
+            logger.debug(f"{self.uid} getting next batch")
             batch_tasks = next(batch_iterator)
             # save batch futures, _output_loop will deliver on them later
             pending_batches[batch_index] = batch_tasks
 
+            logger.debug(f"{self.uid}, batch  {batch_index}: aggregating inputs")
             # find or create shared arrays for current batch size
             batch_inputs = [
                 torch.cat([task.args[i] for task in batch_tasks]).share_memory_()
                 for i in range(len(batch_tasks[0].args))
             ]
 
+            logger.debug(f"{self.uid}, batch {batch_index}: sending to runtime")
             self.batch_sender.send((batch_index, batch_inputs))
+            logger.debug(f"{self.uid}, batch {batch_index}: sent to runtime")
             prev_num_tasks = len(batch_tasks)
             batch_index += 1
 
@@ -171,16 +174,19 @@ class TaskPool(TaskPoolBase):
         """ Infinite loop: receive results from runtime and dispatch them to task Futures """
 
         while True:
+            logger.debug(f"{self.uid} waiting for results from runtime")
             payload = self.outputs_receiver.recv()
             if isinstance(payload, BaseException):
                 raise payload
             else:
                 batch_index, batch_outputs = payload
+            logger.debug(f"{self.uid}, batch {batch_index}: got results")
 
             # split batch into partitions for individual tasks
             batch_tasks = pending_batches.pop(batch_index)
             task_sizes = [self.get_task_size(task) for task in batch_tasks]
             outputs_per_task = zip(*(torch.split_with_sizes(array, task_sizes, dim=0) for array in batch_outputs))
+            logger.debug(f"{self.uid}, batch {batch_index}: sending outputs to handlers")
 
             # dispatch results to futures
             for task, task_outputs in zip(batch_tasks, outputs_per_task):

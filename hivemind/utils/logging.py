@@ -3,6 +3,7 @@ import os
 
 
 def get_logger(module_name: str) -> logging.Logger:
+    # trim package name
     name_without_prefix = '.'.join(module_name.split('.')[1:])
     loglevel = os.getenv('LOGLEVEL', 'INFO')
 
