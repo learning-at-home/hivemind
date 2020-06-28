@@ -5,6 +5,6 @@ requests>=2.22.0
 tqdm
 prefetch_generator>=1.0.1
 pytest
-grpcio>=1.31.0
-grpcio-tools>=1.31.0
+grpcio
+grpcio-tools>=1.30.0
 aiologger>=0.5.0
