@@ -9,11 +9,11 @@ jobs:
     steps:
       - checkout
       - python/load-cache
-      - python/install-deps
       - run: sudo pip install codecov pytest
       - run:
           command: git clone https://github.com/grpc/grpc --recurse-submodules && cd grpc && sudo pip install -r requirements.txt && export GRPC_PYTHON_BUILD_WITH_CYTHON=1 && sudo pip install . && cd -
           name: compile-grpc  # remove this command when v1.31 becomes available via pip install -r requirements.txt
+      - python/install-deps
       - python/save-cache
       - run:
           command: sudo python setup.py develop
