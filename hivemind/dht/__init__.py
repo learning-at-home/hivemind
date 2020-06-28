@@ -16,7 +16,7 @@ from .node import DHTNode, DHTID, DHTExpiration
 from .routing import get_dht_time
 
 from ..client import RemoteExpert
-from ..utils import SharedFuture, find_open_port, Hostname, Port, run_in_background
+from ..utils import SharedFuture, find_open_port, Endpoint, Port, run_in_background, LOCALHOST
 
 
 class DHT(mp.Process):
@@ -33,7 +33,7 @@ class DHT(mp.Process):
     EXPIRATION = 120  # anything written to DHT is considered expired after this many seconds
     make_key = "{}::{}".format
 
-    def __init__(self, *initial_peers: Tuple[Hostname, Port], port: Optional[Port] = None,
+    def __init__(self, *initial_peers: Endpoint, port: Optional[Port] = None,
                  start: bool, daemon: bool = True, **node_params):
         super().__init__()
         port = find_open_port() if port is None else port
@@ -52,7 +52,8 @@ class DHT(mp.Process):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        self.node = DHTNode(initial_peers=list(self.initial_peers), port=self.port, **self.node_params)
+        self.node = loop.run_until_complete(DHTNode.create(
+            initial_peers=list(self.initial_peers), listen_on=f"{LOCALHOST}:{self.port}", **self.node_params))
         run_in_background(loop.run_forever)
         self.ready.set()
 
