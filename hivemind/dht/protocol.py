@@ -197,8 +197,13 @@ class DHTProtocol(dht_grpc.DHTServicer):
             cached_value, cached_expiration = self.cache.get(key_id)
             if (cached_expiration or -float('inf')) > (maybe_expiration or -float('inf')):
                 maybe_value, maybe_expiration = cached_value, cached_expiration
-            peer_ids, endpoints = zip(*self.routing_table.get_nearest_neighbors(
-                key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id)))
+
+            nearest_neighbors = self.routing_table.get_nearest_neighbors(
+                key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id))
+            if nearest_neighbors:
+                peer_ids, endpoints = zip(*nearest_neighbors)
+            else:
+                peer_ids, endpoints = [], []
 
             response.values.append(maybe_value if maybe_value is not None else _NOT_FOUND_VALUE)
             response.expiration.append(maybe_expiration if maybe_expiration is not None else _NOT_FOUND_EXPIRATION)
@@ -247,6 +252,7 @@ _NOT_FOUND_VALUE, _NOT_FOUND_EXPIRATION = b'', -float('inf')  # internal values 
 
 class LocalStorage:
     """ Local dictionary that maintains up to :maxsize: tuples of (key, value, expiration) """
+
     def __init__(self, maxsize: Optional[int] = None):
         self.cache_size = maxsize or float("inf")
         self.data = dict()
