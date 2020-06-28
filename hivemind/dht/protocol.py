@@ -1,6 +1,6 @@
 import asyncio
 import heapq
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, Iterator
 from rpcudp.protocol import RPCProtocol
 
 from .routing import RoutingTable, DHTID, DHTValue, DHTExpiration, BinaryDHTID, get_dht_time
@@ -21,10 +21,11 @@ class KademliaProtocol(RPCProtocol):
      Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
     """
 
-    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int,
-                 wait_timeout: float, cache_size: Optional[int] = None):
+    def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int, wait_timeout: float,
+                 max_concurrent_rpc: int, num_replicas: Optional[int] = None, cache_size: Optional[int] = None):
         super().__init__(wait_timeout)
-        self.node_id, self.bucket_size = node_id, bucket_size
+        self.node_id, self.bucket_size, self.num_replicas = node_id, bucket_size, num_replicas or bucket_size
+        self.rpc_semaphore = asyncio.BoundedSemaphore(value=max_concurrent_rpc)
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.storage = LocalStorage()
         self.cache = LocalStorage(maxsize=cache_size)
@@ -36,7 +37,8 @@ class KademliaProtocol(RPCProtocol):
 
     async def call_ping(self, recipient: Endpoint) -> Optional[DHTID]:
         """ Get recipient's node id and add him to the routing table. If recipient doesn't respond, return None """
-        responded, response = await self.ping(recipient, bytes(self.node_id))
+        async with self.rpc_semaphore:
+            responded, response = await self.ping(recipient, bytes(self.node_id))
         recipient_node_id = DHTID.from_bytes(response) if responded else None
         asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
         return recipient_node_id
@@ -58,8 +60,9 @@ class KademliaProtocol(RPCProtocol):
 
         :returns: True if value was accepted, False if it was rejected (recipient has newer value), None if no response
         """
-        responded, response = await self.store(recipient, bytes(self.node_id), bytes(key),
-                                               value, expiration_time, in_cache)
+        async with self.rpc_semaphore:
+            responded, response = await self.store(recipient, bytes(self.node_id), bytes(key),
+                                                   value, expiration_time, in_cache)
         if responded:
             store_accepted, recipient_node_id = response[0], DHTID.from_bytes(response[1])
             asyncio.ensure_future(self.update_routing_table(recipient_node_id, recipient, responded=responded))
@@ -86,7 +89,8 @@ class KademliaProtocol(RPCProtocol):
 
         :returns: a dicitionary[node id => address] as per Section 2.3 of the paper
         """
-        responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(query_id))
+        async with self.rpc_semaphore:
+            responded, response = await self.find_node(recipient, bytes(self.node_id), bytes(query_id))
         if responded:
             peers = {DHTID.from_bytes(peer_id_bytes): tuple(addr) for peer_id_bytes, addr in response[0]}
             # Note: we convert addr from list to tuple here --^ because some msgpack versions convert tuples to lists
@@ -122,7 +126,8 @@ class KademliaProtocol(RPCProtocol):
          neighbors:  a dictionary[node id => address] as per Section 2.3 of the paper;
         :note: if no response, returns None, None, {}
         """
-        responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
+        async with self.rpc_semaphore:
+            responded, response = await self.find_value(recipient, bytes(self.node_id), bytes(key))
         if responded:
             (value, expiration_time, peers_bytes), recipient_id = response[:-1], DHTID.from_bytes(response[-1])
             peers = {DHTID.from_bytes(peer_id_bytes): tuple(addr) for peer_id_bytes, addr in peers_bytes}
@@ -140,11 +145,23 @@ class KademliaProtocol(RPCProtocol):
           For incoming requests, this should always be True
         """
         if responded:  # incoming request or outgoing request with response
+            if node_id not in self.routing_table:
+                # we just met a new node, maybe we know some values that it *should* store
+                for key, value, expiration in list(self.storage.items()):
+                    neighbors = self.routing_table.get_nearest_neighbors(key, self.num_replicas, exclude=self.node_id)
+                    if neighbors:
+                        nearest_distance = neighbors[0][0].xor_distance(key)
+                        farthest_distance = neighbors[-1][0].xor_distance(key)
+                        new_node_should_store = node_id.xor_distance(key) < farthest_distance
+                        this_node_is_responsible = self.node_id.xor_distance(key) < nearest_distance
+                    if not neighbors or (new_node_should_store and this_node_is_responsible):
+                        asyncio.create_task(self.call_store(addr, key, value, expiration))
+
             maybe_node_to_ping = self.routing_table.add_or_update_node(node_id, addr)
             if maybe_node_to_ping is not None:
                 # we couldn't add new node because the table was full. Check if existing peers are alive (Section 2.2)
                 # ping one least-recently updated peer: if it won't respond, remove it from the table, else update it
-                await self.call_ping(maybe_node_to_ping[1])  # [1]-th element is that node's endpoint
+                asyncio.create_task(self.call_ping(maybe_node_to_ping[1]))  # [1]-th element is that node's endpoint
 
         else:  # outgoing request and peer did not respond
             if node_id is not None and node_id in self.routing_table:
@@ -158,7 +175,6 @@ class KademliaProtocol(RPCProtocol):
             del self._outstanding[msg_id]
         else:
             super()._accept_response(msg_id, data, address)
-
 
 
 class LocalStorage:
@@ -200,3 +216,8 @@ class LocalStorage:
         if key in self.data:
             return self.data[key]
         return None, None
+
+    def items(self) -> Iterator[Tuple[DHTID, DHTValue, DHTExpiration]]:
+        """ Iterate over (key, value, expiration_time) tuples stored in this storage """
+        self.remove_outdated()
+        return ((key, value, expiration) for key, (value, expiration) in self.data.items())

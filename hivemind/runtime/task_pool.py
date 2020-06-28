@@ -55,7 +55,7 @@ class TaskPool(TaskPoolBase):
     to process these batches and dispatches results back to request sources. Operates as a background process.
 
     :param process_func: function to be applied to every formed batch; called by Runtime
-        Note that process_func should accept only \*args Tensors and return a flat tuple of Tensors
+        Note that process_func should accept only positional args (Tensors) and return a flat tuple of Tensors
     :param max_batch_size: process at most this many inputs in a batch (task contains have one or several inputs)
     :param min_batch_size: process at least this many inputs in a batch, otherwise wait for more
     :param timeout: wait for a subsequent task for at most this many seconds

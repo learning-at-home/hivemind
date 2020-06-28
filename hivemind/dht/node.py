@@ -1,4 +1,5 @@
 import asyncio
+import random
 from collections import OrderedDict
 from functools import partial
 from typing import Optional, Tuple, List, Dict
@@ -23,9 +24,16 @@ class DHTNode:
       Recommended value: $k$ is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
     :param num_replicas: (≈k) - number of nearest nodes that will be asked to store a given key, default = bucket_size
     :param depth_modulo: (b) - kademlia can split bucket if it contains root OR up to the nearest multiple of this value
+    :param max_concurrent_rpc: maximum number of outgoing RPC requests emitted by KademliaProtocol in parallel
+        Reduce this value if your RPC requests register no response despite the peer sending the response.
     :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
     :param staleness_timeout: a bucket is considered stale if no node from that bucket was updated in this many seconds
+        if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
     :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
+    :param cache_locally: if True, caches all values (stored or found) in a node-local cache
+    :param cache_nearest: if above 0, whenever DHTNode finds a value, it will also store (cache) this value on this many
+        nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet.
+    :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
     :param interface: provide 0.0.0.0 to operate over ipv4, :: to operate over ipv6, localhost to operate locally, etc.
 
     :note: Hivemind DHT is optimized to store temporary metadata that is regularly updated.
@@ -47,9 +55,9 @@ class DHTNode:
 
     def __init__(self, node_id: Optional[DHTID] = None, port: Optional[Port] = None, initial_peers: List[Endpoint] = (),
                  bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5,
-                 wait_timeout: float = 5, staleness_timeout: Optional[float] = 600,
+                 max_concurrent_rpc: int = 128, wait_timeout: float = 5, staleness_timeout: Optional[float] = None,
                  bootstrap_timeout: Optional[float] = None, cache_locally: bool = True, cache_nearest: int = 1,
-                 interface: Hostname = '0.0.0.0'):
+                 cache_size=None, interface: Hostname = '0.0.0.0'):
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.port = port = port if port is not None else find_open_port()
         self.num_replicas = num_replicas if num_replicas is not None else bucket_size
@@ -58,34 +66,40 @@ class DHTNode:
 
         # create kademlia protocol and make it listen to a port
         loop = asyncio.get_event_loop()
-        make_protocol = partial(KademliaProtocol, self.node_id, bucket_size, depth_modulo, wait_timeout)
+        make_protocol = partial(KademliaProtocol, self.node_id, bucket_size, depth_modulo, wait_timeout,
+                                max_concurrent_rpc, num_replicas, cache_size)
         listener = loop.run_until_complete(loop.create_datagram_endpoint(make_protocol, local_addr=(interface, port)))
         self.transport: asyncio.Transport = listener[0]
         self.protocol: KademliaProtocol = listener[1]
 
         if initial_peers:
-            # bootstrap part 1: ping initial_peers, add each other to the routing table
+            # stage 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
-            began_bootstrap_time = get_dht_time()
+            start_time = get_dht_time()
             ping_tasks = map(self.protocol.call_ping, initial_peers)
-            finished_tasks, remaining_tasks = loop.run_until_complete(
-                asyncio.wait(ping_tasks, timeout=wait_timeout, return_when=asyncio.FIRST_COMPLETED))
-            time_to_first_response = get_dht_time() - began_bootstrap_time
-            # bootstrap part 2: gather all peers who responded within bootstrap_timeout, but at least one peer
-            if remaining_tasks:
+            finished_ping_tasks, remaining_ping_tasks = loop.run_until_complete(
+                asyncio.wait(ping_tasks, return_when=asyncio.FIRST_COMPLETED))
+
+            # stage 2: gather remaining peers (those who respond within bootstrap_timeout)
+            if remaining_ping_tasks:
                 finished_in_time, stragglers = loop.run_until_complete(
-                    asyncio.wait(remaining_tasks, timeout=bootstrap_timeout - time_to_first_response))
+                    asyncio.wait(remaining_ping_tasks, timeout=bootstrap_timeout - get_dht_time() + start_time))
                 for straggler in stragglers:
                     straggler.cancel()
-                finished_tasks |= finished_in_time
+                finished_ping_tasks |= finished_in_time
 
-            peer_ids = [task.result() for task in finished_tasks if task.result() is not None]
-            if len(peer_ids) == 0 and len(initial_peers) != 0:
+            if not finished_ping_tasks:
                 warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
 
-            # bootstrap part 3: run beam search for my node id to add my own nearest neighbors to the routing table
-            # ... and maybe receive some values that we are meant to store (see protocol.update_routing_table)
-            loop.run_until_complete(self.find_nearest_nodes(query_id=self.node_id))
+            # stage 3: traverse dht to find my own nearest neighbors and populate the routing table
+            # ... maybe receive some values that we are meant to store (see protocol.update_routing_table)
+            # note: using asyncio.wait instead of wait_for because wait_for cancels task on timeout
+            loop.run_until_complete(asyncio.wait([loop.create_task(self.find_nearest_nodes(query_id=self.node_id)),
+                                                  asyncio.sleep(bootstrap_timeout - get_dht_time() + start_time)],
+                                                 return_when=asyncio.FIRST_COMPLETED))
+
+        if self.staleness_timeout is not None:
+            loop.create_task(self._refresh_routing_table(period=self.staleness_timeout))
 
     async def find_nearest_nodes(self, query_id: DHTID, k_nearest: Optional[int] = None,
                                  beam_size: Optional[int] = None, exclude_self: bool = False) -> Dict[DHTID, Endpoint]:
@@ -207,3 +221,16 @@ class DHTNode:
                     break
 
         return (latest_value, latest_expiration) if latest_expiration != -float('inf') else (None, None)
+
+    async def _refresh_routing_table(self, *, period: Optional[float]) -> None:
+        """ Tries to find new nodes for buckets that were unused for more than self.staleness_timeout """
+        while period is not None:  # if None run once, otherwise run forever
+            refresh_time = get_dht_time()
+            staleness_threshold = refresh_time - self.staleness_timeout
+            stale_buckets = [bucket for bucket in self.protocol.routing_table.buckets
+                             if bucket.last_updated < staleness_threshold]
+            for bucket in stale_buckets:
+                refresh_id = DHTID(random.randint(bucket.lower, bucket.upper - 1))
+                await self.find_nearest_nodes(refresh_id)
+
+            await asyncio.sleep(max(0.0, period - (get_dht_time() - refresh_time)))
