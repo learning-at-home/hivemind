@@ -3,6 +3,7 @@ import heapq
 import operator
 from itertools import chain, zip_longest
 
+from hivemind import LOCALHOST
 from hivemind.dht.routing import RoutingTable, DHTID
 from hivemind.utils.serializer import PickleSerializer
 
@@ -37,8 +38,8 @@ def test_routing_table_basic():
 
     for phony_neighbor_port in random.sample(range(10000), 100):
         phony_id = DHTID.generate()
-        routing_table.add_or_update_node(phony_id, ('localhost', phony_neighbor_port))
-        assert routing_table[phony_id] == ('localhost', phony_neighbor_port)
+        routing_table.add_or_update_node(phony_id, f'{LOCALHOST}:{phony_neighbor_port}')
+        assert routing_table[phony_id] == f'{LOCALHOST}:{phony_neighbor_port}'
 
     assert routing_table.buckets[0].lower == DHTID.MIN and routing_table.buckets[-1].upper == DHTID.MAX
     for bucket in routing_table.buckets:
@@ -56,7 +57,7 @@ def test_routing_table_parameters():
         node_id = DHTID.generate()
         routing_table = RoutingTable(node_id, bucket_size=bucket_size, depth_modulo=modulo)
         for phony_neighbor_port in random.sample(range(1_000_000), 10_000):
-            routing_table.add_or_update_node(DHTID.generate(), ('localhost', phony_neighbor_port))
+            routing_table.add_or_update_node(DHTID.generate(), f'{LOCALHOST}:{phony_neighbor_port}')
         for bucket in routing_table.buckets:
             assert len(bucket.replacement_nodes) == 0 or len(bucket.nodes_to_addr) <= bucket.size
         assert min_nbuckets <= len(routing_table.buckets) <= max_nbuckets, (
@@ -70,8 +71,13 @@ def test_routing_table_search():
         node_id = DHTID.generate()
         routing_table = RoutingTable(node_id, bucket_size=20, depth_modulo=5)
         num_added = 0
+        total_nodes = 0
+
         for phony_neighbor_port in random.sample(range(1_000_000), table_size):
-            num_added += routing_table.add_or_update_node(DHTID.generate(), ('localhost', phony_neighbor_port)) is None
+            routing_table.add_or_update_node(DHTID.generate(), f'{LOCALHOST}:{phony_neighbor_port}')
+            new_total = sum(len(bucket.nodes_to_addr) for bucket in routing_table.buckets)
+            num_added += new_total > total_nodes
+            total_nodes = new_total
         num_replacements = sum(len(bucket.replacement_nodes) for bucket in routing_table.buckets)
     
         all_active_neighbors = list(chain(

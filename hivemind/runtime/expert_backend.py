@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from .task_pool import TaskPool
-from ..utils import nested_flatten, nested_pack, nested_compare, BatchTensorProto, DUMMY_BATCH_SIZE, nested_map
+from ..utils import nested_flatten, nested_pack, nested_compare, BatchTensorDescriptor, DUMMY_BATCH_SIZE, nested_map
 
 
 class ExpertBackend(nn.Module):
@@ -33,9 +33,9 @@ class ExpertBackend(nn.Module):
     """
 
     def __init__(self, name: str, expert: nn.Module, opt: torch.optim.Optimizer, *,
-                 args_schema: Tuple[BatchTensorProto, ...] = None,
-                 kwargs_schema: Dict[str, BatchTensorProto] = None,
-                 outputs_schema: Union[BatchTensorProto, Tuple[BatchTensorProto, ...]] = None,
+                 args_schema: Tuple[BatchTensorDescriptor, ...] = None,
+                 kwargs_schema: Dict[str, BatchTensorDescriptor] = None,
+                 outputs_schema: Union[BatchTensorDescriptor, Tuple[BatchTensorDescriptor, ...]] = None,
                  **kwargs):
         super().__init__()
         self.expert, self.opt, self.name = expert, opt, name
@@ -50,7 +50,7 @@ class ExpertBackend(nn.Module):
             dummy_args = tuple(sample.make_empty(DUMMY_BATCH_SIZE) for sample in args_schema)
             dummy_kwargs = {key: sample.make_empty(DUMMY_BATCH_SIZE) for key, sample in kwargs_schema.items()}
             dummy_outputs = self.expert(*dummy_args, **dummy_kwargs)
-            outputs_schema = nested_map(BatchTensorProto.from_tensor, dummy_outputs)
+            outputs_schema = nested_map(BatchTensorDescriptor.from_tensor, dummy_outputs)
 
         self.outputs_schema = outputs_schema
         self.forward_schema = (self.args_schema, self.kwargs_schema)

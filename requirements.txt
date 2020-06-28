@@ -3,6 +3,9 @@ joblib>=0.13
 numpy>=1.17
 requests>=2.22.0
 tqdm
-rpcudp>=4.0.0
 prefetch_generator>=1.0.1
 pytest
+umsgpack
+grpcio
+grpcio-tools>=1.30.0
+aiologger>=0.5.0

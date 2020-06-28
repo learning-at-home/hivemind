@@ -9,8 +9,19 @@ jobs:
     steps:
       - checkout
       - python/load-cache
+      - run:
+          command: |
+            if [[ $(pip show grpcio | grep Version) != *1.31* ]]; then
+              git clone https://github.com/grpc/grpc --recurse-submodules
+              cd grpc
+              sudo pip install -r requirements.txt
+              export GRPC_PYTHON_BUILD_WITH_CYTHON=1
+              sudo pip install .
+              cd -
+            fi
+          name: compile-grpc  # remove this command when v1.31 becomes available via pip install -r requirements.txt
+      - run: sudo pip install codecov pytest grpcio-tools
       - python/install-deps
-      - run: sudo pip install codecov pytest
       - python/save-cache
       - run:
           command: sudo python setup.py develop

@@ -61,9 +61,9 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
 
     sample_input = name_to_input[expert_cls](4, hidden_dim)
     if isinstance(sample_input, tuple):
-        args_schema = tuple(hivemind.BatchTensorProto.from_tensor(arg) for arg in sample_input)
+        args_schema = tuple(hivemind.BatchTensorDescriptor.from_tensor(arg) for arg in sample_input)
     else:
-        args_schema = (hivemind.BatchTensorProto.from_tensor(sample_input),)
+        args_schema = (hivemind.BatchTensorDescriptor.from_tensor(sample_input),)
 
     # initialize experts
     experts = {}
@@ -73,7 +73,7 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
         expert_uid = f'{expert_prefix}{UID_DELIMETER}{i + expert_offset}'
         experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
                                                      args_schema=args_schema,
-                                                     outputs_schema=hivemind.BatchTensorProto(hidden_dim),
+                                                     outputs_schema=hivemind.BatchTensorDescriptor(hidden_dim),
                                                      max_batch_size=max_batch_size,
                                                      )
     # actually start server

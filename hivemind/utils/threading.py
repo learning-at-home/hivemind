@@ -65,3 +65,4 @@ def run_and_await_k(jobs: List[callable], k: int,
             future.cancel()
             outputs[index] = future.result() if not future.exception() else future.exception()
     return outputs
+

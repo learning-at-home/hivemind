@@ -41,7 +41,7 @@ class RoutingTable:
         Update routing table after an incoming request from :addr: (host:port) or outgoing request to :addr:
 
         :returns: If we cannot add node_id to the routing table, return the least-recently-updated node (Section 2.2)
-        :note: KademliaProtocol calls this method for every incoming and outgoing request if there was a response.
+        :note: DHTProtocol calls this method for every incoming and outgoing request if there was a response.
           If this method returned a node to be ping-ed, the protocol will ping it to check and either move it to
           the start of the table or remove that node and replace it with
         """
@@ -65,6 +65,12 @@ class RoutingTable:
         first, second = self.buckets[index].split()
         self.buckets[index] = first
         self.buckets.insert(index + 1, second)
+
+    def get(self, node_id: DHTID, default=None) -> Optional[Endpoint]:
+        return self[node_id] if node_id in self else default
+
+    def get_id(self, peer: Endpoint, default=None) -> Optional[DHTID]:
+        return None #TODO(jheuristic)
 
     def __getitem__(self, node_id: DHTID) -> Endpoint:
         return self.buckets[self.get_bucket_index(node_id)][node_id]
@@ -174,6 +180,7 @@ class KBucket:
         """ :returns: least-recently updated node that isn't already being pinged right now -- if such node exists """
         for uid, endpoint in self.nodes_to_addr.items():
             if uid not in self.nodes_requested_for_ping:
+                self.nodes_requested_for_ping.add(uid)
                 return uid, endpoint
 
     def __getitem__(self, node_id: DHTID) -> Endpoint:
@@ -272,5 +279,5 @@ class DHTID(int):
         return self.to_bytes()
 
 
-DHTKey, DHTValue, DHTExpiration, BinaryDHTID = Any, Any, float, bytes  # flavour types
+DHTKey, DHTValue, DHTExpiration, BinaryDHTID, BinaryDHTValue, = Any, Any, float, bytes, bytes  # flavour types
 get_dht_time = time.time  # time used by all dht functionality. You can replace this with any infrastructure-wide time
