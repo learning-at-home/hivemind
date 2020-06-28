@@ -91,7 +91,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             peer_info = None
         responded = bool(peer_info and peer_info.node_id)
         peer_id = DHTID.from_bytes(peer_info.node_id) if responded else None
-        asyncio.ensure_future(self.update_routing_table(peer_id, peer, responded=responded))
+        asyncio.create_task(self.update_routing_table(peer_id, peer, responded=responded))
         return peer_id
 
     async def rpc_ping(self, peer_info: dht_pb2.NodeInfo, context: grpc.ServicerContext):
@@ -100,7 +100,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             sender_id = DHTID.from_bytes(peer_info.node_id)
             peer_url = urllib.parse.urlparse(context.peer())
             address = peer_url.path[:peer_url.path.rindex(':')]
-            asyncio.ensure_future(self.update_routing_table(sender_id, f"{address}:{peer_info.rpc_port}"))
+            asyncio.create_task(self.update_routing_table(sender_id, f"{address}:{peer_info.rpc_port}"))
         return self.node_info
 
     async def call_store(self, peer: Endpoint, keys: Sequence[DHTID], values: Sequence[BinaryDHTValue],
@@ -131,17 +131,17 @@ class DHTProtocol(dht_grpc.DHTServicer):
             response = await self._get(peer).rpc_store(store_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
-                asyncio.ensure_future(self.update_routing_table(peer_id, peer, responded=True))
+                asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
             return response.store_ok
         except grpc.experimental.aio.AioRpcError as error:
             logging.info(f"DHTProtocol failed to store at {peer}: {error.code()}")
-            asyncio.ensure_future(self.update_routing_table(self.routing_table.get_id(peer), peer, responded=False))
+            asyncio.create_task(self.update_routing_table(self.routing_table.get_id(peer), peer, responded=False))
             return [False] * len(keys)
 
     async def rpc_store(self, request: dht_pb2.StoreRequest, context: grpc.ServicerContext) -> dht_pb2.StoreResponse:
         """ Some node wants us to store this (key, value) pair """
         if request.peer:  # if requested, add peer to the routing table
-            asyncio.ensure_future(self.rpc_ping(request.peer, context))
+            asyncio.create_task(self.rpc_ping(request.peer, context))
         assert len(request.keys) == len(request.values) == len(request.expiration) == len(request.in_cache)
         response = dht_pb2.StoreResponse(store_ok=[], peer=self.node_info)
         for key_bytes, value_bytes, expiration_time, in_cache in zip(
@@ -168,7 +168,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             response = await self._get(peer).rpc_find(find_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
-                asyncio.ensure_future(self.update_routing_table(peer_id, peer, responded=True))
+                asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
             assert len(response.values) == len(response.expiration) == len(response.nearest) == len(keys), \
                 "DHTProtocol: response is not aligned with keys"
 
@@ -181,7 +181,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             return output
         except grpc.experimental.aio.AioRpcError as error:
             logging.info(f"DHTProtocol failed to store at {peer}: {error.code()}")
-            asyncio.ensure_future(self.update_routing_table(self.routing_table.get_id(peer), peer, responded=False))
+            asyncio.create_task(self.update_routing_table(self.routing_table.get_id(peer), peer, responded=False))
 
     async def rpc_find(self, request: dht_pb2.FindRequest, context: grpc.ServicerContext) -> dht_pb2.FindResponse:
         """
@@ -189,7 +189,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         Also return :bucket_size: nearest neighbors from our routing table for each key (whether or not we found value)
         """
         if request.peer:  # if requested, add peer to the routing table
-            asyncio.ensure_future(self.rpc_ping(request.peer, context))
+            asyncio.create_task(self.rpc_ping(request.peer, context))
 
         response = dht_pb2.FindResponse(values=[], expiration=[], nearest=[], peer=self.node_info)
         for key_id in map(DHTID.from_bytes, request.keys):
@@ -229,7 +229,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                     if not neighbors or (new_node_should_store and this_node_is_responsible):
                         data_to_send.append((key, value, expiration))
                 if data_to_send:
-                    asyncio.ensure_future(self.call_store(peer_endpoint, *zip(*data_to_send), in_cache=False))
+                    asyncio.create_task(self.call_store(peer_endpoint, *zip(*data_to_send), in_cache=False))
 
             maybe_node_to_ping = self.routing_table.add_or_update_node(node_id, peer_endpoint)
             if maybe_node_to_ping is not None:
