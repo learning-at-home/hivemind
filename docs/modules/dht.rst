@@ -39,6 +39,6 @@
    :exclude-members: HASH_FUNC
    :member-order: bysource
 
-.. currentmodule:: hivemind.dht.search
+.. currentmodule:: hivemind.dht.traverse
 
 .. autofunction:: traverse_dht
