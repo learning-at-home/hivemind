@@ -105,7 +105,7 @@ async def traverse_dht(
             # we finished processing query, update priorities again
             num_active_workers[chosen_query] -= 1
 
-    # spawn all workers and wait for them to terminate; workers terminate after exhausting unifinished_queries
+    # spawn all workers and wait for them to terminate; workers terminate after exhausting unfinished_queries
     await asyncio.gather([worker() for _ in range(num_workers)])
 
     nearest_neighbors_per_query = {
