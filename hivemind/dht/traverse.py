@@ -48,7 +48,7 @@ async def traverse_dht(
         distance_reduction = 0
         for query, current_distance in distance_from_visited.items():
             distance_reduction += current_distance - min(current_distance, candidate_nodes[query][ROOT][0])
-        return distance_reduction, num_active_workers[query]
+        return -distance_reduction, num_active_workers[query]
 
     def upper_bound(query: DHTID_Query):
         """ Any node that is farther from query than upper_bound(query) will not be added to heaps """
