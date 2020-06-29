@@ -46,7 +46,8 @@ async def traverse_dht(
     def get_query_priority(query: DHTID_Query):
         """ Priority used by workers to select which heap to explore first """
         distance_reduction = 0
-        for query, current_distance in distance_from_visited.items():
+        for query in unfinished_queries:
+            current_distance = distance_from_visited[query]
             distance_reduction += current_distance - min(current_distance, candidate_nodes[query][ROOT][0])
         return -distance_reduction, num_active_workers[query]
 
