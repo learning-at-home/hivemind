@@ -1,4 +1,4 @@
-catchannels:
+channels:
   - defaults
   - anaconda
   - pytorch
