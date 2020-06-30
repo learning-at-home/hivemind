@@ -100,6 +100,48 @@ def test_dht_protocol():
     peer2_proc.terminate()
 
 
+def test_empty_table():
+    """ Test RPC methods with empty routing table """
+    peer_port, peer_id, peer_started = hivemind.find_open_port(), DHTID.generate(), mp.Event()
+    peer_proc = mp.Process(target=run_protocol_listener, args=(peer_port, peer_id, peer_started), daemon=True)
+    peer_proc.start(), peer_started.wait()
+    test_success = mp.Event()
+
+    def _tester():
+        # note: we run everything in a separate process to re-initialize all global states from scratch
+        # this helps us avoid undesirable side-effects when running multiple tests in sequence
+
+        loop = asyncio.get_event_loop()
+        protocol = loop.run_until_complete(DHTProtocol.create(
+            DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, listen=False))
+
+        key, value, expiration = DHTID.generate(), [random.random(), {'ololo': 'pyshpysh'}], get_dht_time() + 1e3
+
+        recv_value_bytes, recv_expiration, nodes_found = loop.run_until_complete(
+            protocol.call_find(f'{LOCALHOST}:{peer_port}', [key]))[key]
+        assert recv_value_bytes is None and recv_expiration is None and len(nodes_found) == 0
+        assert all(loop.run_until_complete(protocol.call_store(
+            f'{LOCALHOST}:{peer_port}', [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
+        )), "peer rejected store"
+
+        recv_value_bytes, recv_expiration, nodes_found = loop.run_until_complete(
+            protocol.call_find(f'{LOCALHOST}:{peer_port}', [key]))[key]
+        recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
+        assert len(nodes_found) == 0
+        assert recv_value == value and recv_expiration == expiration, "call_find_value expected " \
+            f"{value} (expires by {expiration}) but got {recv_value} (expires by {recv_expiration})"
+
+        assert loop.run_until_complete(protocol.call_ping(f'{LOCALHOST}:{peer_port}')) == peer_id
+        assert loop.run_until_complete(protocol.call_ping(f'{LOCALHOST}:{hivemind.find_open_port()}')) is None
+        test_success.set()
+
+    tester = mp.Process(target=_tester, daemon=True)
+    tester.start()
+    tester.join()
+    assert test_success.is_set()
+    peer_proc.terminate()
+
+
 def run_node(node_id, peers, status_pipe: mp.Pipe):
     if asyncio.get_event_loop().is_running():
         asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
@@ -132,7 +174,7 @@ def test_dht():
         # note: we run everything in a separate process to re-initialize all global states from scratch
         # this helps us avoid undesirable side-effects when running multiple tests in sequence
         loop = asyncio.get_event_loop()
-        me = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 5)))
+        me = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 5), parallel_rpc=10))
 
         # test 1: find self
         nearest = loop.run_until_complete(me.find_nearest_nodes(key_id=me.node_id, k_nearest=1))
