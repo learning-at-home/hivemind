@@ -20,7 +20,7 @@ from ..client import RemoteExpert
 from ..utils import SharedFuture, find_open_port, Endpoint, Port, run_in_background, LOCALHOST
 
 
-class DHT(mp.context.SpawnProcess):
+class DHT(mp.Process):
     """
     A high-level interface to hivemind DHT. Runs a dht node in a background process.
 
@@ -48,8 +48,11 @@ class DHT(mp.context.SpawnProcess):
 
     def run(self) -> None:
         """ Serve DHT forever. This function will not return until DHT node is shut down """
+        if asyncio.get_event_loop().is_running():
+            asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
         uvloop.install()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         self.node = loop.run_until_complete(DHTNode.create(
             initial_peers=list(self.initial_peers), listen_on=f"{LOCALHOST}:{self.port}", **self.node_params))
         run_in_background(loop.run_forever)
