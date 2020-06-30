@@ -123,7 +123,7 @@ class RoutingTable:
         left_index, right_index = nearest_index, nearest_index + 1  # bucket indices considered, [left, right)
         current_lower, current_upper, current_depth = nearest_bucket.lower, nearest_bucket.upper, nearest_bucket.depth
 
-        while current_depth and len(candidates) < k + int(exclude is not None):
+        while current_depth > 0 and len(candidates) < k + int(exclude is not None):
             split_direction = current_lower // 2 ** (DHTID.HASH_NBYTES * 8 - current_depth) % 2
             # ^-- current leaf direction from pre-leaf node, 0 = left, 1 = right
             current_depth -= 1  # traverse one level closer to the root and add all child nodes to the candidates heap
