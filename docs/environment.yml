@@ -1,4 +1,3 @@
-name: py37
 channels:
   - anaconda
   - defaults
