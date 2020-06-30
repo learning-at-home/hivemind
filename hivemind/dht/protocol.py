@@ -23,13 +23,14 @@ class DHTProtocol(dht_grpc.DHTServicer):
     # fmt:off
     node_id: DHTID; port: int; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
     channel_options: Optional[Sequence[Tuple[str, Any]]]; server: grpc.experimental.aio.Server
-    storage: LocalStorage; cache: LocalStorage; routing_table: RoutingTable
+    storage: LocalStorage; cache: LocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
     # fmt:on
 
     @classmethod
-    async def create(cls, node_id: DHTID, bucket_size: int, depth_modulo: int, num_replicas: int, wait_timeout: float,
-                     cache_size: Optional[int] = None, listen=True, listen_on='0.0.0.0:*',
-                     channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs) -> DHTProtocol:
+    async def create(
+            cls, node_id: DHTID, bucket_size: int, depth_modulo: int, num_replicas: int, wait_timeout: float,
+            parallel_rpc: Optional[int] = None, cache_size: Optional[int] = None, listen=True, listen_on='0.0.0.0:*',
+            channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs) -> DHTProtocol:
         """
         A protocol that allows DHT nodes to request keys/neighbors from other DHT nodes.
         As a side-effect, DHTProtocol also maintains a routing table as described in
@@ -47,6 +48,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         self.wait_timeout, self.channel_options = wait_timeout, channel_options
         self.storage, self.cache = LocalStorage(), LocalStorage(maxsize=cache_size)
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
+        self.rpc_semaphore = asyncio.Semaphore(parallel_rpc if parallel_rpc is not None else float('inf'))
 
         if listen:  # set up server to process incoming rpc requests
             grpc.experimental.aio.init_grpc_aio()
@@ -92,7 +94,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         :return: node's DHTID, if peer responded and decided to send his node_id
         """
         try:
-            peer_info = await self._get(peer).rpc_ping(self.node_info, timeout=self.wait_timeout)
+            async with self.rpc_semaphore:
+                peer_info = await self._get(peer).rpc_ping(self.node_info, timeout=self.wait_timeout)
         except grpc.experimental.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to ping {peer}: {error.code()}")
             peer_info = None
@@ -135,7 +138,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         store_request = dht_pb2.StoreRequest(keys=list(map(DHTID.to_bytes, keys)), values=values,
                                              expiration=expirations, in_cache=in_cache, peer=self.node_info)
         try:
-            response = await self._get(peer).rpc_store(store_request, timeout=self.wait_timeout)
+            async with self.rpc_semaphore:
+                response = await self._get(peer).rpc_store(store_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
@@ -172,7 +176,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         keys = list(keys)
         find_request = dht_pb2.FindRequest(keys=list(map(DHTID.to_bytes, keys)), peer=self.node_info)
         try:
-            response = await self._get(peer).rpc_find(find_request, timeout=self.wait_timeout)
+            async with self.rpc_semaphore:
+                response = await self._get(peer).rpc_find(find_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))

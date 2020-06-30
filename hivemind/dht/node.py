@@ -47,24 +47,22 @@ class DHTNode:
     protocol: DHTProtocol
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
 
-
     @classmethod
     async def create(
             cls, node_id: Optional[DHTID] = None, initial_peers: List[Endpoint] = (),
-            bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5, max_requests: int = 0,
+            bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None,
             listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
-        :param port: port to which this DHTNode will listen, by default find some open port
         :param initial_peers: connects to these peers to populate routing table, defaults to no peers
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
           either split in two buckets along the midpoint or reject the new node (but still save it as a replacement)
           Recommended value: k is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
         :param num_replicas: number of nearest nodes that will be asked to store a given key, default = bucket_size (≈k)
         :param depth_modulo: split full k-bucket if it contains root OR up to the nearest multiple of this value (≈b)
-        :param max_requests: maximum number of outgoing RPC requests emitted by DHTProtocol in parallel
+        :param parallel_rpc: maximum number of concurrent outgoing RPC requests emitted by DHTProtocol
           Reduce this value if your RPC requests register no response despite the peer sending the response.
         :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
         :param refresh_timeout: refresh buckets if no node from that bucket was updated in this many seconds
@@ -81,7 +79,6 @@ class DHTNode:
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
         :param kwargs: extra parameters used in grpc.aio.server
         """
-        assert max_requests == 0, "TODO(jheuristic) implement congestion!"
         self = cls(_initialized_with_create=True)
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.num_replicas = num_replicas if num_replicas is not None else bucket_size
@@ -89,7 +86,7 @@ class DHTNode:
         self.refresh_timeout = refresh_timeout
 
         self.protocol = await DHTProtocol.create(self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
-                                                 cache_size, listen, listen_on, **kwargs)
+                                                 parallel_rpc, cache_size, listen, listen_on, **kwargs)
         self.port = self.protocol.port
 
 

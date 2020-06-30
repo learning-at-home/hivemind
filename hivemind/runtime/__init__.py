@@ -5,7 +5,6 @@ from selectors import DefaultSelector, EVENT_READ
 from typing import Dict
 
 import torch
-import tqdm
 from prefetch_generator import BackgroundGenerator
 
 from .expert_backend import ExpertBackend
