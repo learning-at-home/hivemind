@@ -1,5 +1,8 @@
 version: 2
 
+sphinx:
+  fail_on_warning: true
+
 conda:
   environment: docs/environment.yaml
 
