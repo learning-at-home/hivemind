@@ -6,10 +6,9 @@ channels:
 dependencies:
   - grpcio
   - grpcio-tools
-  - numpy
-  - pytorch
-  - joblib
-  - tqdm
+  - numpy>=1.14
+  - pytorch>=1.3.0
+  - joblib>=0.13
   - pip
   - pip:
     - recommonmark
