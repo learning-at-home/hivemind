@@ -1,12 +1,14 @@
 catchannels:
-  - anaconda
   - defaults
-  - conda-forge
+  - anaconda
   - pytorch
+  - conda-forge
 dependencies:
   - grpcio
   - grpcio-tools
   - numpy
   - pytorch
+  - joblib
+  - tqdm
 
 

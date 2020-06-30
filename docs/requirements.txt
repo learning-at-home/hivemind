@@ -1,8 +1,5 @@
 recommonmark
 sphinx_rtd_theme
-joblib>=0.13
 requests>=2.22.0
-tqdm
 prefetch_generator>=1.0.1
-pytest
 umsgpack
