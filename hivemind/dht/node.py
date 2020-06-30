@@ -81,7 +81,7 @@ class DHTNode:
         """
         self = cls(_initialized_with_create=True)
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
-        self.num_replicas = num_replicas if num_replicas is not None else bucket_size
+        self.num_replicas = num_replicas = num_replicas if num_replicas is not None else bucket_size
         self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
         self.refresh_timeout = refresh_timeout
 
