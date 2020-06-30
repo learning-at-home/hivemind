@@ -63,7 +63,7 @@ class DHTNode:
           Recommended value: k is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
         :param num_replicas: number of nearest nodes that will be asked to store a given key, default = bucket_size (≈k)
         :param depth_modulo: split full k-bucket if it contains root OR up to the nearest multiple of this value (≈b)
-        :param parallel_rpc: maximum number of outgoing RPC requests emitted by DHTProtocol in parallel
+        :param parallel_rpc: maximum number of concurrent outgoing RPC requests emitted by DHTProtocol
           Reduce this value if your RPC requests register no response despite the peer sending the response.
         :param wait_timeout: a kademlia rpc request is deemed lost if we did not recieve a reply in this many seconds
         :param refresh_timeout: refresh buckets if no node from that bucket was updated in this many seconds
