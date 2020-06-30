@@ -19,7 +19,7 @@ from ..client import RemoteExpert
 from ..utils import SharedFuture, find_open_port, Endpoint, Port, run_in_background, LOCALHOST
 
 
-class DHT(mp.Process):
+class DHT(mp.context.SpawnProcess):
     """
     A high-level interface to hivemind DHT. Runs a dht node in a background process.
 
