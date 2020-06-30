@@ -82,7 +82,7 @@ def test_routing_table_parameters():
         for phony_neighbor_port in random.sample(range(1_000_000), 10_000):
             routing_table.add_or_update_node(DHTID.generate(), f'{LOCALHOST}:{phony_neighbor_port}')
         for bucket in routing_table.buckets:
-            assert len(bucket.replacement_nodes) == 0 or len(bucket.nodes_to_addr) <= bucket.size
+            assert len(bucket.replacement_nodes) == 0 or len(bucket.nodes_to_endpoint) <= bucket.size
         assert min_nbuckets <= len(routing_table.buckets) <= max_nbuckets, (
             f"Unexpected number of buckets: {min_nbuckets} <= {len(routing_table.buckets)} <= {max_nbuckets}")
 
@@ -98,13 +98,13 @@ def test_routing_table_search():
 
         for phony_neighbor_port in random.sample(range(1_000_000), table_size):
             routing_table.add_or_update_node(DHTID.generate(), f'{LOCALHOST}:{phony_neighbor_port}')
-            new_total = sum(len(bucket.nodes_to_addr) for bucket in routing_table.buckets)
+            new_total = sum(len(bucket.nodes_to_endpoint) for bucket in routing_table.buckets)
             num_added += new_total > total_nodes
             total_nodes = new_total
         num_replacements = sum(len(bucket.replacement_nodes) for bucket in routing_table.buckets)
     
         all_active_neighbors = list(chain(
-            *(bucket.nodes_to_addr.keys() for bucket in routing_table.buckets)
+            *(bucket.nodes_to_endpoint.keys() for bucket in routing_table.buckets)
         ))
         assert lower_active <= len(all_active_neighbors) <= upper_active
         assert len(all_active_neighbors) == num_added

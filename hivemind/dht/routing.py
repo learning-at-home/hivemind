@@ -55,7 +55,7 @@ class RoutingTable:
         bucket = self.buckets[bucket_index]
         store_success = bucket.add_or_update_node(node_id, endpoint)
 
-        if node_id in bucket.nodes_to_addr or node_id in bucket.replacement_nodes:
+        if node_id in bucket.nodes_to_endpoint or node_id in bucket.replacement_nodes:
             # if we added node to bucket or as a replacement, throw it into lookup dicts as well
             self.uid_to_endpoint[node_id] = endpoint
             self.endpoint_to_uid[endpoint] = node_id
@@ -116,7 +116,7 @@ class RoutingTable:
         # step 1: add current bucket to the candidates heap
         nearest_index = self.get_bucket_index(query_id)
         nearest_bucket = self.buckets[nearest_index]
-        for node_id, endpoint in nearest_bucket:
+        for node_id, endpoint in nearest_bucket.nodes_to_endpoint.items():
             heapq.heappush(candidates, (query_id.xor_distance(node_id), node_id, endpoint))
 
         # step 2: add adjacent buckets by ascending code tree one level at a time until you have enough nodes
@@ -131,7 +131,7 @@ class RoutingTable:
             if split_direction == 0:  # leaf was split on the left, merge its right peer(s)
                 current_upper += current_upper - current_lower
                 while right_index < len(self.buckets) and self.buckets[right_index].upper <= current_upper:
-                    for node_id, endpoint in self.buckets[right_index]:
+                    for node_id, endpoint in self.buckets[right_index].nodes_to_endpoint.items():
                         heapq.heappush(candidates, (query_id.xor_distance(node_id), node_id, endpoint))
                     right_index += 1  # note: we may need to add more than one bucket if they are on a lower depth level
                 assert self.buckets[right_index - 1].upper == current_upper
@@ -140,7 +140,7 @@ class RoutingTable:
                 current_lower -= current_upper - current_lower
                 while left_index > 0 and self.buckets[left_index - 1].lower >= current_lower:
                     left_index -= 1  # note: we may need to add more than one bucket if they are on a lower depth level
-                    for node_id, endpoint in self.buckets[left_index]:
+                    for node_id, endpoint in self.buckets[left_index].nodes_to_endpoint.items():
                         heapq.heappush(candidates, (query_id.xor_distance(node_id), node_id, endpoint))
                 assert self.buckets[left_index].lower == current_lower
 
@@ -162,7 +162,7 @@ class KBucket:
     def __init__(self, lower: int, upper: int, size: int, depth: int = 0):
         assert upper - lower == 2 ** (DHTID.HASH_NBYTES * 8 - depth)
         self.lower, self.upper, self.size, self.depth = lower, upper, size, depth
-        self.nodes_to_addr: Dict[DHTID, Endpoint] = {}
+        self.nodes_to_endpoint: Dict[DHTID, Endpoint] = {}
         self.replacement_nodes: Dict[DHTID, Endpoint] = {}
         self.nodes_requested_for_ping: Set[DHTID] = set()
         self.last_updated = get_dht_time()
@@ -183,11 +183,11 @@ class KBucket:
         if node_id in self.nodes_requested_for_ping:
             self.nodes_requested_for_ping.remove(node_id)
         self.last_updated = get_dht_time()
-        if node_id in self.nodes_to_addr:
-            del self.nodes_to_addr[node_id]
-            self.nodes_to_addr[node_id] = addr
-        elif len(self) < self.size:
-            self.nodes_to_addr[node_id] = addr
+        if node_id in self.nodes_to_endpoint:
+            del self.nodes_to_endpoint[node_id]
+            self.nodes_to_endpoint[node_id] = addr
+        elif len(self.nodes_to_endpoint) < self.size:
+            self.nodes_to_endpoint[node_id] = addr
         else:
             if node_id in self.replacement_nodes:
                 del self.replacement_nodes[node_id]
@@ -197,36 +197,27 @@ class KBucket:
 
     def request_ping_node(self) -> Optional[Tuple[DHTID, Endpoint]]:
         """ :returns: least-recently updated node that isn't already being pinged right now -- if such node exists """
-        for uid, endpoint in self.nodes_to_addr.items():
+        for uid, endpoint in self.nodes_to_endpoint.items():
             if uid not in self.nodes_requested_for_ping:
                 self.nodes_requested_for_ping.add(uid)
                 return uid, endpoint
 
     def __getitem__(self, node_id: DHTID) -> Endpoint:
-        return self.nodes_to_addr[node_id] if node_id in self.nodes_to_addr else self.replacement_nodes[node_id]
+        return self.nodes_to_endpoint[node_id] if node_id in self.nodes_to_endpoint else self.replacement_nodes[node_id]
 
     def __delitem__(self, node_id: DHTID):
-        if not (node_id in self.nodes_to_addr or node_id in self.replacement_nodes):
+        if not (node_id in self.nodes_to_endpoint or node_id in self.replacement_nodes):
             raise KeyError(f"KBucket does not contain node id={node_id}.")
 
         if node_id in self.replacement_nodes:
             del self.replacement_nodes[node_id]
 
-        if node_id in self.nodes_to_addr:
-            del self.nodes_to_addr[node_id]
+        if node_id in self.nodes_to_endpoint:
+            del self.nodes_to_endpoint[node_id]
 
             if self.replacement_nodes:
                 newnode_id, newnode = self.replacement_nodes.popitem()
-                self.nodes_to_addr[newnode_id] = newnode
-
-    def __contains__(self, node_id: DHTID):
-        return node_id in self.nodes_to_addr or node_id in self.replacement_nodes
-
-    def __len__(self):
-        return len(self.nodes_to_addr)
-
-    def __iter__(self):
-        return iter(self.nodes_to_addr.items())
+                self.nodes_to_endpoint[newnode_id] = newnode
 
     def split(self) -> Tuple[KBucket, KBucket]:
         """ Split bucket over midpoint, rounded down, assign nodes to according to their id """
@@ -234,13 +225,13 @@ class KBucket:
         assert self.lower < midpoint < self.upper, f"Bucket to small to be split: [{self.lower}: {self.upper})"
         left = KBucket(self.lower, midpoint, self.size, depth=self.depth + 1)
         right = KBucket(midpoint, self.upper, self.size, depth=self.depth + 1)
-        for node_id, addr in chain(self.nodes_to_addr.items(), self.replacement_nodes.items()):
+        for node_id, addr in chain(self.nodes_to_endpoint.items(), self.replacement_nodes.items()):
             bucket = left if int(node_id) <= midpoint else right
             bucket.add_or_update_node(node_id, addr)
         return left, right
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({len(self.nodes_to_addr)} nodes" \
+        return f"{self.__class__.__name__}({len(self.nodes_to_endpoint)} nodes" \
                f" with {len(self.replacement_nodes)} replacements, depth={self.depth}, max size={self.size}" \
                f" lower={hex(self.lower)}, upper={hex(self.upper)})"
 
