@@ -1,4 +1,4 @@
-channels:
+catchannels:
   - anaconda
   - defaults
   - conda-forge
