@@ -11,6 +11,7 @@ import asyncio
 import multiprocessing as mp
 import warnings
 from typing import List, Optional
+import uvloop
 
 from .node import DHTNode, DHTID, DHTExpiration
 from .routing import get_dht_time
@@ -47,14 +48,11 @@ class DHT(mp.context.SpawnProcess):
 
     def run(self) -> None:
         """ Serve DHT forever. This function will not return until DHT node is shut down """
-        if asyncio.get_event_loop().is_running():
-            asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        uvloop.install()
 
-        self.node = loop.run_until_complete(DHTNode.create(
+        self.node = asyncio.run(DHTNode.create(
             initial_peers=list(self.initial_peers), listen_on=f"{LOCALHOST}:{self.port}", **self.node_params))
-        run_in_background(loop.run_forever)
+        run_in_background(asyncio.get_event_loop().run_forever)
         self.ready.set()
 
         while True:

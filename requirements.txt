@@ -5,4 +5,5 @@ prefetch_generator>=1.0.1
 pytest
 umsgpack
 grpcio
+uvloop>=0.14.0
 grpcio-tools>=1.30.0
