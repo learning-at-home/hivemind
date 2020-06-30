@@ -51,8 +51,9 @@ class DHT(mp.Process):
         if asyncio.get_event_loop().is_running():
             asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
         uvloop.install()
-        asyncio.set_event_loop(asyncio.new_event_loop())
-        self.node = asyncio.run(DHTNode.create(
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self.node = loop.run_until_complete(DHTNode.create(
             initial_peers=list(self.initial_peers), listen_on=f"{LOCALHOST}:{self.port}", **self.node_params))
         run_in_background(asyncio.get_event_loop().run_forever)
         self.ready.set()
