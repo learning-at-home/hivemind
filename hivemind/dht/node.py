@@ -89,7 +89,6 @@ class DHTNode:
                                                  parallel_rpc, cache_size, listen, listen_on, **kwargs)
         self.port = self.protocol.port
 
-
         if initial_peers:
             # stage 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
