@@ -49,7 +49,6 @@ class DHT(mp.Process):
     def run(self) -> None:
         """ Serve DHT forever. This function will not return until DHT node is shut down """
         uvloop.install()
-
         self.node = asyncio.run(DHTNode.create(
             initial_peers=list(self.initial_peers), listen_on=f"{LOCALHOST}:{self.port}", **self.node_params))
         run_in_background(asyncio.get_event_loop().run_forever)
