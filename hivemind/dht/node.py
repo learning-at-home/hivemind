@@ -47,7 +47,6 @@ class DHTNode:
     protocol: DHTProtocol
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
 
-
     @classmethod
     async def create(
             cls, node_id: Optional[DHTID] = None, initial_peers: List[Endpoint] = (),
