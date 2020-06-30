@@ -146,7 +146,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             return response.store_ok
         except grpc.experimental.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to store at {peer}: {error.code()}")
-            asyncio.create_task(self.update_routing_table(self.routing_table.get_id(peer), peer, responded=False))
+            asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
             return [False] * len(keys)
 
     async def rpc_store(self, request: dht_pb2.StoreRequest, context: grpc.ServicerContext) -> dht_pb2.StoreResponse:
@@ -193,7 +193,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             return output
         except grpc.experimental.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to store at {peer}: {error.code()}")
-            asyncio.create_task(self.update_routing_table(self.routing_table.get_id(peer), peer, responded=False))
+            asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
 
     async def rpc_find(self, request: dht_pb2.FindRequest, context: grpc.ServicerContext) -> dht_pb2.FindResponse:
         """
@@ -231,7 +231,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         :param responded: for outgoing requests, this indicated whether recipient responded or not.
           For incoming requests, this should always be True
         """
-        node_id = node_id if node_id is not None else self.routing_table.get_id(peer_endpoint)
+        node_id = node_id if node_id is not None else self.routing_table.get(endpoint=peer_endpoint)
         if responded:  # incoming request or outgoing request with response
             if node_id not in self.routing_table:
                 # we just met a new node, maybe we know some values that it *should* store
