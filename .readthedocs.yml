@@ -6,4 +6,10 @@ conda:
 python:
   version: 3.7
   install:
-    - requirements: docs/requirements.txt
+    - method: pip
+      path: .
+      extra_requirements:
+        - recommonmark
+        - sphinx_rtd_theme
+        - prefetch_generator
+        - umsgpack

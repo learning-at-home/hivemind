@@ -1,7 +1,6 @@
 torch>=1.3.0
 joblib>=0.13
 numpy>=1.17
-requests>=2.22.0
 tqdm
 prefetch_generator>=1.0.1
 pytest
