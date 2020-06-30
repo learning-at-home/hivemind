@@ -169,10 +169,11 @@ class DHTNode:
         """
         key_id, value_bytes = DHTID.generate(source=key), self.serializer.dumps(value)
         nearest_node_to_addr = await self.find_nearest_nodes(key_id, k_nearest=self.num_replicas, exclude_self=True)
+        if len(nearest_node_to_addr) == 0:
+            return False
         tasks = [asyncio.create_task(self.protocol.call_store(endpoint, [key_id], [value_bytes], [expiration_time]))
                  for endpoint in nearest_node_to_addr.values()]
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-
         return any(store_ok for response in done for store_ok in response.result())
 
     async def get(self, key: DHTKey, sufficient_expiration_time: Optional[DHTExpiration] = None,
