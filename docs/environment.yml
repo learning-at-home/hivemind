@@ -1,0 +1,8 @@
+name: py37
+channels:
+  - anaconda
+  - defaults
+  - conda-forge
+dependencies:
+  - grpcio=1.27.2=py37hf8bcb03_0
+  - grpcio-tools=1.16.1=py37he6710b0_0

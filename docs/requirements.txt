@@ -1,2 +1,9 @@
 recommonmark
 sphinx_rtd_theme
+joblib>=0.13
+requests>=2.22.0
+tqdm
+torch>=1.3.0
+prefetch_generator>=1.0.1
+pytest
+umsgpack
