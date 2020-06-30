@@ -160,7 +160,7 @@ class DHTNode:
 
         return OrderedDict((node, node_to_addr[node]) for node in nearest_nodes)
 
-    async def store(self, key: DHTKey, value: BinaryDHTValue, expiration_time: DHTExpiration) -> bool:
+    async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
         Optionally cache (key, value, expiration) on nodes you met along the way (see Section 2.1 end) TODO(jheuristic)
