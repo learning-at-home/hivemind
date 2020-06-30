@@ -27,8 +27,8 @@ class RoutingTable:
     def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int):
         self.node_id, self.bucket_size, self.depth_modulo = node_id, bucket_size, depth_modulo
         self.buckets = [KBucket(node_id.MIN, node_id.MAX, bucket_size)]
-        self.endpoint_to_uid: Dict[Endpoint, DHTID] = dict()  # only nodes currently in buckets, excluding replacements
-        self.uid_to_endpoint: Dict[DHTID, Endpoint] = dict()  # only nodes currently in buckets, excluding replacements
+        self.endpoint_to_uid: Dict[Endpoint, DHTID] = dict()  # all nodes currently in buckets, including replacements
+        self.uid_to_endpoint: Dict[DHTID, Endpoint] = dict()  # all nodes currently in buckets, including replacements
 
     def get_bucket_index(self, node_id: DHTID) -> int:
         """ Get the index of the bucket that the given node would fall into. """
@@ -53,20 +53,22 @@ class RoutingTable:
         """
         bucket_index = self.get_bucket_index(node_id)
         bucket = self.buckets[bucket_index]
+        store_success = bucket.add_or_update_node(node_id, endpoint)
 
-        if bucket.add_or_update_node(node_id, endpoint):
+        if node_id in bucket.nodes_to_addr or node_id in bucket.replacement_nodes:
+            # if we added node to bucket or as a replacement, throw it into lookup dicts as well
             self.uid_to_endpoint[node_id] = endpoint
             self.endpoint_to_uid[endpoint] = node_id
-            return  # this will succeed unless the bucket is full
 
-        # Per section 4.2 of paper, split if the bucket has node's own id in its range
-        # or if bucket depth is not congruent to 0 mod $b$
-        if bucket.has_in_range(self.node_id) or bucket.depth % self.depth_modulo != 0:
-            self.split_bucket(bucket_index)
-            return self.add_or_update_node(node_id, endpoint)
+        if not store_success:
+            # Per section 4.2 of paper, split if the bucket has node's own id in its range
+            # or if bucket depth is not congruent to 0 mod $b$
+            if bucket.has_in_range(self.node_id) or bucket.depth % self.depth_modulo != 0:
+                self.split_bucket(bucket_index)
+                return self.add_or_update_node(node_id, endpoint)
 
-        # The bucket is full and won't split further. Return a node to ping (see this method's docstring)
-        return bucket.request_ping_node()
+            # The bucket is full and won't split further. Return a node to ping (see this method's docstring)
+            return bucket.request_ping_node()
 
     def split_bucket(self, index: int) -> None:
         """ Split bucket range in two equal parts and reassign nodes to the appropriate half """
