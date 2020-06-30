@@ -2,6 +2,11 @@ catchannels:
   - anaconda
   - defaults
   - conda-forge
+  - pytorch
 dependencies:
   - grpcio
   - grpcio-tools
+  - numpy
+  - conda install pytorch torchvision cpuonly
+
+
