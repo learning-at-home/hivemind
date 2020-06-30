@@ -55,7 +55,7 @@ class DHT(mp.Process):
         asyncio.set_event_loop(loop)
         self.node = loop.run_until_complete(DHTNode.create(
             initial_peers=list(self.initial_peers), listen_on=f"{LOCALHOST}:{self.port}", **self.node_params))
-        run_in_background(asyncio.get_event_loop().run_forever)
+        run_in_background(loop.run_forever)
         self.ready.set()
 
         while True:
