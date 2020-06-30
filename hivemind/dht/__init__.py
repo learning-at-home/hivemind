@@ -8,6 +8,7 @@ The code in this module is a modified version of https://github.com/bmuller/kade
 Brian, if you're reading this: THANK YOU! you're awesome :)
 """
 import asyncio
+import ctypes
 import multiprocessing as mp
 import warnings
 from typing import List, Optional
@@ -38,7 +39,7 @@ class DHT(mp.Process):
                  start: bool, daemon: bool = True, **node_params):
         super().__init__()
         self.listen_on, self.initial_peers, self.node_params = listen_on, initial_peers, node_params
-        self.port: Optional[int] = None  # to be initialized after self.ready
+        self._port = mp.Value(ctypes.c_int32, 0)  # initialized after server starts
         self.node: Optional[DHTNode] = None  # initialized inside self.run only
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
@@ -55,7 +56,7 @@ class DHT(mp.Process):
         asyncio.set_event_loop(loop)
         self.node: DHTNode = loop.run_until_complete(DHTNode.create(
             initial_peers=list(self.initial_peers), listen_on=self.listen_on, **self.node_params))
-        self._pipe.send(self.node.port)
+        self._port.value = self.node.port
         run_in_background(loop.run_forever)
         self.ready.set()
 
@@ -69,7 +70,6 @@ class DHT(mp.Process):
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()
-        self.port = self.pipe.recv()
         if await_ready and not self.ready.wait(timeout=timeout):
             raise TimeoutError("Server didn't notify .ready in {timeout} seconds")
 
@@ -79,6 +79,10 @@ class DHT(mp.Process):
             self.kill()
         else:
             warnings.warn("DHT shutdown has no effect: dht process is already not alive")
+
+    @property
+    def port(self) -> Optional[int]:
+        return self._port.value if self._port.value != 0 else None
 
     def get_experts(self, uids: List[str], expiration=None) -> List[Optional[RemoteExpert]]:
         """
