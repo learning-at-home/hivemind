@@ -34,13 +34,13 @@ class DHT(mp.Process):
     EXPIRATION = 120  # anything written to DHT is considered expired after this many seconds
     make_key = "{}::{}".format
 
-    def __init__(self, *initial_peers: Endpoint, port: Optional[Port] = None,
+    def __init__(self, *initial_peers: Endpoint, listen_on: Endpoint = "0.0.0.0:*",
                  start: bool, daemon: bool = True, **node_params):
         super().__init__()
-        port = find_open_port() if port is None else port
-        self.node: Optional[DHTNode] = None  # to be initialized in self.run
-        self.port, self.initial_peers, self.node_params = port, initial_peers, node_params
-        self._pipe, self.pipe = mp.Pipe(duplex=False)
+        self.listen_on, self.initial_peers, self.node_params = listen_on, initial_peers, node_params
+        self.port: Optional[int] = None  # to be initialized after self.ready
+        self.node: Optional[DHTNode] = None  # initialized inside self.run only
+        self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
         self.daemon = daemon
         if start:
@@ -53,8 +53,9 @@ class DHT(mp.Process):
         uvloop.install()
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        self.node = loop.run_until_complete(DHTNode.create(
-            initial_peers=list(self.initial_peers), listen_on=f"{LOCALHOST}:{self.port}", **self.node_params))
+        self.node: DHTNode = loop.run_until_complete(DHTNode.create(
+            initial_peers=list(self.initial_peers), listen_on=self.listen_on, **self.node_params))
+        self._pipe.send(self.node.port)
         run_in_background(loop.run_forever)
         self.ready.set()
 
@@ -68,6 +69,7 @@ class DHT(mp.Process):
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()
+        self.port = self.pipe.recv()
         if await_ready and not self.ready.wait(timeout=timeout):
             raise TimeoutError("Server didn't notify .ready in {timeout} seconds")
 
