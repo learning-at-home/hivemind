@@ -10,5 +10,11 @@ dependencies:
   - pytorch
   - joblib
   - tqdm
+  - pip
+  - pip:
+    - recommonmark
+    - sphinx_rtd_theme
+    - prefetch_generator>=1.0.1
+    - umsgpack
 
 

@@ -5,14 +5,3 @@ sphinx:
 
 conda:
   environment: docs/environment.yaml
-
-python:
-  version: 3.7
-  install:
-    - method: pip
-      path: .
-      extra_requirements:
-        - recommonmark
-        - sphinx_rtd_theme
-        - prefetch_generator
-        - umsgpack
