@@ -1,15 +1,13 @@
-import os
-from socket import socket
-from typing import Tuple, Dict
-import multiprocessing as mp
 import asyncio
-import grpc.experimental.aio
-import numpy as np
-import torch
+import multiprocessing as mp
+import os
 import pickle
+from typing import Dict
+
+import grpc.experimental.aio
 
 from hivemind.runtime.expert_backend import ExpertBackend
-from hivemind.utils import PytorchSerializer, Connection, compile_grpc, get_logger, serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils import compile_grpc, get_logger, serialize_torch_tensor, deserialize_torch_tensor
 
 with open(os.path.join(os.path.dirname(__file__), 'connection_handler.proto')) as f_proto:
     runtime_pb2, runtime_grpc = compile_grpc(f_proto.read())
@@ -57,47 +55,7 @@ class ConnectionHandler(mp.Process):
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
 
     async def backward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
-        inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
-        response = self.experts[request.uid].backward_pool.submit_task(*inputs).result()
+        inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
+        response = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs).result()
         serialized_response = [serialize_torch_tensor(tensor) for tensor in response]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
-
-    @staticmethod
-    def serialize_torch_tensor(tensor: torch.Tensor) -> runtime_pb2.Tensor:
-        array = tensor.numpy()
-        proto = runtime_pb2.Tensor(
-            buffer=array.tobytes(),
-            size=array.shape,
-            dtype=array.dtype.name,
-            requires_grad=tensor.requires_grad)
-        return proto
-
-    @staticmethod
-    def deserialize_torch_tensor(tensor: runtime_pb2.Tensor) -> torch.Tensor:
-        array = np.frombuffer(tensor.buffer, dtype=np.dtype(tensor.dtype))
-        return torch.as_tensor(array).view(tuple(tensor.size)).requires_grad_(tensor.requires_grad)
-        # TODO if you experience segfault or something, replace as_tensor with tensor
-
-
-def handle_connection(connection_tuple: Tuple[socket, str], experts: Dict[str, ExpertBackend]):
-    with Connection(*connection_tuple) as connection:
-        try:
-            header = connection.recv_header()
-            payload = PytorchSerializer.loads(connection.recv_raw())
-
-            if header == 'fwd_':
-                uid, inputs = payload
-                response = experts[uid].forward_pool.submit_task(*inputs).result()
-            elif header == 'bwd_':
-                uid, inputs_and_grad_outputs = payload
-                response = experts[uid].backward_pool.submit_task(*inputs_and_grad_outputs).result()
-            elif header == 'info':
-                uid = payload
-                response = experts[uid].get_info()
-            else:
-                raise NotImplementedError(f"Unknown header: {header}")
-
-            connection.send_raw('rest', PytorchSerializer.dumps(response))
-        except RuntimeError:
-            # socket connection broken
-            pass

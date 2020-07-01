@@ -5,11 +5,12 @@ import functools
 import os
 import sys
 import tempfile
-from typing import Tuple
 from argparse import Namespace
+from typing import Tuple
+
 import grpc_tools.protoc
-import torch
 import numpy as np
+import torch
 
 
 @functools.lru_cache(maxsize=None)
@@ -46,7 +47,7 @@ def compile_grpc(proto: str, *args: str) -> Tuple[Namespace, Namespace]:
                 raise ImportError("Something changed sys.path while compile_grpc was in progress.")
 
 
-with open(os.path.join('/home/mryab/hivemind/hivemind/server', 'connection_handler.proto')) as f_proto:
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'server', 'connection_handler.proto')) as f_proto:
     runtime_pb2, runtime_grpc = compile_grpc(f_proto.read())
 
 

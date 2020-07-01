@@ -1,11 +1,9 @@
 import multiprocessing as mp
-import os
 import threading
-from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict, Optional
 import torch
 
-from .connection_handler import handle_connection, ConnectionHandler
+from .connection_handler import ConnectionHandler
 from .dht_handler import DHTHandlerThread
 from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend

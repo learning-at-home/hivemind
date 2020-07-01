@@ -1,17 +1,17 @@
-from typing import Tuple, Optional
 import os
 import pickle
+from typing import Tuple, Optional
 
+import grpc
+import grpc.experimental.aio
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
-import grpc
-import grpc.experimental.aio
 
-from ..utils import nested_flatten, DUMMY, PytorchSerializer, nested_pack, nested_compare, Connection, compile_grpc, serialize_torch_tensor, \
+from ..utils import nested_flatten, DUMMY, nested_pack, nested_compare, compile_grpc, serialize_torch_tensor, \
     deserialize_torch_tensor
 
-with open(os.path.join('/home/mryab/hivemind/hivemind/server', 'connection_handler.proto')) as f_proto:
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'server', 'connection_handler.proto')) as f_proto:
     runtime_pb2, runtime_grpc = compile_grpc(f_proto.read())
 
 
@@ -100,5 +100,4 @@ class _RemoteModuleCall(torch.autograd.Function):
                 runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[serialize_torch_tensor(tensor) for tensor in payload]))
 
         deserialized_grad_inputs = [deserialize_torch_tensor(tensor) for tensor in grad_inputs.tensors]
-
         return (DUMMY, None, None, None, *deserialized_grad_inputs)
