@@ -12,7 +12,8 @@ ROOT = 0
 async def traverse_dht(
         queries: List[DHTID], initial_peers: List[DHTID], beam_size: int, num_workers: int,
         get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[List[DHTID], bool]]]],
-        found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None, await_found=False
+        found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None,
+        await_found: bool = False, visited_nodes: Collection[DHTID] = (),
 ) -> Tuple[Dict[DHTID, List[DHTID]], Set[DHTID]]:
     """
     Asynchronous beam search over the DHT. Not meant to be called by the user, please use DHTNode.store/get instead.
@@ -37,11 +38,12 @@ async def traverse_dht(
         More specifically, traverse_dht will run asyncio.create_task(found_found_callback(query, nearest_peers, visited)
         Using callbacks allows one to process early results before traverse_dht is finished for all queries
     :param await_found: if set to True, wait for all callbacks to finish before returning (e.g. if you use asyncio.run)
+    :param visited_nodes: beam search will neither call get_neighbors on these nodes (e.g. your own node)
 
     :returns: a dict {query -> beam_size nearest nodes nearest-first}, and a set of all nodes queried with get_neighbors
     """
     unfinished_queries = set(queries)                           # all queries that haven't triggered finish_search
-    visited_nodes: Set[DHTID] = set()                           # all nodes for which we called get_neighbors
+    visited_nodes = set(visited_nodes)                          # all nodes for which we called get_neighbors
     candidate_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}  # heap: unvisited nodes, ordered nearest-to-farthest
     nearest_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}    # heap: top-k nearest nodes, ordered fartest-to-nearest
     known_nodes: Dict[DHTID, Set[DHTID]] = {}                   # all nodes ever added to the heap (for deduplication)
