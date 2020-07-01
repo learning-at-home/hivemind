@@ -8,6 +8,8 @@ import tempfile
 from typing import Tuple
 from argparse import Namespace
 import grpc_tools.protoc
+import torch
+import numpy as np
 
 
 @functools.lru_cache(maxsize=None)
@@ -42,3 +44,23 @@ def compile_grpc(proto: str, *args: str) -> Tuple[Namespace, Namespace]:
         finally:
             if sys.path.pop() != build_dir:
                 raise ImportError("Something changed sys.path while compile_grpc was in progress.")
+
+
+with open(os.path.join('/home/mryab/hivemind/hivemind/server', 'connection_handler.proto')) as f_proto:
+    runtime_pb2, runtime_grpc = compile_grpc(f_proto.read())
+
+
+def serialize_torch_tensor(tensor: torch.Tensor) -> runtime_pb2.Tensor:
+    array = tensor.numpy()
+    proto = runtime_pb2.Tensor(
+        buffer=array.tobytes(),
+        size=array.shape,
+        dtype=array.dtype.name,
+        requires_grad=tensor.requires_grad)
+    return proto
+
+
+def deserialize_torch_tensor(tensor: runtime_pb2.Tensor) -> torch.Tensor:
+    array = np.frombuffer(tensor.buffer, dtype=np.dtype(tensor.dtype))
+    return torch.as_tensor(array).view(tuple(tensor.size)).requires_grad_(tensor.requires_grad)
+    # TODO if you experience segfault or something, replace as_tensor with tensor

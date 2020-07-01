@@ -1,10 +1,18 @@
 from typing import Tuple, Optional
+import os
+import pickle
 
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
+import grpc
+import grpc.experimental.aio
 
-from ..utils import nested_flatten, DUMMY, PytorchSerializer, nested_pack, nested_compare, Connection
+from ..utils import nested_flatten, DUMMY, PytorchSerializer, nested_pack, nested_compare, Connection, compile_grpc, serialize_torch_tensor, \
+    deserialize_torch_tensor
+
+with open(os.path.join('/home/mryab/hivemind/hivemind/server', 'connection_handler.proto')) as f_proto:
+    runtime_pb2, runtime_grpc = compile_grpc(f_proto.read())
 
 
 class RemoteExpert(nn.Module):
@@ -43,9 +51,13 @@ class RemoteExpert(nn.Module):
     @property
     def info(self):
         if self._info is None:
-            connection = Connection.create(self.host, self.port)
-            connection.send_raw('info', PytorchSerializer.dumps(self.uid))
-            self._info = PytorchSerializer.loads(connection.recv_message()[1])
+            with grpc.insecure_channel(f'{self.host}:{self.port}', options=[
+                ('grpc.max_send_message_length', 50 * 1024 * 1024),
+                ('grpc.max_receive_message_length', 50 * 1024 * 1024)
+            ]) as channel:
+                stub = runtime_grpc.ConnectionHandlerStub(channel)
+                outputs = stub.info(runtime_pb2.ExpertUID(uid=self.uid))
+            self._info = pickle.loads(outputs.serialized_info)
         return self._info
 
     def extra_repr(self):
@@ -63,19 +75,30 @@ class _RemoteModuleCall(torch.autograd.Function):
         ctx.uid, ctx.host, ctx.port = uid, host, port
         ctx.save_for_backward(*inputs)
 
-        connection = Connection.create(ctx.host, ctx.port)
-        connection.send_raw('fwd_', PytorchSerializer.dumps((ctx.uid, inputs)))
-        rtype, msg = connection.recv_message()
-        assert len(msg) != 0, "ExpertBackend.forward did not respond"
-        return tuple(PytorchSerializer.loads(msg))  # flattened expert outputs
+        with grpc.insecure_channel(f'{ctx.host}:{ctx.port}', options=[
+            ('grpc.max_send_message_length', 50 * 1024 * 1024),
+            ('grpc.max_receive_message_length', 50 * 1024 * 1024)
+        ]) as channel:
+            stub = runtime_grpc.ConnectionHandlerStub(channel)
+            outputs = stub.forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[serialize_torch_tensor(tensor) for tensor in inputs]))
+
+        deserialized_outputs = [deserialize_torch_tensor(tensor) for tensor in outputs.tensors]
+
+        return tuple(deserialized_outputs)
 
     @staticmethod
     @once_differentiable
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
-        connection = Connection.create(ctx.host, ctx.port)
         payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
-        connection.send_raw('bwd_', PytorchSerializer.dumps((ctx.uid, payload)))
-        rtype, msg = connection.recv_message()
-        assert len(msg) != 0, "ExpertBackend.backward did not respond"
-        grad_inputs = PytorchSerializer.loads(msg)
-        return (DUMMY, None, None, None, *grad_inputs)
+
+        with grpc.insecure_channel(f'{ctx.host}:{ctx.port}', options=[
+            ('grpc.max_send_message_length', 50 * 1024 * 1024),
+            ('grpc.max_receive_message_length', 50 * 1024 * 1024)
+        ]) as channel:
+            stub = runtime_grpc.ConnectionHandlerStub(channel)
+            grad_inputs = stub.backward(
+                runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[serialize_torch_tensor(tensor) for tensor in payload]))
+
+        deserialized_grad_inputs = [deserialize_torch_tensor(tensor) for tensor in grad_inputs.tensors]
+
+        return (DUMMY, None, None, None, *deserialized_grad_inputs)

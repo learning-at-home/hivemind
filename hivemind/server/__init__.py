@@ -5,7 +5,7 @@ from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeo
 from typing import Dict, Optional
 import torch
 
-from .connection_handler import handle_connection
+from .connection_handler import handle_connection, ConnectionHandler
 from .dht_handler import DHTHandlerThread
 from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend
@@ -40,7 +40,7 @@ class Server(threading.Thread):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
-        self.conn_handlers = self._create_connection_handlers(conn_handler_processes)
+        self.conn_handler = ConnectionHandler(self.addr, self.port, self.experts)
         self.runtime = Runtime(self.experts, **kwargs)
 
         if start:
@@ -59,14 +59,11 @@ class Server(threading.Thread):
                                                   addr=self.addr, port=self.port, update_period=self.update_period)
             dht_handler_thread.start()
 
-        for process in self.conn_handlers:
-            if not process.is_alive():
-                process.start()
+        self.conn_handler.start()
 
         self.runtime.run()
 
-        for process in self.conn_handlers:
-            process.join()
+        self.conn_handler.join()
         if self.dht:
             dht_handler_thread.join()
 
@@ -92,18 +89,6 @@ class Server(threading.Thread):
         """
         return self.runtime.ready  # mp.Event that is true if self is ready to process batches
 
-    def _create_connection_handlers(self, num_handlers):
-        sock = socket(AF_INET, SOCK_STREAM)
-        sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-        sock.bind(('', self.port))
-        sock.listen()
-        sock.settimeout(self.update_period)
-
-        processes = [mp.context.ForkProcess(
-            target=socket_loop, name=f"socket_loop-{i}", args=(sock, self.experts), daemon=True)
-                     for i in range(num_handlers)]
-        return processes
-
     def shutdown(self):
         """
         Gracefully terminate a hivemind server, process-safe.
@@ -111,24 +96,10 @@ class Server(threading.Thread):
         If you did already cause a zombie outbreak, your only option is to kill them with -9 (SIGKILL).
         """
         self.ready.clear()
-        for process in self.conn_handlers:
-            process.terminate()
+
+        self.conn_handler.terminate()
 
         if self.dht is not None:
             self.dht.shutdown()
 
         self.runtime.shutdown()
-
-
-def socket_loop(sock, experts):
-    """ catch connections, send tasks to processing, respond with results """
-    torch.set_num_threads(1)
-    print(f'Spawned connection handler pid={os.getpid()}')
-    while True:
-        try:
-            handle_connection(sock.accept(), experts)
-        except KeyboardInterrupt as e:
-            print(f'Socket loop has caught {type(e)}, exiting')
-            break
-        except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
-            continue
