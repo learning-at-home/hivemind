@@ -66,6 +66,8 @@ async def traverse_dht(
 
     def get_query_priority(query: DHTID):
         """ Workers prioritize expanding nodes (out of roots of query heaps) that reduce distances to all queries """
+        if len(candidate_nodes.get(query, [])) == 0:
+            return float('inf'), 0
         distance_reduction = 0
         for query in unfinished_queries:
             current_distance = distance_from_visited[query]
