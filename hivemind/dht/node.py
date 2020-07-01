@@ -291,7 +291,7 @@ class DHTNode:
         """ Tries to find new nodes for buckets that were unused for more than self.staleness_timeout """
         while period is not None:  # if None run once, otherwise run forever
             refresh_time = get_dht_time()
-            staleness_threshold = refresh_time - self.staleness_timeout
+            staleness_threshold = refresh_time - period
             stale_buckets = [bucket for bucket in self.protocol.routing_table.buckets
                              if bucket.last_updated < staleness_threshold]
             for bucket in stale_buckets:
