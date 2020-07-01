@@ -90,13 +90,16 @@ async def traverse_dht(
 
     async def worker():
         while unfinished_queries:
-            # select vertex to be explored
-            chosen_query: DHTID = min(candidate_nodes, key=get_query_priority)
-            chosen_distance_to_query, chosen_peer = heapq.heappop(candidate_nodes[chosen_query])
-
-            if chosen_peer in visited_nodes:
+            # select the heap based on priority
+            chosen_query: DHTID = min(unfinished_queries, key=get_query_priority)
+            if len(candidate_nodes[chosen_query]) == 0:
+                finish_search(chosen_query)
                 continue
 
+            # select vertex to be explored
+            chosen_distance_to_query, chosen_peer = heapq.heappop(candidate_nodes[chosen_query])
+            if chosen_peer in visited_nodes:
+                continue
             if chosen_distance_to_query > upper_bound(chosen_query):
                 finish_search(chosen_query)
                 continue
