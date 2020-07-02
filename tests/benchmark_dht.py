@@ -3,6 +3,7 @@ import argparse
 import random
 import resource
 from typing import Tuple
+from warnings import warn
 
 from dask.dataframe.multi import required
 
@@ -45,53 +46,56 @@ if __name__ == "__main__":
     hivemind.DHT.EXPIRATION = expiration_time
 
     peers = [hivemind.DHT(start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')]
-    for i in range(num_nodes - 3):
+    for i in range(num_nodes - 1):
         neighbors_i = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(num_neighbors, len(peers)))]
         peer = hivemind.DHT(*neighbors_i, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
         peers.append(peer)
 
-    neighbors_store_peer = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(num_neighbors, len(peers)))]
-    neighbors_get_peer = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(num_neighbors, len(peers)))]
-    store_peer = hivemind.DHT(*neighbors_store_peer, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
-    get_peer = hivemind.DHT(*neighbors_get_peer, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
+    store_peer, get_peer = peers[-2:]
 
     expert_uids = list(set(f"expert.{random.randint(0, 999)}.{random.randint(0, 999)}.{random.randint(0, 999)}"
                            for _ in range(num_experts)))
     print(f"Sampled {len(expert_uids)} unique ids (after deduplication)")
     random.shuffle(expert_uids)
 
-    success_store = 0
-    all_store = 0
-    time_store = 0
-    success_get = 0
-    time_get = 0
+    successful_stores = total_stores = total_store_time = 0
+    benchmark_started = time.perf_counter()
     batch_endpoints = []
 
     for start in range(0, num_experts, experts_batch_size):
         store_start = time.time()
         batch_endpoints.append(random_endpoint())
         success_list = store_peer.declare_experts(expert_uids[start: start + experts_batch_size], *batch_endpoints[-1])
-        time_store += time.time() - store_start
+        total_store_time += time.time() - store_start
 
-        all_store += len(success_list)
-        success_store += sum(success_list)
-
+        total_stores += len(success_list)
+        successful_stores += sum(success_list)
         time.sleep(wait_after_request)
 
+    print("store success rate: ", successful_stores / total_stores)
+    print("mean store time: ", total_store_time / total_stores)
     time.sleep(wait_before_read)
+
+    if time.perf_counter() - benchmark_started > args.expiration_time:
+        warn("Warning: all keys expired before benchmark started getting them. Consider increasing expiration_time")
+
+    successful_gets = total_get_time = 0
 
     for start in range(0, num_experts, experts_batch_size):
         get_start = time.time()
         get_result = get_peer.get_experts(expert_uids[start: start + experts_batch_size])
-        time_get += time.time() - get_start
+        total_get_time += time.time() - get_start
 
         for i, expert in enumerate(get_result):
             if expert is not None and expert.uid == expert_uids[start+i] \
                     and [expert.host, expert.port] == batch_endpoints[start//experts_batch_size]:
-                success_get += 1
+                successful_gets += 1
 
-    print("store success rate: ", success_store / all_store)
-    print("mean store time: ", time_store / all_store)
-    print("get success rate: ", success_get / len(expert_uids))
-    print("mean get time: ", time_get / len(expert_uids))
-    print("death rate: ", (num_nodes - alive_nodes_count) / num_nodes)
+    if time.perf_counter() - benchmark_started > args.expiration_time:
+        warn("Warning: keys expired midway during get requests. If that is not desired, increase expiration_time param")
+
+    print(f"Get success rate: {successful_gets / len(expert_uids)} ({successful_gets} / {len(expert_uids)})")
+    print(f"Mean get time: {total_get_time / len(expert_uids)} ({total_get_time} / {len(expert_uids)})")
+
+    alive_peers = [peer.is_alive() for peer in peers]
+    print(f"Node survival rate: {len(alive_peers) / len(peers) * 100}%")
