@@ -4,6 +4,8 @@ import random
 import resource
 from typing import Tuple
 
+from dask.dataframe.multi import required
+
 import hivemind
 
 
@@ -18,9 +20,10 @@ if __name__ == "__main__":
     parser.add_argument('--num_neighbors', type=int, default=20, required=False)
     parser.add_argument('--num_experts', type=int, default=20, required=False)
     parser.add_argument('--experts_batch_size', type=int, default=20, required=False)
-    parser.add_argument('--sleep_after_request', type=float, default=0, required=False)
-    parser.add_argument('--expiration_time', type=float, default=10, required=False)
-    parser.add_argument('--wait_before_read', type=float, default=1, required=False)
+    parser.add_argument('--expiration_time', type=float, default=300, required=False)
+    parser.add_argument('--wait_after_request', type=float, default=0, required=False)
+    parser.add_argument('--wait_before_read', type=float, default=0, required=False)
+    parser.add_argument('--wait_timeout', type=float, default=5, required=False)
     parser.add_argument('--random_seed', type=int, default=random.randint(1, 1000))
     parser.add_argument('--increase_file_limit', action="store_true")
     args = parser.parse_args()
@@ -33,23 +36,25 @@ if __name__ == "__main__":
     num_neighbors = args.num_neighbors
     num_experts = args.num_experts
     experts_batch_size = args.experts_batch_size
-    request_period = args.request_period
     expiration_time = args.expiration_time
+    wait_after_request = args.wait_after_request
     wait_before_read = args.wait_before_read
-    random_seed = args.random_seed
+    wait_timeout = args.wait_timeout
+    random.seed(args.random_seed)
 
-    hivemind.DHT.EXPIRATION = 3600
+    hivemind.DHT.EXPIRATION = expiration_time
 
-    peers = [hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:*')]
-    for i in range(num_nodes):
+    peers = [hivemind.DHT(start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')]
+    for i in range(num_nodes - 3):
         neighbors_i = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(num_neighbors, len(peers)))]
-        peer = hivemind.DHT(*neighbors_i, listen_on=f'0.0.0.0:*', start=True)
+        peer = hivemind.DHT(*neighbors_i, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
         peers.append(peer)
 
-    store_peer = hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:*')
-    get_peer = hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:*')
+    neighbors_store_peer = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(num_neighbors, len(peers)))]
+    neighbors_get_peer = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(num_neighbors, len(peers)))]
+    store_peer = hivemind.DHT(*neighbors_store_peer, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
+    get_peer = hivemind.DHT(*neighbors_get_peer, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
 
-    random.seed(random_seed)
     expert_uids = list(set(f"expert.{random.randint(0, 999)}.{random.randint(0, 999)}.{random.randint(0, 999)}"
                            for _ in range(num_experts)))
     print(f"Sampled {len(expert_uids)} unique ids (after deduplication)")
@@ -59,7 +64,6 @@ if __name__ == "__main__":
     all_store = 0
     time_store = 0
     success_get = 0
-    all_get = 0
     time_get = 0
     batch_endpoints = []
 
@@ -72,20 +76,22 @@ if __name__ == "__main__":
         all_store += len(success_list)
         success_store += sum(success_list)
 
-        time.sleep(request_period)
+        time.sleep(wait_after_request)
 
-    get_time = time.time()
-    get_result = get_peer.get_experts(expert_uids[:, 0])
-    get_time = time.time() - get_time
+    time.sleep(wait_before_read)
 
-    for i in range(num_experts):
-        expert = get_result[i]
-        if expert is not None and [expert.uid, expert.host, expert.port] == experts[i]:
-            success_get += 1
-    all_get = num_experts
+    for start in range(0, num_experts, experts_batch_size):
+        get_start = time.time()
+        get_result = get_peer.get_experts(expert_uids[start: start + experts_batch_size])
+        time_get += time.time() - get_start
+
+        for i, expert in enumerate(get_result):
+            if expert is not None and expert.uid == expert_uids[start+i] \
+                    and [expert.host, expert.port] == batch_endpoints[start//experts_batch_size]:
+                success_get += 1
 
     print("store success rate: ", success_store / all_store)
     print("mean store time: ", time_store / all_store)
-    print("get success rate: ", success_get / all_get)
-    print("mean get time: ", time_get / all_get)
+    print("get success rate: ", success_get / len(expert_uids))
+    print("mean get time: ", time_get / len(expert_uids))
     print("death rate: ", (num_nodes - alive_nodes_count) / num_nodes)
