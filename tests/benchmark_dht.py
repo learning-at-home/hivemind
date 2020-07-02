@@ -39,11 +39,10 @@ if __name__ == "__main__":
     random_seed = args.random_seed
 
     hivemind.DHT.EXPIRATION = 3600
-    ip = "0.0.0.0"
 
     peers = [hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:*')]
     for i in range(num_nodes):
-        neighbors_i = [f'{ip}:{node.port}' for node in random.sample(peers, min(num_neighbors, len(peers)))]
+        neighbors_i = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(num_neighbors, len(peers)))]
         peer = hivemind.DHT(*neighbors_i, listen_on=f'0.0.0.0:*', start=True)
         peers.append(peer)
 
