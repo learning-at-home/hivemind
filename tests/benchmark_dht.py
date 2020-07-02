@@ -3,6 +3,10 @@ import resource
 soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 2 ** 15), max(hard, 2 ** 15)))
 import hivemind, random
+import time
+
+def random_addres_port():
+    return f"{random.randint(0, 256)}.{random.randint(0, 256)}.{random.randint(0, 256)}.{random.randint(0, 256)}", random.randint(0, 65535)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -59,7 +63,7 @@ if __name__ == "__main__":
         time.sleep(request_period)
 
     get_time = time.time()
-    get_result = get_peer.get_experts(expert_uids[:,0])
+    get_result = get_peer.get_experts(expert_uids[:, 0])
     get_time = time.time() - get_time
 
     for i in range(num_experts):
