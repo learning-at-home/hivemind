@@ -1,12 +1,16 @@
-import argparse
-import resource
-soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 2 ** 15), max(hard, 2 ** 15)))
-import hivemind, random
 import time
+import argparse
+import random
+import resource
+from typing import Tuple
 
-def random_addres_port():
-    return f"{random.randint(0, 256)}.{random.randint(0, 256)}.{random.randint(0, 256)}.{random.randint(0, 256)}", random.randint(0, 65535)
+import hivemind
+
+
+def random_endpoint() -> Tuple[str, int]:
+    return (f"{random.randint(0, 256)}.{random.randint(0, 256)}."
+            f"{random.randint(0, 256)}.{random.randint(0, 256)}", random.randint(0, 65535))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -14,11 +18,16 @@ if __name__ == "__main__":
     parser.add_argument('--num_neighbors', type=int, default=20, required=False)
     parser.add_argument('--num_experts', type=int, default=20, required=False)
     parser.add_argument('--experts_batch_size', type=int, default=20, required=False)
-    parser.add_argument('--request_period', type=float, default=2, required=False)
+    parser.add_argument('--sleep_after_request', type=float, default=0, required=False)
     parser.add_argument('--expiration_time', type=float, default=10, required=False)
     parser.add_argument('--wait_before_read', type=float, default=1, required=False)
     parser.add_argument('--random_seed', type=int, default=random.randint(1, 1000))
+    parser.add_argument('--increase_file_limit', action="store_true")
     args = parser.parse_args()
+
+    if args.increase_file_limit:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 2 ** 15), max(hard, 2 ** 15)))
 
     num_nodes = args.num_nodes
     num_neighbors = args.num_neighbors
@@ -32,17 +41,19 @@ if __name__ == "__main__":
     hivemind.DHT.EXPIRATION = 3600
     ip = "0.0.0.0"
 
-    peers = [hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:{15000}')]
-    store_peer = hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:{15000+num_nodes+2}')
-    get_peer = hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:{15000+num_nodes+3}')
+    peers = [hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:*')]
     for i in range(num_nodes):
         neighbors_i = [f'{ip}:{node.port}' for node in random.sample(peers, min(num_neighbors, len(peers)))]
-        peer = hivemind.DHT(*neighbors_i, listen_on=f'0.0.0.0:{15000 + i + 1}', start=True)
+        peer = hivemind.DHT(*neighbors_i, listen_on=f'0.0.0.0:*', start=True)
         peers.append(peer)
 
+    store_peer = hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:*')
+    get_peer = hivemind.DHT(start=True, wait_timeout=30, listen_on=f'0.0.0.0:*')
+
     random.seed(random_seed)
-    expert_uids = list(set(f"expert.{random.randint(0, 999)}.{random.randint(0, 999)}.{random.randint(0, 999)}" for _ in range(num_experts)))
-    expert_uids = [[i, *random_addres_port()] for i in expert_uids]
+    expert_uids = list(set(f"expert.{random.randint(0, 999)}.{random.randint(0, 999)}.{random.randint(0, 999)}"
+                           for _ in range(num_experts)))
+    print(f"Sampled {len(expert_uids)} unique ids (after deduplication)")
     random.shuffle(expert_uids)
 
     success_store = 0
@@ -51,14 +62,16 @@ if __name__ == "__main__":
     success_get = 0
     all_get = 0
     time_get = 0
+    batch_endpoints = []
 
-    for i in range(num_experts//experts_batch_size):
+    for start in range(0, num_experts, experts_batch_size):
         store_start = time.time()
-        succes_list = store_peer.declare_experts(*expert_uids[i*experts_batch_size:(i+1)*experts_batch_size])
+        batch_endpoints.append(random_endpoint())
+        success_list = store_peer.declare_experts(expert_uids[start: start + experts_batch_size], *batch_endpoints[-1])
         time_store += time.time() - store_start
 
-        all_store += len(succes_list)
-        success_store += sum(succes_list)
+        all_store += len(success_list)
+        success_store += sum(success_list)
 
         time.sleep(request_period)
 
