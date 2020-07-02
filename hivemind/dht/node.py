@@ -51,7 +51,7 @@ class DHTNode:
     @classmethod
     async def create(
             cls, node_id: Optional[DHTID] = None, initial_peers: List[Endpoint] = (),
-            bucket_size: int = 20, num_replicas: Optional[int] = None, depth_modulo: int = 5, parallel_rpc: int = None,
+            bucket_size: int = 20, num_replicas: Optional[int] = 3, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             num_workers: int = 1, cache_locally: bool = True, cache_nearest: int = 1, cache_size=None,
             listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
