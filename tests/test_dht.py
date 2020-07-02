@@ -177,13 +177,13 @@ def test_dht():
         me = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 5), parallel_rpc=10))
 
         # test 1: find self
-        nearest = loop.run_until_complete(me.find_nearest_nodes(key_id=me.node_id, k_nearest=1))
-        assert len(nearest) == 1 and nearest[me.node_id] == (LOCALHOST, me.port)
+        nearest = loop.run_until_complete(me.find_nearest_nodes([me.node_id], k_nearest=1))[me.node_id]
+        assert len(nearest) == 1 and nearest[me.node_id] == f"{LOCALHOST}:{me.port}"
 
         # test 2: find others
         for i in range(10):
             ref_endpoint, query_id = random.choice(list(dht.items()))
-            nearest = loop.run_until_complete(me.find_nearest_nodes(key_id=query_id, k_nearest=1))
+            nearest = loop.run_until_complete(me.find_nearest_nodes([query_id], k_nearest=1))[query_id]
             assert len(nearest) == 1 and next(iter(nearest.items())) == (query_id, ref_endpoint)
 
         # test 3: find neighbors to random nodes
@@ -196,11 +196,11 @@ def test_dht():
             k_nearest = random.randint(1, 20)
             exclude_self = random.random() > 0.5
             nearest = loop.run_until_complete(
-                me.find_nearest_nodes(key_id=query_id, k_nearest=k_nearest, exclude_self=exclude_self))
+                me.find_nearest_nodes([query_id], k_nearest=k_nearest, exclude_self=exclude_self))[query_id]
             nearest_nodes = list(nearest)  # keys from ordered dict
 
             assert len(nearest_nodes) == k_nearest, "beam search must return exactly k_nearest results"
-            assert me.node_id not in nearest_nodes or not exclude_self, "if exclude, results should not contain own node id"
+            assert me.node_id not in nearest_nodes or not exclude_self, "if exclude, results shouldn't contain self"
             assert np.all(np.diff(query_id.xor_distance(nearest_nodes)) >= 0), "results must be sorted by distance"
 
             ref_nearest = heapq.nsmallest(k_nearest + 1, all_node_ids, key=query_id.xor_distance)
@@ -223,15 +223,16 @@ def test_dht():
         assert jaccard_index >= 0.9, f"Jaccard index only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
 
         # test 4: find all nodes
-        nearest = loop.run_until_complete(me.find_nearest_nodes(key_id=DHTID.generate(), k_nearest=len(dht) + 100))
+        dummy = DHTID.generate()
+        nearest = loop.run_until_complete(me.find_nearest_nodes([dummy], k_nearest=len(dht) + 100))[dummy]
         assert len(nearest) == len(dht) + 1
         assert len(set.difference(set(nearest.keys()), set(all_node_ids) | {me.node_id})) == 0
 
         # test 5: node without peers
         other_node = loop.run_until_complete(DHTNode.create())
-        nearest = loop.run_until_complete(other_node.find_nearest_nodes(DHTID.generate()))
-        assert len(nearest) == 1 and nearest[other_node.node_id] == (LOCALHOST, other_node.port)
-        nearest = loop.run_until_complete(other_node.find_nearest_nodes(DHTID.generate(), exclude_self=True))
+        nearest = loop.run_until_complete(other_node.find_nearest_nodes([dummy]))[dummy]
+        assert len(nearest) == 1 and nearest[other_node.node_id] == f"{LOCALHOST}:{other_node.port}"
+        nearest = loop.run_until_complete(other_node.find_nearest_nodes([dummy], exclude_self=True))[dummy]
         assert len(nearest) == 0
 
         # test 6 store and get value

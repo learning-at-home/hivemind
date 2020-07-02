@@ -3,16 +3,14 @@ import heapq
 from typing import Dict, Awaitable, Callable, Any, Tuple, List, Set, Collection, Optional
 from .routing import DHTID
 
-DHTValue = Any
-Heap = List
-NEG_XOR_DISTANCE = XOR_DISTANCE = int
-ROOT = 0
+ROOT = 0  # alias for heap root
 
 
 async def traverse_dht(
         queries: List[DHTID], initial_peers: List[DHTID], beam_size: int, num_workers: int,
         get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[List[DHTID], bool]]]],
-        found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None, await_found=False
+        found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None,
+        await_found: bool = False, visited_nodes: Collection[DHTID] = (),
 ) -> Tuple[Dict[DHTID, List[DHTID]], Set[DHTID]]:
     """
     Asynchronous beam search over the DHT. Not meant to be called by the user, please use DHTNode.store/get instead.
@@ -37,18 +35,19 @@ async def traverse_dht(
         More specifically, traverse_dht will run asyncio.create_task(found_found_callback(query, nearest_peers, visited)
         Using callbacks allows one to process early results before traverse_dht is finished for all queries
     :param await_found: if set to True, wait for all callbacks to finish before returning (e.g. if you use asyncio.run)
+    :param visited_nodes: beam search will neither call get_neighbors on these nodes (e.g. your own node)
 
     :returns: a dict {query -> beam_size nearest nodes nearest-first}, and a set of all nodes queried with get_neighbors
     """
     unfinished_queries = set(queries)                           # all queries that haven't triggered finish_search
-    visited_nodes: Set[DHTID] = set()                           # all nodes for which we called get_neighbors
+    visited_nodes = set(visited_nodes)                          # all nodes for which we called get_neighbors
     candidate_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}  # heap: unvisited nodes, ordered nearest-to-farthest
     nearest_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}    # heap: top-k nearest nodes, ordered fartest-to-nearest
     known_nodes: Dict[DHTID, Set[DHTID]] = {}                   # all nodes ever added to the heap (for deduplication)
     pending_callbacks = []                                      # all found_callback tasks created via finish_search
 
     # variables used exclusively for priority computation
-    distance_from_visited: Dict[DHTID, XOR_DISTANCE] = {query: float('inf') for query in queries}
+    distance_from_visited: Dict[DHTID, int] = {query: float('inf') for query in queries}
     num_active_workers: Dict[DHTID, int] = {query: 0 for query in queries}
 
     # initialize data structures
@@ -62,13 +61,18 @@ async def traverse_dht(
             heapq.heappop(nearest_nodes[query])
         known_nodes[query] = set(initial_peers)
 
-    def get_query_priority(query: DHTID):
+    heap_updated_event = asyncio.Event()
+    heap_updated_event.set()
+
+    def get_query_priority(heap_query: DHTID):
         """ Workers prioritize expanding nodes (out of roots of query heaps) that reduce distances to all queries """
+        if len(candidate_nodes[heap_query]) == 0:
+            return float('inf'), float('inf')
         distance_reduction = 0
         for query in unfinished_queries:
             current_distance = distance_from_visited[query]
-            distance_reduction += current_distance - min(current_distance, candidate_nodes[query][ROOT][0])
-        return -distance_reduction, num_active_workers[query]  # break ties by minimum concurrent requests
+            distance_reduction += current_distance - min(current_distance, candidate_nodes[heap_query][ROOT][0])
+        return -distance_reduction, num_active_workers[heap_query]  # break ties by minimum concurrent requests
 
     def upper_bound(query: DHTID):
         """ Any node that is farther from query than upper_bound(query) will not be added to heaps """
@@ -86,13 +90,19 @@ async def traverse_dht(
 
     async def worker():
         while unfinished_queries:
-            # select vertex to be explored
-            chosen_query: DHTID = min(candidate_nodes, key=get_query_priority)
-            chosen_distance_to_query, chosen_peer = heapq.heappop(candidate_nodes[chosen_query])
+            # select the heap based on priority
+            chosen_query: DHTID = min(unfinished_queries, key=get_query_priority)
+            if len(candidate_nodes[chosen_query]) == 0:  # this means that ALL heaps are empty
+                if min(num_active_workers.values()) == 0:
+                    break  # no workers are currently in progress
+                heap_updated_event.clear()
+                await heap_updated_event.wait()  # wait for some other worker to update heaps
+                continue  # some worker has just updated us
 
+            # select vertex to be explored
+            chosen_distance_to_query, chosen_peer = heapq.heappop(candidate_nodes[chosen_query])
             if chosen_peer in visited_nodes:
                 continue
-
             if chosen_distance_to_query > upper_bound(chosen_query):
                 finish_search(chosen_query)
                 continue
@@ -106,7 +116,7 @@ async def traverse_dht(
             # get nearest neighbors (over network) and update search heaps
             response = await get_neighbors(chosen_peer, unfinished_queries)
             for query, (neighbors_for_query, should_stop) in response.items():
-                if should_stop:
+                if should_stop and (query in unfinished_queries):
                     finish_search(query)
                 if query not in unfinished_queries:
                     continue  # either we finished search or someone else did while we awaited
@@ -123,6 +133,7 @@ async def traverse_dht(
 
             # we finished processing query, update priorities again
             num_active_workers[chosen_query] -= 1
+            heap_updated_event.set()
 
     # spawn all workers and wait for them to terminate; workers terminate after exhausting unfinished_queries
     await asyncio.wait([worker() for _ in range(num_workers)])

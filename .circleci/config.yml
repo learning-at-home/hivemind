@@ -20,7 +20,7 @@ jobs:
               cd -
             fi
           name: compile-grpc  # remove this command when v1.31 becomes available via pip install -r requirements.txt
-      - run: sudo pip install codecov pytest grpcio-tools
+      - run: sudo pip install codecov pytest grpcio-tools tqdm
       - python/install-deps
       - python/save-cache
       - run:
@@ -31,7 +31,10 @@ jobs:
           name: tests
       - run:
           command: python tests/benchmark_throughput.py --preset minimalistic
-          name: benchmark
+          name: benchmark_throughput
+      - run:
+          command: python tests/benchmark_dht.py
+          name: benchmark_dht
       - run:
           command: codecov
           name: codecov
