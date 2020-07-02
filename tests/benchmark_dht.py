@@ -63,17 +63,17 @@ if __name__ == "__main__":
     batch_endpoints = []
 
     for start in range(0, num_experts, experts_batch_size):
-        store_start = time.time()
+        store_start = time.perf_counter()
         batch_endpoints.append(random_endpoint())
         success_list = store_peer.declare_experts(expert_uids[start: start + experts_batch_size], *batch_endpoints[-1])
-        total_store_time += time.time() - store_start
+        total_store_time += time.perf_counter() - store_start
 
         total_stores += len(success_list)
         successful_stores += sum(success_list)
         time.sleep(wait_after_request)
 
-    print("store success rate: ", successful_stores / total_stores)
-    print("mean store time: ", total_store_time / total_stores)
+    print(f"store success rate: {successful_stores / total_stores} ({successful_stores} / {total_stores})")
+    print(f"mean store time: {total_store_time / total_stores}, Total: {total_store_time}")
     time.sleep(wait_before_read)
 
     if time.perf_counter() - benchmark_started > args.expiration_time:
@@ -82,9 +82,9 @@ if __name__ == "__main__":
     successful_gets = total_get_time = 0
 
     for start in range(0, num_experts, experts_batch_size):
-        get_start = time.time()
+        get_start = time.perf_counter()
         get_result = get_peer.get_experts(expert_uids[start: start + experts_batch_size])
-        total_get_time += time.time() - get_start
+        total_get_time += time.perf_counter() - get_start
 
         for i, expert in enumerate(get_result):
             if expert is not None and expert.uid == expert_uids[start+i] \
@@ -95,7 +95,7 @@ if __name__ == "__main__":
         warn("Warning: keys expired midway during get requests. If that is not desired, increase expiration_time param")
 
     print(f"Get success rate: {successful_gets / len(expert_uids)} ({successful_gets} / {len(expert_uids)})")
-    print(f"Mean get time: {total_get_time / len(expert_uids)} ({total_get_time} / {len(expert_uids)})")
+    print(f"Mean get time: {total_get_time / len(expert_uids)}, Total: {total_get_time}")
 
     alive_peers = [peer.is_alive() for peer in peers]
     print(f"Node survival rate: {len(alive_peers) / len(peers) * 100}%")
