@@ -7,7 +7,7 @@ ROOT = 0  # alias for heap root
 
 
 async def traverse_dht(
-        queries: List[DHTID], initial_peers: List[DHTID], beam_size: int, num_workers: int,
+        queries: Collection[DHTID], initial_peers: List[DHTID], beam_size: int, num_workers: int,
         get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[List[DHTID], bool]]]],
         found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None,
         await_found: bool = False, visited_nodes: Collection[DHTID] = (),
@@ -39,12 +39,14 @@ async def traverse_dht(
 
     :returns: a dict {query -> beam_size nearest nodes nearest-first}, and a set of all nodes queried with get_neighbors
     """
+    if await_found and found_callback is None:
+        raise ValueError("await_found=True is only allowed with found_callback")
     unfinished_queries = set(queries)                           # all queries that haven't triggered finish_search
     visited_nodes = set(visited_nodes)                          # all nodes for which we called get_neighbors
     candidate_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}  # heap: unvisited nodes, ordered nearest-to-farthest
     nearest_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}    # heap: top-k nearest nodes, ordered fartest-to-nearest
     known_nodes: Dict[DHTID, Set[DHTID]] = {}                   # all nodes ever added to the heap (for deduplication)
-    pending_callbacks = []                                      # all found_callback tasks created via finish_search
+    pending_callbacks = set()                                   # all found_callback tasks created via finish_search
 
     # variables used exclusively for priority computation
     distance_from_visited: Dict[DHTID, int] = {query: float('inf') for query in queries}
@@ -86,14 +88,18 @@ async def traverse_dht(
         unfinished_queries.remove(query)
         if found_callback:
             nearest_neighbors = [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
-            pending_callbacks.append(asyncio.create_task(found_callback(query, nearest_neighbors, set(visited_nodes))))
+            pending_callbacks.add(asyncio.create_task(found_callback(query, nearest_neighbors, set(visited_nodes))))
 
     async def worker():
         while unfinished_queries:
             # select the heap based on priority
             chosen_query: DHTID = min(unfinished_queries, key=get_query_priority)
-            if len(candidate_nodes[chosen_query]) == 0:  # this means that ALL heaps are empty
+
+            if len(candidate_nodes[chosen_query]) == 0:
+                # ^-- this means ALL heaps are empty. Wait for other workers (if any) or terminate
                 if min(num_active_workers.values()) == 0:
+                    for query in list(unfinished_queries):
+                        finish_search(query)
                     break  # no workers are currently in progress
                 heap_updated_event.clear()
                 await heap_updated_event.wait()  # wait for some other worker to update heaps
@@ -138,7 +144,7 @@ async def traverse_dht(
     # spawn all workers and wait for them to terminate; workers terminate after exhausting unfinished_queries
     await asyncio.wait([worker() for _ in range(num_workers)])
     if await_found:
-        await(asyncio.wait(pending_callbacks))
+        await asyncio.wait(pending_callbacks)
 
     nearest_neighbors_per_query = {
         query: [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]

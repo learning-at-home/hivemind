@@ -153,7 +153,7 @@ def run_node(node_id, peers, status_pipe: mp.Pipe):
         loop.run_forever()
 
 
-def test_dht():
+def test_dht_node():
     # create dht with 50 nodes + your 51-st node
     dht: Dict[Endpoint, DHTID] = {}
     processes: List[mp.Process] = []
@@ -242,6 +242,12 @@ def test_dht():
             val, expiration_time = loop.run_until_complete(me.get("mykey"))
             assert expiration_time == true_time, "Wrong time"
             assert val == ["Value", 10], "Wrong value"
+
+        # test 7: bulk store and bulk get
+        keys = 'foo', 'bar', 'baz'
+        values = 3, 2, 'batman'
+        store_ok = loop.run_until_complete(me.store_many(keys, values, expiration=get_dht_time() + 999))
+        assert all(store_ok.values()), "failed to store one or more keys"
 
         test_success.set()
 

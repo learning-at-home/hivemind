@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import random
-from typing import Optional, Tuple, List, Dict, Collection
+from typing import Optional, Tuple, List, Dict, Collection, Union, Callable, Set, Awaitable
 from warnings import warn
 
 from .protocol import DHTProtocol
@@ -131,62 +131,127 @@ class DHTNode:
         await self.protocol.shutdown(timeout)
 
     async def find_nearest_nodes(
-            self, queries: List[DHTID], k_nearest: Optional[int] = None, beam_size: Optional[int] = None,
-            num_workers: Optional[int] = None, exclude_self: bool = False) -> Dict[DHTID, Dict[DHTID, Endpoint]]:
+            self, queries: Collection[DHTID], k_nearest: Optional[int] = None, beam_size: Optional[int] = None,
+            num_workers: Optional[int] = None, node_to_endpoint: Optional[Dict[DHTID, Endpoint]] = None,
+            exclude_self: bool = False, **kwargs) -> Dict[DHTID, Dict[DHTID, Endpoint]]:
         """
-        Traverse the DHT and find :k_nearest: nodes to a given :query_id:, optionally :exclude_self: from the results.
-
-        :returns: an ordered dictionary of [peer DHTID -> network Endpoint], ordered from nearest to farthest neighbor
-        :note: this is a thin wrapper over dht.search.traverse_dht, look there for more details
+        :param queries: find k nearest nodes for each of these DHTIDs
+        :param k_nearest: return this many nearest nodes for every query (if there are enough nodes)
+        :param beam_size: replacement for self.beam_size, see traverse_dht beam_size param
+        :param num_workers: replacement for self.num_workers, see traverse_dht num_workers param
+        :param node_to_endpoint: if specified, uses this dict[node_id => endpoint] as initial peers
+        :param exclude_self: if True, nearest nodes will not contain self.node_id (default = use local peers)
+        :param kwargs: additional params passed to traverse_dht
+        :returns: an for every query, return nearest peers ordered dict[peer DHTID -> network Endpoint], nearest-first
         """
+        queries = list(queries)
         k_nearest = k_nearest if k_nearest is not None else self.protocol.bucket_size
         num_workers = num_workers if num_workers is not None else self.num_workers
         beam_size = beam_size if beam_size is not None else max(self.protocol.bucket_size, k_nearest)
-        node_to_addr: Dict[DHTID, Endpoint] = dict()
-        for query in queries:
-            node_to_addr.update(
-                self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id))
+        if k_nearest > beam_size:
+            warn("Warning: beam_size is too small, beam search is not guaranteed to find enough nodes")
+        if node_to_endpoint is None:
+            node_to_endpoint: Dict[DHTID, Endpoint] = dict()
+            for query in queries:
+                node_to_endpoint.update(
+                    self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id))
 
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
             queries = list(queries)
-            response = await self.protocol.call_find(node_to_addr[peer], queries)
+            response = await self.protocol.call_find(node_to_endpoint[peer], queries)
             if not response:
                 return {query: ([], False) for query in queries}
 
             output: Dict[DHTID, Tuple[List[DHTID], bool]] = {}
             for query, (_, _, peers) in response.items():
-                node_to_addr.update(peers)
+                node_to_endpoint.update(peers)
                 output[query] = list(peers.keys()), False  # False means "do not interrupt search"
             return output
 
         nearest_nodes, visited_nodes = await traverse_dht(
-            queries, initial_peers=list(node_to_addr), beam_size=beam_size, num_workers=num_workers,
-            get_neighbors=get_neighbors, visited_nodes=(self.node_id,))
+            queries, initial_peers=list(node_to_endpoint), beam_size=beam_size, num_workers=num_workers,
+            get_neighbors=get_neighbors, visited_nodes=(self.node_id,), **kwargs)
 
         nearest_nodes_per_query = {}
         for query, nearest_nodes in nearest_nodes.items():
             if not exclude_self:
                 nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query.xor_distance)
-                node_to_addr[self.node_id] = f"{LOCALHOST}:{self.port}"
-            nearest_nodes_per_query[query] = {node: node_to_addr[node] for node in nearest_nodes[:k_nearest]}
+                node_to_endpoint[self.node_id] = f"{LOCALHOST}:{self.port}"
+            nearest_nodes_per_query[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
         return nearest_nodes_per_query
 
     async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration) -> bool:
         """
-        Find beam_size best nodes to store (key, value) and store it there at least until expiration time.
-        Optionally cache (key, value, expiration) on nodes you met along the way (see Section 2.1 end) TODO(jheuristic)
+        Find num_replicas best nodes to store (key, value) and store it there at least until expiration time.
 
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        key_id, value_bytes = DHTID.generate(source=key), self.serializer.dumps(value)
-        response = await self.find_nearest_nodes([key_id], k_nearest=self.num_replicas, exclude_self=True)
-        if not response:
-            return False
-        nearest_node_to_addr = response[key_id]
-        tasks = [asyncio.create_task(self.protocol.call_store(endpoint, [key_id], [value_bytes], [expiration_time]))
-                 for endpoint in nearest_node_to_addr.values()]
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        return any(store_ok for response in done for store_ok in response.result())
+        store_ok = await self.store_many([key], [value], [expiration_time])
+        return store_ok[key]
+
+    async def store_many(
+            self, keys: List[DHTKey], values: List[DHTValue], expiration: Union[DHTExpiration, List[DHTExpiration]],
+            exclude_self: bool = False, return_when=asyncio.FIRST_COMPLETED, **kwargs) -> Dict[DHTKey, bool]:
+        """
+        Traverse DHT to find up to best nodes to store (key, value, expiration) and store it there.
+
+        :param keys: arbitrary serializable keys associated with each value
+        :param values: serializable "payload" for each key
+        :param expiration: either one expiration time for all keys or individual expiration times (see class doc)
+        :param kwargs: any additional parameters passed to traverse_dht function (e.g. num workers)
+        :param exclude_self: if True, never store value locally even if you are one of the nearest nodes
+        :note: if exclude_self is True and self.cache_locally == True, value will still be __cached__ locally
+        :param return_when: when storing data await either first store ok or all store ok
+        :returns: for each key: True if store succeeds, False if it fails (due to no response or newer value)
+        """
+        expiration = [expiration] * len(keys) if isinstance(expiration, DHTExpiration) else expiration
+        assert len(keys) == len(values) == len(expiration), "Please provide equal number of keys, values and expiration"
+
+        key_ids = list(map(DHTID.generate, keys))
+        id_to_original_key = dict(zip(key_ids, keys))
+        binary_values_by_key_id = {key_id: self.serializer.dumps(value) for key_id, value in zip(key_ids, values)}
+        expiration_by_key_id = {key_id: expiration_time for key_id, expiration_time in zip(key_ids, expiration)}
+        unfinished_key_ids = set(key_ids)  # we use this set to ensure that each store request is finished
+        store_ok = {key: False for key in keys}  # outputs, updated during search
+
+        if self.cache_locally:
+            for key_id in key_ids:
+                self.protocol.cache.store(key_id, binary_values_by_key_id[key_id], expiration_by_key_id[key_id])
+
+        # pre-populate node_to_endpoint
+        node_to_endpoint: Dict[DHTID, Endpoint] = dict()
+        for key_id in key_ids:
+            node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
+                key_id, self.protocol.bucket_size, exclude=self.node_id))
+
+        async def on_found(key_id: DHTID, nearest_nodes: List[DHTID], visited_nodes: Set[DHTID]) -> None:
+            """ This will be called once per key when find_nearest_nodes is done for a particular node """
+            # note: we use callbacks instead of returned values to call store immediately without waiting for stragglers
+            assert key_id in unfinished_key_ids, "Internal error: traverse_dht finished the same query twice"
+            unfinished_key_ids.remove(key_id)
+
+            # ensure k nodes and (optionally) exclude self
+            nearest_nodes = [node_id for node_id in nearest_nodes if (not exclude_self or node_id != self.node_id)]
+            store_args = [key_id], [binary_values_by_key_id[key_id]], [expiration_by_key_id[key_id]]
+            store_tasks = {asyncio.create_task(self.protocol.call_store(node_to_endpoint[nearest_node_id], *store_args))
+                           for nearest_node_id in nearest_nodes[:self.num_replicas]}
+            backup_nodes = nearest_nodes[self.num_replicas:]  # used in case previous nodes didn't respond
+
+            # parse responses in hope for at least one ok
+            while store_tasks and not store_ok[id_to_original_key[key_id]]:
+                finished_store_tasks, store_tasks = await asyncio.wait(store_tasks, return_when=return_when)
+                for task in finished_store_tasks:
+                    if task.result()[0]:  # if store succeeded
+                        store_ok[id_to_original_key[key_id]] = True
+                    elif backup_nodes:
+                        store_tasks.add(asyncio.create_task(
+                            self.protocol.call_store(node_to_endpoint[backup_nodes.pop(0)], *store_args)))
+
+        await self.find_nearest_nodes(
+            queries=set(key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
+            found_callback=on_found, exclude_self=exclude_self, await_found=True, **kwargs)
+        assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
+        return store_ok
 
     async def get(
             self, key: DHTKey, sufficient_expiration_time: Optional[DHTExpiration] = None,
