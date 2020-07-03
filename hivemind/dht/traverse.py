@@ -100,12 +100,16 @@ async def traverse_dht(
 
             if len(candidate_nodes[chosen_query]) == 0:
                 # ^-- this means ALL heaps are empty. Wait for other workers (if any) or terminate
-                if max(num_active_workers.values()) == 0:
-                    finish_search(chosen_query)
-                    break  # no workers are currently in progress
-                heap_updated_event.clear()
-                await heap_updated_event.wait()  # wait for some other worker to update heaps
-                continue  # some worker has just updated us
+                if max(num_active_workers) > 0:
+                    heap_updated_event.clear()
+                    await heap_updated_event.wait()  # wait for some other worker to update heaps
+                    continue  # some worker has just updated us
+
+                else:  # no hope of new nodes, finish search immediately
+                    for query in list(unfinished_queries):
+                        finish_search(query)
+                    search_finished_event.set()
+                    break
 
             # select vertex to be explored
             chosen_distance_to_query, chosen_peer = heapq.heappop(candidate_nodes[chosen_query])
