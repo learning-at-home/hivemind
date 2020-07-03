@@ -254,7 +254,7 @@ class DHTNode:
         assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
         return store_ok
 
-    async def get_many(
+    async def get(
             self, key: DHTKey, sufficient_expiration_time: Optional[DHTExpiration] = None,
             num_workers: Optional[int] = None, beam_size: Optional[int] = None
     ) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
