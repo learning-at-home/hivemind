@@ -244,6 +244,7 @@ class DHTNode:
                 for task in finished_store_tasks:
                     if task.result()[0]:  # if store succeeded
                         store_ok[id_to_original_key[key_id]] = True
+                        break
                     elif backup_nodes:
                         store_tasks.add(asyncio.create_task(
                             self.protocol.call_store(node_to_endpoint[backup_nodes.pop(0)], *store_args)))
