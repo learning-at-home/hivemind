@@ -244,10 +244,13 @@ def test_dht_node():
             assert val == ["Value", 10], "Wrong value"
 
         # test 7: bulk store and bulk get
-        keys = 'foo', 'bar', 'baz'
-        values = 3, 2, 'batman'
+        keys = 'foo', 'bar', 'baz', 'zzz'
+        values = 3, 2, 'batman', [1, 2, 3]
         store_ok = loop.run_until_complete(me.store_many(keys, values, expiration=get_dht_time() + 999))
         assert all(store_ok.values()), "failed to store one or more keys"
+        response = loop.run_until_complete(me.get_many(keys[::-1]))
+        for key, value in zip(keys, values):
+            assert key in response and response[key][0] == value
 
         test_success.set()
 
