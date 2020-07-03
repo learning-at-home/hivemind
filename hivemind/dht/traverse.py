@@ -108,7 +108,6 @@ async def traverse_dht(
                 else:  # no hope of new nodes, finish search immediately
                     for query in list(unfinished_queries):
                         finish_search(query)
-                    search_finished_event.set()
                     break
 
             # select vertex to be explored
