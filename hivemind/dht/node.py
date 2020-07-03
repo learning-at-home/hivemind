@@ -180,20 +180,21 @@ class DHTNode:
             nearest_nodes_per_query[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
         return nearest_nodes_per_query
 
-    async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration) -> bool:
+    async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration, **kwargs) -> bool:
         """
         Find num_replicas best nodes to store (key, value) and store it there at least until expiration time.
 
+        :note: store is a simplified interface to store_many, all kwargs are be forwarded there
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        store_ok = await self.store_many([key], [value], [expiration_time])
+        store_ok = await self.store_many([key], [value], [expiration_time], **kwargs)
         return store_ok[key]
 
     async def store_many(
             self, keys: List[DHTKey], values: List[DHTValue], expiration: Union[DHTExpiration, List[DHTExpiration]],
             exclude_self: bool = False, return_when=asyncio.FIRST_COMPLETED, **kwargs) -> Dict[DHTKey, bool]:
         """
-        Traverse DHT to find up to best nodes to store (key, value, expiration) and store it there.
+        Traverse DHT to find up to best nodes to store multiple (key, value, expiration) pairs.
 
         :param keys: arbitrary serializable keys associated with each value
         :param values: serializable "payload" for each key
@@ -253,7 +254,7 @@ class DHTNode:
         assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
         return store_ok
 
-    async def get(
+    async def get_many(
             self, key: DHTKey, sufficient_expiration_time: Optional[DHTExpiration] = None,
             num_workers: Optional[int] = None, beam_size: Optional[int] = None
     ) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
@@ -281,7 +282,6 @@ class DHTNode:
             maybe_value, maybe_expiration = self.protocol.cache.get(key_id)
         if maybe_expiration is not None and maybe_expiration > latest_expiration:
             latest_value_bytes, latest_expiration, latest_node_id = maybe_value, maybe_expiration, self.node_id
-            # TODO(jheuristic) we may want to run background beam search to update our cache
         nodes_checked_for_value.add(self.node_id)
 
         # Option B: go beam search the DHT
