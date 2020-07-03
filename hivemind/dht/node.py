@@ -192,7 +192,7 @@ class DHTNode:
 
     async def store_many(
             self, keys: List[DHTKey], values: List[DHTValue], expiration: Union[DHTExpiration, List[DHTExpiration]],
-            exclude_self: bool = False, return_when=asyncio.FIRST_COMPLETED, **kwargs) -> Dict[DHTKey, bool]:
+            exclude_self: bool = False, await_all_replicas=True, **kwargs) -> Dict[DHTKey, bool]:
         """
         Traverse DHT to find up to best nodes to store multiple (key, value, expiration) pairs.
 
@@ -202,7 +202,8 @@ class DHTNode:
         :param kwargs: any additional parameters passed to traverse_dht function (e.g. num workers)
         :param exclude_self: if True, never store value locally even if you are one of the nearest nodes
         :note: if exclude_self is True and self.cache_locally == True, value will still be __cached__ locally
-        :param return_when: when storing data await either first store ok or all store ok
+        :param await_all_replicas: if False, this function returns after first store_ok and proceeds in background
+            if True, the function will wait for num_replicas successful stores or running out of beam_size nodes
         :returns: for each key: True if store succeeds, False if it fails (due to no response or newer value)
         """
         expiration = [expiration] * len(keys) if isinstance(expiration, DHTExpiration) else expiration
@@ -213,7 +214,9 @@ class DHTNode:
         binary_values_by_key_id = {key_id: self.serializer.dumps(value) for key_id, value in zip(key_ids, values)}
         expiration_by_key_id = {key_id: expiration_time for key_id, expiration_time in zip(key_ids, expiration)}
         unfinished_key_ids = set(key_ids)  # we use this set to ensure that each store request is finished
+
         store_ok = {key: False for key in keys}  # outputs, updated during search
+        store_finished_events = {key: asyncio.Event() for key in keys}
 
         if self.cache_locally:
             for key_id in key_ids:
@@ -238,20 +241,24 @@ class DHTNode:
                            for nearest_node_id in nearest_nodes[:self.num_replicas]}
             backup_nodes = nearest_nodes[self.num_replicas:]  # used in case previous nodes didn't respond
 
-            # parse responses in hope for at least one ok
-            while store_tasks and not store_ok[id_to_original_key[key_id]]:
-                finished_store_tasks, store_tasks = await asyncio.wait(store_tasks, return_when=return_when)
+            # parse responses and issue additional stores if someone fails
+            while store_tasks:
+                finished_store_tasks, store_tasks = await asyncio.wait(store_tasks, return_when=asyncio.FIRST_COMPLETED)
                 for task in finished_store_tasks:
                     if task.result()[0]:  # if store succeeded
                         store_ok[id_to_original_key[key_id]] = True
-                        break
+                        if not await_all_replicas:
+                            store_finished_events[id_to_original_key[key_id]].set()
                     elif backup_nodes:
                         store_tasks.add(asyncio.create_task(
                             self.protocol.call_store(node_to_endpoint[backup_nodes.pop(0)], *store_args)))
 
-        await self.find_nearest_nodes(
+                store_finished_events[id_to_original_key[key_id]].set()
+
+        asyncio.create_task(self.find_nearest_nodes(
             queries=set(key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
-            found_callback=on_found, exclude_self=exclude_self, await_found=True, **kwargs)
+            found_callback=on_found, exclude_self=exclude_self, **kwargs))
+        await asyncio.wait([evt.wait() for evt in store_finished_events.values()])  # await one (or all) store accepts
         assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
         return store_ok
 

@@ -63,10 +63,11 @@ async def traverse_dht(
             heapq.heappop(nearest_nodes[query])
         known_nodes[query] = set(initial_peers)
 
+    search_finished_event = asyncio.Event()
     heap_updated_event = asyncio.Event()
     heap_updated_event.set()
 
-    def get_query_priority(heap_query: DHTID):
+    def heuristic_priority(heap_query: DHTID):
         """ Workers prioritize expanding nodes (out of roots of query heaps) that reduce distances to all queries """
         if len(candidate_nodes[heap_query]) == 0:
             return float('inf'), float('inf')
@@ -86,6 +87,8 @@ async def traverse_dht(
     def finish_search(query):
         """ Remove query from a list of targets """
         unfinished_queries.remove(query)
+        if len(unfinished_queries) == 0:
+            search_finished_event.set()
         if found_callback:
             nearest_neighbors = [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
             pending_callbacks.add(asyncio.create_task(found_callback(query, nearest_neighbors, set(visited_nodes))))
@@ -93,13 +96,12 @@ async def traverse_dht(
     async def worker():
         while unfinished_queries:
             # select the heap based on priority
-            chosen_query: DHTID = min(unfinished_queries, key=get_query_priority)
+            chosen_query: DHTID = min(unfinished_queries, key=heuristic_priority)
 
             if len(candidate_nodes[chosen_query]) == 0:
                 # ^-- this means ALL heaps are empty. Wait for other workers (if any) or terminate
-                if min(num_active_workers.values()) == 0:
-                    for query in list(unfinished_queries):
-                        finish_search(query)
+                if max(num_active_workers.values()) == 0:
+                    finish_search(chosen_query)
                     break  # no workers are currently in progress
                 heap_updated_event.clear()
                 await heap_updated_event.wait()  # wait for some other worker to update heaps
@@ -119,9 +121,15 @@ async def traverse_dht(
             for query in unfinished_queries:
                 distance_from_visited[query] = min(distance_from_visited[query], chosen_distance_to_query)
 
-            # get nearest neighbors (over network) and update search heaps
-            response = await get_neighbors(chosen_peer, unfinished_queries)
-            for query, (neighbors_for_query, should_stop) in response.items():
+            # get nearest neighbors (over network) and update search heaps. Abort if search finishes early
+            get_neighors_task = asyncio.create_task(get_neighbors(chosen_peer, unfinished_queries))
+            await asyncio.wait([get_neighors_task, search_finished_event.wait()], return_when=asyncio.FIRST_COMPLETED)
+            if search_finished_event.is_set():
+                get_neighors_task.cancel()
+                break  # some other worker triggered finish_search
+
+            # add nearest neighbors to their respective heaps
+            for query, (neighbors_for_query, should_stop) in get_neighors_task.result().items():
                 if should_stop and (query in unfinished_queries):
                     finish_search(query)
                 if query not in unfinished_queries:
@@ -142,7 +150,10 @@ async def traverse_dht(
             heap_updated_event.set()
 
     # spawn all workers and wait for them to terminate; workers terminate after exhausting unfinished_queries
-    await asyncio.wait([worker() for _ in range(num_workers)])
+    await asyncio.wait([asyncio.create_task(worker()) for _ in range(num_workers)],
+                       return_when=asyncio.FIRST_COMPLETED)  # other workers are bound to terminate soon
+    assert len(unfinished_queries) == 0 and search_finished_event.is_set()
+
     if await_found:
         await asyncio.wait(pending_callbacks)
 
