@@ -294,16 +294,16 @@ class DHTNode:
         BINARY_VALUE, EXPIRATION, NODE = 0, 1, 2  # values in latest_result (for readability)
 
         # stage 1: value can be stored in our local cache
-        for key_id in unfinished_key_ids:
+        for key_id in key_ids:
             maybe_value, maybe_expiration = self.protocol.storage.get(key_id)
             if maybe_expiration is None:
                 maybe_value, maybe_expiration = self.protocol.cache.get(key_id)
             if maybe_expiration is not None and maybe_expiration > latest_result[key_id][EXPIRATION]:
                 latest_result[key_id] = maybe_value, maybe_expiration, self.node_id
+                if maybe_expiration >= sufficient_expiration_time:
+                    unfinished_key_ids.remove(key_id)
 
         nodes_checked_for_value.add(self.node_id)
-        unfinished_key_ids = {key_id for key_id in unfinished_key_ids
-                              if latest_result[key_id][EXPIRATION] >= sufficient_expiration_time}
 
         # stage 2: traverse the DHT for any unfinished keys
         for key_id in unfinished_key_ids:
@@ -311,7 +311,6 @@ class DHTNode:
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
-            nonlocal latest_value_bytes, latest_expiration, latest_node_id, node_to_addr, nodes_checked_for_value
             queries = list(queries)
             response = await self.protocol.call_find(node_to_addr[peer], queries)
             nodes_checked_for_value.add(peer)
