@@ -18,12 +18,12 @@ class ExpertBackend(nn.Module):
 
     :param expert: nn.Module to be wrapped into a backend. Arbitrary pytorch module with a few limitations:
 
-        - Experts must always receive the same set of \*args and \*\*kwargs and produce output tensors of same type
-        - All \*args, \*\*kwargs and outputs must be **tensors** where 0-th dimension represents to batch size
-        - We recommend using experts that are ~invariant to the order in which they process batches
-        - Using randomness (e.g. Dropout) leads to different samples at forward and backward. If you want to ensure consistency,
-            you should explicitly register these random variables as model outputs, so that they are sent back to the client.
-            See hivemind.utils.custom_layers.DeterministicDropout for an example
+     - Experts must always receive the same set of \*args and \*\*kwargs and produce output tensors of same type
+     - All args, kwargs and outputs must be **tensors** where 0-th dimension represents to batch size
+     - We recommend using experts that are ~invariant to the order in which they process batches
+     - Using randomness (e.g. Dropout) leads to different samples at forward and backward. If you want consistency,
+        you should explicitly register these random variables as model inputs or outputs.
+        See hivemind.utils.custom_layers.DeterministicDropout for an example
 
     :param opt: torch optimizer to be applied on every backward call
     :param args_schema: description of positional arguments to expert.forward, list of BatchTensorProto
