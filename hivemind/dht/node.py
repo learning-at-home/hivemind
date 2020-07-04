@@ -169,7 +169,8 @@ class DHTNode:
 
         nearest_nodes, visited_nodes = await traverse_dht(
             queries, initial_nodes=list(node_to_endpoint), beam_size=beam_size, num_workers=num_workers,
-            get_neighbors=get_neighbors, visited_nodes={query: {self.node_id} for query in queries}, **kwargs)
+            queries_per_call=int(len(queries) ** 0.5), get_neighbors=get_neighbors,
+            visited_nodes={query: {self.node_id} for query in queries}, **kwargs)
 
         nearest_nodes_per_query = {}
         for query, nearest_nodes in nearest_nodes.items():
