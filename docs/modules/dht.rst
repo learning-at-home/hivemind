@@ -10,7 +10,8 @@ Here's a high level scheme of how these components interact with one another:
    :width: 640
    :align: center
 
-
+DHT and DHTNode
+###############
 
 .. autoclass:: DHT
    :members:
