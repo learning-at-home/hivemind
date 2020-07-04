@@ -221,7 +221,7 @@ async def traverse_dht(
     assert len(unfinished_queries) == 0 and search_finished_event.is_set()
 
     if await_all_tasks:
-        await asyncio.wait(pending_tasks)
+        await asyncio.gather(*pending_tasks)
 
     nearest_neighbors_per_query = {
         query: [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
