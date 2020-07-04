@@ -1,3 +1,4 @@
+""" Utility functions for crawling DHT nodes, used to get and store keys in a DHT """
 import asyncio
 import heapq
 from typing import Dict, Awaitable, Callable, Any, Tuple, List, Set, Collection, Optional
@@ -6,38 +7,98 @@ from .routing import DHTID
 ROOT = 0  # alias for heap root
 
 
+async def simple_traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID], beam_size: int,
+                              get_neighbors: Callable[[DHTID], Awaitable[Tuple[Collection[DHTID], bool]]],
+                              visited_nodes: Collection[DHTID] = ()) -> Tuple[List[DHTID], Set[DHTID]]:
+    """
+    Traverse the DHT graph using get_neighbors function, find :beam_size: nearest nodes according to DHTID.xor_distance.
+
+    :note: This is a simplified (but working) algorithm provided for documentation purposes. Actual DHTNode uses
+       `traverse_dht` - a generalization of this this algorithm that allows multiple queries and concurrent workers.
+
+    :param query_id: search query, find k_nearest neighbors of this DHTID
+    :param initial_nodes: nodes used to pre-populate beam search heap, e.g. [my_own_DHTID, ...maybe_some_peers]
+    :param beam_size: beam search will not give up until it exhausts this many nearest nodes (to query_id) from the heap
+        Recommended value: A beam size of k_nearest * (2-5) will yield near-perfect results.
+    :param get_neighbors: A function that returns neighbors of a given node and controls beam search stopping criteria.
+        async def get_neighbors(node: DHTID) -> neighbors_of_that_node: List[DHTID], should_continue: bool
+        If should_continue is False, beam search will halt and return k_nearest of whatever it found by then.
+    :param visited_nodes: beam search will neither call get_neighbors on these nodes, nor return them as nearest
+    :returns: a list of k nearest nodes (nearest to farthest), and a set of all visited nodes (including visited_nodes)
+    """
+    visited_nodes = set(visited_nodes)  # note: copy visited_nodes because we will add more nodes to this collection.
+    initial_nodes = [node_id for node_id in initial_nodes if node_id not in visited_nodes]
+    if not initial_nodes:
+        return [], visited_nodes
+
+    unvisited_nodes = [(distance, uid) for uid, distance in zip(initial_nodes, query_id.xor_distance(initial_nodes))]
+    heapq.heapify(unvisited_nodes)  # nearest-first heap of candidates, unlimited size
+
+    nearest_nodes = [(-distance, node_id) for distance, node_id in heapq.nsmallest(beam_size, unvisited_nodes)]
+    heapq.heapify(nearest_nodes)  # farthest-first heap of size beam_size, used for early-stopping and to select results
+    while len(nearest_nodes) > beam_size:
+        heapq.heappop(nearest_nodes)
+
+    visited_nodes |= set(initial_nodes)
+    upper_bound = -nearest_nodes[0][0]  # distance to farthest element that is still in beam
+    was_interrupted = False  # will set to True if host triggered beam search to stop via get_neighbors
+
+    while (not was_interrupted) and len(unvisited_nodes) != 0 and unvisited_nodes[0][0] <= upper_bound:
+        _, node_id = heapq.heappop(unvisited_nodes)  # note: this  --^ is the smallest element in heap (see heapq)
+        neighbors, was_interrupted = await get_neighbors(node_id)
+        neighbors = [node_id for node_id in neighbors if node_id not in visited_nodes]
+        visited_nodes.update(neighbors)
+
+        for neighbor_id, distance in zip(neighbors, query_id.xor_distance(neighbors)):
+            if distance <= upper_bound or len(nearest_nodes) < beam_size:
+                heapq.heappush(unvisited_nodes, (distance, neighbor_id))
+
+                heapq_add_or_replace = heapq.heappush if len(nearest_nodes) < beam_size else heapq.heappushpop
+                heapq_add_or_replace(nearest_nodes, (-distance, neighbor_id))
+                upper_bound = -nearest_nodes[0][0]  # distance to beam_size-th nearest element found so far
+
+    return [node_id for _, node_id in heapq.nlargest(beam_size, nearest_nodes)], visited_nodes
+
+
 async def traverse_dht(
-        queries: Collection[DHTID], initial_peers: List[DHTID], beam_size: int, num_workers: int,
+        queries: Collection[DHTID], initial_nodes: List[DHTID], beam_size: int, num_workers: int, queries_per_call: int,
         get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[List[DHTID], bool]]]],
         found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None,
-        await_found: bool = False, visited_nodes: Collection[DHTID] = (),
+        await_found: bool = False, visited_nodes: Optional[Dict[DHTID, Collection[DHTID]]] = None,
 ) -> Tuple[Dict[DHTID, List[DHTID]], Set[DHTID]]:
     """
-    Asynchronous beam search over the DHT. Not meant to be called by the user, please use DHTNode.store/get instead.
-    Traverse the DHT graph using get_neighbors function, find up to beam_size nearest nodes based on DHTID.xor_distance.
+    Search the DHT for nearest neighbors to :queries: (based on DHTID.xor_distance). Use get_neighbors to request peers.
+    The algorithm can reuse intermediate results from each query to speed up search for other (similar) queries.
 
     :param queries: a list of search queries, find beam_size neighbors for these DHTIDs
-    :param initial_peers: nodes used to pre-populate beam search heap, e.g. [my_own_DHTID, ...maybe_some_peers]
-    :param beam_size: beam search will not give up until it exhausts this many nearest nodes (to query_id) from the heap
-    :param num_workers: run this many concurrent get_neighbors. Each worker expands nearest node to one of the queries.
-        Workers can run concurrent requests for the same query or for several queries in parallel depending on priority.
-        A worker selects a node for get_neighbors (out of nearest nodes per query) based on two factors:
+    :param initial_nodes: nodes used to pre-populate beam search heap, e.g. [my_own_DHTID, ...maybe_some_peers]
+    :param beam_size: beam search will not give up until it visits this many nearest nodes (to query_id) from the heap
+    :param num_workers: run up to this many concurrent get_neighbors requests, each querying one peer for neighbors.
+        When selecting a peer to request neighbors from, workers try to balance concurrent exploration across queries.
+        A worker will expand the nearest candidate to a query with least concurrent requests from other workers.
+        If several queries have the same number of concurrent requests, prefer the one with nearest XOR distance.
 
-           - distance reduction = how much closer we are to a query after including this node (sum over all queries)
-           - crowding penalty = with everything else equal, spread workers evenly between queries (i.e. between heaps)
+    :param queries_per_call: workers can pack up to this many queries in one get_neighbors call. These queries contain
+        the primary query (see num_workers above) and up to `queries_per_call - 1` nearest unfinished queries.
 
-    :param get_neighbors: A function that requests a given peer to find nearest neighbors for several queries
-        async def get_neighbors(peer, queries) -> {query1: ([nearest1, nearest2, ...], False), query2: ([...], False)}
+    :param get_neighbors: A function that requests a given peer to find nearest neighbors for multiple queries
+        async def get_neighbors(peer, queries) -> {query1: ([nearest1, nearest2, ...], False), query2: ([...], True)}
         For each query in queries, return nearest neighbors (known to a given peer) and a boolean "should_stop" flag
-        If should_stop is True, traverse_dht will no longer search for it or request it from peers
-    :note: the search terminates iff each query is either stopped via should_stop or finds beam_size nearest nodes
-    :param found_callback: if specified, call this callback for each finished query the moment it finishes or is stopped
-        More specifically, traverse_dht will run asyncio.create_task(found_found_callback(query, nearest_peers, visited)
-        Using callbacks allows one to process early results before traverse_dht is finished for all queries
-    :param await_found: if set to True, wait for all callbacks to finish before returning (e.g. if you use asyncio.run)
-    :param visited_nodes: beam search will neither call get_neighbors on these nodes (e.g. your own node)
+        If should_stop is True, traverse_dht will no longer search for this query or request it from other peers.
+        The search terminates iff each query is either stopped via should_stop or finds beam_size nearest nodes.
 
-    :returns: a dict {query -> beam_size nearest nodes nearest-first}, and a set of all nodes queried with get_neighbors
+    :param found_callback: if specified, call this callback for each finished query the moment it finishes or is stopped
+        More specifically, run asyncio.create_task(found_found_callback(query, nearest_to_query, visited_for_query))
+        Using this callback allows one to process results faster before traverse_dht is finishes for all queries.
+
+    :param await_found: if set to True, wait for all callbacks to finish before returning (e.g. if you use asyncio.run)
+    :param visited_nodes: for each query, do not call get_neighbors on these nodes, nor return them among nearest.
+    :note: the source code of this function can get tricky to read. Take a look at `simple_traverse_dht` function
+        for reference. That function implements a special case of traverse_dht with a single query and one worker.
+
+    :returns: a dict of nearest nodes, and another dict of visited nodes
+        nearest nodes: { query -> a list of up to beam_size nearest nodes, ordered nearest-first }
+        visited nodes: { query -> a set of all nodes that received requests for a given query }
     """
     if await_found and found_callback is None:
         raise ValueError("await_found=True is only allowed with found_callback")
@@ -54,14 +115,14 @@ async def traverse_dht(
 
     # initialize data structures
     for query in queries:
-        distances = query.xor_distance(initial_peers)
-        candidate_nodes[query] = list(zip(distances, initial_peers))
-        nearest_nodes[query] = list(zip([-d for d in distances], initial_peers))
+        distances = query.xor_distance(initial_nodes)
+        candidate_nodes[query] = list(zip(distances, initial_nodes))
+        nearest_nodes[query] = list(zip([-d for d in distances], initial_nodes))
         heapq.heapify(candidate_nodes[query])
         heapq.heapify(nearest_nodes[query])
         while len(nearest_nodes[query]) > beam_size:
             heapq.heappop(nearest_nodes[query])
-        known_nodes[query] = set(initial_peers)
+        known_nodes[query] = set(initial_nodes)
 
     search_finished_event = asyncio.Event()
     heap_updated_event = asyncio.Event()

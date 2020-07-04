@@ -169,7 +169,7 @@ class DHTNode:
             return output
 
         nearest_nodes, visited_nodes = await traverse_dht(
-            queries, initial_peers=list(node_to_endpoint), beam_size=beam_size, num_workers=num_workers,
+            queries, initial_nodes=list(node_to_endpoint), beam_size=beam_size, num_workers=num_workers,
             get_neighbors=get_neighbors, visited_nodes=(self.node_id,), **kwargs)
 
         nearest_nodes_per_query = {}
@@ -335,7 +335,7 @@ class DHTNode:
             return output
 
         nearest_nodes_per_query, visited_nodes = await traverse_dht(
-            queries=list(unfinished_key_ids), initial_peers=list(node_to_addr), beam_size=beam_size,
+            queries=list(unfinished_key_ids), initial_nodes=list(node_to_addr), beam_size=beam_size,
             num_workers=num_workers, get_neighbors=get_neighbors, visited_nodes=nodes_checked_for_value)
 
         # stage 3: cache any new results depending on caching parameters
