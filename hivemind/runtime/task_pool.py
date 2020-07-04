@@ -11,6 +11,7 @@ from collections import namedtuple
 from concurrent.futures import Future
 from queue import Empty
 from typing import List, Tuple, Dict, Any, Generator
+import asyncio
 
 import torch
 
@@ -215,3 +216,22 @@ class TaskPool(TaskPoolBase):
     def get_task_size(self, task: Task) -> int:
         """ compute task processing complexity (used for batching); defaults to batch size """
         return len(task.args[0]) if task.args else 1
+
+
+class RemotePoolInterface:
+    def __init__(self, pool):
+        self.tasks = pool.tasks
+        self.undispatched_task_timestamps = pool.undispatched_task_timestamps
+        self.max_batch_size = pool.max_batch_size
+
+    async def submit_task(self, *args: List[torch.Tensor], executor=None) -> Future:
+        """ Add task to this pool's queue, return Future for its output """
+        future1, future2 = SharedFuture.make_pair()
+        task = Task(future1, args)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(executor, self.put_task_with_time, task)
+        return future2
+
+    def put_task_with_time(self, task):
+        self.tasks.put(task)
+        self.undispatched_task_timestamps.put(time.time())

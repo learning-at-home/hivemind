@@ -1,12 +1,14 @@
 import multiprocessing as mp
 import threading
 from typing import Dict, Optional
-import torch
+from collections import namedtuple
 
 from .connection_handler import ConnectionHandler
 from .dht_handler import DHTHandlerThread
 from ..dht import DHT
-from ..runtime import Runtime, ExpertBackend,RemotePoolInterface
+from ..runtime import Runtime, ExpertBackend, RemotePoolInterface
+
+ExpertData = namedtuple('ExpertData', ('forward_pool', 'backward_pool', 'metadata'))
 
 
 class Server(threading.Thread):
@@ -38,7 +40,12 @@ class Server(threading.Thread):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
-        self.conn_handler = ConnectionHandler(self.addr, self.port, self.experts)
+
+        data_for_expert = {uid: ExpertData(RemotePoolInterface(expert.forward_pool),
+                                           RemotePoolInterface(expert.backward_pool), expert.get_info())
+                           for uid, expert in self.experts.items()}
+
+        self.conn_handler = ConnectionHandler(self.addr, self.port, data_for_expert)
         self.runtime = Runtime(self.experts, **kwargs)
 
         if start:
