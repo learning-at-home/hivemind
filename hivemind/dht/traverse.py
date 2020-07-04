@@ -216,7 +216,7 @@ async def traverse_dht(
 
     # spawn all workers and wait for them to terminate; workers terminate after exhausting unfinished_queries
     await asyncio.wait([asyncio.create_task(worker()) for _ in range(num_workers)])
-    assert len(unfinished_queries) == 0 and search_finished_event.is_set(), (unfinished_queries, num_workers, search_finished_event.is_set())
+    assert len(unfinished_queries) == 0 and search_finished_event.is_set()
 
     if await_found:
         await asyncio.wait(pending_callbacks)
