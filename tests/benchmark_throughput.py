@@ -13,6 +13,7 @@ import hivemind
 
 
 def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
+    torch.set_num_threads(1)
     can_start.wait()
     experts = [hivemind.RemoteExpert(f"expert{i}", port=port) for i in range(num_experts)]
 
@@ -131,6 +132,12 @@ if __name__ == "__main__":
     elif args.preset == 'ffn_small_batch':
         benchmark_throughput(backprop=False, num_experts=4, batch_size=32, max_batch_size=8192,
                              num_batches_per_client=args.num_batches_per_client)
+    elif args.preset == 'ffn_small_batch_512clients':
+        benchmark_throughput(backprop=True, num_experts=1, batch_size=1, max_batch_size=8192,
+                             num_clients=512, num_batches_per_client=args.num_batches_per_client)
+    elif args.preset == 'ffn_small_batch_512clients_32handlers':
+        benchmark_throughput(backprop=True, num_experts=1, batch_size=1, max_batch_size=8192, num_handlers=32,
+                             num_clients=512, num_batches_per_client=args.num_batches_per_client)
     elif args.preset == 'ffn_massive':
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         try:

@@ -3,6 +3,7 @@ import os
 import threading
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict, Optional
+import torch
 
 from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
@@ -121,6 +122,7 @@ class Server(threading.Thread):
 
 def socket_loop(sock, experts):
     """ catch connections, send tasks to processing, respond with results """
+    torch.set_num_threads(1)
     print(f'Spawned connection handler pid={os.getpid()}')
     while True:
         try:
