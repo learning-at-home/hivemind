@@ -31,7 +31,15 @@ class RemoteExpert(nn.Module):
     def __init__(self, uid, host='127.0.0.1', port=8080):
         super().__init__()
         self.uid, self.host, self.port = uid, host, port
+        self.channel = grpc.insecure_channel(f'{self.host}:{self.port}', options=[
+            ('grpc.max_send_message_length', 50 * 1024 * 1024),
+            ('grpc.max_receive_message_length', 50 * 1024 * 1024)
+        ])
+        self.stub = runtime_grpc.ConnectionHandlerStub(self.channel)
         self._info = None
+
+    def __del__(self):
+        self.channel.close()
 
     def forward(self, *args, **kwargs):
         """ Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd. """
@@ -44,19 +52,14 @@ class RemoteExpert(nn.Module):
         if not nested_compare(forward_inputs, self.info['forward_schema']):
             raise TypeError(f"Inputs do not match expert input schema. Did you pass the right number of parameters?")
 
-        flat_outputs = _RemoteModuleCall.apply(DUMMY, self.uid, self.host, self.port, *nested_flatten(forward_inputs))
+        flat_outputs = _RemoteModuleCall.apply(DUMMY, self.uid, self.host, self.port, self.stub, *nested_flatten(forward_inputs))
         # Note: we send DUMMY to prevent torch from excluding expert from backward if no other inputs require grad
         return nested_pack(flat_outputs, structure=self.info['outputs_schema'])
 
     @property
     def info(self):
         if self._info is None:
-            with grpc.insecure_channel(f'{self.host}:{self.port}', options=[
-                ('grpc.max_send_message_length', 50 * 1024 * 1024),
-                ('grpc.max_receive_message_length', 50 * 1024 * 1024)
-            ]) as channel:
-                stub = runtime_grpc.ConnectionHandlerStub(channel)
-                outputs = stub.info(runtime_pb2.ExpertUID(uid=self.uid))
+            outputs = self.stub.info(runtime_pb2.ExpertUID(uid=self.uid))
             self._info = pickle.loads(outputs.serialized_info)
         return self._info
 
@@ -68,19 +71,14 @@ class _RemoteModuleCall(torch.autograd.Function):
     """ Internal autograd-friendly call of a remote module. For applications, use RemoteExpert instead. """
 
     @staticmethod
-    def forward(ctx, dummy: torch.Tensor,
-                uid: str, host: str, port: int, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+    def forward(ctx, dummy: torch.Tensor, uid: str, host: str, port: int, stub: runtime_grpc.ConnectionHandlerStub,
+                *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         # Note: *inputs are flattened input tensors that follow the expert's info['input_schema']
         inputs = tuple(map(torch.Tensor.detach, inputs))  # detach to avoid pickling the computation graph
-        ctx.uid, ctx.host, ctx.port = uid, host, port
+        ctx.uid, ctx.host, ctx.port, ctx.stub = uid, host, port, stub
         ctx.save_for_backward(*inputs)
 
-        with grpc.insecure_channel(f'{ctx.host}:{ctx.port}', options=[
-            ('grpc.max_send_message_length', 50 * 1024 * 1024),
-            ('grpc.max_receive_message_length', 50 * 1024 * 1024)
-        ]) as channel:
-            stub = runtime_grpc.ConnectionHandlerStub(channel)
-            outputs = stub.forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[serialize_torch_tensor(tensor) for tensor in inputs]))
+        outputs = stub.forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[serialize_torch_tensor(tensor) for tensor in inputs]))
 
         deserialized_outputs = [deserialize_torch_tensor(tensor) for tensor in outputs.tensors]
 
@@ -91,13 +89,8 @@ class _RemoteModuleCall(torch.autograd.Function):
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
         payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
 
-        with grpc.insecure_channel(f'{ctx.host}:{ctx.port}', options=[
-            ('grpc.max_send_message_length', 50 * 1024 * 1024),
-            ('grpc.max_receive_message_length', 50 * 1024 * 1024)
-        ]) as channel:
-            stub = runtime_grpc.ConnectionHandlerStub(channel)
-            grad_inputs = stub.backward(
-                runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[serialize_torch_tensor(tensor) for tensor in payload]))
+        grad_inputs = ctx.stub.backward(
+            runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[serialize_torch_tensor(tensor) for tensor in payload]))
 
         deserialized_grad_inputs = [deserialize_torch_tensor(tensor) for tensor in grad_inputs.tensors]
-        return (DUMMY, None, None, None, *deserialized_grad_inputs)
+        return (DUMMY, None, None, None, None, *deserialized_grad_inputs)

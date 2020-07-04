@@ -62,6 +62,6 @@ def serialize_torch_tensor(tensor: torch.Tensor) -> runtime_pb2.Tensor:
 
 
 def deserialize_torch_tensor(tensor: runtime_pb2.Tensor) -> torch.Tensor:
-    array = np.frombuffer(tensor.buffer, dtype=np.dtype(tensor.dtype))
+    array = np.frombuffer(tensor.buffer, dtype=np.dtype(tensor.dtype)).copy()
     return torch.as_tensor(array).view(tuple(tensor.size)).requires_grad_(tensor.requires_grad)
     # TODO if you experience segfault or something, replace as_tensor with tensor

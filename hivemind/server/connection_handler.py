@@ -5,6 +5,7 @@ import pickle
 from typing import Dict
 
 import grpc.experimental.aio
+import uvloop
 
 from hivemind.runtime.expert_backend import ExpertBackend
 from hivemind.utils import compile_grpc, get_logger, serialize_torch_tensor, deserialize_torch_tensor
@@ -23,6 +24,7 @@ class ConnectionHandler(mp.Process):
         self.ready = mp.Event()
 
     def run(self):
+        uvloop.install()
         loop = asyncio.new_event_loop()
 
         async def _run():
@@ -31,7 +33,7 @@ class ConnectionHandler(mp.Process):
             server = grpc.experimental.aio.server(options=[
                 ('grpc.max_send_message_length', 50 * 1024 * 1024),
                 ('grpc.max_receive_message_length', 50 * 1024 * 1024)
-            ])  # TODO check out params
+            ])
             runtime_grpc.add_ConnectionHandlerServicer_to_server(self, server)
 
             found_port = server.add_insecure_port(self.endpoint)
