@@ -66,7 +66,7 @@ async def traverse_dht(
         queries: Collection[DHTID], initial_nodes: List[DHTID], beam_size: int, num_workers: int, queries_per_call: int,
         get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[List[DHTID], bool]]]],
         found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None,
-        await_found: bool = False, visited_nodes: Optional[Dict[DHTID, Set[DHTID]]] = (),
+        await_all_tasks: bool = True, visited_nodes: Optional[Dict[DHTID, Set[DHTID]]] = (),
 ) -> Tuple[Dict[DHTID, List[DHTID]], Dict[DHTID, Set[DHTID]]]:
     """
     Search the DHT for nearest neighbors to :queries: (based on DHTID.xor_distance). Use get_neighbors to request peers.
@@ -93,7 +93,9 @@ async def traverse_dht(
         More specifically, run asyncio.create_task(found_found_callback(query, nearest_to_query, visited_for_query))
         Using this callback allows one to process results faster before traverse_dht is finishes for all queries.
 
-    :param await_found: if set to True, wait for all callbacks to finish before returning (e.g. if you use asyncio.run)
+    :param await_all_tasks: if True, wait for all tasks to finish before returning, otherwise returns after finding
+        nearest neighbors and finishes the remaining tasks (callbacks and queries to known-but-unvisited nodes)
+
     :param visited_nodes: for each query, do not call get_neighbors on these nodes, nor return them among nearest.
     :note: the source code of this function can get tricky to read. Take a look at `simple_traverse_dht` function
         for reference. That function implements a special case of traverse_dht with a single query and one worker.
@@ -102,8 +104,6 @@ async def traverse_dht(
         nearest nodes: { query -> a list of up to beam_size nearest nodes, ordered nearest-first }
         visited nodes: { query -> a set of all nodes that received requests for a given query }
     """
-    if await_found and found_callback is None:
-        raise warn("await_found=True only makes sense with found_callback")
     if len(queries) == 0:
         return {}, dict(visited_nodes)
 
@@ -112,7 +112,7 @@ async def traverse_dht(
     nearest_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}      # heap: top-k nearest nodes, farthest-to-nearest
     known_nodes: Dict[DHTID, Set[DHTID]] = {}                     # all nodes ever added to the heap (for deduplication)
     visited_nodes: Dict[DHTID, Set[DHTID]] = dict(visited_nodes)  # where we requested get_neighbors for a given query
-    pending_callbacks = set()                                     # all found_callback tasks created via finish_search
+    pending_tasks = set()                                         # all active tasks (get_neighbors and found_callback)
     active_workers = Counter({q: 0 for q in queries})             # count workers that search for this query
 
     search_finished_event = asyncio.Event()  # used to immediately stop all workers when the search is finished
@@ -149,7 +149,7 @@ async def traverse_dht(
             search_finished_event.set()
         if found_callback:
             nearest_neighbors = [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
-            pending_callbacks.add(asyncio.create_task(found_callback(query, nearest_neighbors, set(visited_nodes))))
+            pending_tasks.add(asyncio.create_task(found_callback(query, nearest_neighbors, set(visited_nodes))))
 
     async def worker():
         while unfinished_queries:
@@ -188,9 +188,11 @@ async def traverse_dht(
 
             # get nearest neighbors (over network) and update search heaps. Abort if search finishes early
             get_neighbors_task = asyncio.create_task(get_neighbors(chosen_peer, queries_to_call))
+            pending_tasks.add(get_neighbors_task)
             await asyncio.wait([get_neighbors_task, search_finished_event.wait()], return_when=asyncio.FIRST_COMPLETED)
             if search_finished_event.is_set():
-                break  # some other worker triggered finish_search
+                break  # other worker triggered finish_search, we exit immediately
+            pending_tasks.remove(get_neighbors_task)
 
             # add nearest neighbors to their respective heaps
             for query, (neighbors_for_query, should_stop) in get_neighbors_task.result().items():
@@ -218,8 +220,8 @@ async def traverse_dht(
                        return_when=asyncio.FIRST_COMPLETED)  # first worker finishes when the search is over
     assert len(unfinished_queries) == 0 and search_finished_event.is_set()
 
-    if await_found:
-        await asyncio.wait(pending_callbacks)
+    if await_all_tasks:
+        await asyncio.wait(pending_tasks)
 
     nearest_neighbors_per_query = {
         query: [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
