@@ -157,7 +157,6 @@ class DHTNode:
                     self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id))
 
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
-            queries = list(queries)
             response = await self.protocol.call_find(node_to_endpoint[peer], queries)
             if not response:
                 return {query: ([], False) for query in queries}
@@ -170,7 +169,7 @@ class DHTNode:
 
         nearest_nodes, visited_nodes = await traverse_dht(
             queries, initial_nodes=list(node_to_endpoint), beam_size=beam_size, num_workers=num_workers,
-            get_neighbors=get_neighbors, visited_nodes=(self.node_id,), **kwargs)
+            get_neighbors=get_neighbors, visited_nodes={query: {self.node_id} for query in queries}, **kwargs)
 
         nearest_nodes_per_query = {}
         for query, nearest_nodes in nearest_nodes.items():
@@ -266,7 +265,7 @@ class DHTNode:
         """
         Search for a key across DHT and return either first or latest entry.
         :param key: same key as in node.store(...)
-        :param latest: if True, finds the latest value, otherwise finds any non-expired value (much faster)
+        :param latest: if True, finds the latest value, otherwise finds any non-expired value (which is much faster)
         :param kwargs: parameters forwarded to get_many
         :returns: (value, expiration time); if value was not found, returns (None, None)
         """
@@ -297,7 +296,7 @@ class DHTNode:
 
         # search metadata
         unfinished_key_ids = set(key_ids)  # track key ids for which the search is not terminated
-        node_to_addr, nodes_checked_for_value = dict(), set()  # routing table and a set of queried nodes
+        node_to_addr: Dict[DHTID, Endpoint] = dict()  # global routing table for all queries
         latest_result = {key_id: (b'', -float('inf'), None) for key_id in key_ids}  # key: (value_bin, expiration, node)
         BINARY_VALUE, EXPIRATION, NODE = 0, 1, 2  # values in latest_result (for readability)
 
@@ -311,8 +310,6 @@ class DHTNode:
                 if maybe_expiration >= sufficient_expiration_time:
                     unfinished_key_ids.remove(key_id)
 
-        nodes_checked_for_value.add(self.node_id)
-
         # stage 2: traverse the DHT for any unfinished keys
         for key_id in unfinished_key_ids:
             node_to_addr.update(self.protocol.routing_table.get_nearest_neighbors(
@@ -321,7 +318,6 @@ class DHTNode:
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
             queries = list(queries)
             response = await self.protocol.call_find(node_to_addr[peer], queries)
-            nodes_checked_for_value.add(peer)
             if not response:
                 return {query: ([], False) for query in queries}
 
@@ -335,8 +331,9 @@ class DHTNode:
             return output
 
         nearest_nodes_per_query, visited_nodes = await traverse_dht(
-            queries=list(unfinished_key_ids), initial_nodes=list(node_to_addr), beam_size=beam_size,
-            num_workers=num_workers, get_neighbors=get_neighbors, visited_nodes=nodes_checked_for_value)
+            queries=list(unfinished_key_ids), initial_nodes=list(node_to_addr),
+            beam_size=beam_size, num_workers=num_workers, queries_per_call=int(len(unfinished_key_ids) ** 0.5),
+            get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in unfinished_key_ids})
 
         # stage 3: cache any new results depending on caching parameters
         for key_id, nearest_nodes in nearest_nodes_per_query.items():
