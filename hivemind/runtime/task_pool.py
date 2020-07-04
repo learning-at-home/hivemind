@@ -126,6 +126,7 @@ class TaskPool(TaskPoolBase):
 
     def run(self, *args, **kwargs):
         torch.set_num_threads(1)
+        torch.set_num_interop_threads(1)
         logger.info(f'{self.uid} starting, pid={os.getpid()}')
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],

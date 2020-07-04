@@ -8,7 +8,7 @@ import torch
 from prefetch_generator import BackgroundGenerator
 
 from .expert_backend import ExpertBackend
-from .task_pool import TaskPool, TaskPoolBase
+from .task_pool import TaskPool, TaskPoolBase, RemotePoolInterface
 from hivemind.utils import get_logger
 
 logger = get_logger(__name__)

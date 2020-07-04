@@ -6,7 +6,7 @@ import torch
 from .connection_handler import ConnectionHandler
 from .dht_handler import DHTHandlerThread
 from ..dht import DHT
-from ..runtime import Runtime, ExpertBackend
+from ..runtime import Runtime, ExpertBackend,RemotePoolInterface
 
 
 class Server(threading.Thread):

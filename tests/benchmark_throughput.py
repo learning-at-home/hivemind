@@ -13,6 +13,7 @@ import hivemind
 
 def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
     torch.set_num_threads(1)
+    torch.set_num_interop_threads(1)
     can_start.wait()
     experts = [hivemind.RemoteExpert(f"expert{i}", port=port) for i in range(num_experts)]
 
