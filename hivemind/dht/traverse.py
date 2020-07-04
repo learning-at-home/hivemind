@@ -190,7 +190,6 @@ async def traverse_dht(
             get_neighbors_task = asyncio.create_task(get_neighbors(chosen_peer, queries_to_call))
             await asyncio.wait([get_neighbors_task, search_finished_event.wait()], return_when=asyncio.FIRST_COMPLETED)
             if search_finished_event.is_set():
-                get_neighbors_task.cancel()
                 break  # some other worker triggered finish_search
 
             # add nearest neighbors to their respective heaps
@@ -215,7 +214,8 @@ async def traverse_dht(
             heap_updated_event.set()
 
     # spawn all workers and wait for them to terminate; workers terminate after exhausting unfinished_queries
-    await asyncio.wait([asyncio.create_task(worker()) for _ in range(num_workers)])
+    await asyncio.wait([asyncio.create_task(worker()) for _ in range(num_workers)],
+                       return_when=asyncio.FIRST_COMPLETED)  # first worker finishes when the search is over
     assert len(unfinished_queries) == 0 and search_finished_event.is_set()
 
     if await_found:
