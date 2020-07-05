@@ -21,7 +21,7 @@ def increase_file_limit(new_soft=2 ** 15, new_hard=2 ** 15):
     try:
         import resource  # note: local import to avoid ImportError for those who don't have it
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        print("Increasing file limit - soft {soft}=>{new_soft}, hard {hard}=>{new_hard}")
+        print(f"Increasing file limit - soft {soft}=>{new_soft}, hard {hard}=>{new_hard}")
         return resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, new_soft), max(hard, new_hard)))
     except Exception as e:
         warn(f"Failed to increase file limit: {e}")
