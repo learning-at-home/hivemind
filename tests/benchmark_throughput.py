@@ -1,12 +1,11 @@
 import argparse
 import multiprocessing as mp
 import random
-import resource
 import sys
 import time
 
 import torch
-from test_utils import layers, print_device_info
+from test_utils import layers, print_device_info, increase_file_limit
 from hivemind import find_open_port
 
 import hivemind
@@ -139,12 +138,7 @@ if __name__ == "__main__":
         benchmark_throughput(backprop=True, num_experts=1, batch_size=1, max_batch_size=8192, num_handlers=32,
                              num_clients=512, num_batches_per_client=args.num_batches_per_client)
     elif args.preset == 'ffn_massive':
-        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        try:
-            print("Setting open file limit to soft={}, hard={}".format(max(soft, 2 ** 15), max(hard, 2 ** 15)))
-            resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 2 ** 15), max(hard, 2 ** 15)))
-        except:
-            print("Could not increase open file limit, currently at soft={}, hard={}".format(soft, hard))
+        increase_file_limit()
         benchmark_throughput(backprop=False, num_clients=512, batch_size=512,
                              max_batch_size=8192, num_batches_per_client=args.num_batches_per_client)
     elif args.preset == 'minimalistic':

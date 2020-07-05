@@ -1,10 +1,11 @@
+""" RPC protocol that provides nodes a way to communicate with each other. Based on gRPC.AIO. """
 from __future__ import annotations
 
 import asyncio
 import heapq
 import os
 import urllib.parse
-from typing import Optional, List, Tuple, Dict, Iterator, Any, Sequence, Union
+from typing import Optional, List, Tuple, Dict, Iterator, Any, Sequence, Union, Collection
 from warnings import warn
 
 import grpc
@@ -161,7 +162,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             response.store_ok.append(local_memory.store(DHTID.from_bytes(key_bytes), value_bytes, expiration_time))
         return response
 
-    async def call_find(self, peer: Endpoint, keys: Sequence[DHTID]) -> \
+    async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> \
             Optional[Dict[DHTID, Tuple[Optional[BinaryDHTValue], Optional[DHTExpiration], Dict[DHTID, Endpoint]]]]:
         """
         Request keys from a peer. For each key, look for its (value, expiration time) locally and

@@ -1,104 +1,98 @@
-import argparse
 import time
-import asyncio
-import multiprocessing as mp
+import argparse
 import random
-
+from typing import Tuple
+from warnings import warn
 import hivemind
-from typing import List, Dict
+from tqdm import trange
 
-from hivemind import get_dht_time
-from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST
+from test_utils import increase_file_limit
 
 
-def run_benchmark_node(node_id, port, peers, ready: mp.Event, request_perod,
-                       expiration_time, wait_before_read, time_to_test, statistics: mp.Queue, dht_loaded: mp.Event):
-    if asyncio.get_event_loop().is_running():
-        asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    node = DHTNode(node_id, port, initial_peers=peers)
-    await_forever = hivemind.run_forever(asyncio.get_event_loop().run_forever)
-    ready.set()
-    dht_loaded.wait()
-    start = time.perf_counter()
-    while time.perf_counter() < start + time_to_test:
-        query_id = DHTID.generate()
-        store_value = random.randint(0, 256)
+def random_endpoint() -> Tuple[str, int]:
+    return (f"{random.randint(0, 256)}.{random.randint(0, 256)}."
+            f"{random.randint(0, 256)}.{random.randint(0, 256)}", random.randint(0, 65535))
 
-        store_time = time.perf_counter()
-        success_store = asyncio.run_coroutine_threadsafe(
-            node.store(query_id, store_value, get_dht_time() + expiration_time), loop).result()
-        store_time = time.perf_counter() - store_time
-        if success_store:
-            time.sleep(wait_before_read)
-            get_time = time.perf_counter()
-            get_value, get_time_expiration = asyncio.run_coroutine_threadsafe(node.get(query_id), loop).result()
-            get_time = time.perf_counter() - get_time
-            success_get = (get_value == store_value)
-            statistics.put((success_store, store_time, success_get, get_time))
-        else:
-            statistics.put((success_store, store_time, None, None))
-    await_forever.result()  # process will exit only if event loop broke down
+
+def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_batch_size: int, random_seed: int,
+                  wait_after_request: float, wait_before_read: float, wait_timeout: float, expiration_time: float):
+    old_expiration_time, hivemind.DHT.EXPIRATION = hivemind.DHT.EXPIRATION, expiration_time
+    random.seed(random_seed)
+
+    print("Creating peers...")
+    peers = []
+    for _ in trange(num_peers):
+        neighbors = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(initial_peers, len(peers)))]
+        peer = hivemind.DHT(*neighbors, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
+        peers.append(peer)
+
+    store_peer, get_peer = peers[-2:]
+
+    expert_uids = list(set(f"expert.{random.randint(0, 999)}.{random.randint(0, 999)}.{random.randint(0, 999)}"
+                           for _ in range(num_experts)))
+    print(f"Sampled {len(expert_uids)} unique ids (after deduplication)")
+    random.shuffle(expert_uids)
+
+    print(f"Storing peers to dht in batches of {expert_batch_size}...")
+    successful_stores = total_stores = total_store_time = 0
+    benchmark_started = time.perf_counter()
+    endpoints = []
+
+    for start in trange(0, num_experts, expert_batch_size):
+        store_start = time.perf_counter()
+        endpoints.append(random_endpoint())
+        success_list = store_peer.declare_experts(expert_uids[start: start + expert_batch_size], *endpoints[-1])
+        total_store_time += time.perf_counter() - store_start
+
+        total_stores += len(success_list)
+        successful_stores += sum(success_list)
+        time.sleep(wait_after_request)
+
+    print(f"Store success rate: {successful_stores / total_stores * 100:.1f}% ({successful_stores} / {total_stores})")
+    print(f"Mean store time: {total_store_time / total_stores:.5}, Total: {total_store_time:.5}")
+    time.sleep(wait_before_read)
+
+    if time.perf_counter() - benchmark_started > expiration_time:
+        warn("Warning: all keys expired before benchmark started getting them. Consider increasing expiration_time")
+
+    successful_gets = total_get_time = 0
+
+    for start in trange(0, len(expert_uids), expert_batch_size):
+        get_start = time.perf_counter()
+        get_result = get_peer.get_experts(expert_uids[start: start + expert_batch_size])
+        total_get_time += time.perf_counter() - get_start
+
+        for i, expert in enumerate(get_result):
+            if expert is not None and expert.uid == expert_uids[start + i] \
+                    and (expert.host, expert.port) == endpoints[start // expert_batch_size]:
+                successful_gets += 1
+
+    if time.perf_counter() - benchmark_started > expiration_time:
+        warn("Warning: keys expired midway during get requests. If that is not desired, increase expiration_time param")
+
+    print(f"Get success rate: {successful_gets / len(expert_uids) * 100:.1f} ({successful_gets} / {len(expert_uids)})")
+    print(f"Mean get time: {total_get_time / len(expert_uids):.5f}, Total: {total_get_time:.5f}")
+
+    alive_peers = [peer.is_alive() for peer in peers]
+    print(f"Node survival rate: {len(alive_peers) / len(peers) * 100:.3f}%")
+    hivemind.DHT.EXPIRATION = old_expiration_time
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_nodes', type=int, default=20, required=False)
-    parser.add_argument('--request_perod', type=float, default=2, required=False)
-    parser.add_argument('--expiration_time', type=float, default=10, required=False)
-    parser.add_argument('--wait_before_read', type=float, default=1, required=False)
-    parser.add_argument('--time_to_test', type=float, default=10, required=False)
-    args = parser.parse_args()
+    parser.add_argument('--num_peers', type=int, default=32, required=False)
+    parser.add_argument('--initial_peers', type=int, default=1, required=False)
+    parser.add_argument('--num_experts', type=int, default=256, required=False)
+    parser.add_argument('--expert_batch_size', type=int, default=32, required=False)
+    parser.add_argument('--expiration_time', type=float, default=300, required=False)
+    parser.add_argument('--wait_after_request', type=float, default=0, required=False)
+    parser.add_argument('--wait_before_read', type=float, default=0, required=False)
+    parser.add_argument('--wait_timeout', type=float, default=5, required=False)
+    parser.add_argument('--random_seed', type=int, default=random.randint(1, 1000))
+    parser.add_argument('--increase_file_limit', action="store_true")
+    args = vars(parser.parse_args())
 
-    statistics = mp.Queue()
-    dht: Dict[Endpoint, DHTID] = {}
-    processes: List[mp.Process] = []
+    if args.pop('increase_file_limit', False):
+        increase_file_limit()
 
-    num_nodes = args.num_nodes
-    request_perod = args.request_perod
-    expiration_time = args.expiration_time
-    wait_before_read = args.wait_before_read
-    time_to_test = args.time_to_test
-
-    dht_loaded = mp.Event()
-    for i in range(num_nodes):
-        node_id = DHTID.generate()
-        port = hivemind.find_open_port()
-        peers = random.sample(dht.keys(), min(len(dht), 5))
-        ready = mp.Event()
-        proc = mp.Process(target=run_benchmark_node, args=(node_id, port, peers, ready, request_perod,
-                                                           expiration_time, wait_before_read, time_to_test, statistics,
-                                                           dht_loaded), daemon=True)
-        proc.start()
-        ready.wait()
-        processes.append(proc)
-        dht[(LOCALHOST, port)] = node_id
-    dht_loaded.set()
-    time.sleep(time_to_test)
-    success_store = 0
-    all_store = 0
-    time_store = 0
-    success_get = 0
-    all_get = 0
-    time_get = 0
-    while not statistics.empty():
-        success_store_i, store_time_i, success_get_i, get_time_i = statistics.get()
-        all_store += 1
-        time_store += store_time_i
-        if success_store_i:
-            success_store += 1
-            all_get += 1
-            success_get += 1 if success_get_i else 0
-            time_get += get_time_i
-    alive_nodes_count = 0
-    loop = asyncio.new_event_loop()
-    node = DHTNode(loop=loop)
-    for addr, port in dht:
-        if loop.run_until_complete(node.protocol.call_ping((addr, port))) is not None:
-            alive_nodes_count += 1
-    print("store success rate: ", success_store / all_store)
-    print("mean store time: ", time_store / all_store)
-    print("get success rate: ", success_get / all_get)
-    print("mean get time: ", time_get / all_get)
-    print("death rate: ", (num_nodes - alive_nodes_count) / num_nodes)
+    benchmark_dht(**args)

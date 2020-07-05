@@ -57,7 +57,7 @@ class MSGPackSerializer(SerializerBase):
 
     @staticmethod
     def dumps(obj: object) -> bytes:
-        return umsgpack.dumps(obj, use_bin_type=False)
+        return umsgpack.dumps(obj, use_bin_type=False) # TODO strict https://github.com/msgpack/msgpack-python/pull/158
 
     @staticmethod
     def loads(buf: bytes) -> object:

@@ -1,3 +1,4 @@
+""" Utlity data structures to represent DHT nodes (peers), data keys, and routing tables. """
 from __future__ import annotations
 
 import hashlib
@@ -15,13 +16,13 @@ from ..utils import Endpoint, PickleSerializer
 
 class RoutingTable:
     """
-    A data structure that contains DHT peers bucketed according to their distance to node_id
+    A data structure that contains DHT peers bucketed according to their distance to node_id.
+    Follows Kademlia routing table as described in https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
 
     :param node_id: node id used to measure distance
     :param bucket_size: parameter $k$ from Kademlia paper Section 2.2
     :param depth_modulo: parameter $b$ from Kademlia paper Section 2.2.
-    :note: you can find a more detailed docstring for Node class, see node.py
-    :note: kademlia paper refers to https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
+    :note: you can find a more detailed description of parameters in DHTNode, see node.py
     """
 
     def __init__(self, node_id: DHTID, bucket_size: int, depth_modulo: int):
