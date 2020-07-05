@@ -1,11 +1,12 @@
 import time
 import argparse
 import random
-import resource
 from typing import Tuple
 from warnings import warn
 import hivemind
 from tqdm import trange
+
+from test_utils import increase_file_limit
 
 
 def random_endpoint() -> Tuple[str, int]:
@@ -28,8 +29,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.increase_file_limit:
-        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        resource.setrlimit(resource.RLIMIT_NOFILE, (max(soft, 2 ** 15), max(hard, 2 ** 15)))
+        increase_file_limit()
 
     random.seed(args.random_seed)
     hivemind.DHT.EXPIRATION = args.expiration_time
