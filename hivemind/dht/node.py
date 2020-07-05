@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import random
+from collections import namedtuple
 from typing import Optional, Tuple, List, Dict, Collection, Union, Set
 from warnings import warn
 
@@ -297,16 +298,17 @@ class DHTNode:
         # search metadata
         unfinished_key_ids = set(key_ids)  # track key ids for which the search is not terminated
         node_to_addr: Dict[DHTID, Endpoint] = dict()  # global routing table for all queries
-        latest_result = {key_id: (b'', -float('inf'), None) for key_id in key_ids}  # key: (value_bin, expiration, node)
-        BINARY_VALUE, EXPIRATION, NODE = 0, 1, 2  # values in latest_result (for readability)
+
+        SearchResult = namedtuple("SearchResult", ["binary_value", "expiration", "source_node_id"])
+        latest_results = {key_id: SearchResult(b'', -float('inf'), None) for key_id in key_ids}
 
         # stage 1: value can be stored in our local cache
         for key_id in key_ids:
             maybe_value, maybe_expiration = self.protocol.storage.get(key_id)
             if maybe_expiration is None:
                 maybe_value, maybe_expiration = self.protocol.cache.get(key_id)
-            if maybe_expiration is not None and maybe_expiration > latest_result[key_id][EXPIRATION]:
-                latest_result[key_id] = maybe_value, maybe_expiration, self.node_id
+            if maybe_expiration is not None and maybe_expiration > latest_results[key_id].expiration:
+                latest_results[key_id] = SearchResult(maybe_value, maybe_expiration, self.node_id)
                 if maybe_expiration >= sufficient_expiration_time:
                     unfinished_key_ids.remove(key_id)
 
@@ -324,9 +326,9 @@ class DHTNode:
             output: Dict[DHTID, Tuple[List[DHTID], bool]] = {}
             for key_id, (maybe_value, maybe_expiration, peers) in response.items():
                 node_to_addr.update(peers)
-                if maybe_expiration is not None and maybe_expiration > latest_result[key_id][EXPIRATION]:
-                    latest_result[key_id] = maybe_value, maybe_expiration, peer
-                should_interrupt = (latest_result[key_id][EXPIRATION] >= sufficient_expiration_time)
+                if maybe_expiration is not None and maybe_expiration > latest_results[key_id].expiration:
+                    latest_results[key_id] = SearchResult(maybe_value, maybe_expiration, peer)
+                should_interrupt = (latest_results[key_id].expiration >= sufficient_expiration_time)
                 output[key_id] = list(peers.keys()), should_interrupt
             return output
 
@@ -337,7 +339,7 @@ class DHTNode:
 
         # stage 3: cache any new results depending on caching parameters
         for key_id, nearest_nodes in nearest_nodes_per_query.items():
-            latest_value_bytes, latest_expiration, latest_node_id = latest_result[key_id]
+            latest_value_bytes, latest_expiration, latest_node_id = latest_results[key_id]
             should_cache = latest_expiration >= sufficient_expiration_time  # if we found a newer value, cache it
             if should_cache and self.cache_locally:
                 self.protocol.cache.store(key_id, latest_value_bytes, latest_expiration)
@@ -355,7 +357,7 @@ class DHTNode:
 
         # stage 4: deserialize data and assemble function output
         find_result: Dict[DHTKey, Tuple[Optional[DHTValue], Optional[DHTExpiration]]] = {}
-        for key_id, (latest_value_bytes, latest_expiration, _) in latest_result.items():
+        for key_id, (latest_value_bytes, latest_expiration, _) in latest_results.items():
             if latest_expiration != -float('inf'):
                 find_result[id_to_original_key[key_id]] = self.serializer.loads(latest_value_bytes), latest_expiration
             else:
