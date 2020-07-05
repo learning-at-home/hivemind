@@ -144,7 +144,7 @@ class DHTNode:
         :param kwargs: additional params passed to traverse_dht
         :returns: an for every query, return nearest peers ordered dict[peer DHTID -> network Endpoint], nearest-first
         """
-        queries = list(queries)
+        queries = tuple(queries)
         k_nearest = k_nearest if k_nearest is not None else self.protocol.bucket_size
         num_workers = num_workers if num_workers is not None else self.num_workers
         beam_size = beam_size if beam_size is not None else max(self.protocol.bucket_size, k_nearest)
