@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import random
-from typing import Optional, Tuple, List, Dict, Collection, Union, Callable, Set, Awaitable
+from typing import Optional, Tuple, List, Dict, Collection, Union, Set
 from warnings import warn
 
 from .protocol import DHTProtocol
