@@ -142,7 +142,7 @@ class DHTNode:
         :param node_to_endpoint: if specified, uses this dict[node_id => endpoint] as initial peers
         :param exclude_self: if True, nearest nodes will not contain self.node_id (default = use local peers)
         :param kwargs: additional params passed to traverse_dht
-        :returns: an for every query, return nearest peers ordered dict[peer DHTID -> network Endpoint], nearest-first
+        :returns: for every query, return nearest peers ordered dict[peer DHTID -> network Endpoint], nearest-first
         """
         queries = tuple(queries)
         k_nearest = k_nearest if k_nearest is not None else self.protocol.bucket_size
