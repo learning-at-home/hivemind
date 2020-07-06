@@ -20,7 +20,7 @@ jobs:
               cd -
             fi
           name: compile-grpc  # remove this command when v1.31 becomes available via pip install -r requirements.txt
-      - run: sudo pip install codecov pytest grpcio-tools tqdm
+      - run: sudo pip install codecov pytest grpcio-tools tqdm scikit-learn
       - python/install-deps
       - python/save-cache
       - run:
