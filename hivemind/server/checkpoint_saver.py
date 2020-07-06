@@ -17,9 +17,10 @@ class CheckpointSaver(threading.Thread):
         self.expert_backends = expert_backends
         self.update_period = update_period
         self.dir = dir
+        self.stop = False
 
     def run(self) -> None:
-        while True:
+        while not self.stop:
             store_experts(self.expert_backends, self.dir)
             time.sleep(self.update_period)
 

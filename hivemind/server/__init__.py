@@ -75,8 +75,10 @@ class Server(threading.Thread):
         for process in self.conn_handlers:
             process.join()
         if self.dht:
+            dht_handler_thread.stop = True
             dht_handler_thread.join()
         if self.checkpoint_saver is not None:
+            self.checkpoint_saver.stop = True
             self.checkpoint_saver.join()
 
     def run_in_background(self, await_ready=True, timeout=None):
