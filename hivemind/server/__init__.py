@@ -3,11 +3,12 @@ import os
 import threading
 from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict, Optional
+
 import torch
 
 from .connection_handler import handle_connection
 from .dht_handler import DHTHandlerThread
-from hivemind.server.checkpoint_saver import CheckpointSaver
+from .checkpoint_saver import CheckpointSaver
 from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend
 
