@@ -13,8 +13,9 @@ class DHTHandlerThread(threading.Thread):
         self.experts = experts
         self.dht = dht
         self.update_period = update_period
+        self.stop = False
 
     def run(self) -> None:
-        while True:
+        while not self.stop:
             self.dht.declare_experts(self.experts.keys(), self.addr, self.port)
             time.sleep(self.update_period)
