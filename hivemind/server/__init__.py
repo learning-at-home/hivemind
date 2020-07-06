@@ -105,7 +105,7 @@ class Server(threading.Thread):
         sock = socket(AF_INET, SOCK_STREAM)
         sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
         sock.bind(('', self.port))
-        sock.listen()
+        sock.listen(1024)
         sock.settimeout(self.update_period)
 
         processes = [mp.context.ForkProcess(
