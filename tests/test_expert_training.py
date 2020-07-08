@@ -14,8 +14,6 @@ from test_utils.run_server import background_server
 
 from sklearn.datasets import load_digits
 
-port =
-
 def test_training(port:int):
     dataset = load_digits()
     X_train, y_train = torch.tensor(dataset['images'], dtype=torch.float), torch.tensor(dataset['target'])
