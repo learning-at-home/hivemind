@@ -17,13 +17,13 @@ import ctypes
 import multiprocessing as mp
 import warnings
 from typing import List, Optional
+
 import uvloop
 
-from .node import DHTNode, DHTID, DHTExpiration
-from .routing import get_dht_time
-
-from ..client import RemoteExpert
-from ..utils import SharedFuture, find_open_port, Endpoint, Port, run_in_background, LOCALHOST
+from hivemind.client import RemoteExpert
+from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
+from hivemind.dht.routing import get_dht_time
+from hivemind.utils import SharedFuture, Endpoint, run_in_background
 
 
 class DHT(mp.Process):

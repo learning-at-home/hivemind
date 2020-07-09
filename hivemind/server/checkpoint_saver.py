@@ -8,7 +8,7 @@ from typing import Dict
 
 import torch
 
-from ..runtime import ExpertBackend
+from hivemind.runtime import ExpertBackend
 
 
 class CheckpointSaver(threading.Thread):

@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-from ..utils import nested_flatten, DUMMY, nested_pack, nested_compare
-from ..utils.grpc import serialize_torch_tensor, deserialize_torch_tensor, runtime_pb2, runtime_grpc
+from hivemind.utils import nested_flatten, DUMMY, nested_pack, nested_compare
+from hivemind.utils.grpc import serialize_torch_tensor, deserialize_torch_tensor, runtime_pb2, runtime_grpc
 
 
 class RemoteExpert(nn.Module):
