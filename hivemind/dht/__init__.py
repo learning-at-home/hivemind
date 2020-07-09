@@ -101,7 +101,7 @@ class DHT(mp.Process):
         """
         future, _future = SharedFuture.make_pair()
         self.pipe.send(('_get_experts', [], dict(uids=uids, expiration=expiration, future=_future)))
-        return [RemoteExpert(**expert_metadata) if expert_metadata else None for expert_metadata in future.result()]
+        return future.result()
 
     def _get_experts(self, uids: List[str], expiration: Optional[DHTExpiration], future: SharedFuture):
         loop = asyncio.get_event_loop()
@@ -112,11 +112,11 @@ class DHT(mp.Process):
         response = asyncio.run_coroutine_threadsafe(
             self.node.get_many(keys, expiration, num_workers=num_workers), loop).result()
 
-        experts: List[Optional[dict]] = [None] * len(uids)
+        experts: List[Optional[RemoteExpert]] = [None] * len(uids)
         for i, (key, uid) in enumerate(zip(keys, uids)):
             maybe_result, maybe_expiration = response[key]
             if maybe_expiration is not None:  # if we found a value
-                experts[i] = dict(uid=uid, host=maybe_result[0], port=maybe_result[1])
+                experts[i] = RemoteExpert(uid=uid, host=maybe_result[0], port=maybe_result[1])
 
         future.set_result(experts)
 
