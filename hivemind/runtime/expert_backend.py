@@ -3,8 +3,8 @@ from typing import Dict, Sequence, Any, Tuple, Union
 import torch
 from torch import nn
 
-from .task_pool import TaskPool
-from ..utils import nested_flatten, nested_pack, nested_compare, BatchTensorDescriptor, DUMMY_BATCH_SIZE, nested_map
+from hivemind.runtime.task_pool import TaskPool
+from hivemind.utils import nested_flatten, nested_pack, nested_compare, BatchTensorDescriptor, DUMMY_BATCH_SIZE, nested_map
 
 
 class ExpertBackend(nn.Module):

@@ -1,16 +1,12 @@
 import multiprocessing as mp
-import os
 import threading
-from socket import socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET, timeout
 from typing import Dict, Optional
 
-import torch
-
-from .connection_handler import handle_connection
-from .dht_handler import DHTHandlerThread
-from .checkpoint_saver import CheckpointSaver
-from ..dht import DHT
-from ..runtime import Runtime, ExpertBackend
+from hivemind.dht import DHT
+from hivemind.runtime import Runtime, ExpertBackend
+from hivemind.server.checkpoint_saver import CheckpointSaver
+from hivemind.server.connection_handler import ConnectionHandler
+from hivemind.server.dht_handler import DHTHandlerThread
 
 
 class Server(threading.Thread):
@@ -37,12 +33,12 @@ class Server(threading.Thread):
     """
 
     def __init__(self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
-                 port: int = 8080, conn_handler_processes: int = 1, update_period: int = 30, start=False,
-                 checkpoint_dir=None, **kwargs):
+                 port: int = 8080, conn_handler_processes: int = 1, update_period: int = 30, start=False, checkpoint_dir=None, **kwargs):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
-        self.conn_handlers = self._create_connection_handlers(conn_handler_processes)
+        self.conn_handlers = [ConnectionHandler(f"{self.addr}:{port}", self.experts)
+                              for _ in range(conn_handler_processes)]
         if checkpoint_dir is not None:
             self.checkpoint_saver = CheckpointSaver(expert_backends, checkpoint_dir, update_period)
         else:
@@ -70,6 +66,9 @@ class Server(threading.Thread):
         for process in self.conn_handlers:
             if not process.is_alive():
                 process.start()
+
+        for process in self.conn_handlers:
+            process.ready.wait()
 
         self.runtime.run()
 
@@ -104,18 +103,6 @@ class Server(threading.Thread):
         """
         return self.runtime.ready  # mp.Event that is true if self is ready to process batches
 
-    def _create_connection_handlers(self, num_handlers):
-        sock = socket(AF_INET, SOCK_STREAM)
-        sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-        sock.bind(('', self.port))
-        sock.listen(1024)
-        sock.settimeout(self.update_period)
-
-        processes = [mp.context.ForkProcess(
-            target=socket_loop, name=f"socket_loop-{i}", args=(sock, self.experts), daemon=True)
-            for i in range(num_handlers)]
-        return processes
-
     def shutdown(self):
         """
         Gracefully terminate a hivemind server, process-safe.
@@ -130,17 +117,3 @@ class Server(threading.Thread):
             self.dht.shutdown()
 
         self.runtime.shutdown()
-
-
-def socket_loop(sock, experts):
-    """ catch connections, send tasks to processing, respond with results """
-    torch.set_num_threads(1)
-    print(f'Spawned connection handler pid={os.getpid()}')
-    while True:
-        try:
-            handle_connection(sock.accept(), experts)
-        except KeyboardInterrupt as e:
-            print(f'Socket loop has caught {type(e)}, exiting')
-            break
-        except (timeout, BrokenPipeError, ConnectionResetError, NotImplementedError):
-            continue

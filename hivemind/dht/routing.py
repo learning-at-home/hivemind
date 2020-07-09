@@ -2,16 +2,18 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import os
 import random
-
 import time
-import heapq
 from collections.abc import Iterable
 from itertools import chain
-from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence, Iterator
+from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
 
-from ..utils import Endpoint, PickleSerializer
+from hivemind.utils import Endpoint, PickleSerializer
+
+DHTKey, DHTValue, DHTExpiration, BinaryDHTID, BinaryDHTValue, = Any, Any, float, bytes, bytes  # flavour types
+get_dht_time = time.time  # time used by all dht functionality. You can replace this with any infrastructure-wide time
 
 
 class RoutingTable:
@@ -160,6 +162,7 @@ class KBucket:
     A bucket containing up to :size: of DHTIDs in [lower, upper) semi-interval.
     Maps DHT node ids to their endpoints (hostname, addr)
     """
+
     def __init__(self, lower: int, upper: int, size: int, depth: int = 0):
         assert upper - lower == 2 ** (DHTID.HASH_NBYTES * 8 - depth)
         self.lower, self.upper, self.size, self.depth = lower, upper, size, depth
@@ -288,7 +291,3 @@ class DHTID(int):
 
     def __bytes__(self):
         return self.to_bytes()
-
-
-DHTKey, DHTValue, DHTExpiration, BinaryDHTID, BinaryDHTValue, = Any, Any, float, bytes, bytes  # flavour types
-get_dht_time = time.time  # time used by all dht functionality. You can replace this with any infrastructure-wide time

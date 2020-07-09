@@ -6,9 +6,9 @@ import time
 
 import torch
 from test_utils import layers, print_device_info, increase_file_limit
-from hivemind import find_open_port
 
 import hivemind
+from hivemind import find_open_port
 
 
 def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
@@ -142,7 +142,8 @@ if __name__ == "__main__":
         benchmark_throughput(backprop=False, num_clients=512, batch_size=512,
                              max_batch_size=8192, num_batches_per_client=args.num_batches_per_client)
     elif args.preset == 'minimalistic':
-        benchmark_throughput(num_experts=1, num_clients=1, num_handlers=1)
+        benchmark_throughput(num_experts=1, num_clients=1, num_handlers=1,
+                             num_batches_per_client=args.num_batches_per_client)
     elif args.preset == 'nop':
         benchmark_throughput(expert_cls='nop', backprop=False, num_batches_per_client=args.num_batches_per_client)
     else:

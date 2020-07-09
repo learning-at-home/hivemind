@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+
+service ConnectionHandler {
+  // Listens to incoming requests for expert computation
+  rpc info(ExpertUID) returns (ExpertInfo);
+  rpc forward(ExpertRequest) returns (ExpertResponse);
+  rpc backward(ExpertRequest) returns (ExpertResponse);
+}
+
+
+message ExpertUID {
+  string uid = 1;
+}
+
+message ExpertInfo {
+  bytes serialized_info = 1;
+}
+
+message ExpertRequest {
+  string uid = 1;
+  repeated Tensor tensors = 2;
+}
+
+message ExpertResponse {
+  repeated Tensor tensors = 2;
+}
+
+message Tensor {
+  bytes buffer = 1;
+  repeated uint32 size = 2;
+  bool requires_grad = 3;
+  string dtype = 4;
+}
+
