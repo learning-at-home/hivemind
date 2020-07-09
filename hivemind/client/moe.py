@@ -250,7 +250,8 @@ class _RemoteMoECall(torch.autograd.Function):
             for grad_out, stacked_avive_out in zip(grad_outputs_flat, stacked_alive_outputs)
         ))
         softmax_jacobian = torch.diagflat(survived_probas) - torch.ger(survived_probas, survived_probas)
-        grad_wrt_logits = grad_wrt_probs @ softmax_jacobian
+        grad_wrt_survived_logits = grad_wrt_probs @ softmax_jacobian
+        grad_wrt_logits = torch.zeros_like(expert_logits).scatter(0, backward_survivors_ix, grad_wrt_survived_logits)
 
         return (grad_wrt_logits, None, None, None, None, None, None, None, *flat_grad_inputs)
 
