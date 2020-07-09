@@ -11,6 +11,7 @@ from test_utils.run_server import background_server
 
 from sklearn.datasets import load_digits
 
+
 def test_training(port:int):
     dataset = load_digits()
     X_train, y_train = torch.tensor(dataset['images'], dtype=torch.float), torch.tensor(dataset['target'])
@@ -56,9 +57,10 @@ def test_training(port:int):
         accuracy = np.count_nonzero(train_pred == y_train)/y_train.shape[0]
         return accuracy
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=1376, required=False)
-    args = vars(parser.parse_args())
+    args = parser.parse_args()
     accuracy = test_training(args.port)
     assert accuracy >= 0.9, "too small accuracy: {accuracy}"
