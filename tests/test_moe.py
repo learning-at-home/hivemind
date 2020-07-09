@@ -6,7 +6,7 @@ from test_utils.run_server import background_server
 def test_remote_module_call():
     """ Check that remote_module_call returns correct outputs and gradients if called directly """
     num_experts = 8
-    k_min = 2
+    k_min = 1
     timeout_after_k_min = None
     backward_k_min = 1
     timeout_total = None
