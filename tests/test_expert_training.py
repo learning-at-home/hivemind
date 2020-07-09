@@ -12,7 +12,7 @@ from test_utils.run_server import background_server
 from sklearn.datasets import load_digits
 
 
-def test_training(port: int):
+def test_training(port: int, epochs: int):
     dataset = load_digits()
     X_train, y_train = torch.tensor(dataset['data'], dtype=torch.float), torch.tensor(dataset['target'])
 
@@ -40,7 +40,7 @@ def test_training(port: int):
 
         train_size = y_train.shape[0]
 
-        for epoch in range(11):
+        for epoch in range(epochs):
             permutation = np.random.permutation(np.arange(train_size))
             X_train = X_train[permutation]
             y_train = y_train[permutation]
@@ -61,7 +61,8 @@ def test_training(port: int):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=1376, required=False)
+    parser.add_argument('--epochs', type=int, default=12, required=False)
     args = parser.parse_args()
-    accuracy = test_training(args.port)
+    accuracy = test_training(args.port, args.epochs)
     assert accuracy >= 0.9, f"too small accuracy: {accuracy}"
     print(f"Success, accuracy: {accuracy}!")
