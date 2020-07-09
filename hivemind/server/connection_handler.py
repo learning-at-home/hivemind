@@ -24,12 +24,11 @@ class ConnectionHandler(mp.Process):
     :note: ConnectionHandler is designed so as to allow using multiple handler processes for the same port.
     :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
     :param experts: a dict [UID -> ExpertBackend] with all active experts
-    :param max_message_length: maximum size of incoming requests and responses (in bytes)
     """
 
-    def __init__(self, listen_on: Endpoint, experts: Dict[str, ExpertBackend], max_message_length=100 * 1024 * 1024):
+    def __init__(self, listen_on: Endpoint, experts: Dict[str, ExpertBackend]):
         super().__init__()
-        self.listen_on, self.experts, self.max_message_length = listen_on, experts, max_message_length
+        self.listen_on, self.experts = listen_on, experts
         self.ready = mp.Event()
 
     def run(self):
@@ -41,10 +40,10 @@ class ConnectionHandler(mp.Process):
             grpc.experimental.aio.init_grpc_aio()
             logger.debug(f'Starting, pid {os.getpid()}')
             server = grpc.experimental.aio.server(options=[
-                                                      ('grpc.so_reuseport', 1),
-                                                      ('grpc.max_send_message_length', self.max_message_length),
-                                                      ('grpc.max_receive_message_length', self.max_message_length)
-                                                  ])
+                ('grpc.so_reuseport', 1),
+                ('grpc.max_send_message_length', -1),
+                ('grpc.max_receive_message_length', -1)
+            ])
             runtime_grpc.add_ConnectionHandlerServicer_to_server(self, server)
 
             found_port = server.add_insecure_port(self.listen_on)

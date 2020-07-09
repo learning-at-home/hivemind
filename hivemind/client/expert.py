@@ -1,4 +1,3 @@
-import os
 import pickle
 from typing import Tuple, Optional
 
@@ -8,12 +7,8 @@ import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-from ..utils import nested_flatten, DUMMY, nested_pack, nested_compare, compile_grpc, serialize_torch_tensor, \
-    deserialize_torch_tensor
-
-with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'server',
-                       'connection_handler.proto')) as f_proto:
-    runtime_pb2, runtime_grpc = compile_grpc(f_proto.read())
+from ..utils import nested_flatten, DUMMY, nested_pack, nested_compare
+from ..utils.grpc import serialize_torch_tensor, deserialize_torch_tensor, runtime_pb2, runtime_grpc
 
 
 class RemoteExpert(nn.Module):
@@ -28,7 +23,6 @@ class RemoteExpert(nn.Module):
     :param host: hostname where server operates
     :param port: port to which server listens
     """
-    max_message_length = 100 * 1024 * 1024
 
     def __init__(self, uid, host='127.0.0.1', port=8080):
         super().__init__()
@@ -40,8 +34,8 @@ class RemoteExpert(nn.Module):
     def stub(self):
         if self._channel is None:
             self._channel = grpc.insecure_channel(f'{self.host}:{self.port}', options=[
-                ('grpc.max_send_message_length', self.max_message_length),
-                ('grpc.max_receive_message_length', self.max_message_length)
+                ('grpc.max_send_message_length', -1),
+                ('grpc.max_receive_message_length', -1)
             ])
         if self._stub is None:
             self._stub = runtime_grpc.ConnectionHandlerStub(self._channel)
