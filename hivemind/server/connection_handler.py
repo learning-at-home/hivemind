@@ -41,10 +41,10 @@ class ConnectionHandler(mp.Process):
             grpc.experimental.aio.init_grpc_aio()
             logger.debug(f'Starting, pid {os.getpid()}')
             server = grpc.experimental.aio.server(options=[
-                                                      ('grpc.so_reuseport', 1),  # TODO ('grpc.optimization_target', 'throughput')
-                                                      ('grpc.max_send_message_length', self.max_message_length),
-                                                      ('grpc.max_receive_message_length', self.max_message_length)
-                                                  ])
+                ('grpc.so_reuseport', 1), ('grpc.optimization_target', 'throughput'),
+                ('grpc.max_send_message_length', self.max_message_length),
+                ('grpc.max_receive_message_length', self.max_message_length)
+            ])
             runtime_grpc.add_ConnectionHandlerServicer_to_server(self, server)
 
             found_port = server.add_insecure_port(self.listen_on)
