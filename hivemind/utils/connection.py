@@ -71,28 +71,3 @@ def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_
             return sock.getsockname()[1]
     except Exception as e:
         raise e
-
-
-@contextlib.contextmanager
-def reserve_port(port: Optional[int] = None, params=(socket.AF_INET6, socket.SOCK_STREAM)):
-    """ Find open port and reserve it for user's listener. Based on gGPC examples. """
-    with closing(socket.socket(*params)) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setsockopt(socket.SOL_SOCKET, get_so_reuseport(), 1)
-        if sock.getsockopt(socket.SOL_SOCKET, get_so_reuseport()) == 0:
-            raise RuntimeError("Failed to set SO_REUSEPORT.")
-        sock.bind(('', port or 0))
-        yield sock.getsockname()[1]
-
-
-def get_so_reuseport():
-    """ A generic function that returns SO_REUSEPORT code even on older linux platforms """
-    try:
-        return socket.SO_REUSEPORT
-    except AttributeError:
-        if platform.system() == "Linux":
-            major, minor, *_ = platform.release().split(".")
-            if (int(major), int(minor)) > (3, 9):
-                # The interpreter must have been compiled on Linux <3.9.
-                return 15
-    raise RuntimeError("Kernel does not support SO_REUSEPORT. Please upgrade to linux >3.9 or upgrading Mac OS")

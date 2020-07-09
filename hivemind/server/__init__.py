@@ -7,7 +7,6 @@ from .connection_handler import ConnectionHandler
 from .dht_handler import DHTHandlerThread
 from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend
-from ..utils import reserve_port
 
 ExpertData = namedtuple('ExpertData', ('forward_pool', 'backward_pool', 'metadata'))
 
@@ -65,9 +64,8 @@ class Server(threading.Thread):
                                                   addr=self.addr, port=self.port, update_period=self.update_period)
             dht_handler_thread.start()
 
-        with reserve_port(self.port):
-            for connection_handler in self.conn_handlers:
-                connection_handler.start()
+        for connection_handler in self.conn_handlers:
+            connection_handler.start()
 
         self.runtime.run()
 
