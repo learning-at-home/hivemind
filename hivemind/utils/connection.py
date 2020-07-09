@@ -63,7 +63,6 @@ class Connection(AbstractContextManager):
 
 def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):
     """ Finds a tcp port that can be occupied with a socket with *params and use *opt options """
-    #TODO(issue #54) remove in favor of reserve_port!
     try:
         with closing(socket.socket(*params)) as sock:
             sock.bind(('', 0))
