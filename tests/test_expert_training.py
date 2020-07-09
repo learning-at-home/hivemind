@@ -12,9 +12,9 @@ from test_utils.run_server import background_server
 from sklearn.datasets import load_digits
 
 
-def test_training(port:int):
+def test_training(port: int):
     dataset = load_digits()
-    X_train, y_train = torch.tensor(dataset['images'], dtype=torch.float), torch.tensor(dataset['target'])
+    X_train, y_train = torch.tensor(dataset['data'], dtype=torch.float), torch.tensor(dataset['target'])
 
     class Model(nn.Module):
         def __init__(self, expert1, expert2):
@@ -63,4 +63,5 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=1376, required=False)
     args = parser.parse_args()
     accuracy = test_training(args.port)
-    assert accuracy >= 0.9, "too small accuracy: {accuracy}"
+    assert accuracy >= 0.9, f"too small accuracy: {accuracy}"
+    print(f"Success, accuracy: {accuracy}!")
