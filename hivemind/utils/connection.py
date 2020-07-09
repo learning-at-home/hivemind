@@ -1,6 +1,8 @@
+import contextlib
+import platform
 import socket
 from contextlib import AbstractContextManager, closing
-from typing import Tuple
+from typing import Tuple, Optional
 
 Hostname, Port = str, int  # flavour types
 Endpoint = str  # e.g. 1.2.3.4:1337 or [2a21:6с8:b192:2105]:8888, https://networkengineering.stackexchange.com/a/9435
@@ -8,6 +10,7 @@ LOCALHOST = '127.0.0.1'
 
 
 class Connection(AbstractContextManager):
+    #TODO(issue #54) remove in favor of grpc
     header_size = 4  # number of characters in all headers
     payload_length_size = 8  # number of bytes used to encode payload length
 
@@ -60,6 +63,7 @@ class Connection(AbstractContextManager):
 
 def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):
     """ Finds a tcp port that can be occupied with a socket with *params and use *opt options """
+    #TODO(issue #54) remove in favor of reserve_port!
     try:
         with closing(socket.socket(*params)) as sock:
             sock.bind(('', 0))
@@ -67,3 +71,28 @@ def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_
             return sock.getsockname()[1]
     except Exception as e:
         raise e
+
+
+@contextlib.contextmanager
+def reserve_port(port: Optional[int] = None, params=(socket.AF_INET6, socket.SOCK_STREAM)):
+    """ Find open port and reserve it for user's listener. Based on gGPC examples. """
+    with closing(socket.socket(*params)) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, get_so_reuseport(), 1)
+        if sock.getsockopt(socket.SOL_SOCKET, get_so_reuseport()) == 0:
+            raise RuntimeError("Failed to set SO_REUSEPORT.")
+        sock.bind(('', port or 0))
+        yield sock.getsockname()[1]
+
+
+def get_so_reuseport():
+    """ A generic function that returns SO_REUSEPORT code even on older linux platforms """
+    try:
+        return socket.SO_REUSEPORT
+    except AttributeError:
+        if platform.system() == "Linux":
+            major, minor, *_ = platform.release().split(".")
+            if (int(major), int(minor)) > (3, 9):
+                # The interpreter must have been compiled on Linux <3.9.
+                return 15
+    raise RuntimeError("Kernel does not support SO_REUSEPORT. Please upgrade to linux >3.9 or upgrading Mac OS")
