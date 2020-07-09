@@ -70,7 +70,7 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
     experts = {}
     for i in range(num_experts):
         expert = name_to_block[expert_cls](hidden_dim)
-        opt = torch.optim.SGD(expert.parameters(), 0.0) if no_optimizer else torch.optim.Adam(expert.parameters())
+        opt = torch.optim.SGD(expert.parameters(), 0.0 if no_optimizer else 0.05)
         expert_uid = f'{expert_prefix}{UID_DELIMETER}{i + expert_offset}'
         experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
                                                      args_schema=args_schema,
