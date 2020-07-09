@@ -27,7 +27,7 @@ jobs:
           command: sudo python setup.py develop
           name: setup
       - run:
-          command: for test_file in test*.py; do pytest $test_file --full-trace; done
+          command: for test_file in tests/test*.py; do pytest $test_file --full-trace; done
           name: tests
       - run:
           command: python tests/benchmark_throughput.py --preset minimalistic
