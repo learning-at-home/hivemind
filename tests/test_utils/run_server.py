@@ -95,6 +95,7 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs):
     pipe, runners_pipe = mp.Pipe(duplex=True)
     runner = mp.get_context("spawn").Process(
         target=_server_runner, args=(runners_pipe, *args), kwargs=dict(verbose=verbose, **kwargs))
+
     try:
         runner.start()
         yield pipe.recv()  # once the server is ready, runner will send us a tuple(hostname, port, dht port)
