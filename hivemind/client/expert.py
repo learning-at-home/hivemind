@@ -47,8 +47,8 @@ class RemoteExpert(nn.Module):
         return self._stub
 
     def __del__(self):
-        if self.channel is not None:
-            self.channel.close()
+        if self._channel is not None:
+            self._channel.close()
 
     def forward(self, *args, **kwargs):
         """ Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd. """
