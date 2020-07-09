@@ -1,4 +1,6 @@
+import io
 import resource
+import sys
 from contextlib import contextmanager
 import multiprocessing as mp
 import argparse
@@ -95,7 +97,6 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs):
     pipe, runners_pipe = mp.Pipe(duplex=True)
     runner = mp.get_context("spawn").Process(
         target=_server_runner, args=(runners_pipe, *args), kwargs=dict(verbose=verbose, **kwargs))
-
     try:
         runner.start()
         yield pipe.recv()  # once the server is ready, runner will send us a tuple(hostname, port, dht port)
@@ -112,6 +113,7 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs):
 
 
 def _server_runner(pipe, *args, verbose, **kwargs):
+    sys.stdout = io.TextIOWrapper(open(sys.stdout.fileno(), 'wb', 0), write_through=True)
     server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
     try:
         dht_port = server.dht.port if server.dht is not None else None
