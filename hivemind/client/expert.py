@@ -30,7 +30,6 @@ class RemoteExpert(nn.Module):
     """
     max_message_length = 100 * 1024 * 1024
 
-
     def __init__(self, uid, host='127.0.0.1', port=8080):
         super().__init__()
         self.uid, self.host, self.port = uid, host, port
