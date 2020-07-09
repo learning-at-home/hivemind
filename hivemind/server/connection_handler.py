@@ -3,16 +3,13 @@ import multiprocessing as mp
 import os
 import pickle
 from typing import Dict
-import torch
 
 import grpc.experimental.aio
+import torch
 import uvloop
 
 from hivemind.runtime.expert_backend import ExpertBackend
-from hivemind.utils import compile_grpc, get_logger, serialize_torch_tensor, deserialize_torch_tensor, Endpoint
-
-with open(os.path.join(os.path.dirname(__file__), 'connection_handler.proto')) as f_proto:
-    runtime_pb2, runtime_grpc = compile_grpc(f_proto.read())
+from hivemind.utils import get_logger, serialize_torch_tensor, deserialize_torch_tensor, Endpoint, runtime_pb2, runtime_grpc
 
 logger = get_logger(__name__)
 

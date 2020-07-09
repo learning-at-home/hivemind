@@ -11,7 +11,6 @@ from collections import namedtuple
 from concurrent.futures import Future
 from queue import Empty
 from typing import List, Tuple, Dict, Any, Generator
-import asyncio
 
 import torch
 
@@ -127,7 +126,6 @@ class TaskPool(TaskPoolBase):
 
     def run(self, *args, **kwargs):
         torch.set_num_threads(1)
-        torch.set_num_interop_threads(1)
         logger.info(f'{self.uid} starting, pid={os.getpid()}')
         pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
@@ -216,4 +214,3 @@ class TaskPool(TaskPoolBase):
     def get_task_size(self, task: Task) -> int:
         """ compute task processing complexity (used for batching); defaults to batch size """
         return len(task.args[0]) if task.args else 1
-

@@ -6,14 +6,13 @@ import time
 
 import torch
 from test_utils import layers, print_device_info, increase_file_limit
-from hivemind import find_open_port
 
 import hivemind
+from hivemind import find_open_port
 
 
 def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
     torch.set_num_threads(1)
-    torch.set_num_interop_threads(1)
     can_start.wait()
     experts = [hivemind.RemoteExpert(f"expert{i}", port=port) for i in range(num_experts)]
 
