@@ -63,16 +63,17 @@ class Server(threading.Thread):
         if self.checkpoint_saver is not None:
             self.checkpoint_saver.start()
 
-        for connection_handler in self.conn_handlers:
-            connection_handler.start()
+        for process in self.conn_handlers:
+            if not process.is_alive():
+                process.start()
 
-        for connection_handler in self.conn_handlers:
-            connection_handler.ready.wait()
+        for process in self.conn_handlers:
+            process.ready.wait()
 
         self.runtime.run()
 
-        for conn_handler in self.conn_handlers:
-            conn_handler.join()
+        for process in self.conn_handlers:
+            process.join()
         if self.dht:
             dht_handler_thread.stop = True
             dht_handler_thread.join()
@@ -109,8 +110,8 @@ class Server(threading.Thread):
         If you did already cause a zombie outbreak, your only option is to kill them with -9 (SIGKILL).
         """
         self.ready.clear()
-        for conn_handler in self.conn_handlers:
-            conn_handler.terminate()
+        for process in self.conn_handlers:
+            process.terminate()
 
         if self.dht is not None:
             self.dht.shutdown()
