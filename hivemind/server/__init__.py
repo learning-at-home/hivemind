@@ -5,6 +5,7 @@ from collections import namedtuple
 
 from .connection_handler import ConnectionHandler
 from .dht_handler import DHTHandlerThread
+from .checkpoint_saver import CheckpointSaver
 from ..dht import DHT
 from ..runtime import Runtime, ExpertBackend
 
@@ -37,15 +38,17 @@ class Server(threading.Thread):
 
     def __init__(self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
                  port: int = 8080, conn_handler_processes: int = 1, update_period: int = 30, start=False,
-                 max_message_length: int = 100 * 1024 * 1024, **kwargs):
+                 max_message_length: int = 100 * 1024 * 1024, checkpoint_dir=None, **kwargs):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.max_message_length = max_message_length
         self.addr, self.port = addr, port
-
         self.conn_handlers = [ConnectionHandler(f"{self.addr}:{port}", self.experts, self.max_message_length)
                               for _ in range(conn_handler_processes)]
-
+        if checkpoint_dir is not None:
+            self.checkpoint_saver = CheckpointSaver(expert_backends, checkpoint_dir, update_period)
+        else:
+            self.checkpoint_saver = None
         self.runtime = Runtime(self.experts, **kwargs)
 
         if start:
@@ -63,6 +66,8 @@ class Server(threading.Thread):
             dht_handler_thread = DHTHandlerThread(experts=self.experts, dht=self.dht,
                                                   addr=self.addr, port=self.port, update_period=self.update_period)
             dht_handler_thread.start()
+        if self.checkpoint_saver is not None:
+            self.checkpoint_saver.start()
 
         for connection_handler in self.conn_handlers:
             connection_handler.start()
@@ -75,7 +80,11 @@ class Server(threading.Thread):
         for conn_handler in self.conn_handlers:
             conn_handler.join()
         if self.dht:
+            dht_handler_thread.stop = True
             dht_handler_thread.join()
+        if self.checkpoint_saver is not None:
+            self.checkpoint_saver.stop = True
+            self.checkpoint_saver.join()
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
