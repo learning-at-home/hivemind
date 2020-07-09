@@ -1,6 +1,8 @@
+import contextlib
+import platform
 import socket
 from contextlib import AbstractContextManager, closing
-from typing import Tuple
+from typing import Tuple, Optional
 
 Hostname, Port = str, int  # flavour types
 Endpoint = str  # e.g. 1.2.3.4:1337 or [2a21:6с8:b192:2105]:8888, https://networkengineering.stackexchange.com/a/9435
@@ -8,6 +10,7 @@ LOCALHOST = '127.0.0.1'
 
 
 class Connection(AbstractContextManager):
+    #TODO(issue #54) remove in favor of grpc
     header_size = 4  # number of characters in all headers
     payload_length_size = 8  # number of bytes used to encode payload length
 

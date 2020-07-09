@@ -143,7 +143,8 @@ if __name__ == "__main__":
         benchmark_throughput(backprop=False, num_clients=512, batch_size=512,
                              max_batch_size=8192, num_batches_per_client=args.num_batches_per_client)
     elif args.preset == 'minimalistic':
-        benchmark_throughput(num_experts=1, num_clients=1, num_handlers=1)
+        benchmark_throughput(num_experts=1, num_clients=1, num_handlers=1,
+                             num_batches_per_client=args.num_batches_per_client)
     elif args.preset == 'nop':
         benchmark_throughput(expert_cls='nop', backprop=False, num_batches_per_client=args.num_batches_per_client)
     else:

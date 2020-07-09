@@ -6,7 +6,7 @@ from collections import namedtuple
 from .connection_handler import ConnectionHandler
 from .dht_handler import DHTHandlerThread
 from ..dht import DHT
-from ..runtime import Runtime, ExpertBackend, RemotePoolInterface
+from ..runtime import Runtime, ExpertBackend
 
 ExpertData = namedtuple('ExpertData', ('forward_pool', 'backward_pool', 'metadata'))
 
@@ -30,22 +30,22 @@ class Server(threading.Thread):
         if too small for normal functioning, we recommend 4 handlers per expert backend.
     :param update_period: how often will server attempt to publish its state (i.e. experts) to the DHT;
         if dht is None, this parameter is ignored.
+    :param max_message_length: maximum length of incoming requests and responses (in bytes)
     :param start: if True, the server will immediately start as a background thread and returns control after server
         is ready (see .ready below)
     """
 
     def __init__(self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
                  port: int = 8080, conn_handler_processes: int = 1, update_period: int = 30, start=False,
-                 **kwargs):
+                 max_message_length: int = 100 * 1024 * 1024, **kwargs):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
+        self.max_message_length = max_message_length
         self.addr, self.port = addr, port
 
-        data_for_expert = {uid: ExpertData(RemotePoolInterface(expert.forward_pool),
-                                           RemotePoolInterface(expert.backward_pool), expert.get_info())
-                           for uid, expert in self.experts.items()}
+        self.conn_handlers = [ConnectionHandler(f"{self.addr}:{port}", self.experts, self.max_message_length)
+                              for _ in range(conn_handler_processes)]
 
-        self.conn_handler = ConnectionHandler(self.addr, self.port, data_for_expert)
         self.runtime = Runtime(self.experts, **kwargs)
 
         if start:
@@ -64,11 +64,16 @@ class Server(threading.Thread):
                                                   addr=self.addr, port=self.port, update_period=self.update_period)
             dht_handler_thread.start()
 
-        self.conn_handler.start()
+        for connection_handler in self.conn_handlers:
+            connection_handler.start()
+
+        for connection_handler in self.conn_handlers:
+            connection_handler.ready.wait()
 
         self.runtime.run()
 
-        self.conn_handler.join()
+        for conn_handler in self.conn_handlers:
+            conn_handler.join()
         if self.dht:
             dht_handler_thread.join()
 
@@ -101,8 +106,8 @@ class Server(threading.Thread):
         If you did already cause a zombie outbreak, your only option is to kill them with -9 (SIGKILL).
         """
         self.ready.clear()
-
-        self.conn_handler.terminate()
+        for conn_handler in self.conn_handlers:
+            conn_handler.terminate()
 
         if self.dht is not None:
             self.dht.shutdown()
