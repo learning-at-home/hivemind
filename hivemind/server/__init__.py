@@ -70,7 +70,7 @@ class Server(threading.Thread):
         self.runtime.run()
 
         for conn_handler in self.conn_handlers:
-            conn_handler.terminate()
+            conn_handler.join()
         if self.dht:
             dht_handler_thread.join()
 
