@@ -28,6 +28,8 @@ class RemoteExpert(nn.Module):
     :param host: hostname where server operates
     :param port: port to which server listens
     """
+    max_message_length = 100 * 1024 * 1024
+
 
     def __init__(self, uid, host='127.0.0.1', port=8080):
         super().__init__()
@@ -39,8 +41,8 @@ class RemoteExpert(nn.Module):
     def stub(self):
         if self._channel is None:
             self._channel = grpc.insecure_channel(f'{self.host}:{self.port}', options=[
-                ('grpc.max_send_message_length', 50 * 1024 * 1024),
-                ('grpc.max_receive_message_length', 50 * 1024 * 1024)
+                ('grpc.max_send_message_length', self.max_message_length),
+                ('grpc.max_receive_message_length', self.max_message_length)
             ])
         if self._stub is None:
             self._stub = runtime_grpc.ConnectionHandlerStub(self._channel)
