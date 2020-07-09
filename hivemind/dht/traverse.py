@@ -2,9 +2,9 @@
 import asyncio
 import heapq
 from collections import Counter
-from warnings import warn
 from typing import Dict, Awaitable, Callable, Any, Tuple, List, Set, Collection, Optional
-from .routing import DHTID
+
+from hivemind.dht.routing import DHTID
 
 ROOT = 0  # alias for heap root
 
@@ -107,13 +107,13 @@ async def traverse_dht(
     if len(queries) == 0:
         return {}, dict(visited_nodes)
 
-    unfinished_queries = set(queries)                             # all queries that haven't triggered finish_search yet
-    candidate_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}    # heap: unvisited nodes, ordered nearest-to-farthest
-    nearest_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}      # heap: top-k nearest nodes, farthest-to-nearest
-    known_nodes: Dict[DHTID, Set[DHTID]] = {}                     # all nodes ever added to the heap (for deduplication)
+    unfinished_queries = set(queries)  # all queries that haven't triggered finish_search yet
+    candidate_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}  # heap: unvisited nodes, ordered nearest-to-farthest
+    nearest_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}  # heap: top-k nearest nodes, farthest-to-nearest
+    known_nodes: Dict[DHTID, Set[DHTID]] = {}  # all nodes ever added to the heap (for deduplication)
     visited_nodes: Dict[DHTID, Set[DHTID]] = dict(visited_nodes)  # where we requested get_neighbors for a given query
-    pending_tasks = set()                                         # all active tasks (get_neighbors and found_callback)
-    active_workers = Counter({q: 0 for q in queries})             # count workers that search for this query
+    pending_tasks = set()  # all active tasks (get_neighbors and found_callback)
+    active_workers = Counter({q: 0 for q in queries})  # count workers that search for this query
 
     search_finished_event = asyncio.Event()  # used to immediately stop all workers when the search is finished
     heap_updated_event = asyncio.Event()  # if a worker has no nodes to explore, it will await other workers
@@ -228,5 +228,3 @@ async def traverse_dht(
         for query in queries
     }
     return nearest_neighbors_per_query, visited_nodes
-
-

@@ -3,7 +3,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed, Timeout
 import time
 from typing import Optional, List
 
-GLOBAL_EXECUTOR = ThreadPoolExecutor(max_workers=os.environ.get("HIVEMIND_THREADS", float('inf')))
+GLOBAL_EXECUTOR = ThreadPoolExecutor(max_workers=os.environ.get("HIVEMIND_THREADS", 1000))
 
 
 def run_in_background(func: callable, *args, **kwargs) -> Future:
@@ -14,9 +14,11 @@ def run_in_background(func: callable, *args, **kwargs) -> Future:
 
 def run_forever(func: callable, *args, **kwargs):
     """ A function that runs a :func: in background forever. Returns a future that catches exceptions """
+
     def repeat():
         while True:
             func(*args, **kwargs)
+
     return run_in_background(repeat)
 
 
@@ -65,4 +67,3 @@ def run_and_await_k(jobs: List[callable], k: int,
             future.cancel()
             outputs[index] = future.result() if not future.exception() else future.exception()
     return outputs
-

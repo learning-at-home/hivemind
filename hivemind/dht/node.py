@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 import asyncio
 import random
 from collections import namedtuple
 from typing import Optional, Tuple, List, Dict, Collection, Union, Set
 from warnings import warn
 
-from .protocol import DHTProtocol
-from .routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue
-from .traverse import traverse_dht
-from ..utils import Endpoint, LOCALHOST, MSGPackSerializer
+from hivemind.dht.protocol import DHTProtocol
+from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue
+from hivemind.dht.traverse import traverse_dht
+from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer
 
 
 class DHTNode:

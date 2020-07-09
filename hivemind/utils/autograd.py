@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.autograd.function
 
-from .threading import run_in_background
+from hivemind.utils.threading import run_in_background
 
 
 class EmulatedAutogradContext(torch.autograd.function._ContextMethodMixin):
@@ -19,6 +19,7 @@ class EmulatedAutogradContext(torch.autograd.function._ContextMethodMixin):
     such as running several parallel backwards or transferring backward to a separate device.
     This class is not tested outside its use cases in RemoteMixtureOfExperts and we do not recommend using it elsewhere.
     """
+
     @property
     def saved_tensors(self):
         return tuple(self.to_save)
@@ -71,6 +72,7 @@ class _ParallelApplyFunction(torch.autograd.Function):
     Please do not call this function directly. Use apply_with_parallel_backward instead.
     Unlike default pytorch behavior, the backward pass for each function will also happen in parallel.
     """
+
     @staticmethod
     def forward(ctx, func: torch.autograd.Function, num_calls: int, num_args_per_call: int,
                 output_strides_ph: Future, *args_flat) -> Tuple[torch.Tensor, ...]:

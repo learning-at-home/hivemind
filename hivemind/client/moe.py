@@ -1,16 +1,14 @@
-import multiprocessing as mp
-import multiprocessing.pool
 from functools import partial
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-from .expert import RemoteExpert, _RemoteModuleCall
-from ..utils import nested_map, check_numpy, run_and_await_k, nested_pack, nested_flatten, DUMMY, run_in_background
-from ..utils import run_isolated_forward, EmulatedAutogradContext, run_isolated_backward, map_with_parallel_backward
+from hivemind.client.expert import RemoteExpert, _RemoteModuleCall
+from hivemind.utils import nested_map, run_and_await_k, nested_pack, nested_flatten, DUMMY, run_in_background, \
+    run_isolated_forward, EmulatedAutogradContext, run_isolated_backward, map_with_parallel_backward
 
 
 class RemoteMixtureOfExperts(nn.Module):
@@ -37,6 +35,7 @@ class RemoteMixtureOfExperts(nn.Module):
      allow_broadcasting=True will flatten first d-1 input dimensions, apply RemoteMixtureOfExperts and un-flatten again
      allow_broadcasting=False will raise an error
     """
+
     def __init__(self, *, in_features, grid_size: Tuple[int], dht, k_best, k_min=1,
                  forward_timeout=None, timeout_after_k_min=1.0, backward_k_min=1, backward_timeout=None,
                  uid_prefix='', expert_padding=None, allow_broadcasting=True):
@@ -107,7 +106,7 @@ class RemoteMixtureOfExperts(nn.Module):
         delimeters = np.array(self.dht.UID_DELIMETER)[None, None, None]  # pre-compute numpy array for fast concat
 
         for dim_index, dim_scores in enumerate(grid_scores):
-            dim_scores = check_numpy(dim_scores)
+            dim_scores = dim_scores.detach().cpu().numpy()
             assert dim_scores.shape[-1] == self.grid_size[dim_index]
 
             # create all possible successsors from current beam
@@ -194,6 +193,7 @@ class _RemoteMoECall(torch.autograd.Function):
     This function that can recover from individual failures during forward and/or backward passes.
     For user-friendly version of this function, use RemoteMixtureOfExperts module.
     """
+
     @classmethod
     def forward(cls, ctx, expert_logits: torch.Tensor, experts: List[RemoteExpert],
                 k_min: int, timeout_after_k_min: float, backward_k_min: int, timeout_total: Optional[float],

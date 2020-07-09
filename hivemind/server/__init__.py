@@ -2,11 +2,11 @@ import multiprocessing as mp
 import threading
 from typing import Dict, Optional
 
-from .checkpoint_saver import CheckpointSaver
-from .connection_handler import ConnectionHandler
-from .dht_handler import DHTHandlerThread
-from ..dht import DHT
-from ..runtime import Runtime, ExpertBackend
+from hivemind.dht import DHT
+from hivemind.runtime import Runtime, ExpertBackend
+from hivemind.server.checkpoint_saver import CheckpointSaver
+from hivemind.server.connection_handler import ConnectionHandler
+from hivemind.server.dht_handler import DHTHandlerThread
 
 
 class Server(threading.Thread):
