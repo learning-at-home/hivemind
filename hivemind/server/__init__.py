@@ -67,6 +67,9 @@ class Server(threading.Thread):
         for connection_handler in self.conn_handlers:
             connection_handler.start()
 
+        for connection_handler in self.conn_handlers:
+            connection_handler.ready.wait()
+
         self.runtime.run()
 
         for conn_handler in self.conn_handlers:

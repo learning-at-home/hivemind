@@ -49,10 +49,10 @@ class ConnectionHandler(mp.Process):
 
             found_port = server.add_insecure_port(self.listen_on)
             assert found_port != 0, f"Failed to listen to {self.listen_on}"
-            self.ready.set()
 
             await server.start()
             await server.wait_for_termination()
+            self.ready.set()
             logger.debug(f"ConnectionHandler terminated: (pid={os.getpid()})")
 
         loop.run_until_complete(_run())
