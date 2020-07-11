@@ -245,8 +245,8 @@ class DHTNode:
             while num_successful_stores < self.num_replicas and (store_candidates or pending_store_tasks):
                 # spawn enough tasks to cover all replicas
                 while store_candidates and num_successful_stores + len(pending_store_tasks) < self.num_replicas:
-                    peer: DHTID = store_candidates.pop()  # nearest untried candidate
-                    if peer == self.node_id:
+                    node_id: DHTID = store_candidates.pop()  # nearest untried candidate
+                    if node_id == self.node_id:
                         self.protocol.storage.store(key_id, binary_values_by_key_id[key_id],
                                                     expiration_by_key_id[key_id])
                         store_ok[id_to_original_key[key_id]] = True
@@ -256,18 +256,19 @@ class DHTNode:
 
                     else:
                         pending_store_tasks.add(asyncio.create_task(self.protocol.call_store(
-                            node_to_endpoint[peer], [key_id], [binary_values_by_key_id[key_id]],
+                            node_to_endpoint[node_id], [key_id], [binary_values_by_key_id[key_id]],
                             [expiration_by_key_id[key_id]])))
 
                 # await nearest task. If it fails, dispatch more on the next iteration
-                finished_store_tasks, pending_store_tasks = await asyncio.wait(
-                    pending_store_tasks, return_when=asyncio.FIRST_COMPLETED)
-                for task in finished_store_tasks:
-                    if task.result()[0]:  # if store succeeded
-                        store_ok[id_to_original_key[key_id]] = True
-                        num_successful_stores += 1
-                        if not await_all_replicas:
-                            store_finished_events[id_to_original_key[key_id]].set()
+                if pending_store_tasks:
+                    finished_store_tasks, pending_store_tasks = await asyncio.wait(
+                        pending_store_tasks, return_when=asyncio.FIRST_COMPLETED)
+                    for task in finished_store_tasks:
+                        if task.result()[0]:  # if store succeeded
+                            store_ok[id_to_original_key[key_id]] = True
+                            num_successful_stores += 1
+                            if not await_all_replicas:
+                                store_finished_events[id_to_original_key[key_id]].set()
 
             store_finished_events[id_to_original_key[key_id]].set()
 
