@@ -105,13 +105,13 @@ async def traverse_dht(
         visited nodes: { query -> a set of all nodes that received requests for a given query }
     """
     if len(queries) == 0:
-        return {}, dict(visited_nodes)
+        return {}, dict(visited_nodes or {})
 
     unfinished_queries = set(queries)  # all queries that haven't triggered finish_search yet
     candidate_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}  # heap: unvisited nodes, ordered nearest-to-farthest
     nearest_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}  # heap: top-k nearest nodes, farthest-to-nearest
     known_nodes: Dict[DHTID, Set[DHTID]] = {}  # all nodes ever added to the heap (for deduplication)
-    visited_nodes: Dict[DHTID, Set[DHTID]] = dict(visited_nodes)  # where we requested get_neighbors for a given query
+    visited_nodes: Dict[DHTID, Set[DHTID]] = dict(visited_nodes or {})  # nodes that were chosen for get_neighbors call
     pending_tasks = set()  # all active tasks (get_neighbors and found_callback)
     active_workers = Counter({q: 0 for q in queries})  # count workers that search for this query
 
@@ -149,7 +149,7 @@ async def traverse_dht(
             search_finished_event.set()
         if found_callback:
             nearest_neighbors = [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
-            pending_tasks.add(asyncio.create_task(found_callback(query, nearest_neighbors, set(visited_nodes))))
+            pending_tasks.add(asyncio.create_task(found_callback(query, nearest_neighbors, set(visited_nodes)[query])))
 
     async def worker():
         while unfinished_queries:
