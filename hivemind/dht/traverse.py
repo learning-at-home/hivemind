@@ -149,7 +149,7 @@ async def traverse_dht(
             search_finished_event.set()
         if found_callback:
             nearest_neighbors = [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
-            pending_tasks.add(asyncio.create_task(found_callback(query, nearest_neighbors, set(visited_nodes)[query])))
+            pending_tasks.add(asyncio.create_task(found_callback(query, nearest_neighbors, set(visited_nodes[query]))))
 
     async def worker():
         while unfinished_queries:
