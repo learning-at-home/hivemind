@@ -154,8 +154,8 @@ class DHTNode:
         if node_to_endpoint is None:
             node_to_endpoint: Dict[DHTID, Endpoint] = dict()
             for query in queries:
-                node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
-                    query, beam_size, exclude=self.node_id if exclude_self else None))
+                node_to_endpoint.update(
+                    self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id))
 
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
             response = await self.protocol.call_find(node_to_endpoint[peer], queries)
@@ -171,10 +171,14 @@ class DHTNode:
         nearest_nodes_per_query, visited_nodes = await traverse_dht(
             queries, initial_nodes=list(node_to_endpoint), beam_size=beam_size, num_workers=num_workers,
             queries_per_call=int(len(queries) ** 0.5), get_neighbors=get_neighbors,
-            visited_nodes={query: {self.node_id} for query in queries} if exclude_self else None, **kwargs)
+            visited_nodes={query: {self.node_id} for query in queries}, **kwargs)
 
-        return {query: {node: node_to_endpoint[node] for node in nearest_nodes}
-                for query, nearest_nodes in nearest_nodes_per_query.items()}
+        for query, nearest_nodes in nearest_nodes_per_query.items():
+            if not exclude_self:
+                nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query.xor_distance)
+                node_to_endpoint[self.node_id] = f"{LOCALHOST}:{self.port}"
+            nearest_nodes_per_query[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
+        return nearest_nodes_per_query
 
     async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration, **kwargs) -> bool:
         """
@@ -222,7 +226,7 @@ class DHTNode:
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()
         for key_id in key_ids:
             node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
-                key_id, self.protocol.bucket_size, exclude=self.node_id if exclude_self else None))
+                key_id, self.protocol.bucket_size, exclude=self.node_id))
 
         async def on_found(key_id: DHTID, nearest_nodes: List[DHTID], visited_nodes: Set[DHTID]) -> None:
             """ This will be called once per key when find_nearest_nodes is done for a particular node """
@@ -249,7 +253,7 @@ class DHTNode:
                         store_tasks.add(asyncio.create_task(
                             self.protocol.call_store(node_to_endpoint[backup_nodes.pop(0)], *store_args)))
 
-            store_finished_events[id_to_original_key[key_id]].set()
+                store_finished_events[id_to_original_key[key_id]].set()
 
         asyncio.create_task(self.find_nearest_nodes(
             queries=set(key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
