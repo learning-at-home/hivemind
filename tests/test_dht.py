@@ -300,6 +300,14 @@ def test_hivemind_dht():
         peer.shutdown()
 
 
+def test_dht_single_node():
+    node = hivemind.DHT(start=True)
+    assert all(node.declare_experts(['e1', 'e2', 'e3'], hivemind.LOCALHOST, 1337))
+    for expert in node.get_experts(['e3', 'e2']):
+        assert expert.host == hivemind.LOCALHOST and expert.port == 1337
+    assert node.first_k_active(['e0', 'e1', 'e3', 'e5', 'e2'], k=2) == ['e1', 'e3']
+
+
 def test_store():
     d = LocalStorage()
     d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.5)
