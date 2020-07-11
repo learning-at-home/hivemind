@@ -173,12 +173,13 @@ class DHTNode:
             queries_per_call=int(len(queries) ** 0.5), get_neighbors=get_neighbors,
             visited_nodes={query: {self.node_id} for query in queries}, **kwargs)
 
+        nearest_nodes_with_endpoints = {}
         for query, nearest_nodes in nearest_nodes_per_query.items():
             if not exclude_self:
                 nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query.xor_distance)
                 node_to_endpoint[self.node_id] = f"{LOCALHOST}:{self.port}"
-            nearest_nodes_per_query[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
-        return nearest_nodes_per_query
+            nearest_nodes_with_endpoints[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
+        return nearest_nodes_with_endpoints
 
     async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration, **kwargs) -> bool:
         """
