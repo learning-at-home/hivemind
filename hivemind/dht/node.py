@@ -249,7 +249,7 @@ class DHTNode:
                         store_tasks.add(asyncio.create_task(
                             self.protocol.call_store(node_to_endpoint[backup_nodes.pop(0)], *store_args)))
 
-                store_finished_events[id_to_original_key[key_id]].set()
+            store_finished_events[id_to_original_key[key_id]].set()
 
         asyncio.create_task(self.find_nearest_nodes(
             queries=set(key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,

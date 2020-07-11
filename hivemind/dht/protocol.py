@@ -12,7 +12,7 @@ import grpc
 import grpc.experimental.aio
 
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, get_dht_time
-from hivemind.utils import Endpoint, compile_grpc, get_logger
+from hivemind.utils import Endpoint, compile_grpc, get_logger, LOCALHOST
 
 logger = get_logger(__name__)
 
@@ -58,6 +58,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
             found_port = self.server.add_insecure_port(listen_on)
             assert found_port != 0, f"Failed to listen to {listen_on}"
+            self.routing_table.add_or_update_node(self.node_id, f"{LOCALHOST}:{found_port}")
             self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes(), rpc_port=found_port)
             self.port = found_port
             await self.server.start()
