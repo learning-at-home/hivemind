@@ -154,8 +154,8 @@ class DHTNode:
         if node_to_endpoint is None:
             node_to_endpoint: Dict[DHTID, Endpoint] = dict()
             for query in queries:
-                node_to_endpoint.update(
-                    self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id))
+                node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
+                    query, beam_size, exclude=self.node_id if exclude_self else None))
 
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
             response = await self.protocol.call_find(node_to_endpoint[peer], queries)
@@ -173,13 +173,8 @@ class DHTNode:
             queries_per_call=int(len(queries) ** 0.5), get_neighbors=get_neighbors,
             visited_nodes={query: {self.node_id} for query in queries} if exclude_self else None, **kwargs)
 
-        nearest_nodes_per_query = {}
-        for query, nearest_nodes in nearest_nodes.items():
-            if not exclude_self:
-                nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query.xor_distance)
-                node_to_endpoint[self.node_id] = f"{LOCALHOST}:{self.port}"
-            nearest_nodes_per_query[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
-        return nearest_nodes_per_query
+        return {node: node_to_endpoint[node] for node in nearest_nodes
+                for query, nearest_nodes in nearest_nodes.items()}
 
     async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration, **kwargs) -> bool:
         """
@@ -227,7 +222,7 @@ class DHTNode:
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()
         for key_id in key_ids:
             node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
-                key_id, self.protocol.bucket_size, exclude=self.node_id))
+                key_id, self.protocol.bucket_size, exclude=self.node_id if exclude_self else None))
 
         async def on_found(key_id: DHTID, nearest_nodes: List[DHTID], visited_nodes: Set[DHTID]) -> None:
             """ This will be called once per key when find_nearest_nodes is done for a particular node """
