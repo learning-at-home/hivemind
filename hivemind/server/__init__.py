@@ -1,4 +1,3 @@
-import ctypes
 import multiprocessing as mp
 import multiprocessing.synchronize
 import threading
