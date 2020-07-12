@@ -17,7 +17,7 @@ def get_port(endpoint: Endpoint) -> Optional[Port]:
 
 
 def replace_port(endpoint: Endpoint, new_port: Port) -> Endpoint:
-    assert endpoint.endswith(':*') or get_port(endpoint) is not None
+    assert endpoint.endswith(':*') or get_port(endpoint) is not None, endpoint
     return f"{endpoint[:endpoint.rindex(':')]}:{new_port}"
 
 
