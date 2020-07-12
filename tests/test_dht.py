@@ -16,11 +16,6 @@ from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, DHTProtocol
 from hivemind.dht.protocol import LocalStorage
 
 
-def strip_protocol(endpoint: Endpoint) -> Endpoint:
-    """ Strip protocol, e.g. ipv4:1.2.3.4:1337 => 1.2.3.4:1337"""
-    return ':'.join(endpoint.split(':')[-2:])
-
-
 def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping: Optional[Endpoint] = None):
     loop = asyncio.get_event_loop()
     protocol = loop.run_until_complete(DHTProtocol.create(
@@ -73,7 +68,7 @@ def test_dht_protocol():
                 protocol.call_find(f'{LOCALHOST}:{peer1_port}', [key]))[key]
             recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
             (recv_id, recv_endpoint) = next(iter(nodes_found.items()))
-            assert recv_id == peer2_id and strip_protocol(recv_endpoint) == f"{LOCALHOST}:{peer2_port}", \
+            assert recv_id == peer2_id and ':'.join(recv_endpoint.split(':')[-2:]) == f"{LOCALHOST}:{peer2_port}", \
                 f"expected id={peer2_id}, peer={LOCALHOST}:{peer2_port} but got {recv_id}, {recv_endpoint}"
 
             assert recv_value == value and recv_expiration == expiration, \
@@ -184,7 +179,7 @@ def test_dht_node():
 
         # test 1: find self
         nearest = loop.run_until_complete(me.find_nearest_nodes([me.node_id], k_nearest=1))[me.node_id]
-        assert len(nearest) == 1 and strip_protocol(nearest[me.node_id]) == f"{LOCALHOST}:{me.port}"
+        assert len(nearest) == 1 and ':'.join(nearest[me.node_id].split(':')[-2:]) == f"{LOCALHOST}:{me.port}"
 
         # test 2: find others
         for i in range(10):
@@ -192,7 +187,7 @@ def test_dht_node():
             nearest = loop.run_until_complete(me.find_nearest_nodes([query_id], k_nearest=1))[query_id]
             assert len(nearest) == 1
             found_node_id, found_endpoint = next(iter(nearest.items()))
-            assert found_node_id == query_id and strip_protocol(found_endpoint) == ref_endpoint
+            assert found_node_id == query_id and ':'.join(found_endpoint.split(':')[-2:]) == ref_endpoint
 
         # test 3: find neighbors to random nodes
         accuracy_numerator = accuracy_denominator = 0  # top-1 nearest neighbor accuracy
