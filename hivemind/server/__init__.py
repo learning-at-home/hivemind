@@ -1,4 +1,5 @@
 import multiprocessing as mp
+from multiprocessing import synchronize, pool, context
 import threading
 from typing import Dict, Optional
 
@@ -24,7 +25,7 @@ class Server(threading.Thread):
     :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
     :param addr: server's dht address that determines how it can be accessed. Default is local connections only.
     :param port: port to which server listens for requests such as expert forward or backward pass.
-    :param conn_handler_processes: maximum number of simultaneous requests. Please note that the default value of 1
+    :param num_connection_handlers: maximum number of simultaneous requests. Please note that the default value of 1
         if too small for normal functioning, we recommend 4 handlers per expert backend.
     :param update_period: how often will server attempt to publish its state (i.e. experts) to the DHT;
         if dht is None, this parameter is ignored.
@@ -32,13 +33,14 @@ class Server(threading.Thread):
         is ready (see .ready below)
     """
 
-    def __init__(self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1',
-                 port: int = 8080, conn_handler_processes: int = 1, update_period: int = 30, start=False, checkpoint_dir=None, **kwargs):
+    def __init__(
+            self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1', port: int = 8080,
+            num_connection_handlers: int = 1, update_period: int = 30, start=False, checkpoint_dir=None, **kwargs):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         self.addr, self.port = addr, port
         self.conn_handlers = [ConnectionHandler(f"{self.addr}:{port}", self.experts)
-                              for _ in range(conn_handler_processes)]
+                              for _ in range(num_connection_handlers)]
         if checkpoint_dir is not None:
             self.checkpoint_saver = CheckpointSaver(expert_backends, checkpoint_dir, update_period)
         else:
