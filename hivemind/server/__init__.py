@@ -1,5 +1,5 @@
 import multiprocessing as mp
-from multiprocessing import synchronize, pool, context
+import multiprocessing.synchronize
 import threading
 from typing import Dict, Optional
 
