@@ -5,7 +5,7 @@ import random
 import heapq
 import uuid
 from itertools import chain
-from typing import Optional
+from typing import Optional, Tuple
 import numpy as np
 
 import hivemind
@@ -14,6 +14,11 @@ from typing import List, Dict
 from hivemind import get_dht_time
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, DHTProtocol
 from hivemind.dht.protocol import LocalStorage
+
+
+def strip_protocol(endpoint: Endpoint) -> Endpoint:
+    """ Strip protocol, e.g. ipv4:1.2.3.4:1337 => 1.2.3.4:1337"""
+    return ':'.join(endpoint.split(':')[-2:])
 
 
 def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping: Optional[Endpoint] = None):
@@ -68,7 +73,7 @@ def test_dht_protocol():
                 protocol.call_find(f'{LOCALHOST}:{peer1_port}', [key]))[key]
             recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
             (recv_id, recv_endpoint) = next(iter(nodes_found.items()))
-            assert recv_id == peer2_id and recv_endpoint == f"{LOCALHOST}:{peer2_port}", \
+            assert recv_id == peer2_id and strip_protocol(recv_endpoint) == f"{LOCALHOST}:{peer2_port}", \
                 f"expected id={peer2_id}, peer={LOCALHOST}:{peer2_port} but got {recv_id}, {recv_endpoint}"
 
             assert recv_value == value and recv_expiration == expiration, \
@@ -179,13 +184,15 @@ def test_dht_node():
 
         # test 1: find self
         nearest = loop.run_until_complete(me.find_nearest_nodes([me.node_id], k_nearest=1))[me.node_id]
-        assert len(nearest) == 1 and nearest[me.node_id] == f"{LOCALHOST}:{me.port}"
+        assert len(nearest) == 1 and strip_protocol(nearest[me.node_id]) == f"{LOCALHOST}:{me.port}"
 
         # test 2: find others
         for i in range(10):
             ref_endpoint, query_id = random.choice(list(dht.items()))
             nearest = loop.run_until_complete(me.find_nearest_nodes([query_id], k_nearest=1))[query_id]
-            assert len(nearest) == 1 and next(iter(nearest.items())) == (query_id, ref_endpoint)
+            assert len(nearest) == 1
+            found_node_id, found_endpoint = next(iter(nearest.items()))
+            assert found_node_id == query_id and strip_protocol(found_endpoint) == ref_endpoint
 
         # test 3: find neighbors to random nodes
         accuracy_numerator = accuracy_denominator = 0  # top-1 nearest neighbor accuracy
@@ -282,10 +289,10 @@ def test_hivemind_dht():
     assert all(res is None for res in found[-2:]), "Found non-existing experts"
 
     that_guys_expert, that_guys_port = str(uuid.uuid4()), random.randint(1000, 9999)
-    theguyshetoldyounottoworryabout.declare_experts([that_guys_expert], 'that_host', that_guys_port)
+    theguyshetoldyounottoworryabout.declare_experts([that_guys_expert], f'that_host:{that_guys_port}')
     you_notfound, you_found = you.get_experts(['foobar', that_guys_expert])
     assert isinstance(you_found, hivemind.RemoteExpert)
-    assert you_found.host == 'that_host', you_found.port == that_guys_port
+    assert you_found.endpoint == f'that_host:{that_guys_port}'
 
     # test first_k_active
     assert theguyshetoldyounottoworryabout.first_k_active(expert_uids, k=10) == expert_uids[:10]
@@ -303,9 +310,9 @@ def test_hivemind_dht():
 
 def test_dht_single_node():
     node = hivemind.DHT(start=True)
-    assert all(node.declare_experts(['e1', 'e2', 'e3'], hivemind.LOCALHOST, 1337))
+    assert all(node.declare_experts(['e1', 'e2', 'e3'], f"{hivemind.LOCALHOST}:{1337}"))
     for expert in node.get_experts(['e3', 'e2']):
-        assert expert.host == hivemind.LOCALHOST and expert.port == 1337
+        assert expert.endpoint == f"{hivemind.LOCALHOST}:{1337}"
     assert node.first_k_active(['e0', 'e1', 'e3', 'e5', 'e2'], k=2) == ['e1', 'e3']
 
 

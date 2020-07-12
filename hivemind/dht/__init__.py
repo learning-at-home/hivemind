@@ -114,41 +114,40 @@ class DHT(mp.Process):
 
         experts: List[Optional[RemoteExpert]] = [None] * len(uids)
         for i, (key, uid) in enumerate(zip(keys, uids)):
-            maybe_result, maybe_expiration = response[key]
+            maybe_endpoint, maybe_expiration = response[key]
             if maybe_expiration is not None:  # if we found a value
-                experts[i] = RemoteExpert(uid=uid, host=maybe_result[0], port=maybe_result[1])
+                experts[i] = RemoteExpert(uid=uid, endpoint=maybe_endpoint)
 
         future.set_result(experts)
 
-    def declare_experts(self, uids: List[str], addr, port, wait=True, timeout=None) -> Optional[List[bool]]:
+    def declare_experts(self, uids: List[str], endpoint: Endpoint, wait=True, timeout=None) -> Optional[List[bool]]:
         """
-        Make experts available to DHT; update timestamps if already available
+        Make experts visible to all DHT peers; update timestamps if declared previously.
 
         :param uids: a list of expert ids to update
-        :param addr: hostname that can be used to call this expert
-        :param port: port that can be used to call this expert
+        :param endpoint: endpoint that serves these experts, usually your server addr (e.g. "201.111.222.333:1337")
         :param wait: if True, awaits for declaration to finish, otherwise runs in background
         :param timeout: waits for the procedure to finish, None means wait indeninitely
         :returns: if wait, returns a list of booleans, (True = store succeeded, False = store rejected)
         """
+        assert isinstance(uids, (list, tuple)), "Please send a list or tuple of expert uids."
         future, _future = MPFuture.make_pair() if wait else (None, None)
-        self.pipe.send(('_declare_experts', [], dict(uids=list(uids), addr=addr, port=port, future=_future)))
+        self.pipe.send(('_declare_experts', [], dict(uids=list(uids), endpoint=endpoint, future=_future)))
         if wait:
             return future.result(timeout)
 
-    def _declare_experts(self, uids: List[str], addr: str, port: int, future: Optional[MPFuture]):
+    def _declare_experts(self, uids: List[str], endpoint: Endpoint, future: Optional[MPFuture]):
         assert self.node is not None, "This method should only be accessed from inside .run method"
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         loop = asyncio.get_event_loop()
         expiration_time = get_dht_time() + self.EXPIRATION
         unique_prefixes = set()
-        coroutines = []
 
         keys, values = [], []
         for uid in uids:
             uid_parts = uid.split(self.UID_DELIMETER)
             keys.append(self.make_key('expert', uid))
-            values.append((addr, port))
+            values.append(endpoint)
             unique_prefixes.update([self.UID_DELIMETER.join(uid_parts[:i + 1]) for i in range(len(uid_parts))])
 
         for prefix in unique_prefixes:

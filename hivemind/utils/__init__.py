@@ -1,4 +1,4 @@
-from hivemind.utils.connection import *
+from hivemind.utils.networking import *
 from hivemind.utils.nested import *
 from hivemind.utils.tensor_descr import *
 from hivemind.utils.serializer import *

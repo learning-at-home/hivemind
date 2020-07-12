@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import heapq
 import os
-import urllib.parse
 from typing import Optional, List, Tuple, Dict, Iterator, Any, Sequence, Union, Collection
 from warnings import warn
 
@@ -12,7 +11,7 @@ import grpc
 import grpc.experimental.aio
 
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, get_dht_time
-from hivemind.utils import Endpoint, compile_grpc, get_logger
+from hivemind.utils import Endpoint, compile_grpc, get_logger, change_port_to, get_port
 
 logger = get_logger(__name__)
 
@@ -109,9 +108,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         """ Some node wants us to add it to our routing table. """
         if peer_info.node_id and peer_info.rpc_port:
             sender_id = DHTID.from_bytes(peer_info.node_id)
-            peer_url = urllib.parse.urlparse(context.peer())
-            address = peer_url.path[:peer_url.path.rindex(':')]
-            asyncio.create_task(self.update_routing_table(sender_id, f"{address}:{peer_info.rpc_port}"))
+            rpc_endpoint = change_port_to(context.peer(), new_port=peer_info.rpc_port)
+            asyncio.create_task(self.update_routing_table(sender_id, rpc_endpoint))
         return self.node_info
 
     async def call_store(self, peer: Endpoint, keys: Sequence[DHTID], values: Sequence[BinaryDHTValue],
@@ -193,7 +191,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 output[key] = (value, expiration, nearest)
             return output
         except grpc.experimental.aio.AioRpcError as error:
-            logger.warning(f"DHTProtocol failed to store at {peer}: {error.code()}")
+            logger.warning(f"DHTProtocol failed to find at {peer}: {error.code()}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
 
     async def rpc_find(self, request: dht_pb2.FindRequest, context: grpc.ServicerContext) -> dht_pb2.FindResponse:

@@ -10,6 +10,7 @@ from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.checkpoint_saver import CheckpointSaver
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread
+from hivemind.utils import Endpoint, get_port, change_port_to, find_open_port
 
 
 class Server(threading.Thread):
@@ -36,13 +37,14 @@ class Server(threading.Thread):
     """
 
     def __init__(
-            self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1', port: int = 8080,
+            self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], listen_on: Endpoint = "0.0.0.0:*",
             num_connection_handlers: int = 1, update_period: int = 30, start=False, checkpoint_dir=None, **kwargs):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
-        self.addr, self.port = addr, port
-        self.conn_handlers = [ConnectionHandler(f"{self.addr}:{port}", self.experts)
-                              for _ in range(num_connection_handlers)]
+        if get_port(listen_on) is None:
+            self.listen_on = listen_on = change_port_to(listen_on, new_port=find_open_port())
+
+        self.conn_handlers = [ConnectionHandler(listen_on, self.experts) for _ in range(num_connection_handlers)]
         if checkpoint_dir is not None:
             self.checkpoint_saver = CheckpointSaver(expert_backends, checkpoint_dir, update_period)
         else:
@@ -61,8 +63,8 @@ class Server(threading.Thread):
             if not self.dht.is_alive():
                 self.dht.run_in_background(await_ready=True)
 
-            dht_handler_thread = DHTHandlerThread(experts=self.experts, dht=self.dht,
-                                                  addr=self.addr, port=self.port, update_period=self.update_period)
+            dht_handler_thread = DHTHandlerThread(
+                experts=self.experts, dht=self.dht, endpoint=self.listen_on, update_period=self.update_period)
             dht_handler_thread.start()
         if self.checkpoint_saver is not None:
             self.checkpoint_saver.start()

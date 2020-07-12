@@ -3,6 +3,8 @@ import multiprocessing as mp
 from contextlib import contextmanager
 
 import resource
+from typing import Tuple
+
 import torch
 
 import hivemind
@@ -91,7 +93,7 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
 
 
 @contextmanager
-def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs):
+def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs) -> Tuple[hivemind.Endpoint, hivemind.Endpoint]:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
     pipe, runners_pipe = mp.Pipe(duplex=True)
     runner = mp.get_context("spawn").Process(
