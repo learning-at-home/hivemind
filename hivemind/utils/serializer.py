@@ -2,10 +2,8 @@
 import pickle
 from io import BytesIO
 
-import joblib
 import torch
 import umsgpack
-
 
 class SerializerBase:
     @staticmethod
@@ -15,19 +13,6 @@ class SerializerBase:
     @staticmethod
     def loads(buf: bytes) -> object:
         raise NotImplementedError()
-
-
-class JoblibSerializer(SerializerBase):
-
-    @staticmethod
-    def dumps(obj: object) -> bytes:
-        s = BytesIO()
-        joblib.dump(obj, s)
-        return s.getvalue()
-
-    @staticmethod
-    def loads(buf: bytes) -> object:
-        return joblib.load(BytesIO(buf))
 
 
 class PickleSerializer(SerializerBase):
@@ -41,7 +26,6 @@ class PickleSerializer(SerializerBase):
 
 
 class PytorchSerializer(SerializerBase):
-
     @staticmethod
     def dumps(obj: object) -> bytes:
         s = BytesIO()
@@ -54,7 +38,6 @@ class PytorchSerializer(SerializerBase):
 
 
 class MSGPackSerializer(SerializerBase):
-
     @staticmethod
     def dumps(obj: object) -> bytes:
         return umsgpack.dumps(obj, use_bin_type=False)  # TODO strict https://github.com/msgpack/msgpack-python/pull/158
