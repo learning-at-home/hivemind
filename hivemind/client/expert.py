@@ -28,7 +28,7 @@ class RemoteExpert(nn.Module):
     def __init__(self, uid, endpoint: Endpoint):
         super().__init__()
         self.uid, self.endpoint = uid, endpoint
-        self._channel, self._stub, self._info = None, None, None  # to be filled via @property
+        self._channel, self._stub, self._info = None, None, None
 
     @property
     def stub(self):
