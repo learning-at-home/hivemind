@@ -1,3 +1,4 @@
+import ctypes
 import multiprocessing as mp
 from multiprocessing import synchronize, pool, context
 import threading
@@ -10,7 +11,7 @@ from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.checkpoint_saver import CheckpointSaver
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread
-from hivemind.utils import Endpoint, get_port, change_port_to, find_open_port
+from hivemind.utils import Endpoint, get_port, replace_port, find_open_port
 
 
 class Server(threading.Thread):
@@ -42,7 +43,8 @@ class Server(threading.Thread):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         if get_port(listen_on) is None:
-            self.listen_on = listen_on = change_port_to(listen_on, new_port=find_open_port())
+            self.listen_on = listen_on = replace_port(listen_on, new_port=find_open_port())
+        self.port = get_port(listen_on)
 
         self.conn_handlers = [ConnectionHandler(listen_on, self.experts) for _ in range(num_connection_handlers)]
         if checkpoint_dir is not None:

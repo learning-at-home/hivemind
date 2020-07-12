@@ -11,14 +11,13 @@ import hivemind
 from test_utils.layers import name_to_block, name_to_input
 
 
-def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024,
+def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hidden_dim=1024,
                       num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
                       no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
                       UID_DELIMETER=hivemind.DHT.UID_DELIMETER, start=False, **kwargs) -> hivemind.Server:
     """
     Instantiate a server with several identical experts. See argparse comments below for details
-    :param interface: 'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6
-    :param port: main server will listen to this port, default = find open port
+    :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
     :param num_experts: run this many identical experts
     :param expert_cls: expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
     :param hidden_dim: main dimension for expert_cls
@@ -81,13 +80,13 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
                                                      )
     # actually start server
     server = hivemind.Server(
-        dht, experts, addr=interface, port=port or hivemind.find_open_port(),
+        dht, experts, listen_on=listen_on,
         num_connection_handlers=num_handlers, device=device)
 
     if start:
         server.run_in_background(await_ready=True)
         if verbose:
-            print(f"Server started at {server.addr}:{server.port}")
+            print(f"Server started at {server.listen_on}")
             print(f"Got {num_experts} active experts of type {expert_cls}: {list(experts.keys())}")
     return server
 
@@ -117,8 +116,11 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs) -> Tupl
 def _server_runner(pipe, *args, verbose, **kwargs):
     server = make_dummy_server(*args, verbose=verbose, start=True, **kwargs)
     try:
-        dht_port = server.dht.port if server.dht is not None else None
-        pipe.send((server.addr, server.port, dht_port))
+        if server.dht is not None:
+            dht_listen_on = hivemind.replace_port(server.dht.listen_on, server.dht.port)
+        else:
+            dht_listen_on = None
+        pipe.send((server.listen_on, dht_listen_on))
         pipe.recv()  # wait for shutdown signal
     finally:
         if verbose:

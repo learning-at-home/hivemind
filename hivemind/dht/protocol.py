@@ -11,7 +11,7 @@ import grpc
 import grpc.experimental.aio
 
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, get_dht_time
-from hivemind.utils import Endpoint, compile_grpc, get_logger, change_port_to, get_port
+from hivemind.utils import Endpoint, compile_grpc, get_logger, replace_port, get_port
 
 logger = get_logger(__name__)
 
@@ -108,7 +108,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         """ Some node wants us to add it to our routing table. """
         if peer_info.node_id and peer_info.rpc_port:
             sender_id = DHTID.from_bytes(peer_info.node_id)
-            rpc_endpoint = change_port_to(context.peer(), new_port=peer_info.rpc_port)
+            rpc_endpoint = replace_port(context.peer(), new_port=peer_info.rpc_port)
             asyncio.create_task(self.update_routing_table(sender_id, rpc_endpoint))
         return self.node_info
 

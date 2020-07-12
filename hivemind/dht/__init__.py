@@ -47,7 +47,7 @@ class DHT(mp.Process):
         super().__init__()
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
-        self._port = mp.Value(ctypes.c_int32, 0)  # initialized after server starts
+        self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self.node: Optional[DHTNode] = None  # initialized inside self.run only
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
@@ -130,7 +130,7 @@ class DHT(mp.Process):
         :param timeout: waits for the procedure to finish, None means wait indeninitely
         :returns: if wait, returns a list of booleans, (True = store succeeded, False = store rejected)
         """
-        assert isinstance(uids, (list, tuple)), "Please send a list or tuple of expert uids."
+        assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
         future, _future = MPFuture.make_pair() if wait else (None, None)
         self.pipe.send(('_declare_experts', [], dict(uids=list(uids), endpoint=endpoint, future=_future)))
         if wait:
