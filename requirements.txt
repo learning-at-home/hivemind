@@ -1,5 +1,4 @@
 torch>=1.3.0
-joblib>=0.13
 numpy>=1.17
 prefetch_generator>=1.0.1
 umsgpack

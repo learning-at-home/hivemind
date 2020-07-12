@@ -3,8 +3,9 @@ from typing import Dict, Sequence, Any, Tuple, Union
 import torch
 from torch import nn
 
-from hivemind.runtime.task_pool import TaskPool
-from hivemind.utils import nested_flatten, nested_pack, nested_compare, BatchTensorDescriptor, DUMMY_BATCH_SIZE, nested_map
+from hivemind.server.task_pool import TaskPool
+from hivemind.utils import nested_flatten, nested_pack, nested_compare, nested_map,\
+    BatchTensorDescriptor, DUMMY_BATCH_SIZE
 
 
 class ExpertBackend(nn.Module):
@@ -18,7 +19,7 @@ class ExpertBackend(nn.Module):
 
     :param expert: nn.Module to be wrapped into a backend. Arbitrary pytorch module with a few limitations:
 
-     - Experts must always receive the same set of \*args and \*\*kwargs and produce output tensors of same type
+     - Experts must always receive the same set of args and kwargs and produce output tensors of same type
      - All args, kwargs and outputs must be **tensors** where 0-th dimension represents to batch size
      - We recommend using experts that are ~invariant to the order in which they process batches
      - Using randomness (e.g. Dropout) leads to different samples at forward and backward. If you want consistency,
@@ -95,15 +96,17 @@ class ExpertBackend(nn.Module):
 
            .. todo correct state handling (see forward)
 
-           Please make sure to call ``ExpertBackend.apply_gradients`` **within** this method, otherwise the expert will not train
+           Please make sure to call ``ExpertBackend.apply_gradients`` here, otherwise the expert will not train
         """
         (args, kwargs), grad_outputs = nested_pack(inputs, structure=self.backward_schema)
 
         with torch.enable_grad():
             args = [tensor.detach().requires_grad_(True) if tensor.dtype in (torch.half, torch.float, torch.double)
                     else tensor.detach() for tensor in args]
-            kwargs = {input_key: (tensor.detach().requires_grad_(True) if tensor.dtype in (torch.half, torch.float, torch.double)
-                                  else tensor.detach()) for input_key, tensor in kwargs.items()}
+            kwargs = {input_key: (tensor.detach().requires_grad_(True)
+                                  if tensor.dtype in (torch.half, torch.float, torch.double)
+                                  else tensor.detach())
+                      for input_key, tensor in kwargs.items()}
 
             outputs = self.expert(*args, **kwargs)
             assert nested_compare(outputs, grad_outputs), "outputs and grad_outputs must have the same structure"
@@ -122,7 +125,7 @@ class ExpertBackend(nn.Module):
 
     def apply_gradients(self) -> None:
         """
-        Train the expert for a single step. This method is called by ``ExpertBackend.backward`` after computing gradients.
+        Train the expert for one step. This method is called by ``ExpertBackend.backward`` after computing gradients.
         """
         self.opt.step()
         self.opt.zero_grad()

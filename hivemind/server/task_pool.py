@@ -3,6 +3,7 @@ Task pool is responsible for receiving tasks and grouping them together for proc
 """
 import ctypes
 import multiprocessing as mp
+import multiprocessing.context
 import os
 import threading
 import time
@@ -14,7 +15,7 @@ from typing import List, Tuple, Dict, Any, Generator
 
 import torch
 
-from hivemind.utils import SharedFuture, get_logger
+from hivemind.utils import MPFuture, get_logger
 
 logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))
@@ -86,10 +87,10 @@ class TaskPool(TaskPoolBase):
 
     def submit_task(self, *args: torch.Tensor) -> Future:
         """ Add task to this pool's queue, return Future for its output """
-        future1, future2 = SharedFuture.make_pair()
+        future1, future2 = MPFuture.make_pair()
         task = Task(future1, args)
         if self.get_task_size(task) > self.max_batch_size:
-            exc = ValueError(f"Task size greater than max_batch_size ({self.max_batch_size}), it will never be finished")
+            exc = ValueError(f"Task size greater than max_batch_size ({self.max_batch_size}), it can't be processed")
             future2.set_exception(exc)
         else:
             self.tasks.put(task)
@@ -127,7 +128,7 @@ class TaskPool(TaskPoolBase):
     def run(self, *args, **kwargs):
         torch.set_num_threads(1)
         logger.info(f'{self.uid} starting, pid={os.getpid()}')
-        pending_batches = {}  # Dict[batch uuid, List[SharedFuture]] for each batch currently in runtime
+        pending_batches = {}  # Dict[batch uuid, List[MPFuture]] for each batch currently in runtime
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
                                          name=f'{self.uid}_output')
         try:

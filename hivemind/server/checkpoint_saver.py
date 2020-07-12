@@ -8,20 +8,20 @@ from typing import Dict
 
 import torch
 
-from hivemind.runtime import ExpertBackend
+from hivemind.server.expert_backend import ExpertBackend
 
 
 class CheckpointSaver(threading.Thread):
-    def __init__(self, expert_backends: Dict[str, ExpertBackend], dir: Path, update_period: int):
+    def __init__(self, expert_backends: Dict[str, ExpertBackend], checkpoint_dir: Path, update_period: int):
         super().__init__()
         self.expert_backends = expert_backends
         self.update_period = update_period
-        self.dir = dir
+        self.checkpoint_dir = checkpoint_dir
         self.stop = False
 
     def run(self) -> None:
         while not self.stop:
-            store_experts(self.expert_backends, self.dir)
+            store_experts(self.expert_backends, self.checkpoint_dir)
             time.sleep(self.update_period)
 
 

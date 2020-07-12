@@ -314,7 +314,7 @@ class DHTNode:
 
         # search metadata
         unfinished_key_ids = set(key_ids)  # track key ids for which the search is not terminated
-        node_to_addr: Dict[DHTID, Endpoint] = dict()  # global routing table for all queries
+        node_to_endpoint: Dict[DHTID, Endpoint] = dict()  # global routing table for all queries
 
         SearchResult = namedtuple("SearchResult", ["binary_value", "expiration", "source_node_id"])
         latest_results = {key_id: SearchResult(b'', -float('inf'), None) for key_id in key_ids}
@@ -331,18 +331,18 @@ class DHTNode:
 
         # stage 2: traverse the DHT for any unfinished keys
         for key_id in unfinished_key_ids:
-            node_to_addr.update(self.protocol.routing_table.get_nearest_neighbors(
+            node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
             queries = list(queries)
-            response = await self.protocol.call_find(node_to_addr[peer], queries)
+            response = await self.protocol.call_find(node_to_endpoint[peer], queries)
             if not response:
                 return {query: ([], False) for query in queries}
 
             output: Dict[DHTID, Tuple[List[DHTID], bool]] = {}
             for key_id, (maybe_value, maybe_expiration, peers) in response.items():
-                node_to_addr.update(peers)
+                node_to_endpoint.update(peers)
                 if maybe_expiration is not None and maybe_expiration > latest_results[key_id].expiration:
                     latest_results[key_id] = SearchResult(maybe_value, maybe_expiration, peer)
                 should_interrupt = (latest_results[key_id].expiration >= sufficient_expiration_time)
@@ -350,7 +350,7 @@ class DHTNode:
             return output
 
         nearest_nodes_per_query, visited_nodes = await traverse_dht(
-            queries=list(unfinished_key_ids), initial_nodes=list(node_to_addr),
+            queries=list(unfinished_key_ids), initial_nodes=list(node_to_endpoint),
             beam_size=beam_size, num_workers=num_workers, queries_per_call=int(len(unfinished_key_ids) ** 0.5),
             get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in unfinished_key_ids})
 
@@ -367,7 +367,7 @@ class DHTNode:
                     if node_id == latest_node_id:
                         continue
                     asyncio.create_task(self.protocol.call_store(
-                        node_to_addr[node_id], [key_id], [latest_value_bytes], [latest_expiration], in_cache=True))
+                        node_to_endpoint[node_id], [key_id], [latest_value_bytes], [latest_expiration], in_cache=True))
                     num_cached_nodes += 1
                     if num_cached_nodes >= self.cache_nearest:
                         break

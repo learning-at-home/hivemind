@@ -14,7 +14,7 @@ from hivemind import find_open_port
 def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
     torch.set_num_threads(1)
     can_start.wait()
-    experts = [hivemind.RemoteExpert(f"expert{i}", port=port) for i in range(num_experts)]
+    experts = [hivemind.RemoteExpert(f"expert{i}", endpoint=f"{hivemind.LOCALHOST}:{port}") for i in range(num_experts)]
 
     try:
         dummy_batch = torch.randn(batch_size, hid_dim)
@@ -69,7 +69,8 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
                                                            max_batch_size=max_batch_size,
                                                            )
         timestamps['created_experts'] = time.perf_counter()
-        server = hivemind.Server(None, experts, port=port, conn_handler_processes=num_handlers, device=device)
+        server = hivemind.Server(None, experts, listen_on=f"{hivemind.LOCALHOST}:{port}",
+                                 num_connection_handlers=num_handlers, device=device)
         server.start()
         server.ready.wait()
         timestamps['server_ready'] = time.perf_counter()

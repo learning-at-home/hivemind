@@ -8,7 +8,7 @@ import grpc.experimental.aio
 import torch
 import uvloop
 
-from hivemind.runtime.expert_backend import ExpertBackend
+from hivemind.server.expert_backend import ExpertBackend
 from hivemind.utils import get_logger, serialize_torch_tensor, deserialize_torch_tensor, Endpoint, runtime_pb2, runtime_grpc
 
 logger = get_logger(__name__)

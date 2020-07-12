@@ -1,4 +1,4 @@
-``hivemind.server & runtime``
+**Hivemind Server**
 ========================================
 
 .. automodule:: hivemind.server
@@ -9,12 +9,9 @@
    :members:
    :member-order: bysource
 
-.. currentmodule:: hivemind.runtime
-
 .. autoclass:: Runtime
     :members:
     :member-order: bysource
-
 
 .. autoclass:: ExpertBackend
     :members: forward, backward, apply_gradients, get_info, get_pools

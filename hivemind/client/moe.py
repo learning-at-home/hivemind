@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-from hivemind.client.expert import RemoteExpert, _RemoteModuleCall
-from hivemind.utils import nested_map, run_and_await_k, nested_pack, nested_flatten, DUMMY, run_in_background, \
+from hivemind.client.expert import RemoteExpert, _RemoteModuleCall, DUMMY
+from hivemind.utils import nested_map, run_and_await_k, nested_pack, nested_flatten, run_in_background, \
     run_isolated_forward, EmulatedAutogradContext, run_isolated_backward, map_with_parallel_backward
 
 
@@ -43,7 +43,8 @@ class RemoteMixtureOfExperts(nn.Module):
         self.dht, self.grid_size = dht, grid_size
         self.uid_prefix, self.expert_padding = uid_prefix, expert_padding
         self.k_best, self.k_min, self.backward_k_min = k_best, k_min, backward_k_min
-        self.forward_timeout, self.timeout_after_k_min, self.backward_timeout = forward_timeout, timeout_after_k_min, backward_timeout
+        self.forward_timeout, self.backward_timeout = forward_timeout, backward_timeout
+        self.timeout_after_k_min = timeout_after_k_min
         self.allow_broadcasting = allow_broadcasting
 
         self.proj = nn.Linear(in_features, sum(grid_size))  # jointly predict logits for all grid dimensions
@@ -258,11 +259,10 @@ class _RemoteMoECall(torch.autograd.Function):
     @staticmethod
     def _run_expert_forward(expert: RemoteExpert, *args: torch.Tensor, **kwargs: torch.Tensor):
         """ Call remote expert and return flattened outputs. Compatible with concurrent autograd. """
-        return run_isolated_forward(_RemoteModuleCall, DUMMY, expert.uid, expert.host, expert.port, expert.stub,
-                                    *nested_flatten((args, kwargs)))
+        return run_isolated_forward(_RemoteModuleCall, DUMMY, expert.uid, expert.stub, *nested_flatten((args, kwargs)))
 
     @staticmethod
     def _run_expert_backward(ctx: EmulatedAutogradContext, weight: torch.Tensor, *grad_outputs: torch.Tensor):
         backward_result = run_isolated_backward(_RemoteModuleCall, ctx, *(grad * weight for grad in grad_outputs))
-        grad_dummy, no_grad_uid, no_grad_hostname, no_grad_port, no_grad_stub, *grad_inputs = backward_result
+        grad_dummy, no_grad_uid, no_grad_stub, *grad_inputs = backward_result
         return grad_inputs
