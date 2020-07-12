@@ -69,7 +69,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
                                                            max_batch_size=max_batch_size,
                                                            )
         timestamps['created_experts'] = time.perf_counter()
-        server = hivemind.Server(None, experts, port=port, conn_handler_processes=num_handlers, device=device)
+        server = hivemind.Server(None, experts, port=port, num_connection_handlers=num_handlers, device=device)
         server.start()
         server.ready.wait()
         timestamps['server_ready'] = time.perf_counter()

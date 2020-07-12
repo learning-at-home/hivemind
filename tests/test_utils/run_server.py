@@ -80,7 +80,7 @@ def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls=
     # actually start server
     server = hivemind.Server(
         dht, experts, addr=interface, port=port or hivemind.find_open_port(),
-        conn_handler_processes=num_handlers, device=device)
+        num_connection_handlers=num_handlers, device=device)
 
     if start:
         server.run_in_background(await_ready=True)

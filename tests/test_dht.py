@@ -71,8 +71,9 @@ def test_dht_protocol():
             assert recv_id == peer2_id and recv_endpoint == f"{LOCALHOST}:{peer2_port}", \
                 f"expected id={peer2_id}, peer={LOCALHOST}:{peer2_port} but got {recv_id}, {recv_endpoint}"
 
-            assert recv_value == value and recv_expiration == expiration, "call_find_value expected " \
-                                                                          f"{value} (expires by {expiration}) but got {recv_value} (expires by {recv_expiration})"
+            assert recv_value == value and recv_expiration == expiration, \
+                f"call_find_value expected {value} (expires by {expiration}) " \
+                f"but got {recv_value} (expires by {recv_expiration})"
 
             # peer 2 must know about peer 1, but not have a *random* nonexistent value
             dummy_key = DHTID.generate()

@@ -1,4 +1,3 @@
-#%env CUDA_VISIBLE_DEVICES=
 import argparse
 from typing import Optional
 
