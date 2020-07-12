@@ -90,7 +90,7 @@ def test_dht_protocol():
 
             if listen:
                 loop.run_until_complete(protocol.shutdown())
-            print("DHTProtocol test finished sucessfully!")
+            print("DHTProtocol test finished successfully!")
             test_success.set()
 
     tester = mp.Process(target=_tester, daemon=True)
