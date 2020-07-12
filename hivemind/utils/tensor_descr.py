@@ -45,7 +45,8 @@ class BatchTensorDescriptor(TensorDescriptor):
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor):
         return cls(*tensor.shape[1:], dtype=tensor.dtype, layout=tensor.layout,
-                   device=tensor.device, requires_grad=tensor.requires_grad, pin_memory=torch.cuda.is_available() and tensor.is_pinned())
+                   device=tensor.device, requires_grad=tensor.requires_grad,
+                   pin_memory=torch.cuda.is_available() and tensor.is_pinned())
 
     def make_empty(self, batch_size, **kwargs):
         assert self.shape[0] is None, "Make sure 0-th dimension is not specified (set to None)"

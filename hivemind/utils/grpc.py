@@ -47,7 +47,8 @@ def compile_grpc(proto: str, *args: str) -> Tuple[Namespace, Namespace]:
                 raise ImportError("Something changed sys.path while compile_grpc was in progress.")
 
 
-with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'server', 'connection_handler.proto')) as f_proto:
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       'server', 'connection_handler.proto')) as f_proto:
     runtime_pb2, runtime_grpc = compile_grpc(f_proto.read())
 
 

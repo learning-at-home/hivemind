@@ -8,8 +8,8 @@ def get_logger(module_name: str) -> logging.Logger:
     loglevel = os.getenv('LOGLEVEL', 'INFO')
 
     logging.addLevelName(logging.WARNING, 'WARN')
-    formatter = logging.Formatter(fmt='[{asctime}.{msecs:03.0f}][{levelname}][{name}.{funcName}:{lineno}] {message}', style='{',
-                                  datefmt='%Y/%m/%d %H:%M:%S')
+    formatter = logging.Formatter(fmt='[{asctime}.{msecs:03.0f}][{levelname}][{name}.{funcName}:{lineno}] {message}',
+                                  style='{', datefmt='%Y/%m/%d %H:%M:%S')
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
     logger = logging.getLogger(name_without_prefix)
