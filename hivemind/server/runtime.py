@@ -7,8 +7,7 @@ from typing import Dict
 import torch
 from prefetch_generator import BackgroundGenerator
 
-from hivemind.runtime.expert_backend import ExpertBackend
-from hivemind.runtime.task_pool import TaskPool, TaskPoolBase
+from hivemind.server.expert_backend import ExpertBackend
 from hivemind.utils import get_logger
 
 logger = get_logger(__name__)

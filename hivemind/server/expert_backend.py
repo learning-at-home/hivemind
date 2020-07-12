@@ -3,7 +3,7 @@ from typing import Dict, Sequence, Any, Tuple, Union
 import torch
 from torch import nn
 
-from hivemind.runtime.task_pool import TaskPool
+from hivemind.server.task_pool import TaskPool
 from hivemind.utils import nested_flatten, nested_pack, nested_compare, nested_map,\
     BatchTensorDescriptor, DUMMY_BATCH_SIZE
 
@@ -19,7 +19,7 @@ class ExpertBackend(nn.Module):
 
     :param expert: nn.Module to be wrapped into a backend. Arbitrary pytorch module with a few limitations:
 
-     - Experts must always receive the same set of \*args and \*\*kwargs and produce output tensors of same type
+     - Experts must always receive the same set of args and kwargs and produce output tensors of same type
      - All args, kwargs and outputs must be **tensors** where 0-th dimension represents to batch size
      - We recommend using experts that are ~invariant to the order in which they process batches
      - Using randomness (e.g. Dropout) leads to different samples at forward and backward. If you want consistency,

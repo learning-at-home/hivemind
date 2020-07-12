@@ -4,7 +4,9 @@ import threading
 from typing import Dict, Optional
 
 from hivemind.dht import DHT
-from hivemind.runtime import Runtime, ExpertBackend
+from hivemind.server.runtime import Runtime
+from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
+from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.checkpoint_saver import CheckpointSaver
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread
