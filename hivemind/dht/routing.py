@@ -47,7 +47,7 @@ class RoutingTable:
 
     def add_or_update_node(self, node_id: DHTID, endpoint: Endpoint) -> Optional[Tuple[DHTID, Endpoint]]:
         """
-        Update routing table after an incoming request from :addr: (host:port) or outgoing request to :addr:
+        Update routing table after an incoming request from :endpoint: or outgoing request to :endpoint:
 
         :returns: If we cannot add node_id to the routing table, return the least-recently-updated node (Section 2.2)
         :note: DHTProtocol calls this method for every incoming and outgoing request if there was a response.
@@ -91,7 +91,7 @@ class RoutingTable:
         """ Find endpoint for a given DHTID or vice versa """
         return self.uid_to_endpoint[item] if isinstance(item, DHTID) else self.endpoint_to_uid[item]
 
-    def __setitem__(self, node_id: DHTID, addr: Endpoint) -> NotImplementedError:
+    def __setitem__(self, node_id: DHTID, endpoint: Endpoint) -> NotImplementedError:
         raise NotImplementedError("RoutingTable doesn't support direct item assignment. Use table.try_add_node instead")
 
     def __contains__(self, item: Union[DHTID, Endpoint]) -> bool:
@@ -160,7 +160,7 @@ class RoutingTable:
 class KBucket:
     """
     A bucket containing up to :size: of DHTIDs in [lower, upper) semi-interval.
-    Maps DHT node ids to their endpoints (hostname, addr)
+    Maps DHT node ids to their endpoints
     """
 
     def __init__(self, lower: int, upper: int, size: int, depth: int = 0):
@@ -175,13 +175,13 @@ class KBucket:
         """ Check if node_id is between this bucket's lower and upper bounds """
         return self.lower <= node_id < self.upper
 
-    def add_or_update_node(self, node_id: DHTID, addr: Endpoint) -> bool:
+    def add_or_update_node(self, node_id: DHTID, endpoint: Endpoint) -> bool:
         """
         Add node to KBucket or update existing node, return True if successful, False if the bucket is full.
         If the bucket is full, keep track of node in a replacement list, per section 4.1 of the paper.
 
         :param node_id: dht node identifier that should be added or moved to the front of bucket
-        :param addr: a pair of (hostname, port) associated with that node id
+        :param endpoint: network address associated with that node id
         :note: this function has a side-effect of resetting KBucket.last_updated time
         """
         if node_id in self.nodes_requested_for_ping:
@@ -189,13 +189,13 @@ class KBucket:
         self.last_updated = get_dht_time()
         if node_id in self.nodes_to_endpoint:
             del self.nodes_to_endpoint[node_id]
-            self.nodes_to_endpoint[node_id] = addr
+            self.nodes_to_endpoint[node_id] = endpoint
         elif len(self.nodes_to_endpoint) < self.size:
-            self.nodes_to_endpoint[node_id] = addr
+            self.nodes_to_endpoint[node_id] = endpoint
         else:
             if node_id in self.replacement_nodes:
                 del self.replacement_nodes[node_id]
-            self.replacement_nodes[node_id] = addr
+            self.replacement_nodes[node_id] = endpoint
             return False
         return True
 
@@ -229,9 +229,9 @@ class KBucket:
         assert self.lower < midpoint < self.upper, f"Bucket to small to be split: [{self.lower}: {self.upper})"
         left = KBucket(self.lower, midpoint, self.size, depth=self.depth + 1)
         right = KBucket(midpoint, self.upper, self.size, depth=self.depth + 1)
-        for node_id, addr in chain(self.nodes_to_endpoint.items(), self.replacement_nodes.items()):
+        for node_id, endpoint in chain(self.nodes_to_endpoint.items(), self.replacement_nodes.items()):
             bucket = left if int(node_id) <= midpoint else right
-            bucket.add_or_update_node(node_id, addr)
+            bucket.add_or_update_node(node_id, endpoint)
         return left, right
 
     def __repr__(self):

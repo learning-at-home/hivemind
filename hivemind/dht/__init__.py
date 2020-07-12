@@ -30,7 +30,7 @@ class DHT(mp.Process):
     """
     A high-level interface to hivemind DHT. Runs a dht node in a background process.
 
-    :param initial_peers: one or multiple pairs of (host, port) pointing to active DHT peers. Default: no peers
+    :param initial_peers: one or multiple endpoints pointing to active DHT peers. Similar format to listen_on.
     :param listen_on: an interface for incoming connections, e.g. "127.0.0.1:*", "0.0.0.0:1234" or "ipv6:[::]:*"
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
@@ -125,7 +125,7 @@ class DHT(mp.Process):
         Make experts visible to all DHT peers; update timestamps if declared previously.
 
         :param uids: a list of expert ids to update
-        :param endpoint: endpoint that serves these experts, usually your server addr (e.g. "201.111.222.333:1337")
+        :param endpoint: endpoint that serves these experts, usually your server endpoint (e.g. "201.111.222.333:1337")
         :param wait: if True, awaits for declaration to finish, otherwise runs in background
         :param timeout: waits for the procedure to finish, None means wait indeninitely
         :returns: if wait, returns a list of booleans, (True = store succeeded, False = store rejected)

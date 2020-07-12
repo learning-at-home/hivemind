@@ -39,7 +39,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         See DHTNode (node.py) for a more detailed description.
 
         :note: the rpc_* methods defined in this class will be automatically exposed to other DHT nodes,
-         for instance, def rpc_ping can be called as protocol.call_ping(addr, dht_id) from a remote machine
+         for instance, def rpc_ping can be called as protocol.call_ping(endpoint, dht_id) from a remote machine
          Only the call_* methods are meant to be called publicly, e.g. from DHTNode
          Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
         """

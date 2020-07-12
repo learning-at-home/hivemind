@@ -25,10 +25,9 @@ class Server(threading.Thread):
      - follows orders from HivemindController - if it exists
 
     :type dht: DHT or None. Server with dht=None will NOT be visible from DHT,
-     but it will still support accessing experts directly with RemoteExpert(uid=UID, host=IPADDR, port=PORT).
+     but it will still support accessing experts directly with RemoteExpert(uid=UID, endpoint="IPADDR:PORT").
     :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
-    :param addr: server's dht address that determines how it can be accessed. Default is local connections only.
-    :param port: port to which server listens for requests such as expert forward or backward pass.
+    :param listen_on: server's dht address that determines how it can be accessed. Address and (optional) port
     :param num_connection_handlers: maximum number of simultaneous requests. Please note that the default value of 1
         if too small for normal functioning, we recommend 4 handlers per expert backend.
     :param update_period: how often will server attempt to publish its state (i.e. experts) to the DHT;

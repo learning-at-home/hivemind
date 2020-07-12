@@ -115,16 +115,17 @@ def test_routing_table_search():
             k = random.randint(1, 100)
             query_id = DHTID.generate()
             exclude = query_id if random.random() < 0.5 else None
-            our_knn, our_addrs = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=exclude))
+            our_knn, our_endpoints = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=exclude))
             reference_knn = heapq.nsmallest(k, all_active_neighbors, key=query_id.xor_distance)
             assert all(our == ref for our, ref in zip_longest(our_knn, reference_knn))
-            assert all(our_addr == routing_table[our_node] for our_node, our_addr in zip(our_knn, our_addrs))
+            assert all(our_endpoint == routing_table[our_node]
+                       for our_node, our_endpoint in zip(our_knn, our_endpoints))
 
         # queries from table
         for i in range(1000):
             k = random.randint(1, 100)
             query_id = random.choice(all_active_neighbors)
-            our_knn, our_addrs = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=query_id))
+            our_knn, our_endpoints = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=query_id))
 
             reference_knn = heapq.nsmallest(k + 1, all_active_neighbors, key=query_id.xor_distance)
             if query_id in reference_knn:
