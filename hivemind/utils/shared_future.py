@@ -5,7 +5,7 @@ from warnings import warn
 import asyncio
 
 
-class SharedFuture(Future):
+class MPFuture(Future):
     """ Multiprocessing version of concurrent.futures.Future, interacts between two processes via Pipe """
     STATES = 'pending', 'running', 'cancelled', 'finished', 'exception'
     STATE_PENDING, STATE_RUNNING, STATE_CANCELLED, STATE_FINISHED, STATE_EXCEPTION = STATES
