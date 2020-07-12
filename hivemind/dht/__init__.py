@@ -23,7 +23,7 @@ import uvloop
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import get_dht_time
-from hivemind.utils import SharedFuture, Endpoint, run_in_background
+from hivemind.utils import MPFuture, Endpoint, run_in_background
 
 
 class DHT(mp.Process):
@@ -99,11 +99,11 @@ class DHT(mp.Process):
         :param expiration: returns experts that expire no sooner than this (based on get_dht_time), default = now
         :returns: a list of [RemoteExpert if found else None]
         """
-        future, _future = SharedFuture.make_pair()
+        future, _future = MPFuture.make_pair()
         self.pipe.send(('_get_experts', [], dict(uids=uids, expiration=expiration, future=_future)))
         return future.result()
 
-    def _get_experts(self, uids: List[str], expiration: Optional[DHTExpiration], future: SharedFuture):
+    def _get_experts(self, uids: List[str], expiration: Optional[DHTExpiration], future: MPFuture):
         loop = asyncio.get_event_loop()
         expiration = expiration or get_dht_time()
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
@@ -131,12 +131,12 @@ class DHT(mp.Process):
         :param timeout: waits for the procedure to finish, None means wait indeninitely
         :returns: if wait, returns a list of booleans, (True = store succeeded, False = store rejected)
         """
-        future, _future = SharedFuture.make_pair() if wait else (None, None)
+        future, _future = MPFuture.make_pair() if wait else (None, None)
         self.pipe.send(('_declare_experts', [], dict(uids=list(uids), addr=addr, port=port, future=_future)))
         if wait:
             return future.result(timeout)
 
-    def _declare_experts(self, uids: List[str], addr: str, port: int, future: Optional[SharedFuture]):
+    def _declare_experts(self, uids: List[str], addr: str, port: int, future: Optional[MPFuture]):
         assert self.node is not None, "This method should only be accessed from inside .run method"
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         loop = asyncio.get_event_loop()
@@ -171,12 +171,12 @@ class DHT(mp.Process):
         :returns: a list of at most :k: prefixes that have at least one active expert each;
         """
         assert isinstance(prefixes, (list, tuple)), "please provide a list/tuple of prefixes as the first argument"
-        future, _future = SharedFuture.make_pair()
+        future, _future = MPFuture.make_pair()
         self.pipe.send(('_first_k_active', [],
                         dict(prefixes=prefixes, k=k, max_prefetch=max_prefetch or k, future=_future)))
         return future.result()
 
-    def _first_k_active(self, prefixes: List[str], k: int, max_prefetch: Optional[int], future: SharedFuture):
+    def _first_k_active(self, prefixes: List[str], k: int, max_prefetch: Optional[int], future: MPFuture):
         assert self.node is not None, "This method should only be accessed from inside .run method"
         max_prefetch = max_prefetch or len(prefixes)
         loop = asyncio.get_event_loop()
