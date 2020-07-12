@@ -1,9 +1,24 @@
 import socket
+import urllib.parse
 from contextlib import closing
+from typing import Optional
 
 Hostname, Port = str, int  # flavour types
 Endpoint = str  # e.g. 1.2.3.4:1337 or [2a21:6с8:b192:2105]:8888, https://networkengineering.stackexchange.com/a/9435
 LOCALHOST = '127.0.0.1'
+
+
+def get_port(endpoint: Endpoint) -> Optional[Port]:
+    """ get port or None if port is undefined """
+    try:
+        return int(endpoint[endpoint.rindex(':') + 1:], base=10)
+    except ValueError:  # :* or not specified
+        return None
+
+
+def replace_port(endpoint: Endpoint, new_port: Port) -> Endpoint:
+    assert endpoint.endswith(':*') or get_port(endpoint) is not None, endpoint
+    return f"{endpoint[:endpoint.rindex(':')]}:{new_port}"
 
 
 def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):

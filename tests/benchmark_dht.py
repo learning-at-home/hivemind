@@ -9,9 +9,9 @@ from tqdm import trange
 from test_utils import increase_file_limit
 
 
-def random_endpoint() -> Tuple[str, int]:
-    return (f"{random.randint(0, 256)}.{random.randint(0, 256)}."
-            f"{random.randint(0, 256)}.{random.randint(0, 256)}", random.randint(0, 65535))
+def random_endpoint() -> hivemind.Endpoint:
+    return f"{random.randint(0, 256)}.{random.randint(0, 256)}.{random.randint(0, 256)}." \
+           f"{random.randint(0, 256)}:{random.randint(0, 65535)}"
 
 
 def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_batch_size: int, random_seed: int,
@@ -23,7 +23,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     peers = []
     for _ in trange(num_peers):
         neighbors = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(initial_peers, len(peers)))]
-        peer = hivemind.DHT(*neighbors, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
+        peer = hivemind.DHT(initial_peers=neighbors, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
         peers.append(peer)
 
     store_peer, get_peer = peers[-2:]
@@ -41,7 +41,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     for start in trange(0, num_experts, expert_batch_size):
         store_start = time.perf_counter()
         endpoints.append(random_endpoint())
-        success_list = store_peer.declare_experts(expert_uids[start: start + expert_batch_size], *endpoints[-1])
+        success_list = store_peer.declare_experts(expert_uids[start: start + expert_batch_size], endpoints[-1])
         total_store_time += time.perf_counter() - store_start
 
         total_stores += len(success_list)
@@ -64,7 +64,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
 
         for i, expert in enumerate(get_result):
             if expert is not None and expert.uid == expert_uids[start + i] \
-                    and (expert.host, expert.port) == endpoints[start // expert_batch_size]:
+                    and expert.endpoint == endpoints[start // expert_batch_size]:
                 successful_gets += 1
 
     if time.perf_counter() - benchmark_started > expiration_time:

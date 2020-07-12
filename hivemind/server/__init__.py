@@ -1,3 +1,4 @@
+import ctypes
 import multiprocessing as mp
 from multiprocessing import synchronize, pool, context
 import threading
@@ -10,6 +11,7 @@ from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.checkpoint_saver import CheckpointSaver
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread
+from hivemind.utils import Endpoint, get_port, replace_port, find_open_port
 
 
 class Server(threading.Thread):
@@ -23,10 +25,9 @@ class Server(threading.Thread):
      - follows orders from HivemindController - if it exists
 
     :type dht: DHT or None. Server with dht=None will NOT be visible from DHT,
-     but it will still support accessing experts directly with RemoteExpert(uid=UID, host=IPADDR, port=PORT).
+     but it will still support accessing experts directly with RemoteExpert(uid=UID, endpoint="IPADDR:PORT").
     :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
-    :param addr: server's dht address that determines how it can be accessed. Default is local connections only.
-    :param port: port to which server listens for requests such as expert forward or backward pass.
+    :param listen_on: server's dht address that determines how it can be accessed. Address and (optional) port
     :param num_connection_handlers: maximum number of simultaneous requests. Please note that the default value of 1
         if too small for normal functioning, we recommend 4 handlers per expert backend.
     :param update_period: how often will server attempt to publish its state (i.e. experts) to the DHT;
@@ -36,13 +37,15 @@ class Server(threading.Thread):
     """
 
     def __init__(
-            self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], addr='127.0.0.1', port: int = 8080,
+            self, dht: Optional[DHT], expert_backends: Dict[str, ExpertBackend], listen_on: Endpoint = "0.0.0.0:*",
             num_connection_handlers: int = 1, update_period: int = 30, start=False, checkpoint_dir=None, **kwargs):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
-        self.addr, self.port = addr, port
-        self.conn_handlers = [ConnectionHandler(f"{self.addr}:{port}", self.experts)
-                              for _ in range(num_connection_handlers)]
+        if get_port(listen_on) is None:
+            self.listen_on = listen_on = replace_port(listen_on, new_port=find_open_port())
+        self.port = get_port(listen_on)
+
+        self.conn_handlers = [ConnectionHandler(listen_on, self.experts) for _ in range(num_connection_handlers)]
         if checkpoint_dir is not None:
             self.checkpoint_saver = CheckpointSaver(expert_backends, checkpoint_dir, update_period)
         else:
@@ -61,8 +64,8 @@ class Server(threading.Thread):
             if not self.dht.is_alive():
                 self.dht.run_in_background(await_ready=True)
 
-            dht_handler_thread = DHTHandlerThread(experts=self.experts, dht=self.dht,
-                                                  addr=self.addr, port=self.port, update_period=self.update_period)
+            dht_handler_thread = DHTHandlerThread(
+                experts=self.experts, dht=self.dht, endpoint=self.listen_on, update_period=self.update_period)
             dht_handler_thread.start()
         if self.checkpoint_saver is not None:
             self.checkpoint_saver.start()
