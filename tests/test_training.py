@@ -12,8 +12,6 @@ from sklearn.datasets import load_digits
 
 
 def test_training(port: Optional[int] = None, max_steps: int = 100, threshold: float = 0.9):
-    if port is None:
-        port = find_open_port()
     dataset = load_digits()
     X_train, y_train = torch.tensor(dataset['data'], dtype=torch.float), torch.tensor(dataset['target'])
 

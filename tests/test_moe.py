@@ -19,8 +19,8 @@ def test_remote_module_call():
     random_proj = torch.randn_like(xx)
 
     with background_server(num_experts=num_experts, device='cpu', num_handlers=1,
-                           no_optimizer=True, no_dht=True) as (localhost, server_port, dht_port):
-        experts = [hivemind.RemoteExpert(uid=f'expert.{i}', port=server_port) for i in range(num_experts)]
+                           no_optimizer=True, no_dht=True) as (server_endpoint, dht_endpoint):
+        experts = [hivemind.RemoteExpert(uid=f'expert.{i}', endpoint=server_endpoint) for i in range(num_experts)]
         moe_output, = hivemind.client.moe._RemoteMoECall.apply(
             logits, experts[:len(logits)], k_min, timeout_after_k_min, backward_k_min, timeout_total, backward_timeout,
             [(None,), {}], xx)
@@ -51,8 +51,8 @@ def test_determinism():
     mask = torch.randint(0, 1, (32, 1024))
 
     with background_server(num_experts=1, device='cpu', expert_cls='det_dropout', num_handlers=1,
-                           no_optimizer=True, no_dht=True) as (interface, server_port, dht_port):
-        expert = hivemind.RemoteExpert(uid=f'expert.0', port=server_port)
+                           no_optimizer=True, no_dht=True) as (server_endpoint, dht_endpoint):
+        expert = hivemind.RemoteExpert(uid=f'expert.0', endpoint=server_endpoint)
 
         out = expert(xx, mask)
         out_rerun = expert(xx, mask)
@@ -70,11 +70,11 @@ def test_compute_expert_scores():
         moe = hivemind.client.moe.RemoteMixtureOfExperts(
             dht=dht, in_features=1024, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1,
             uid_prefix='expert')
-        gx, gy = torch.randn(4, 5, requires_grad=True), torch.torch.randn(4, 3, requires_grad=True)
+        gx, gy = torch.randn(4, 5, requires_grad=True), torch.randn(4, 3, requires_grad=True)
         ii = [[4, 0, 2], [3, 1, 1, 1, 3], [0], [3, 2]]
         jj = [[2, 2, 1], [0, 1, 2, 0, 1], [0], [1, 2]]
         batch_experts = [
-            [hivemind.RemoteExpert(uid=f'expert.{ii[batch_i][expert_i]}.{jj[batch_i][expert_i]}')
+            [hivemind.RemoteExpert(uid=f'expert.{ii[batch_i][expert_i]}.{jj[batch_i][expert_i]}', endpoint="[::]:1337")
              for expert_i in range(len(ii[batch_i]))]
             for batch_i in range(len(ii))
         ]  # note: these experts do not exists on server, we use them only to test moe compute_expert_scores
