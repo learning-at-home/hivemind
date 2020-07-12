@@ -10,6 +10,7 @@ LOCALHOST = '127.0.0.1'
 
 def get_port(endpoint: Endpoint) -> Optional[Port]:
     """ get port or None if port is undefined """
+    # TODO: find a standard way to get port, make sure it works in malformed ports
     try:
         return int(endpoint[endpoint.rindex(':') + 1:], base=10)
     except ValueError:  # :* or not specified
