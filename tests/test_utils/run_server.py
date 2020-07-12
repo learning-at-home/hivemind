@@ -6,7 +6,7 @@ import resource
 import torch
 
 import hivemind
-from tests.test_utils.layers import name_to_block, name_to_input
+from test_utils.layers import name_to_block, name_to_input
 
 
 def make_dummy_server(interface='0.0.0.0', port=None, num_experts=1, expert_cls='ffn', hidden_dim=1024,
