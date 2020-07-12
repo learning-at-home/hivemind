@@ -16,7 +16,7 @@ import asyncio
 import ctypes
 import multiprocessing as mp
 import warnings
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import uvloop
 
@@ -42,8 +42,8 @@ class DHT(mp.Process):
     EXPIRATION = 120  # anything written to DHT is considered expired after this many seconds
     make_key = "{}::{}".format
 
-    def __init__(self, *initial_peers: Endpoint, listen_on: Endpoint = "0.0.0.0:*", start: bool, daemon: bool = True,
-                 max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None, **kwargs):
+    def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
+                 daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None, **kwargs):
         super().__init__()
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.max_workers, self.parallel_rpc = max_workers, parallel_rpc

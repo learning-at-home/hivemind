@@ -274,7 +274,7 @@ def test_hivemind_dht():
     peers = [hivemind.DHT(start=True)]
     for i in range(10):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(hivemind.DHT(*neighbors_i, start=True))
+        peers.append(hivemind.DHT(initial_peers=neighbors_i, start=True))
 
     you: hivemind.dht.DHT = random.choice(peers)
     theguyshetoldyounottoworryabout: hivemind.dht.DHT = random.choice(peers)
