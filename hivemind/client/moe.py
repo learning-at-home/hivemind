@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-from hivemind.client.expert import RemoteExpert, _RemoteModuleCall
-from hivemind.utils import nested_map, run_and_await_k, nested_pack, nested_flatten, DUMMY, run_in_background, \
+from hivemind.client.expert import RemoteExpert, _RemoteModuleCall, DUMMY
+from hivemind.utils import nested_map, run_and_await_k, nested_pack, nested_flatten, run_in_background, \
     run_isolated_forward, EmulatedAutogradContext, run_isolated_backward, map_with_parallel_backward
 
 
@@ -43,7 +43,8 @@ class RemoteMixtureOfExperts(nn.Module):
         self.dht, self.grid_size = dht, grid_size
         self.uid_prefix, self.expert_padding = uid_prefix, expert_padding
         self.k_best, self.k_min, self.backward_k_min = k_best, k_min, backward_k_min
-        self.forward_timeout, self.timeout_after_k_min, self.backward_timeout = forward_timeout, timeout_after_k_min, backward_timeout
+        self.forward_timeout, self.backward_timeout = forward_timeout, backward_timeout
+        self.timeout_after_k_min = timeout_after_k_min
         self.allow_broadcasting = allow_broadcasting
 
         self.proj = nn.Linear(in_features, sum(grid_size))  # jointly predict logits for all grid dimensions
