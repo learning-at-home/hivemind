@@ -14,7 +14,7 @@ from test_utils.layers import name_to_block, name_to_input
 def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hidden_dim=1024,
                       num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
                       no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
-                      UID_DELIMETER=hivemind.DHT.UID_DELIMETER, start=False, **kwargs) -> hivemind.Server:
+                      uid_delimiter='.', start=False, **kwargs) -> hivemind.Server:
     """
     Instantiate a server with several identical experts. See argparse comments below for details
     :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
@@ -47,9 +47,8 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
     if not no_dht:
         if not len(initial_peers):
             print("No initial peers provided. Starting additional dht as an initial peer.")
-            dht_root = hivemind.DHT(initial_peers=initial_peers,
-                                    listen_on=f"{hivemind.LOCALHOST}:{root_port or hivemind.find_open_port()}",
-                                    start=True)
+            dht_root = hivemind.DHT(initial_peers=initial_peers, uid_delimiter=uid_delimiter, start=True,
+                                    listen_on=f"{hivemind.LOCALHOST}:{root_port or hivemind.find_open_port()}")
             print(f"Initializing DHT with port {dht_root.port}")
             initial_peers = [f"{hivemind.LOCALHOST}:{dht_root.port}"]
         else:
@@ -57,9 +56,8 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
             if root_port is not None:
                 print(f"Warning: root_port={root_port} will not be used since we already have peers.")
 
-        dht = hivemind.DHT(initial_peers=initial_peers,
-                           listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}",
-                           start=True)
+        dht = hivemind.DHT(initial_peers=initial_peers, uid_delimiter=uid_delimiter, start=True,
+                           listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}")
         if verbose:
             print(f"Running dht node on port {dht.port}")
 
@@ -74,7 +72,7 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
     for i in range(num_experts):
         expert = name_to_block[expert_cls](hidden_dim)
         opt = torch.optim.SGD(expert.parameters(), 0.0 if no_optimizer else 0.05)
-        expert_uid = f'{expert_prefix}{UID_DELIMETER}{i + expert_offset}'
+        expert_uid = f'{expert_prefix}{uid_delimiter}{i + expert_offset}'
         experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
                                                      args_schema=args_schema,
                                                      outputs_schema=hivemind.BatchTensorDescriptor(hidden_dim),
