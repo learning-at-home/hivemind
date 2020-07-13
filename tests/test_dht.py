@@ -5,7 +5,7 @@ import random
 import heapq
 import uuid
 from itertools import chain
-from typing import Optional, Tuple
+from typing import Optional
 import numpy as np
 
 import hivemind
