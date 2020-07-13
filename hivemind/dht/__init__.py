@@ -17,6 +17,7 @@ import ctypes
 import multiprocessing as mp
 import warnings
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Sequence
 
 import uvloop
@@ -40,6 +41,7 @@ class DHT(mp.Process):
     :param uid_delimiter: when declaring experts, DHT will also declare all prefixes of that expert's uid, defined as
         {uid.split(uid_delimiter)[:prefix_length] for prefix_length in range(1, len(uid.split(uid_delimiter) + 1))}
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
+    :param receiver_threads: uses this many threads to await on input pipe. Default = 1 should be enough in most cases
     :param kwargs: any other params will be forwarded to DHTNode upon creation
 
     Each expert has an identifier in the form of {prefix}.{i}.{j}.{...}, e.g. "ffn_expert.98.76.54.32.10"
@@ -69,13 +71,12 @@ class DHT(mp.Process):
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 uid_delimiter='.', expiration=300, **kwargs):
+                 receiver_threads: int = 1, uid_delimiter: str = '.', expiration: float = 300, **kwargs):
         super().__init__()
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
-        self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
+        self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
         self.uid_delimiter, self.expiration = uid_delimiter, expiration
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
-        self.node: Optional[DHTNode] = None  # initialized inside self.run only
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
         self.daemon = daemon
@@ -89,16 +90,20 @@ class DHT(mp.Process):
         uvloop.install()
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        self.node: DHTNode = loop.run_until_complete(DHTNode.create(
-            initial_peers=list(self.initial_peers), listen_on=self.listen_on, parallel_rpc=self.parallel_rpc,
-            num_workers=self.max_workers or 1, **self.kwargs))
-        self._port.value = self.node.port
-        run_in_background(loop.run_forever)
-        self.ready.set()
+        pipe_awaiter = ThreadPoolExecutor(self.receiver_threads)
 
-        while True:
-            method, args, kwargs = self._pipe.recv()
-            getattr(self, method)(*args, **kwargs)
+        async def _run():
+            node = await DHTNode.create(
+                initial_peers=list(self.initial_peers), listen_on=self.listen_on, parallel_rpc=self.parallel_rpc,
+                num_workers=self.max_workers or 1, **self.kwargs)
+            self._port.value = node.port
+            self.ready.set()
+
+            while True:
+                method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
+                asyncio.create_task(getattr(self, method)(node, *args, **kwargs))
+
+        loop.run_until_complete(_run())
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
@@ -112,7 +117,7 @@ class DHT(mp.Process):
     def shutdown(self) -> None:
         """ Shuts down the dht process """
         if self.is_alive():
-            self.kill()
+            self.terminate()
         else:
             warnings.warn("DHT shutdown has no effect: dht process is already not alive")
 
@@ -131,14 +136,10 @@ class DHT(mp.Process):
         self.pipe.send(('_get_experts', [], dict(uids=uids, expiration=expiration, future=_future)))
         return future.result()
 
-    def _get_experts(self, uids: List[str], expiration: Optional[DHTExpiration], future: MPFuture):
-        loop = asyncio.get_event_loop()
+    async def _get_experts(self, node: DHTNode, uids: List[str], expiration: Optional[DHTExpiration], future: MPFuture):
         expiration = expiration or get_dht_time()
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
-
-        response = asyncio.run_coroutine_threadsafe(
-            self.node.get_many(uids, expiration, num_workers=num_workers), loop).result()
-
+        response = await node.get_many(uids, expiration, num_workers=num_workers)
         future.set_result([RemoteExpert(uid, maybe_endpoint) if maybe_expiration else None
                            for uid, (maybe_endpoint, maybe_expiration) in response.items()])
 
@@ -158,10 +159,8 @@ class DHT(mp.Process):
         if wait:
             return future.result(timeout)
 
-    def _declare_experts(self, uids: List[str], endpoint: Endpoint, future: Optional[MPFuture]):
-        assert self.node is not None, "This method should only be accessed from inside .run method"
+    async def _declare_experts(self, node: DHTNode, uids: List[str], endpoint: Endpoint, future: Optional[MPFuture]):
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
-        loop = asyncio.get_event_loop()
         expiration_time = get_dht_time() + self.expiration
 
         data_to_store = {}
@@ -171,9 +170,8 @@ class DHT(mp.Process):
                 uid_prefix_i = self.uid_delimiter.join(uid_parts[:i + 1])
                 data_to_store[uid_prefix_i] = endpoint
 
-        store_ok = asyncio.run_coroutine_threadsafe(
-            self.node.store_many(*zip(*data_to_store.items()), expiration=expiration_time, num_workers=num_workers), loop
-        ).result()
+        store_keys, store_values = zip(*data_to_store.items())
+        store_ok = await node.store_many(store_keys, store_values, expiration_time, num_workers=num_workers)
         if future is not None:
             future.set_result([store_ok[key] for key in data_to_store.keys()])
 
@@ -194,22 +192,21 @@ class DHT(mp.Process):
                              chunk_size=chunk_size or k, future=_future)))
         return future.result()
 
-    def _first_k_active(self, uid_prefixes: List[str], k: int, max_prefetch: int, chunk_size: int, future: MPFuture):
-        assert self.node is not None, "This method should only be accessed from inside .run method"
-        loop = asyncio.get_event_loop()
-        workers_per_chunk = min(chunk_size, self.max_workers or chunk_size)
+    async def _first_k_active(
+            self, node: DHTNode, uid_prefixes: List[str], k: int, max_prefetch: int, chunk_size: int, future: MPFuture):
+        num_workers_per_chunk = min(chunk_size, self.max_workers or chunk_size)
         total_chunks = (len(uid_prefixes) - 1) // chunk_size + 1
         active_prefixes = []
 
         pending_tasks = deque(
-            asyncio.run_coroutine_threadsafe(self.node.get_many(
-                uid_prefixes[chunk_i * chunk_size: (chunk_i + 1) * chunk_size], num_workers=workers_per_chunk), loop)
+            asyncio.create_task(node.get_many(uid_prefixes[chunk_i * chunk_size: (chunk_i + 1) * chunk_size],
+                                              num_workers=num_workers_per_chunk))
             for chunk_i in range(min(max_prefetch + 1, total_chunks))
         )  # pre-dispatch first task and up to max_prefetch additional tasks
 
         for chunk_i in range(total_chunks):
             # parse task results in chronological order, launch additional tasks on demand
-            response = pending_tasks.popleft().result()
+            response = await pending_tasks.popleft()
             for uid_prefix in uid_prefixes[chunk_i * chunk_size: (chunk_i + 1) * chunk_size]:
                 if response[uid_prefix][1] is not None:  # found active peer
                     active_prefixes.append(uid_prefix)
@@ -223,9 +220,9 @@ class DHT(mp.Process):
 
             pre_dispatch_chunk_i = chunk_i + len(pending_tasks) + 1
             if pre_dispatch_chunk_i < total_chunks:
-                pending_tasks.append(asyncio.run_coroutine_threadsafe(self.node.get_many(
+                pending_tasks.append(asyncio.create_task(node.get_many(
                     uid_prefixes[pre_dispatch_chunk_i * chunk_size: (pre_dispatch_chunk_i + 1) * chunk_size],
-                    num_workers=workers_per_chunk), loop))
+                    num_workers=num_workers_per_chunk)))
 
         # return k active prefixes or as many as we could find
         future.set_result(active_prefixes)
