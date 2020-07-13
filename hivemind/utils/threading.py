@@ -12,16 +12,6 @@ def run_in_background(func: callable, *args, **kwargs) -> Future:
     return GLOBAL_EXECUTOR.submit(func, *args, **kwargs)
 
 
-def run_forever(func: callable, *args, **kwargs):
-    """ A function that runs a :func: in background forever. Returns a future that catches exceptions """
-
-    def repeat():
-        while True:
-            func(*args, **kwargs)
-
-    return run_in_background(repeat)
-
-
 def run_and_await_k(jobs: List[callable], k: int,
                     timeout_after_k: Optional[float] = 0, timeout_total: Optional[float] = None):
     """
