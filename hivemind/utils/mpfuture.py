@@ -5,7 +5,8 @@ import multiprocessing.connection
 import concurrent.futures._base as base
 
 import asyncio
-from typing import Optional, Any
+from functools import lru_cache
+from typing import Optional
 
 from hivemind.utils.threading import run_in_background
 
@@ -18,7 +19,6 @@ class MPFuture(base.Future):
     def __init__(self, connection: mp.connection.Connection):
         """ manually create MPFuture. Please use MPFuture.make_pair instead """
         self._state, self._result, self._exception = base.PENDING, None, None
-        self._self_shutdown = base.Future()
         self.connection = connection
 
     @classmethod
@@ -32,7 +32,7 @@ class MPFuture(base.Future):
         try:
             self.connection.send((self._state, self._result, self._exception))
             if self._state in self.TERMINAL_STATES:
-                self._self_shutdown.set_result(True)
+                self._shutdown_trigger.set_result(True)
                 self.connection.close()
             return True
         except BrokenPipeError:
@@ -41,9 +41,9 @@ class MPFuture(base.Future):
     def _recv_updates(self, timeout: Optional[float]):
         """ Await updates from a paired MPFuture """
         try:
-            future = base.wait([run_in_background(self.connection.poll, timeout), self._self_shutdown],
+            future = base.wait([run_in_background(self.connection.poll, timeout), self._shutdown_trigger],
                                return_when=base.FIRST_COMPLETED)[0].pop()
-            if future is self._self_shutdown:
+            if future is self._shutdown_trigger:
                 raise BrokenPipeError()
             if not future.result():
                 raise TimeoutError()
@@ -138,6 +138,11 @@ class MPFuture(base.Future):
     def get_loop(self):
         raise NotImplementedError(f"MPFuture doesn't support get_loop")
 
+    @property
+    @lru_cache()
+    def _shutdown_trigger(self):
+        return base.Future()
+
     def __repr__(self):
         self._sync_updates()
         if self._state == base.FINISHED:
@@ -155,4 +160,5 @@ class MPFuture(base.Future):
         return self._result
 
     def __del__(self):
+        self._shutdown_trigger.set_result(True)
         return self.connection.close()

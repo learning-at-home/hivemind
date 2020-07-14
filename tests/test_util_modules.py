@@ -114,8 +114,3 @@ def test_await_mpfuture():
                 await future
 
     asyncio.new_event_loop().run_until_complete(_run())
-
-
-
-
-

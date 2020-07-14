@@ -1,15 +1,21 @@
-import os
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed, TimeoutError
+from concurrent.futures import Future, as_completed, TimeoutError
 import time
+from threading import Thread
 from typing import Optional, List
 
-GLOBAL_EXECUTOR = ThreadPoolExecutor(max_workers=os.environ.get("HIVEMIND_THREADS", float('inf')))
 
-
-def run_in_background(func: callable, *args, **kwargs) -> Future:
+def run_in_background(func: callable, *args, **kwargs):
     """ run func(*args, **kwargs) in background and return Future for its outputs """
+    future = Future()
 
-    return GLOBAL_EXECUTOR.submit(func, *args, **kwargs)
+    def _run():
+        try:
+            future.set_result(func(*args, **kwargs))
+        except Exception as e:
+            future.set_exception(e)
+
+    Thread(target=_run).start()
+    return future
 
 
 def run_and_await_k(jobs: List[callable], k: int,

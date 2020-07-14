@@ -59,13 +59,11 @@ class ConnectionHandler(mp.Process):
     async def forward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].forward_pool.submit_task(*inputs)
-        response = await future.async_result()
-        serialized_response = [serialize_torch_tensor(tensor) for tensor in response]
+        serialized_response = [serialize_torch_tensor(tensor) for tensor in await future]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
 
     async def backward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
         inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
-        response = await future.async_result()
-        serialized_response = [serialize_torch_tensor(tensor) for tensor in response]
+        serialized_response = [serialize_torch_tensor(tensor) for tensor in await future]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
