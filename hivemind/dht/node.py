@@ -28,7 +28,7 @@ class DHTNode:
     Compared to Kademlia RPC protocol, hivemind DHT has 3 RPCs:
 
     * ping - request peer's identifier and update routing table (same as Kademlia PING RPC)
-    * store - send several (key, value, expiration) pairs to the same peer (like Kademlia STORE, but in bulk)
+    * store - send several (key, value, expiration_time) pairs to the same peer (like Kademlia STORE, but in bulk)
     * find - request one or several keys, get values & expiration (if peer finds it locally) and :bucket_size: of
         nearest peers from recipient's routing table (ordered nearest-to-farthest, not including recipient itself)
         This RPC is a mixture between Kademlia FIND_NODE and FIND_VALUE with multiple keys per call.
@@ -37,10 +37,10 @@ class DHTNode:
 
     - when asked to get(key), a node must find and return a value with highest expiration time that it found across DHT
       IF that time has not come yet. if expiration time is smaller than current get_dht_time(), node may return None;
-    - when requested to store(key: value, expiration), a node must store (key => value) at until expiration time
+    - when requested to store(key: value, expiration_time), a node must store (key => value) at until expiration time
       or until DHTNode gets the same key with greater expiration time. If a node is asked to store a key but it already
       has the same key with newer expiration, the older key will not be stored. Return True if stored, False if refused;
-    - when requested to store(key: value, expiration, in_cache=True), stores (key => value) in a separate "cache".
+    - when requested to store(key: value, expiration_time, in_cache=True), stores (key => value) in a separate "cache".
       Cache operates same as regular storage, but it has a limited size and evicts least recently used nodes when full;
 
     """
@@ -191,15 +191,15 @@ class DHTNode:
         store_ok = await self.store_many([key], [value], [expiration_time], **kwargs)
         return store_ok[key]
 
-    async def store_many(
-            self, keys: List[DHTKey], values: List[DHTValue], expiration: Union[DHTExpiration, List[DHTExpiration]],
-            exclude_self: bool = False, await_all_replicas=True, **kwargs) -> Dict[DHTKey, bool]:
+    async def store_many(self, keys: List[DHTKey], values: List[DHTValue],
+                         expiration_time: Union[DHTExpiration, List[DHTExpiration]],
+                         exclude_self: bool = False, await_all_replicas=True, **kwargs) -> Dict[DHTKey, bool]:
         """
-        Traverse DHT to find up to best nodes to store multiple (key, value, expiration) pairs.
+        Traverse DHT to find up to best nodes to store multiple (key, value, expiration_time) pairs.
 
         :param keys: arbitrary serializable keys associated with each value
         :param values: serializable "payload" for each key
-        :param expiration: either one expiration time for all keys or individual expiration times (see class doc)
+        :param expiration_time: either one expiration time for all keys or individual expiration times (see class doc)
         :param kwargs: any additional parameters passed to traverse_dht function (e.g. num workers)
         :param exclude_self: if True, never store value locally even if you are one of the nearest nodes
         :note: if exclude_self is True and self.cache_locally == True, value will still be __cached__ locally
@@ -207,13 +207,14 @@ class DHTNode:
             if True, the function will wait for num_replicas successful stores or running out of beam_size nodes
         :returns: for each key: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        expiration = [expiration] * len(keys) if isinstance(expiration, DHTExpiration) else expiration
-        assert len(keys) == len(values) == len(expiration), "Please provide equal number of keys, values and expiration"
+        if isinstance(expiration_time, DHTExpiration):
+            expiration_time = [expiration_time] * len(keys)
+        assert len(keys) == len(values) == len(expiration_time), "Number of keys, values and expiration doesn't match."
 
         key_ids = list(map(DHTID.generate, keys))
         id_to_original_key = dict(zip(key_ids, keys))
         binary_values_by_key_id = {key_id: self.serializer.dumps(value) for key_id, value in zip(key_ids, values)}
-        expiration_by_key_id = {key_id: expiration_time for key_id, expiration_time in zip(key_ids, expiration)}
+        expiration_by_key_id = {key_id: expiration_time for key_id, expiration_time in zip(key_ids, expiration_time)}
         unfinished_key_ids = set(key_ids)  # we use this set to ensure that each store request is finished
 
         store_ok = {key: False for key in keys}  # outputs, updated during search
@@ -320,17 +321,17 @@ class DHTNode:
         unfinished_key_ids = set(key_ids)  # track key ids for which the search is not terminated
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()  # global routing table for all queries
 
-        SearchResult = namedtuple("SearchResult", ["binary_value", "expiration", "source_node_id"])
+        SearchResult = namedtuple("SearchResult", ["binary_value", "expiration_time", "source_node_id"])
         latest_results = {key_id: SearchResult(b'', -float('inf'), None) for key_id in key_ids}
 
         # stage 1: value can be stored in our local cache
         for key_id in key_ids:
-            maybe_value, maybe_expiration = self.protocol.storage.get(key_id)
-            if maybe_expiration is None:
-                maybe_value, maybe_expiration = self.protocol.cache.get(key_id)
-            if maybe_expiration is not None and maybe_expiration > latest_results[key_id].expiration:
-                latest_results[key_id] = SearchResult(maybe_value, maybe_expiration, self.node_id)
-                if maybe_expiration >= sufficient_expiration_time:
+            maybe_value, maybe_expiration_time = self.protocol.storage.get(key_id)
+            if maybe_expiration_time is None:
+                maybe_value, maybe_expiration_time = self.protocol.cache.get(key_id)
+            if maybe_expiration_time is not None and maybe_expiration_time > latest_results[key_id].expiration_time:
+                latest_results[key_id] = SearchResult(maybe_value, maybe_expiration_time, self.node_id)
+                if maybe_expiration_time >= sufficient_expiration_time:
                     unfinished_key_ids.remove(key_id)
 
         # stage 2: traverse the DHT for any unfinished keys
@@ -345,11 +346,11 @@ class DHTNode:
                 return {query: ([], False) for query in queries}
 
             output: Dict[DHTID, Tuple[List[DHTID], bool]] = {}
-            for key_id, (maybe_value, maybe_expiration, peers) in response.items():
+            for key_id, (maybe_value, maybe_expiration_time, peers) in response.items():
                 node_to_endpoint.update(peers)
-                if maybe_expiration is not None and maybe_expiration > latest_results[key_id].expiration:
-                    latest_results[key_id] = SearchResult(maybe_value, maybe_expiration, peer)
-                should_interrupt = (latest_results[key_id].expiration >= sufficient_expiration_time)
+                if maybe_expiration_time is not None and maybe_expiration_time > latest_results[key_id].expiration_time:
+                    latest_results[key_id] = SearchResult(maybe_value, maybe_expiration_time, peer)
+                should_interrupt = (latest_results[key_id].expiration_time >= sufficient_expiration_time)
                 output[key_id] = list(peers.keys()), should_interrupt
             return output
 
@@ -360,10 +361,10 @@ class DHTNode:
 
         # stage 3: cache any new results depending on caching parameters
         for key_id, nearest_nodes in nearest_nodes_per_query.items():
-            latest_value_bytes, latest_expiration, latest_node_id = latest_results[key_id]
-            should_cache = latest_expiration >= sufficient_expiration_time  # if we found a newer value, cache it
+            latest_value_bytes, latest_expiration_time, latest_node_id = latest_results[key_id]
+            should_cache = latest_expiration_time >= sufficient_expiration_time  # if we found a newer value, cache it
             if should_cache and self.cache_locally:
-                self.protocol.cache.store(key_id, latest_value_bytes, latest_expiration)
+                self.protocol.cache.store(key_id, latest_value_bytes, latest_expiration_time)
 
             if should_cache and self.cache_nearest:
                 num_cached_nodes = 0
@@ -371,16 +372,18 @@ class DHTNode:
                     if node_id == latest_node_id:
                         continue
                     asyncio.create_task(self.protocol.call_store(
-                        node_to_endpoint[node_id], [key_id], [latest_value_bytes], [latest_expiration], in_cache=True))
+                        node_to_endpoint[node_id], [key_id], [latest_value_bytes], [latest_expiration_time],
+                        in_cache=True))
                     num_cached_nodes += 1
                     if num_cached_nodes >= self.cache_nearest:
                         break
 
         # stage 4: deserialize data and assemble function output
         find_result: Dict[DHTKey, Tuple[Optional[DHTValue], Optional[DHTExpiration]]] = {}
-        for key_id, (latest_value_bytes, latest_expiration, _) in latest_results.items():
-            if latest_expiration != -float('inf'):
-                find_result[id_to_original_key[key_id]] = self.serializer.loads(latest_value_bytes), latest_expiration
+        for key_id, (latest_value_bytes, latest_expiration_time, _) in latest_results.items():
+            if latest_expiration_time != -float('inf'):
+                latest_value = self.serializer.loads(latest_value_bytes)
+                find_result[id_to_original_key[key_id]] = (latest_value, latest_expiration_time)
             else:
                 find_result[id_to_original_key[key_id]] = None, None
         return find_result

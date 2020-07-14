@@ -249,7 +249,7 @@ def test_dht_node():
         # test 7: bulk store and bulk get
         keys = 'foo', 'bar', 'baz', 'zzz'
         values = 3, 2, 'batman', [1, 2, 3]
-        store_ok = loop.run_until_complete(me.store_many(keys, values, expiration=get_dht_time() + 999))
+        store_ok = loop.run_until_complete(me.store_many(keys, values, expiration_time=get_dht_time() + 999))
         assert all(store_ok.values()), "failed to store one or more keys"
         response = loop.run_until_complete(me.get_many(keys[::-1]))
         for key, value in zip(keys, values):

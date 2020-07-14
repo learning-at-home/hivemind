@@ -72,7 +72,7 @@ class DHT(mp.Process):
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 receiver_threads: int = 1, uid_delimiter: str = '.', expiration: float = 300, **kwargs):
+                 receiver_threads: int = 1, expiration: float = 300, **kwargs):
         super().__init__()
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
@@ -126,24 +126,27 @@ class DHT(mp.Process):
     def port(self) -> Optional[int]:
         return self._port.value if self._port.value != 0 else None
 
-    def get_experts(self, uids: List[str], expiration=None, wait=True) -> List[Optional[RemoteExpert]]:
+    def get_experts(self, uids: List[str], expiration_time: Optional[DHTExpiration] = None,
+                    wait=True) -> List[Optional[RemoteExpert]]:
         """
         :param uids: find experts with these ids from across the DHT
-        :param expiration: if specified, return experts that expire no sooner than this (based on get_dht_time)
+        :param expiration_time: if specified, return experts that expire no sooner than this (based on get_dht_time)
         :param wait: if True (default), return when experts are returned. Otherwise return a Future.
         :returns: a list of [RemoteExpert if found else None]
         """
         assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_experts', [], dict(uids=uids, expiration=expiration, future=_future)))
+        self.pipe.send(('_get_experts', [], dict(uids=uids, expiration_time=expiration_time, future=_future)))
         return future.result() if wait else future
 
-    async def _get_experts(self, node: DHTNode, uids: List[str], expiration: Optional[DHTExpiration], future: MPFuture):
-        expiration = expiration or get_dht_time()
+    async def _get_experts(
+            self, node: DHTNode, uids: List[str], expiration_time: Optional[DHTExpiration], future: MPFuture):
+        if expiration_time is None:
+            expiration_time = get_dht_time()
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
-        response = await node.get_many(uids, expiration, num_workers=num_workers)
-        future.set_result([RemoteExpert(uid, maybe_endpoint) if maybe_expiration else None
-                           for uid, (maybe_endpoint, maybe_expiration) in response.items()])
+        response = await node.get_many(uids, expiration_time, num_workers=num_workers)
+        future.set_result([RemoteExpert(uid, maybe_endpoint) if maybe_expiration_time else None
+                           for uid, (maybe_endpoint, maybe_expiration_time) in response.items()])
 
     def declare_experts(self, uids: List[str], endpoint: Endpoint, wait=True, timeout=None) -> Optional[List[bool]]:
         """
