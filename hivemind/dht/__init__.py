@@ -125,16 +125,17 @@ class DHT(mp.Process):
     def port(self) -> Optional[int]:
         return self._port.value if self._port.value != 0 else None
 
-    def get_experts(self, uids: List[str], expiration=None) -> List[Optional[RemoteExpert]]:
+    def get_experts(self, uids: List[str], expiration=None, wait=True) -> List[Optional[RemoteExpert]]:
         """
         :param uids: find experts with these ids from across the DHT
-        :param expiration: returns experts that expire no sooner than this (based on get_dht_time), default = now
+        :param expiration: if specified, return experts that expire no sooner than this (based on get_dht_time)
+        :param wait: if True (default), return when experts are returned. Otherwise return a Future.
         :returns: a list of [RemoteExpert if found else None]
         """
         assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_get_experts', [], dict(uids=uids, expiration=expiration, future=_future)))
-        return future.result()
+        return future.result() if wait else future
 
     async def _get_experts(self, node: DHTNode, uids: List[str], expiration: Optional[DHTExpiration], future: MPFuture):
         expiration = expiration or get_dht_time()
