@@ -104,7 +104,7 @@ class RemoteMixtureOfExperts(nn.Module):
         beam = np.array([[self.uid_prefix]] * batch_size, dtype=object)  # [batch_size, up_to_beam_size]
         scores = np.zeros([batch_size, 1], dtype=np.float64)
 
-        delimeters = np.array(self.dht.UID_DELIMETER)[None, None, None]  # pre-compute numpy array for fast concat
+        delimiters = np.array(self.dht.UID_DELIMITER)[None, None, None]  # pre-compute numpy array for fast concat
 
         for dim_index, dim_scores in enumerate(grid_scores):
             dim_scores = dim_scores.detach().cpu().numpy()
@@ -112,7 +112,7 @@ class RemoteMixtureOfExperts(nn.Module):
 
             # create all possible successsors from current beam
             dim_indices = np.arange(dim_scores.shape[1]).astype(str)
-            new_candidates = beam[:, :, None] + delimeters + dim_indices[None, None, :]
+            new_candidates = beam[:, :, None] + delimiters + dim_indices[None, None, :]
             new_candidates = new_candidates.reshape([batch_size, -1])
 
             new_scores = scores[:, :, None] + dim_scores[:, None, :]
@@ -166,8 +166,8 @@ class RemoteMixtureOfExperts(nn.Module):
 
         grid_indices = np.zeros([len(flat_experts), len(grid_scores)], dtype=np.int64)
         for i, expert in enumerate(flat_experts):
-            expert_indices = expert.uid[len(self.uid_prefix) + len(self.dht.UID_DELIMETER):]
-            expert_indices = list(map(int, expert_indices.split(self.dht.UID_DELIMETER)))
+            expert_indices = expert.uid[len(self.uid_prefix) + len(self.dht.UID_DELIMITER):]
+            expert_indices = list(map(int, expert_indices.split(self.dht.UID_DELIMITER)))
             grid_indices[i] = expert_indices
 
         scores_per_dim = [

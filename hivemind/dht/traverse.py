@@ -215,16 +215,22 @@ async def traverse_dht(
             active_workers.subtract(queries_to_call)
             heap_updated_event.set()
 
-    # spawn all workers and wait for them to terminate; workers terminate after exhausting unfinished_queries
-    await asyncio.wait([asyncio.create_task(worker()) for _ in range(num_workers)],
-                       return_when=asyncio.FIRST_COMPLETED)  # first worker finishes when the search is over
-    assert len(unfinished_queries) == 0 and search_finished_event.is_set()
+    workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
+    try:
+        # spawn all workers and wait for them to terminate; workers terminate after exhausting unfinished_queries
+        await asyncio.wait(workers, return_when=asyncio.FIRST_COMPLETED)
+        assert len(unfinished_queries) == 0 and search_finished_event.is_set()
 
-    if await_all_tasks:
-        await asyncio.gather(*pending_tasks)
+        if await_all_tasks:
+            await asyncio.gather(*pending_tasks)
 
-    nearest_neighbors_per_query = {
-        query: [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
-        for query in queries
-    }
-    return nearest_neighbors_per_query, visited_nodes
+        nearest_neighbors_per_query = {
+            query: [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
+            for query in queries
+        }
+        return nearest_neighbors_per_query, visited_nodes
+
+    except asyncio.CancelledError as e:
+        for worker in workers:
+            worker.cancel()
+        raise e

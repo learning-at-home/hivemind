@@ -1,25 +1,18 @@
 import os
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed, TimeoutError
+from concurrent.futures import Future, as_completed, TimeoutError, ThreadPoolExecutor
 import time
 from typing import Optional, List
 
-GLOBAL_EXECUTOR = ThreadPoolExecutor(max_workers=os.environ.get("HIVEMIND_THREADS", float('inf')))
+EXECUTOR_PID, GLOBAL_EXECUTOR = None, None
 
 
 def run_in_background(func: callable, *args, **kwargs) -> Future:
     """ run func(*args, **kwargs) in background and return Future for its outputs """
-
+    global EXECUTOR_PID, GLOBAL_EXECUTOR
+    if os.getpid() != EXECUTOR_PID:
+        GLOBAL_EXECUTOR = ThreadPoolExecutor(max_workers=os.environ.get("HIVEMIND_THREADS", float('inf')))
+        EXECUTOR_PID = os.getpid()
     return GLOBAL_EXECUTOR.submit(func, *args, **kwargs)
-
-
-def run_forever(func: callable, *args, **kwargs):
-    """ A function that runs a :func: in background forever. Returns a future that catches exceptions """
-
-    def repeat():
-        while True:
-            func(*args, **kwargs)
-
-    return run_in_background(repeat)
 
 
 def run_and_await_k(jobs: List[callable], k: int,

@@ -15,15 +15,15 @@ def random_endpoint() -> hivemind.Endpoint:
 
 
 def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_batch_size: int, random_seed: int,
-                  wait_after_request: float, wait_before_read: float, wait_timeout: float, expiration_time: float):
-    old_expiration_time, hivemind.DHT.EXPIRATION = hivemind.DHT.EXPIRATION, expiration_time
+                  wait_after_request: float, wait_before_read: float, wait_timeout: float, expiration: float):
     random.seed(random_seed)
 
     print("Creating peers...")
     peers = []
     for _ in trange(num_peers):
         neighbors = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(initial_peers, len(peers)))]
-        peer = hivemind.DHT(initial_peers=neighbors, start=True, wait_timeout=wait_timeout, listen_on=f'0.0.0.0:*')
+        peer = hivemind.DHT(initial_peers=neighbors, start=True, wait_timeout=wait_timeout,
+                            expiration=expiration, listen_on=f'0.0.0.0:*')
         peers.append(peer)
 
     store_peer, get_peer = peers[-2:]
@@ -52,7 +52,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     print(f"Mean store time: {total_store_time / total_stores:.5}, Total: {total_store_time:.5}")
     time.sleep(wait_before_read)
 
-    if time.perf_counter() - benchmark_started > expiration_time:
+    if time.perf_counter() - benchmark_started > expiration:
         warn("Warning: all keys expired before benchmark started getting them. Consider increasing expiration_time")
 
     successful_gets = total_get_time = 0
@@ -67,7 +67,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
                     and expert.endpoint == endpoints[start // expert_batch_size]:
                 successful_gets += 1
 
-    if time.perf_counter() - benchmark_started > expiration_time:
+    if time.perf_counter() - benchmark_started > expiration:
         warn("Warning: keys expired midway during get requests. If that is not desired, increase expiration_time param")
 
     print(f"Get success rate: {successful_gets / len(expert_uids) * 100:.1f} ({successful_gets} / {len(expert_uids)})")
@@ -75,7 +75,6 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
 
     alive_peers = [peer.is_alive() for peer in peers]
     print(f"Node survival rate: {len(alive_peers) / len(peers) * 100:.3f}%")
-    hivemind.DHT.EXPIRATION = old_expiration_time
 
 
 if __name__ == "__main__":
@@ -84,7 +83,7 @@ if __name__ == "__main__":
     parser.add_argument('--initial_peers', type=int, default=1, required=False)
     parser.add_argument('--num_experts', type=int, default=256, required=False)
     parser.add_argument('--expert_batch_size', type=int, default=32, required=False)
-    parser.add_argument('--expiration_time', type=float, default=300, required=False)
+    parser.add_argument('--expiration', type=float, default=300, required=False)
     parser.add_argument('--wait_after_request', type=float, default=0, required=False)
     parser.add_argument('--wait_before_read', type=float, default=0, required=False)
     parser.add_argument('--wait_timeout', type=float, default=5, required=False)

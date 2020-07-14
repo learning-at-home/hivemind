@@ -14,7 +14,7 @@ from test_utils.layers import name_to_block, name_to_input
 def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hidden_dim=1024,
                       num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
                       no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
-                      UID_DELIMETER=hivemind.DHT.UID_DELIMETER, start=False, **kwargs) -> hivemind.Server:
+                      start=False, **kwargs) -> hivemind.Server:
     """
     Instantiate a server with several identical experts. See argparse comments below for details
     :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
@@ -47,9 +47,8 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
     if not no_dht:
         if not len(initial_peers):
             print("No initial peers provided. Starting additional dht as an initial peer.")
-            dht_root = hivemind.DHT(initial_peers=initial_peers,
-                                    listen_on=f"{hivemind.LOCALHOST}:{root_port or hivemind.find_open_port()}",
-                                    start=True)
+            dht_root = hivemind.DHT(initial_peers=initial_peers, start=True,
+                                    listen_on=f"{hivemind.LOCALHOST}:{root_port or hivemind.find_open_port()}")
             print(f"Initializing DHT with port {dht_root.port}")
             initial_peers = [f"{hivemind.LOCALHOST}:{dht_root.port}"]
         else:
@@ -57,9 +56,8 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
             if root_port is not None:
                 print(f"Warning: root_port={root_port} will not be used since we already have peers.")
 
-        dht = hivemind.DHT(initial_peers=initial_peers,
-                           listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}",
-                           start=True)
+        dht = hivemind.DHT(initial_peers=initial_peers, start=True,
+                           listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}")
         if verbose:
             print(f"Running dht node on port {dht.port}")
 
@@ -74,7 +72,7 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
     for i in range(num_experts):
         expert = name_to_block[expert_cls](hidden_dim)
         opt = torch.optim.SGD(expert.parameters(), 0.0 if no_optimizer else 0.05)
-        expert_uid = f'{expert_prefix}{UID_DELIMETER}{i + expert_offset}'
+        expert_uid = f'{expert_prefix}{hivemind.DHT.UID_DELIMITER}{i + expert_offset}'
         experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
                                                      args_schema=args_schema,
                                                      outputs_schema=hivemind.BatchTensorDescriptor(hidden_dim),
@@ -154,12 +152,12 @@ if __name__ == '__main__':
     parser.add_argument('--no_optimizer', action='store_true', help='if specified, all optimizers use learning rate=0')
     parser.add_argument('--no_dht', action='store_true', help='if specified, the server will not be attached to a dht')
     parser.add_argument('--initial_peers', type=str, default="[]", required=False, help='a list of peers that will'
-                                                                                        ' introduce this node to the dht, e.g. [("1.2.3.4", 1337), ("127.0.0.1", 4321)]')
+                        ' introduce this node to the dht, e.g. [("1.2.3.4", 1337), ("127.0.0.1", 4321)]')
     parser.add_argument('--dht_port', type=int, default=None, required=False, help='DHT node will listen on this port')
     parser.add_argument('--root_port', type=int, default=None, required=False, help='If this server does not have peers'
-                                                                                    ', it will create a virtual dht node on this port. You can then use this node as initial peer.')
+                        ', it will create a virtual dht node on this port. You can then use this node as initial peer.')
     parser.add_argument('--increase_file_limit', action='store_true', help='On *nix, this will increase the max number'
-                                                                           ' of processes a server can spawn before hitting "Too many open files"; Use at your own risk.')
+                        ' of processes a server can spawn before hitting "Too many open files"; Use at your own risk.')
 
     args = vars(parser.parse_args())
 
