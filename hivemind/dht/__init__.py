@@ -30,7 +30,7 @@ from hivemind.utils import MPFuture, Endpoint, run_in_background
 
 class DHT(mp.Process):
     """
-    High-level interface to hivemind.dht that is designed to allow RemoteMixtureOfExperts select best experts.
+    High-level interface to hivemind.dht that is designed to allow RemoteMixtureOfExperts to select best experts.
 
     :param initial_peers: one or multiple endpoints pointing to active DHT peers. Similar format to listen_on.
     :param listen_on: an interface for incoming connections, e.g. "127.0.0.1:*", "0.0.0.0:1234" or "ipv6:[::]:*"
