@@ -14,7 +14,7 @@ from test_utils.layers import name_to_block, name_to_input
 def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hidden_dim=1024,
                       num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
                       no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
-                      uid_delimiter='.', start=False, **kwargs) -> hivemind.Server:
+                      start=False, **kwargs) -> hivemind.Server:
     """
     Instantiate a server with several identical experts. See argparse comments below for details
     :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
@@ -47,7 +47,7 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
     if not no_dht:
         if not len(initial_peers):
             print("No initial peers provided. Starting additional dht as an initial peer.")
-            dht_root = hivemind.DHT(initial_peers=initial_peers, uid_delimiter=uid_delimiter, start=True,
+            dht_root = hivemind.DHT(initial_peers=initial_peers, start=True,
                                     listen_on=f"{hivemind.LOCALHOST}:{root_port or hivemind.find_open_port()}")
             print(f"Initializing DHT with port {dht_root.port}")
             initial_peers = [f"{hivemind.LOCALHOST}:{dht_root.port}"]
@@ -56,7 +56,7 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
             if root_port is not None:
                 print(f"Warning: root_port={root_port} will not be used since we already have peers.")
 
-        dht = hivemind.DHT(initial_peers=initial_peers, uid_delimiter=uid_delimiter, start=True,
+        dht = hivemind.DHT(initial_peers=initial_peers, start=True,
                            listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}")
         if verbose:
             print(f"Running dht node on port {dht.port}")
