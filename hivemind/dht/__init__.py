@@ -47,7 +47,6 @@ class DHT(mp.Process):
 
         * optional prefix that determines expert role, experiment name, etc.
         * one or more integers that determine that expert's position in an N-dimensional grid
-        * delimiters, e.g. "." (uid_delimiter param) over which expert uid will be split to get prefixes (see below)
 
     A hivemind.Server can ``DHT.declare_experts(expert_uids: List[str])`` to make its experts visible to everyone.
     When declaring experts, DHT will store each expert's uid and all its prefixes until :expiration: (specified at init)
