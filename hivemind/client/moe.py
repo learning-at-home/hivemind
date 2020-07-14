@@ -104,7 +104,7 @@ class RemoteMixtureOfExperts(nn.Module):
         beam = np.array([[self.uid_prefix]] * batch_size, dtype=object)  # [batch_size, up_to_beam_size]
         scores = np.zeros([batch_size, 1], dtype=np.float64)
 
-        delimiters = np.array(self.dht.uid_delimiter)[None, None, None]  # pre-compute numpy array for fast concat
+        delimiters = np.array(self.dht.UID_DELIMITER)[None, None, None]  # pre-compute numpy array for fast concat
 
         for dim_index, dim_scores in enumerate(grid_scores):
             dim_scores = dim_scores.detach().cpu().numpy()
@@ -166,8 +166,8 @@ class RemoteMixtureOfExperts(nn.Module):
 
         grid_indices = np.zeros([len(flat_experts), len(grid_scores)], dtype=np.int64)
         for i, expert in enumerate(flat_experts):
-            expert_indices = expert.uid[len(self.uid_prefix) + len(self.dht.uid_delimiter):]
-            expert_indices = list(map(int, expert_indices.split(self.dht.uid_delimiter)))
+            expert_indices = expert.uid[len(self.uid_prefix) + len(self.dht.UID_DELIMITER):]
+            expert_indices = list(map(int, expert_indices.split(self.dht.UID_DELIMITER)))
             grid_indices[i] = expert_indices
 
         scores_per_dim = [

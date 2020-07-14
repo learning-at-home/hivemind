@@ -38,8 +38,6 @@ class DHT(mp.Process):
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
     :param max_workers: declare_experts and get_experts will use up to this many parallel workers
         (but no more than one per key)
-    :param uid_delimiter: when declaring experts, DHT will also declare all prefixes of that expert's uid, defined as
-        {uid.split(uid_delimiter)[:prefix_length] for prefix_length in range(1, len(uid.split(uid_delimiter) + 1))}
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
     :param receiver_threads: uses this many threads to await on input pipe. Default = 1 should be enough in most cases
     :param kwargs: any other params will be forwarded to DHTNode upon creation
@@ -69,13 +67,16 @@ class DHT(mp.Process):
     in O(k / s * log(N)) average time where s is grid sparsity rate and N is the total number of experts.
     """
 
+    UID_DELIMITER = '.'  # when declaring experts, DHT store all prefixes of that expert's uid, split over this prefix
+    #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
+
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
                  receiver_threads: int = 1, uid_delimiter: str = '.', expiration: float = 300, **kwargs):
         super().__init__()
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
-        self.uid_delimiter, self.expiration = uid_delimiter, expiration
+        self.expiration = expiration
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
@@ -166,9 +167,9 @@ class DHT(mp.Process):
 
         data_to_store = {}
         for uid in uids:
-            uid_parts = uid.split(self.uid_delimiter)
+            uid_parts = uid.split(self.UID_DELIMITER)
             for i in range(len(uid_parts)):
-                uid_prefix_i = self.uid_delimiter.join(uid_parts[:i + 1])
+                uid_prefix_i = self.UID_DELIMITER.join(uid_parts[:i + 1])
                 data_to_store[uid_prefix_i] = endpoint
 
         store_keys, store_values = zip(*data_to_store.items())
