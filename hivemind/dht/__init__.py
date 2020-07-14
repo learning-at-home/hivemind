@@ -25,7 +25,7 @@ import uvloop
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import get_dht_time
-from hivemind.utils import MPFuture, Endpoint, run_in_background
+from hivemind.utils import MPFuture, Endpoint
 
 
 class DHT(mp.Process):

@@ -272,12 +272,16 @@ class DHTNode:
 
             store_finished_events[id_to_original_key[key_id]].set()
 
-        asyncio.create_task(self.find_nearest_nodes(
+        store_task = asyncio.create_task(self.find_nearest_nodes(
             queries=set(key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
             found_callback=on_found, exclude_self=exclude_self, **kwargs))
-        await asyncio.wait([evt.wait() for evt in store_finished_events.values()])  # await one (or all) store accepts
-        assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
-        return store_ok
+        try:
+            await asyncio.wait([evt.wait() for evt in store_finished_events.values()])  # wait for items to be stored
+            assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
+            return store_ok
+        except asyncio.CancelledError as e:
+            store_task.cancel()
+            raise e
 
     async def get(self, key: DHTKey, latest=False, **kwargs) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
