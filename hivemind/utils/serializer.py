@@ -40,7 +40,7 @@ class PytorchSerializer(SerializerBase):
 class MSGPackSerializer(SerializerBase):
     @staticmethod
     def dumps(obj: object) -> bytes:
-        return umsgpack.dumps(obj, use_bin_type=False)  # TODO strict https://github.com/msgpack/msgpack-python/pull/158
+        return umsgpack.dumps(obj, use_bin_type=False, strict_types=True)
 
     @staticmethod
     def loads(buf: bytes) -> object:
