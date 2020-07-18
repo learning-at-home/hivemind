@@ -81,7 +81,6 @@ if __name__ == "__main__":
     parser.add_argument('--num_peers', type=int, default=32, required=False)
     parser.add_argument('--initial_peers', type=int, default=1, required=False)
     parser.add_argument('--num_experts', type=int, default=256, required=False)
-    parser.add_argument('--density_rate', type=int, default=0.5, required=False)
     parser.add_argument('--expert_batch_size', type=int, default=32, required=False)
     parser.add_argument('--expiration', type=float, default=300, required=False)
     parser.add_argument('--wait_after_request', type=float, default=0, required=False)
