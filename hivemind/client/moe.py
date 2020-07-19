@@ -89,6 +89,7 @@ class RemoteMixtureOfExperts(nn.Module):
             for i in range(len(input))
         )
 
+        # TODO(jheuristic)
         averaged_outputs_flat = map(torch.cat, zip(*map_with_parallel_backward(_RemoteMoECall, *batch_jobs_args)))
         return nested_pack(averaged_outputs_flat, self.outputs_schema)
 
