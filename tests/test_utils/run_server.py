@@ -108,7 +108,7 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs) -> Tupl
         finally:
             if verbose:
                 print("Server failed to shutdown gracefully, terminating it the hard way...")
-            runner.terminate()
+            runner.kill()
             if verbose:
                 print("Server terminated.")
 
