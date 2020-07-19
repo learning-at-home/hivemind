@@ -41,8 +41,8 @@ class Server(threading.Thread):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
         if get_port(listen_on) is None:
-            self.listen_on = listen_on = replace_port(listen_on, new_port=find_open_port())
-        self.port = get_port(listen_on)
+            listen_on = replace_port(listen_on, new_port=find_open_port())
+        self.listen_on, self.port = listen_on, get_port(listen_on)
 
         self.conn_handlers = [ConnectionHandler(listen_on, self.experts) for _ in range(num_connection_handlers)]
         if checkpoint_dir is not None:

@@ -132,9 +132,8 @@ def _server_runner(pipe, *args, verbose, **kwargs):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--interface', type=str, default='0.0.0.0', required=False,
+    parser.add_argument('--listen_on', type=str, default='0.0.0.0:*', required=False,
                         help="'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6")
-    parser.add_argument('--port', type=int, default=None, required=False, help="server will listen to this port")
     parser.add_argument('--num_experts', type=int, default=1, required=False, help="run this many identical experts")
     parser.add_argument('--expert_cls', type=str, default='ffn', required=False,
                         help="expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop'.")

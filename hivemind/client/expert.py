@@ -1,5 +1,6 @@
 import pickle
-from typing import Tuple, Optional
+from functools import lru_cache
+from typing import Tuple, Optional, Any
 
 import grpc
 import grpc.experimental.aio
@@ -11,6 +12,19 @@ from hivemind.utils import nested_flatten, nested_pack, nested_compare, Endpoint
 from hivemind.utils.grpc import serialize_torch_tensor, deserialize_torch_tensor, runtime_pb2, runtime_grpc
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
+
+
+@lru_cache(maxsize=None)
+def _get_expert_stub(endpoint: Endpoint, aio: bool, *extra_options: Tuple[str, Any]):
+    """ Create a gRPC stub to access remote expert or use previously created stub from a process-wide cache """
+    channel_options = [
+        ('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)
+    ] + list(extra_options)
+    if aio:
+        channel = grpc.experimental.aio.insecure_channel(endpoint, options=channel_options)
+    else:
+        channel = grpc.insecure_channel(endpoint, options=channel_options)
+    return runtime_grpc.ConnectionHandlerStub(channel)
 
 
 class RemoteExpert(nn.Module):
@@ -28,22 +42,11 @@ class RemoteExpert(nn.Module):
     def __init__(self, uid, endpoint: Endpoint):
         super().__init__()
         self.uid, self.endpoint = uid, endpoint
-        self._channel, self._stub, self._info = None, None, None
+        self._info = None
 
     @property
     def stub(self):
-        if self._channel is None:
-            self._channel = grpc.insecure_channel(self.endpoint, options=[
-                ('grpc.max_send_message_length', -1),
-                ('grpc.max_receive_message_length', -1)
-            ])
-        if self._stub is None:
-            self._stub = runtime_grpc.ConnectionHandlerStub(self._channel)
-        return self._stub
-
-    def __del__(self):
-        if self._channel is not None:
-            self._channel.close()
+        return _get_expert_stub(self.endpoint, aio=False)
 
     def forward(self, *args, **kwargs):
         """ Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd. """
