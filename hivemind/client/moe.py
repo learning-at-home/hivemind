@@ -1,6 +1,7 @@
+from __future__ import annotations
 import time
 import asyncio
-from typing import Tuple, List, Optional, Awaitable, Set
+from typing import Tuple, List, Optional, Awaitable, Set, Dict
 
 import numpy as np
 import torch
@@ -8,6 +9,7 @@ import torch.nn as nn
 from torch.autograd.function import once_differentiable
 import grpc.experimental.aio
 
+import hivemind
 from hivemind.client.expert import RemoteExpert, DUMMY, _get_expert_stub
 from hivemind.utils import nested_map, nested_pack, nested_flatten, run_in_background, \
     runtime_grpc, runtime_pb2, serialize_torch_tensor, deserialize_torch_tensor
@@ -30,30 +32,31 @@ class RemoteMixtureOfExperts(nn.Module):
     :param uid_prefix: common prefix for all expert uids
      expert uid follows the pattern {uid_prefix}.{0...grid_size[0]}.{0...grid_size[1]}...{0...grid_size[-1]}
     :param dht: DHT where the experts reside
-    :param num_workers: number of threads for parallel dht operation
     :param k_best: queries this many experts with highest scores
     :param k_min: makes sure at least this many experts returned output
     :param timeout_after_k_min: waits for this many seconds after k_min experts returned results.
      Any expert that didn't manage to return output after that delay is considered unavailable
-    :param expert_padding: internal value used to denote "absent expert". Should not coincide with any expert uid.
     :param allow_broadcasting: if RemoteMixtureOfExperts if fed with input dimension above 2,
      allow_broadcasting=True will flatten first d-1 input dimensions, apply RemoteMixtureOfExperts and un-flatten again
      allow_broadcasting=False will raise an error
     """
 
-    def __init__(self, *, in_features, grid_size: Tuple[int], dht, k_best, k_min=1,
-                 forward_timeout=None, timeout_after_k_min=1.0, backward_k_min=1, backward_timeout=None,
-                 uid_prefix='', expert_padding=None, allow_broadcasting=True):
+    def __init__(self, *, in_features, grid_size: Tuple[int, ...], dht: hivemind.DHT, k_best: int, k_min: int = 1,
+                 forward_timeout: Optional[float] = None, timeout_after_k_min: Optional[float] = None,
+                 backward_k_min: int = 1, backward_timeout: Optional[float] = None, uid_prefix='',
+                 allow_broadcasting=True, loop: asyncio.BaseEventLoop = None):
         super().__init__()
-        self.dht, self.grid_size = dht, grid_size
-        self.uid_prefix, self.expert_padding = uid_prefix, expert_padding
+        self.dht, self.grid_size, self.uid_prefix = dht, grid_size, uid_prefix
+        self.loop = loop or asyncio.new_event_loop()
+        assert not self.loop.is_running(), "Event loop is already running. If in jupyter, please apply nest_asyncio " \
+            "(pip install nest_asyncio , https://pypi.org/project/nest-asyncio ) and send loop=asyncio.new_event_loop()"
         self.k_best, self.k_min, self.backward_k_min = k_best, k_min, backward_k_min
         self.forward_timeout, self.backward_timeout = forward_timeout, backward_timeout
         self.timeout_after_k_min = timeout_after_k_min
         self.allow_broadcasting = allow_broadcasting
 
         self.proj = nn.Linear(in_features, sum(grid_size))  # jointly predict logits for all grid dimensions
-        self._outputs_schema = None
+        self._outputs_schema = None  # expert['info'][outputs_schema] from one of experts in the grid
 
     def forward(self, input: torch.Tensor, *args: torch.Tensor, **kwargs: torch.Tensor):
         """
@@ -74,26 +77,32 @@ class RemoteMixtureOfExperts(nn.Module):
 
         # 1. compute scores and find most appropriate experts with beam search
         grid_scores = self.proj(input).split_with_sizes(self.grid_size, dim=-1)
-        chosen_experts = self.beam_search(grid_scores, self.k_best)
+
+        grid_scores_numpy = [dim_scores.cpu().detach().numpy() for dim_scores in grid_scores]
+
+        async def _search():
+            coroutines = [asyncio.create_task(self.beam_search(
+                [dim_scores[i] for dim_scores in grid_scores_numpy], self.k_best))
+                for i in range(len(input))]
+            return list(await asyncio.gather(*coroutines))
+
+        chosen_experts: List[List[RemoteExpert]] = self.loop.run_until_complete(_search())
         # ^-- List[batch_size] of List[RemoteExpert] chosen for every input in batch
 
+        expert_mask, *expert_outputs = _RemoteCallMany.apply(
+            DUMMY, chosen_experts, self.k_min, self.backward_k_min, self.timeout_after_k_min,
+            self.forward_timeout, self.backward_timeout, self.loop, *nested_flatten(((input, *args), kwargs)))
+        # ^-- multiple tensors of shape [batch_size, max_experts, ...output_shape]
+
         expert_logits = self.compute_expert_scores(grid_scores, chosen_experts)
-
-        expert_inputs = ((input, *args), kwargs)
-        input_schema = nested_map(lambda x: None, expert_inputs)
-        flat_inputs_per_expert = tuple(zip(*[tensor.split(1, dim=0) for tensor in nested_flatten(expert_inputs)]))
-
-        batch_jobs_args = tuple(
-            (expert_logits[i, :len(chosen_experts[i])], chosen_experts[i], self.k_min, self.timeout_after_k_min,
-             self.backward_k_min, self.forward_timeout, self.backward_timeout, input_schema, *flat_inputs_per_expert[i])
-            for i in range(len(input))
-        )
-
-        # TODO(jheuristic)
-        averaged_outputs_flat = map(torch.cat, zip(*map_with_parallel_backward(_RemoteMoECall, *batch_jobs_args)))
+        expert_logits = torch.where(expert_mask, expert_logits, torch.full_like(expert_logits, -float('inf')))
+        expert_weights = torch.softmax(expert_logits, dim=1)
+        averaged_outputs_flat = [
+            torch.sum(expert_weights.view(*expert_weights.shape, *[1] * (tensor.ndim - 2)) * tensor, dim=1)
+            for tensor in expert_outputs]  # ^-- multiply by softmax weights along first 2 axes
         return nested_pack(averaged_outputs_flat, self.outputs_schema)
 
-    def beam_search(self, grid_scores: List[torch.Tensor], k_best: int, **kwargs) -> List[List[RemoteExpert]]:
+    async def beam_search(self, grid_scores: List[np.ndarray], k_best: int, **kwargs) -> List[RemoteExpert]:
         """
         Find and return k best experts in the grid using (exact) beam search of the product space
 
@@ -105,51 +114,36 @@ class RemoteMixtureOfExperts(nn.Module):
          RemoteExpert instances for *up to* k_best experts
         """
         assert len(grid_scores) == len(self.grid_size)
-        assert all(len(dim_scores.shape) == 2 for dim_scores in grid_scores)
-        batch_size = len(grid_scores[0])
-        beam = np.array([[self.uid_prefix]] * batch_size, dtype=object)  # [batch_size, up_to_beam_size]
-        scores = np.zeros([batch_size, 1], dtype=np.float64)
+        assert all(dim_scores.shape == (self.grid_size[dim_index],) for dim_index, dim_scores in enumerate(grid_scores))
+        grid_scores = tuple(map(np.asarray, grid_scores))
 
-        delimiters = np.array(self.dht.UID_DELIMITER)[None, None, None]  # pre-compute numpy array for fast concat
+        beam_experts: List[RemoteExpert] = []
+        beam: List[str] = [self.uid_prefix]
+        beam_scores = np.zeros(1)
 
         for dim_index, dim_scores in enumerate(grid_scores):
-            dim_scores = dim_scores.detach().cpu().numpy()
-            assert dim_scores.shape[-1] == self.grid_size[dim_index]
+            # create all possible successors from current beam and sort them by total score
+            expanded_scores = beam_scores[:, None] + dim_scores[None, :]
+            sorted_indices = [(flat_i // len(dim_scores), flat_i % len(dim_scores))
+                              for flat_i in np.argsort(-np.ravel(expanded_scores))]
 
-            # create all possible successsors from current beam
-            dim_indices = np.arange(dim_scores.shape[1]).astype(str)
-            new_candidates = beam[:, :, None] + delimiters + dim_indices[None, None, :]
-            new_candidates = new_candidates.reshape([batch_size, -1])
-
-            new_scores = scores[:, :, None] + dim_scores[:, None, :]
-            new_scores = new_scores.reshape([batch_size, -1])
+            sorted_candidates = [f"{beam[row]}{self.dht.UID_DELIMITER}{col}" for row, col in sorted_indices]
+            candidate_to_indices = dict(zip(sorted_candidates, sorted_indices))
 
             # select k best candidates according to scores but only those that are still active
-            new_order = np.argsort(- new_scores, axis=-1)
-            top_alive_lookups = [
-                run_in_background(self.dht.first_k_active, cands[order], k_best, **kwargs)
-                for cands, order in zip(new_candidates, new_order)]
+            best_alive_prefixes: Dict[str, RemoteExpert] = await self.dht.first_k_active(
+                uid_prefixes=sorted_candidates, k=k_best, return_future=True, **kwargs)
+            if not best_alive_prefixes:
+                logger.warning(f"Grid is empty: found neither of {sorted_candidates}")
+                break
+            beam = list(best_alive_prefixes.keys())
+            beam_scores = expanded_scores[tuple(zip(*map(candidate_to_indices.get, beam)))]
+            beam_experts = list(best_alive_prefixes.values())
 
-            batch_cand_to_score = [
-                dict(zip(cands, cand_scores)) for cands, cand_scores in zip(new_candidates, new_scores)]
-
-            top_alive_prefixes = [result.result() for result in top_alive_lookups]
-            top_alive_scores = [list(map(cand_to_score.get, top_cands))
-                                for cand_to_score, top_cands in zip(batch_cand_to_score, top_alive_prefixes)]
-
-            # pad up to beam size
-            beam = np.array([row + [self.expert_padding] * (k_best - len(row))
-                             for row in top_alive_prefixes], dtype='object')
-            scores = np.array([row + [-float('inf')] * (k_best - len(row))
-                               for row in top_alive_scores], dtype='float32')
-
-        unique_experts = self.dht.get_experts(list(set(
-            uid for row in beam for uid in row if uid != self.expert_padding)))
         if self._outputs_schema is None:
-            self._outputs_schema = next(iter(unique_experts)).info['outputs_schema']
-        unique_experts_by_uid = {expert.uid: expert for expert in unique_experts if expert != self.expert_padding}
+            self._outputs_schema = beam_experts[0].info['outputs_schema']
 
-        return [[unique_experts_by_uid[uid] for uid in row if uid in unique_experts_by_uid] for row in beam]
+        return beam_experts
 
     def compute_expert_scores(
             self, grid_scores: List[torch.Tensor], batch_experts: List[List[RemoteExpert]]) -> torch.Tensor:
@@ -189,8 +183,10 @@ class RemoteMixtureOfExperts(nn.Module):
     def outputs_schema(self):
         if self._outputs_schema is None:
             # grab some expert to set ensemble output shape
-            dummy_scores = self.proj(torch.randn(1, self.proj.in_features)).split_with_sizes(self.grid_size, dim=-1)
-            self._outputs_schema = self.beam_search(dummy_scores, k_best=1)[0][0].info['outputs_schema']
+            dummy_scores = self.proj(torch.randn(self.proj.in_features)).split_with_sizes(self.grid_size, dim=-1)
+            dummy_scores = [dim_scores.cpu().detach().numpy() for dim_scores in dummy_scores]
+            dummy_experts = self.loop.run_until_complete(self.beam_search(dummy_scores, k_best=1))
+            self._outputs_schema = dummy_experts[0].info['outputs_schema']
         return self._outputs_schema
 
 

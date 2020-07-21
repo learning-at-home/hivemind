@@ -1,5 +1,4 @@
 import socket
-import urllib.parse
 from contextlib import closing
 from typing import Optional
 

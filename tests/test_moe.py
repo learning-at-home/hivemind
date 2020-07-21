@@ -81,6 +81,50 @@ def test_call_many():
         reference_grad = inputs_clone.grad.data.cpu().clone()
         assert torch.allclose(our_grad, reference_grad, rtol, atol)
 
+
+def test_moe_beam_search():
+    all_expert_uids = [f'ffn.{5 + i}.{10 + j}.{15 + k}' for i in range(10) for j in range(10) for k in range(10)]
+    dht = hivemind.DHT(start=True, expiration=999)
+    assert all(dht.declare_experts(all_expert_uids, endpoint='fake-endpoint'))
+
+    dmoe = hivemind.RemoteMixtureOfExperts(
+        in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix='ffn')
+
+    for i in range(25):
+        input = torch.randn(32)
+        grid_scores = dmoe.proj(input).split_with_sizes(dmoe.grid_size, dim=-1)
+
+        chosen_experts = dmoe.loop.run_until_complete(
+            dmoe.beam_search([dim_scores.data.cpu().numpy() for dim_scores in grid_scores], k_best=dmoe.k_best))
+
+        chosen_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
+                                                   [chosen_experts])[0]
+
+        all_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
+                                                [[hivemind.RemoteExpert(uid, '') for uid in all_expert_uids]])[0]
+        true_best_scores = sorted(all_scores.cpu().data.numpy(), reverse=True)[:len(chosen_experts)]
+        our_best_scores = list(chosen_scores.data.cpu().numpy())
+        assert np.allclose(true_best_scores, our_best_scores)
+
+
+def test_moe():
+    all_expert_uids = [f'ffn.{np.random.randint(0, 31)}.{np.random.randint(0, 31)}.{np.random.randint(0, 31)}'
+                       for _ in range(50)]
+    with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn',
+                           num_handlers=1, hidden_dim=16) as (server_endpoint, dht_endpoint):
+
+        dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+        # declare expert uids. Server *should* declare them by itself, but it takes time.
+        assert all(dht.declare_experts(all_expert_uids, endpoint=server_endpoint))
+
+        dmoe = hivemind.RemoteMixtureOfExperts(
+            in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix='ffn')
+
+        for i in range(10):
+            out = dmoe(torch.randn(10, 16))
+            out.sum().backward()
+
+
 def test_determinism():
     rtol = 0
     atol = 1e-6
