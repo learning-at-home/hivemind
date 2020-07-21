@@ -9,6 +9,24 @@ from hivemind.client.expert import DUMMY
 from test_utils.run_server import background_server
 
 
+def test_moe():
+    all_expert_uids = [f'ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
+                       for _ in range(20)]
+    with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn',
+                           num_handlers=1, hidden_dim=16) as (server_endpoint, dht_endpoint):
+
+        dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+        # declare expert uids. Server *should* declare them by itself, but it takes time.
+        assert all(dht.declare_experts(all_expert_uids, endpoint=server_endpoint))
+
+        dmoe = hivemind.RemoteMixtureOfExperts(
+            in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn')
+
+        for i in range(10):
+            out = dmoe(torch.randn(10, 16))
+            out.sum().backward()
+
+
 def test_remote_module_call():
     with background_server(num_experts=1, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=1024,
                            no_optimizer=True, no_dht=True) as (server_endpoint, dht_endpoint):
@@ -50,24 +68,6 @@ def test_determinism():
 
     assert torch.allclose(out, out_rerun, rtol, atol), "Dropout layer outputs are non-deterministic."
     assert torch.allclose(grad, grad_rerun, rtol, atol), "Gradients are non-deterministic."
-
-
-def test_moe():
-    all_expert_uids = [f'ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
-                       for _ in range(20)]
-    with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn',
-                           num_handlers=1, hidden_dim=16) as (server_endpoint, dht_endpoint):
-
-        dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
-        # declare expert uids. Server *should* declare them by itself, but it takes time.
-        assert all(dht.declare_experts(all_expert_uids, endpoint=server_endpoint))
-
-        dmoe = hivemind.RemoteMixtureOfExperts(
-            in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn')
-
-        for i in range(10):
-            out = dmoe(torch.randn(10, 16))
-            out.sum().backward()
 
 
 def test_moe_beam_search():
