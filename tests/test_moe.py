@@ -94,8 +94,7 @@ def test_moe_beam_search():
         input = torch.randn(32)
         grid_scores = dmoe.proj(input).split_with_sizes(dmoe.grid_size, dim=-1)
 
-        chosen_experts = dmoe.loop.run_until_complete(
-            dmoe.beam_search([dim_scores.data.cpu().numpy() for dim_scores in grid_scores], k_best=dmoe.k_best))
+        chosen_experts = dmoe.loop.run_until_complete(dmoe.beam_search(grid_scores, k_best=dmoe.k_best))
 
         chosen_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
                                                    [chosen_experts])[0]

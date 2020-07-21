@@ -3,7 +3,6 @@ import time
 import asyncio
 from typing import Tuple, List, Optional, Awaitable, Set, Dict
 
-import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
@@ -78,11 +77,9 @@ class RemoteMixtureOfExperts(nn.Module):
         # 1. compute scores and find most appropriate experts with beam search
         grid_scores = self.proj(input).split_with_sizes(self.grid_size, dim=-1)
 
-        grid_scores_numpy = [dim_scores.cpu().detach().numpy() for dim_scores in grid_scores]
-
         async def _search():
             coroutines = [asyncio.create_task(self.beam_search(
-                [dim_scores[i] for dim_scores in grid_scores_numpy], self.k_best))
+                [dim_scores[i] for dim_scores in grid_scores], self.k_best))
                 for i in range(len(input))]
             return list(await asyncio.gather(*coroutines))
 
@@ -102,7 +99,7 @@ class RemoteMixtureOfExperts(nn.Module):
             for tensor in expert_outputs]  # ^-- multiply by softmax weights along first 2 axes
         return nested_pack(averaged_outputs_flat, self.outputs_schema)
 
-    async def beam_search(self, grid_scores: List[np.ndarray], k_best: int, **kwargs) -> List[RemoteExpert]:
+    async def beam_search(self, grid_scores: List[torch.Tensor], k_best: int, **kwargs) -> List[RemoteExpert]:
         """
         Find and return k best experts in the grid using (exact) beam search of the product space
 
@@ -115,17 +112,17 @@ class RemoteMixtureOfExperts(nn.Module):
         """
         assert len(grid_scores) == len(self.grid_size)
         assert all(dim_scores.shape == (self.grid_size[dim_index],) for dim_index, dim_scores in enumerate(grid_scores))
-        grid_scores = tuple(map(np.asarray, grid_scores))
+        grid_scores = [dim_scores.cpu().detach() for dim_scores in grid_scores]
 
         beam_experts: List[RemoteExpert] = []
         beam: List[str] = [self.uid_prefix]
-        beam_scores = np.zeros(1)
+        beam_scores = torch.zeros(1)
 
         for dim_index, dim_scores in enumerate(grid_scores):
             # create all possible successors from current beam and sort them by total score
             expanded_scores = beam_scores[:, None] + dim_scores[None, :]
             sorted_indices = [(flat_i // len(dim_scores), flat_i % len(dim_scores))
-                              for flat_i in np.argsort(-np.ravel(expanded_scores))]
+                              for flat_i in (-expanded_scores).view(-1).argsort().numpy()]
 
             sorted_candidates = [f"{beam[row]}{self.dht.UID_DELIMITER}{col}" for row, col in sorted_indices]
             candidate_to_indices = dict(zip(sorted_candidates, sorted_indices))
@@ -141,7 +138,10 @@ class RemoteMixtureOfExperts(nn.Module):
             beam_experts = list(best_alive_prefixes.values())
 
         if self._outputs_schema is None:
-            self._outputs_schema = beam_experts[0].info['outputs_schema']
+            try:
+                self._outputs_schema = beam_experts[0].info['outputs_schema']
+            except grpc.RpcError as e:
+                logger.warning(f"Failed to get RemoteMixtureOfExperts.output_shape: {e}")
 
         return beam_experts
 
@@ -164,11 +164,11 @@ class RemoteMixtureOfExperts(nn.Module):
         flat_local_indices = expert_index_in_batch - expert_strides[flat_batch_indices]
         flat_experts = [expert for row in batch_experts for expert in row]
 
-        grid_indices = np.zeros([len(flat_experts), len(grid_scores)], dtype=np.int64)
+        grid_indices = torch.zeros([len(flat_experts), len(grid_scores)], dtype=torch.int64)
         for i, expert in enumerate(flat_experts):
             expert_indices = expert.uid[len(self.uid_prefix) + len(self.dht.UID_DELIMITER):]
             expert_indices = list(map(int, expert_indices.split(self.dht.UID_DELIMITER)))
-            grid_indices[i] = expert_indices
+            grid_indices[i] = torch.as_tensor(expert_indices, dtype=grid_indices.dtype)
 
         scores_per_dim = [
             dim_scores[flat_batch_indices, dim_indices] if len(flat_batch_indices) else torch.zeros(0)
@@ -183,8 +183,7 @@ class RemoteMixtureOfExperts(nn.Module):
     def outputs_schema(self):
         if self._outputs_schema is None:
             # grab some expert to set ensemble output shape
-            dummy_scores = self.proj(torch.randn(self.proj.in_features)).split_with_sizes(self.grid_size, dim=-1)
-            dummy_scores = [dim_scores.cpu().detach().numpy() for dim_scores in dummy_scores]
+            dummy_scores = self.proj(torch.randn(self.proj.in_features)).cpu().split_with_sizes(self.grid_size, dim=-1)
             dummy_experts = self.loop.run_until_complete(self.beam_search(dummy_scores, k_best=1))
             self._outputs_schema = dummy_experts[0].info['outputs_schema']
         return self._outputs_schema
