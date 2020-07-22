@@ -119,8 +119,8 @@ def test_moe_beam_search():
 
         all_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
                                                 [[hivemind.RemoteExpert(uid, '') for uid in all_expert_uids]])[0]
-        true_best_scores = sorted(all_scores.cpu().data.numpy(), reverse=True)[:len(chosen_experts)]
-        our_best_scores = list(chosen_scores.data.cpu().numpy())
+        true_best_scores = sorted(all_scores.cpu().detach().numpy(), reverse=True)[:len(chosen_experts)]
+        our_best_scores = list(chosen_scores.cpu().detach().numpy())
         assert np.allclose(true_best_scores, our_best_scores)
 
 
