@@ -96,7 +96,7 @@ class RemoteMixtureOfExperts(nn.Module):
         expert_logits = torch.where(expert_mask, expert_logits, masked_logits)
         expert_weights = torch.softmax(expert_logits, dim=1)
         averaged_outputs_flat = [
-            torch.sum(expert_weights.view(*expert_weights.shape, *[1] * (tensor.ndim - 2)) * tensor, dim=1)
+            (expert_weights[..., None] * tensor.flatten(start_dim=2)).view(tensor.shape).sum(dim=1)
             for tensor in expert_outputs]  # ^-- multiply by softmax weights along first 2 axes
         return nested_pack(averaged_outputs_flat, self.outputs_schema)
 
