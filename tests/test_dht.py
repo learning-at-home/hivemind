@@ -320,7 +320,7 @@ def test_dht_single_node():
 
 def test_first_k_active():
     node = hivemind.DHT(start=True)
-    assert all(node.declare_experts(['e.1.2.3', 'e.1.2.4', 'e.3.4.5'], endpoint=f"{hivemind.LOCALHOST}:{1337}"))
+    assert all(node.declare_experts(['e.1.2.3', 'e.1.2.4', 'e.3.4.5'], endpoint=f"{hivemind.LOCALHOST}:1337"))
     assert all(node.declare_experts(['e.2.1.1'], endpoint=f"{hivemind.LOCALHOST}:{1338}"))
 
     results = node.first_k_active(['e.0', 'e.1', 'e.2', 'e.3'], k=2)
