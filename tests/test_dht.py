@@ -308,31 +308,31 @@ def test_dht_single_node():
     assert node.first_k_active(['e3', 'e2'], k=3) == {}
     assert node.get_experts(['e3', 'e2']) == [None, None]
 
-    assert all(node.declare_experts(['e1', 'e2', 'e3'], f"{hivemind.LOCALHOST}:{1337}"))
+    assert all(node.declare_experts(['e1', 'e2', 'e3'], f"{hivemind.LOCALHOST}:1337"))
     for expert in node.get_experts(['e3', 'e2']):
-        assert expert.endpoint == f"{hivemind.LOCALHOST}:{1337}"
+        assert expert.endpoint == f"{hivemind.LOCALHOST}:1337"
     active_found = node.first_k_active(['e0', 'e1', 'e3', 'e5', 'e2'], k=2)
     assert list(active_found.keys()) == ['e1', 'e3']
     assert all(expert.uid.startswith(prefix) for prefix, expert in active_found.items())
 
-    assert all(node.declare_experts(['e1', 'e2', 'e3'], f"{hivemind.LOCALHOST}:{1337}"))
+    assert all(node.declare_experts(['e1', 'e2', 'e3'], f"{hivemind.LOCALHOST}:1337"))
 
 
 def test_first_k_active():
     node = hivemind.DHT(start=True)
-    assert all(node.declare_experts(['e.1.2.3', 'e.1.2.4', 'e.3.4.5'], endpoint=f"{hivemind.LOCALHOST}:{1337}"))
-    assert all(node.declare_experts(['e.2.1.1'], endpoint=f"{hivemind.LOCALHOST}:{1338}"))
+    assert all(node.declare_experts(['e.1.2.3', 'e.1.2.4', 'e.3.4.5'], endpoint=f"{hivemind.LOCALHOST}:1337"))
+    assert all(node.declare_experts(['e.2.1.1'], endpoint=f"{hivemind.LOCALHOST}:1338"))
 
     results = node.first_k_active(['e.0', 'e.1', 'e.2', 'e.3'], k=2)
     assert len(results) == 2 and next(iter(results.keys())) == 'e.1'
-    assert results['e.1'].uid in ('e.1.2.3', 'e.1.2.4') and results['e.1'].endpoint == f"{hivemind.LOCALHOST}:{1337}"
-    assert results['e.2'].uid == 'e.2.1.1' and results['e.2'].endpoint == f"{hivemind.LOCALHOST}:{1338}"
+    assert results['e.1'].uid in ('e.1.2.3', 'e.1.2.4') and results['e.1'].endpoint == f"{hivemind.LOCALHOST}:1337"
+    assert results['e.2'].uid == 'e.2.1.1' and results['e.2'].endpoint == f"{hivemind.LOCALHOST}:1338"
 
     results = node.first_k_active(['e', 'e.1', 'e.1.2', 'e.1.2.3'], k=10)
     assert len(results) == 4
     assert 'e' in results
     for k in ('e.1', 'e.1.2', 'e.1.2.3'):
-        assert results[k].uid in ('e.1.2.3', 'e.1.2.4') and results[k].endpoint == f"{hivemind.LOCALHOST}:{1337}"
+        assert results[k].uid in ('e.1.2.3', 'e.1.2.4') and results[k].endpoint == f"{hivemind.LOCALHOST}:1337"
 
 
 
