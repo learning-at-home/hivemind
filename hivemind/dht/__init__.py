@@ -190,7 +190,8 @@ class DHT(mp.Process):
         :param max_prefetch: pre-dispatch up to *this many* tasks (each for chunk_size experts)
         :param chunk_size: dispatch this many requests in one task
         :param return_future: if False (default), return when experts are returned. Otherwise return MPFuture.
-        :returns: a dict{uid_prefix -> RemoteExpert} mapping at most :k: prefixes to some expert with matching prefix;
+        :returns: a ordered dict{uid_prefix -> RemoteExpert} mapping at most :k: prefixes to matching experts
+            The keys in the returned dict are ordered same as in uid_prefixes.
         """
         assert not isinstance(uid_prefixes, str), "please provide a list/tuple of prefixes as the first argument"
         future, _future = MPFuture.make_pair()
