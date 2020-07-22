@@ -10,8 +10,8 @@ import grpc.experimental.aio
 
 import hivemind
 from hivemind.client.expert import RemoteExpert, DUMMY, _get_expert_stub
-from hivemind.utils import nested_map, nested_pack, nested_flatten, run_in_background, \
-    runtime_grpc, runtime_pb2, serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils import nested_map, nested_pack, nested_flatten, runtime_grpc, runtime_pb2, \
+    serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -123,7 +123,7 @@ class RemoteMixtureOfExperts(nn.Module):
             # create all possible successors from current beam and sort them by total score
             expanded_scores = beam_scores[:, None] + dim_scores[None, :]
             sorted_indices = [(flat_i // len(dim_scores), flat_i % len(dim_scores))
-                              for flat_i in (-expanded_scores).view(-1).argsort().numpy()]
+                              for flat_i in (-expanded_scores).flatten().argsort().numpy()]
 
             sorted_candidates = [f"{beam[row]}{self.dht.UID_DELIMITER}{col}" for row, col in sorted_indices]
             candidate_to_indices = dict(zip(sorted_candidates, sorted_indices))
