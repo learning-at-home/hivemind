@@ -1,7 +1,6 @@
 import time
 import argparse
 import random
-from typing import Tuple
 from warnings import warn
 import hivemind
 from tqdm import trange

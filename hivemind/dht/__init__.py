@@ -16,9 +16,9 @@ import asyncio
 import ctypes
 import multiprocessing as mp
 import warnings
-from collections import deque
+from collections import deque, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional, Sequence
+from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable
 
 import uvloop
 
@@ -126,17 +126,17 @@ class DHT(mp.Process):
         return self._port.value if self._port.value != 0 else None
 
     def get_experts(self, uids: List[str], expiration_time: Optional[DHTExpiration] = None,
-                    wait=True) -> List[Optional[RemoteExpert]]:
+                    return_future=False) -> List[Optional[RemoteExpert]]:
         """
         :param uids: find experts with these ids from across the DHT
         :param expiration_time: if specified, return experts that expire no sooner than this (based on get_dht_time)
-        :param wait: if True (default), return when experts are returned. Otherwise return a Future.
+        :param return_future: if False (default), return when experts are returned. Otherwise return MPFuture.
         :returns: a list of [RemoteExpert if found else None]
         """
         assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_get_experts', [], dict(uids=uids, expiration_time=expiration_time, future=_future)))
-        return future.result() if wait else future
+        return future if return_future else future.result()
 
     async def _get_experts(
             self, node: DHTNode, uids: List[str], expiration_time: Optional[DHTExpiration], future: MPFuture):
@@ -144,8 +144,8 @@ class DHT(mp.Process):
             expiration_time = get_dht_time()
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         response = await node.get_many(uids, expiration_time, num_workers=num_workers)
-        future.set_result([RemoteExpert(uid, maybe_endpoint) if maybe_expiration_time else None
-                           for uid, (maybe_endpoint, maybe_expiration_time) in response.items()])
+        future.set_result([RemoteExpert(**expert_data) if maybe_expiration_time else None
+                           for uid, (expert_data, maybe_expiration_time) in response.items()])
 
     def declare_experts(self, uids: List[str], endpoint: Endpoint, wait=True, timeout=None) -> Optional[List[bool]]:
         """
@@ -172,14 +172,16 @@ class DHT(mp.Process):
             uid_parts = uid.split(self.UID_DELIMITER)
             for i in range(len(uid_parts)):
                 uid_prefix_i = self.UID_DELIMITER.join(uid_parts[:i + 1])
-                data_to_store[uid_prefix_i] = endpoint
+                data_to_store[uid_prefix_i] = {'uid': uid, 'endpoint': endpoint}
 
         store_keys, store_values = zip(*data_to_store.items())
         store_ok = await node.store_many(store_keys, store_values, expiration_time, num_workers=num_workers)
         if future is not None:
             future.set_result([store_ok[key] for key in data_to_store.keys()])
 
-    def first_k_active(self, uid_prefixes: List[str], k: int, max_prefetch: int = 1, chunk_size: Optional[int] = None):
+    def first_k_active(
+            self, uid_prefixes: List[str], k: int, max_prefetch: int = 1, chunk_size: Optional[int] = None,
+            return_future=False) -> Union[TOrderedDict[str, RemoteExpert], Awaitable[TOrderedDict[str, RemoteExpert]]]:
         """
         Find k prefixes with active experts; may return less if there aren't enough; used for DMoE beam search
 
@@ -187,20 +189,22 @@ class DHT(mp.Process):
         :param k: return at most *this many* active prefixes
         :param max_prefetch: pre-dispatch up to *this many* tasks (each for chunk_size experts)
         :param chunk_size: dispatch this many requests in one task
-        :returns: a list of at most :k: prefixes that have at least one active expert each;
+        :param return_future: if False (default), return when experts are returned. Otherwise return MPFuture.
+        :returns: a ordered dict{uid_prefix -> RemoteExpert} mapping at most :k: prefixes to matching experts
+            The keys in the returned dict are ordered same as in uid_prefixes.
         """
         assert not isinstance(uid_prefixes, str), "please provide a list/tuple of prefixes as the first argument"
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_first_k_active', [],
                         dict(uid_prefixes=uid_prefixes, k=k, max_prefetch=max_prefetch,
                              chunk_size=chunk_size or k, future=_future)))
-        return future.result()
+        return future if return_future else future.result()
 
     async def _first_k_active(
             self, node: DHTNode, uid_prefixes: List[str], k: int, max_prefetch: int, chunk_size: int, future: MPFuture):
         num_workers_per_chunk = min(chunk_size, self.max_workers or chunk_size)
         total_chunks = (len(uid_prefixes) - 1) // chunk_size + 1
-        active_prefixes = []
+        found: List[Tuple[str, RemoteExpert]] = []
 
         pending_tasks = deque(
             asyncio.create_task(node.get_many(uid_prefixes[chunk_i * chunk_size: (chunk_i + 1) * chunk_size],
@@ -212,14 +216,13 @@ class DHT(mp.Process):
             # parse task results in chronological order, launch additional tasks on demand
             response = await pending_tasks.popleft()
             for uid_prefix in uid_prefixes[chunk_i * chunk_size: (chunk_i + 1) * chunk_size]:
-                if response[uid_prefix][1] is not None:  # found active peer
-                    active_prefixes.append(uid_prefix)
+                maybe_expert_data, maybe_expiration_time = response[uid_prefix]
+                if maybe_expiration_time is not None:  # found active peer
+                    found.append((uid_prefix, RemoteExpert(**maybe_expert_data)))
                     # if we found enough active experts, finish immediately
-                    if len(active_prefixes) >= k:
+                    if len(found) >= k:
                         break
-            if len(active_prefixes) >= k:
-                for task in pending_tasks:
-                    task.cancel()
+            if len(found) >= k:
                 break
 
             pre_dispatch_chunk_i = chunk_i + len(pending_tasks) + 1
@@ -228,5 +231,8 @@ class DHT(mp.Process):
                     uid_prefixes[pre_dispatch_chunk_i * chunk_size: (pre_dispatch_chunk_i + 1) * chunk_size],
                     num_workers=num_workers_per_chunk)))
 
+        for task in pending_tasks:
+            task.cancel()
+
         # return k active prefixes or as many as we could find
-        future.set_result(active_prefixes)
+        future.set_result(OrderedDict(found))

@@ -11,7 +11,7 @@ import hivemind
 from test_utils.layers import name_to_block, name_to_input
 
 
-def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hidden_dim=1024,
+def make_dummy_server(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
                       num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
                       no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
                       start=False, **kwargs) -> hivemind.Server:
@@ -19,11 +19,12 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
     Instantiate a server with several identical experts. See argparse comments below for details
     :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
     :param num_experts: run this many identical experts
+    :param expert_prefix: all expert uids will be {expert_prefix}.{index}
+    :param expert_offset: expert uid will use indices in range(expert_offset, expert_offset + num_experts)
+    :param expert_uids: spawn experts with these exact uids, overrides num_experts, expert_prefix and expert_offset
     :param expert_cls: expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
     :param hidden_dim: main dimension for expert_cls
     :param num_handlers: server will use this many parallel processes to handle incoming requests
-    :param expert_prefix: all expert uids will be {expert_prefix}.{index}
-    :param expert_offset: expert uid will use indices in range(expert_offset, expert_offset + num_experts)
     :param max_batch_size: total num examples in the same batch will not exceed this value
     :param device: all experts will use this device in torch notation; default: cuda if available else cpu
     :param no_optimizer: if specified, all optimizers use learning rate=0
@@ -36,6 +37,8 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
     :param verbose: whether to print server started / finished / terminated events
     :param start: if True, starts server right away and returns when server is ready for requests
     """
+    assert (expert_uids is None) != (num_experts is None and expert_prefix == 'expert' and expert_offset == 0), \
+        "Please provide either expert uids *or* (num_experts, expert_prefix and expert_offset), not both"
     if verbose and len(kwargs) != 0:
         print("Ignored kwargs:", kwargs)
     assert expert_cls in name_to_block
@@ -68,11 +71,15 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=1, expert_cls='ffn', hi
         args_schema = (hivemind.BatchTensorDescriptor.from_tensor(sample_input),)
 
     # initialize experts
+    if expert_uids is None:
+        num_experts = num_experts if num_experts is not None else 1
+        expert_uids = [f'{expert_prefix}{hivemind.DHT.UID_DELIMITER}{i + expert_offset}'
+                       for i in range(num_experts)]
+
     experts = {}
-    for i in range(num_experts):
+    for expert_uid in expert_uids:
         expert = name_to_block[expert_cls](hidden_dim)
         opt = torch.optim.SGD(expert.parameters(), 0.0 if no_optimizer else 0.05)
-        expert_uid = f'{expert_prefix}{hivemind.DHT.UID_DELIMITER}{i + expert_offset}'
         experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
                                                      args_schema=args_schema,
                                                      outputs_schema=hivemind.BatchTensorDescriptor(hidden_dim),
@@ -108,7 +115,7 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs) -> Tupl
         finally:
             if verbose:
                 print("Server failed to shutdown gracefully, terminating it the hard way...")
-            runner.terminate()
+            runner.kill()
             if verbose:
                 print("Server terminated.")
 
@@ -132,9 +139,8 @@ def _server_runner(pipe, *args, verbose, **kwargs):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--interface', type=str, default='0.0.0.0', required=False,
+    parser.add_argument('--listen_on', type=str, default='0.0.0.0:*', required=False,
                         help="'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6")
-    parser.add_argument('--port', type=int, default=None, required=False, help="server will listen to this port")
     parser.add_argument('--num_experts', type=int, default=1, required=False, help="run this many identical experts")
     parser.add_argument('--expert_cls', type=str, default='ffn', required=False,
                         help="expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop'.")
