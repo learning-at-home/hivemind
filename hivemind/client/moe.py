@@ -92,7 +92,8 @@ class RemoteMixtureOfExperts(nn.Module):
         # ^-- multiple tensors of shape [batch_size, max_experts, ...output_shape]
 
         expert_logits = self.compute_expert_scores(grid_scores, chosen_experts)
-        expert_logits = torch.where(expert_mask, expert_logits, torch.full_like(expert_logits, -float('inf')))
+        masked_logits = torch.full((1,), float('-inf'), device=expert_logits.device, dtype=expert_logits.dtype)
+        expert_logits = torch.where(expert_mask, expert_logits, masked_logits)
         expert_weights = torch.softmax(expert_logits, dim=1)
         averaged_outputs_flat = [
             torch.sum(expert_weights.view(*expert_weights.shape, *[1] * (tensor.ndim - 2)) * tensor, dim=1)
