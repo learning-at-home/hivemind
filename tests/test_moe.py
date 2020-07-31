@@ -6,7 +6,7 @@ import pytest
 import torch
 import hivemind
 from hivemind.client.expert import DUMMY
-from test_utils.run_server import background_server
+from hivemind.server.run_server import background_server
 
 
 def test_moe():
