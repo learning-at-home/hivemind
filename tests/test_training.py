@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from hivemind import RemoteExpert, find_open_port, LOCALHOST
-from test_utils.run_server import background_server
+from hivemind.server.run_server import background_server
 
 from sklearn.datasets import load_digits
 
