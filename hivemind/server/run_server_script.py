@@ -1,6 +1,6 @@
 import yaml
 import resource
-from hivemind.server.run_server import make_dummy_server, background_server
+from hivemind.server.run_server import make_dummy_server
 
 with open("config.yml", "r") as f:
     args = yaml.safe_load(f)
