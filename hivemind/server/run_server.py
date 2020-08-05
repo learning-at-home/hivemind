@@ -8,7 +8,7 @@ from typing import Tuple
 import torch
 
 import hivemind
-from test_utils.layers import name_to_block, name_to_input
+from hivemind.server.layers import name_to_block, name_to_input
 
 
 def make_dummy_server(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
@@ -21,7 +21,7 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None,
     :param num_experts: run this many identical experts
     :param expert_prefix: all expert uids will be {expert_prefix}.{index}
     :param expert_offset: expert uid will use indices in range(expert_offset, expert_offset + num_experts)
-    :param expert_uids: spawn experts with these exact uids, overrides num_experts, expert_prefix and expert_offset
+    :param expert_uids: spawn experts with  these exact uids, overrides num_experts, expert_prefix and expert_offset
     :param expert_cls: expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
     :param hidden_dim: main dimension for expert_cls
     :param num_handlers: server will use this many parallel processes to handle incoming requests
