@@ -14,7 +14,6 @@ def test_moe():
                        for _ in range(20)]
     with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn',
                            num_handlers=1, hidden_dim=16) as (server_endpoint, dht_endpoint):
-
         dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
         # declare expert uids. Server *should* declare them by itself, but it takes time.
         assert all(dht.declare_experts(all_expert_uids, endpoint=server_endpoint))
@@ -38,7 +37,6 @@ def test_call_many():
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
                            no_optimizer=True, no_dht=True) as (server_endpoint, dht_endpoint):
-
         inputs = torch.randn(4, 64, requires_grad=True)
         inputs_clone = inputs.clone().detach().requires_grad_(True)
         e0, e1, e2, e3, e4 = [hivemind.RemoteExpert(f'expert.{i}', server_endpoint) for i in range(5)]

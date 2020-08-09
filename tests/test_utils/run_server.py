@@ -10,6 +10,8 @@ import torch
 import hivemind
 from test_utils.layers import name_to_block, name_to_input
 
+logger = hivemind.get_logger(__name__)
+
 
 def make_dummy_server(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
                       num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
@@ -49,20 +51,20 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None,
     dht = None
     if not no_dht:
         if not len(initial_peers):
-            print("No initial peers provided. Starting additional dht as an initial peer.")
+            logger.info("No initial peers provided. Starting additional dht as an initial peer.")
             dht_root = hivemind.DHT(initial_peers=initial_peers, start=True,
                                     listen_on=f"{hivemind.LOCALHOST}:{root_port or hivemind.find_open_port()}")
-            print(f"Initializing DHT with port {dht_root.port}")
+            logger.info(f"Initializing DHT with port {dht_root.port}")
             initial_peers = [f"{hivemind.LOCALHOST}:{dht_root.port}"]
         else:
-            print("Bootstrapping dht with peers:", initial_peers)
+            logger.info("Bootstrapping dht with peers:", initial_peers)
             if root_port is not None:
-                print(f"Warning: root_port={root_port} will not be used since we already have peers.")
+                logger.info(f"Warning: root_port={root_port} will not be used since we already have peers.")
 
         dht = hivemind.DHT(initial_peers=initial_peers, start=True,
                            listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}")
         if verbose:
-            print(f"Running dht node on port {dht.port}")
+            logger.info(f"Running dht node on port {dht.port}")
 
     sample_input = name_to_input[expert_cls](4, hidden_dim)
     if isinstance(sample_input, tuple):
@@ -93,8 +95,8 @@ def make_dummy_server(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None,
     if start:
         server.run_in_background(await_ready=True)
         if verbose:
-            print(f"Server started at {server.listen_on}")
-            print(f"Got {num_experts} active experts of type {expert_cls}: {list(experts.keys())}")
+            logger.info(f"Server started at {server.listen_on}")
+            logger.info(f"Got {len(experts)} active experts of type {expert_cls}: {list(experts.keys())}")
     return server
 
 
@@ -110,14 +112,13 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs) -> Tupl
         yield pipe.recv()  # once the server is ready, runner will send us a tuple(hostname, port, dht port)
         pipe.send('SHUTDOWN')  # on exit from context, send shutdown signal
     finally:
-        try:
-            runner.join(timeout=shutdown_timeout)
-        finally:
+        runner.join(timeout=shutdown_timeout)
+        if runner.is_alive():
             if verbose:
-                print("Server failed to shutdown gracefully, terminating it the hard way...")
+                logger.info("Server failed to shutdown gracefully, terminating it the hard way...")
             runner.kill()
             if verbose:
-                print("Server terminated.")
+                logger.info("Server terminated.")
 
 
 def _server_runner(pipe, *args, verbose, **kwargs):
@@ -131,13 +132,15 @@ def _server_runner(pipe, *args, verbose, **kwargs):
         pipe.recv()  # wait for shutdown signal
     finally:
         if verbose:
-            print("Shutting down server...")
+            logger.info("Shutting down server...")
         server.shutdown()
+        server.join()
         if verbose:
-            print("Server shut down successfully.")
+            logger.info("Server shut down successfully.")
 
 
 if __name__ == '__main__':
+    # fmt:off
     parser = argparse.ArgumentParser()
     parser.add_argument('--listen_on', type=str, default='0.0.0.0:*', required=False,
                         help="'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6")
@@ -164,6 +167,7 @@ if __name__ == '__main__':
                         ', it will create a virtual dht node on this port. You can then use this node as initial peer.')
     parser.add_argument('--increase_file_limit', action='store_true', help='On *nix, this will increase the max number'
                         ' of processes a server can spawn before hitting "Too many open files"; Use at your own risk.')
+    # fmt:on
 
     args = vars(parser.parse_args())
 
