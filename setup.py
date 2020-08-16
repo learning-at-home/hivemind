@@ -21,6 +21,7 @@ setup(
     long_description='',
     author='Learning@home authors',
     author_email='mryabinin@hse.ru',
+    url="https://github.com/learning-at-home/hivemind",
     packages=['hivemind'],
     license='MIT',
     install_requires=install_requires,
