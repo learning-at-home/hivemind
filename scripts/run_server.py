@@ -1,5 +1,4 @@
 import configargparse
-import yaml
 import resource
 from hivemind.server.run_server import make_dummy_server
 
