@@ -62,7 +62,8 @@ class RemoteMixtureOfExperts(nn.Module):
     def forward(self, input: torch.Tensor, *args: torch.Tensor, **kwargs: torch.Tensor):
         """
         Choose k best experts with beam search, then call chosen experts and average their outputs. Input tensor is averaged over all
-         dimensions except first and last (we assume that extra dimensions represent sequence length or image dimensions)
+        dimensions except first and last (we assume that extra dimensions represent sequence length or image dimensions)
+
         :param input: a tensor of values that are used to estimate gating function, batch-first.
         :param args: extra positional parameters that will be passed to each expert after input, batch-first
         :param kwargs: extra keyword parameters that will be passed to each expert, batch-first
@@ -184,7 +185,8 @@ class RemoteMixtureOfExperts(nn.Module):
         if self._outputs_schema is None:
             # grab some expert to set ensemble output shape
             proj_device = self.proj.weight.device
-            dummy_scores = self.proj(torch.randn(1, self.proj.in_features)).to(proj_device).split_with_sizes(self.grid_size, dim=-1)
+            dummy_scores_concat = self.proj(torch.randn(1, self.proj.in_features, device=proj_device))
+            dummy_scores = dummy_scores_concat.cpu().split_with_sizes(self.grid_size, dim=-1)
             dummy_experts = self.loop.run_until_complete(self.beam_search(dummy_scores, k_best=1))
             self._outputs_schema = dummy_experts[0].info['outputs_schema']
         return self._outputs_schema
