@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.datasets import load_digits
-from test_utils.run_server import background_server
+from hivemind.server.run_server import background_server
 
 from hivemind import RemoteExpert
 

@@ -8,7 +8,7 @@ from typing import Tuple
 import torch
 
 import hivemind
-from test_utils.layers import name_to_block, name_to_input
+from hivemind.server.layers import name_to_block, name_to_input
 
 logger = hivemind.get_logger(__name__)
 
