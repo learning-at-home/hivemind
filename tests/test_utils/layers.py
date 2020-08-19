@@ -53,6 +53,21 @@ class TransformerEncoderLayer(nn.Module):
         return src
 
 
+class MaskedTransformerEncoderLayer(TransformerEncoderLayer):
+    def forward(self, src, mask):
+        assert mask.ndim == 2 and mask.dtype == torch.bool and tuple(mask.shape) == tuple(src.shape)[:2]
+        src.transpose_(0, 1)
+        mask = (~mask).transpose(0, 1)
+        src2 = self.self_attn(src, src, src, mask)[0]
+        src = src + self.dropout1(src2)
+        src = self.norm1(src)
+        src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
+        src = src + self.dropout2(src2)
+        src = self.norm2(src)
+        src.transpose_(0, 1)
+        return src
+
+
 class NopExpert(nn.Sequential):
     def __init__(self, hid_dim):
         super().__init__()
@@ -77,10 +92,13 @@ class DeterministicDropoutNetwork(nn.Module):
 
 name_to_block = {'ffn': lambda hid_dim: FeedforwardBlock(hid_dim),
                  'transformer': lambda hid_dim: TransformerEncoderLayer(hid_dim, nhead=16),
+                 'masked_transformer': lambda hid_dim: MaskedTransformerEncoderLayer(hid_dim, nhead=16),
                  'nop': lambda hid_dim: NopExpert(hid_dim),
                  'det_dropout': lambda hid_dim: DeterministicDropoutNetwork(hid_dim, dropout_prob=0.2)}
 name_to_input = {'ffn': lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
                  'transformer': lambda batch_size, hid_dim: torch.empty((batch_size, 512, hid_dim)),
+                 'masked_transformer': lambda batch_size, hid_dim: (torch.empty((batch_size, 512, hid_dim)),
+                                                                    torch.empty((batch_size, 512))),
                  'nop': lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
                  'det_dropout': lambda batch_size, hid_dim:
                  (torch.empty((batch_size, hid_dim)), torch.randint(0, 1, (batch_size, hid_dim)))}
