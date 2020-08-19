@@ -13,7 +13,7 @@ if __name__ == '__main__':
     parser.add_argument('--expert_cls', type=str, default='ffn', required=False,
                         help="expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop'.")
     parser.add_argument('--hidden_dim', type=int, default=1024, required=False, help='main dimension for expert_cls')
-    parser.add_argument('--num_handlers', type=Optional[int], default=None, required=False,
+    parser.add_argument('--num_handlers', type=int, default=0, required=False,
                         help='server will use this many processes to handle incoming requests')
     parser.add_argument('--expert_prefix', type=str, default='expert', required=False,
                         help='all expert uids will be {expert_prefix}.{index}')
