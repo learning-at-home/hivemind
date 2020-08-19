@@ -10,7 +10,9 @@ from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.checkpoint_saver import CheckpointSaver
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread
-from hivemind.utils import Endpoint, get_port, replace_port, find_open_port
+from hivemind.utils import Endpoint, get_port, replace_port, find_open_port, get_logger
+
+logger = get_logger(__name__)
 
 
 class Server(threading.Thread):
@@ -81,10 +83,10 @@ class Server(threading.Thread):
         for process in self.conn_handlers:
             process.join()
         if self.dht:
-            dht_handler_thread.stop = True
+            dht_handler_thread.stop.set()
             dht_handler_thread.join()
         if self.checkpoint_saver is not None:
-            self.checkpoint_saver.stop = True
+            self.checkpoint_saver.stop.set()
             self.checkpoint_saver.join()
 
     def run_in_background(self, await_ready=True, timeout=None):
@@ -121,5 +123,6 @@ class Server(threading.Thread):
 
         if self.dht is not None:
             self.dht.shutdown()
+            self.dht.join()
 
         self.runtime.shutdown()

@@ -77,6 +77,7 @@ class Runtime(threading.Thread):
         for pool in self.pools:
             if pool.is_alive():
                 pool.terminate()
+                pool.join()
 
     def iterate_minibatches_from_pools(self, timeout=None):
         """

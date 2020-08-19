@@ -96,7 +96,8 @@ class DHT(mp.Process):
             node = await DHTNode.create(
                 initial_peers=list(self.initial_peers), listen_on=self.listen_on, parallel_rpc=self.parallel_rpc,
                 num_workers=self.max_workers or 1, **self.kwargs)
-            self._port.value = node.port
+            if node.port is not None:
+                self._port.value = node.port
             self.ready.set()
 
             while True:

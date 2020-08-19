@@ -1,14 +1,12 @@
-import argparse
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from hivemind import RemoteExpert, find_open_port, LOCALHOST
+from sklearn.datasets import load_digits
 from test_utils.run_server import background_server
 
-from sklearn.datasets import load_digits
+from hivemind import RemoteExpert
 
 
 def test_training(port: Optional[int] = None, max_steps: int = 100, threshold: float = 0.9):
@@ -30,7 +28,7 @@ def test_training(port: Optional[int] = None, max_steps: int = 100, threshold: f
             loss.backward()
             opt.step()
 
-            accuracy = (outputs.argmax(dim=1) == y_train).numpy().mean()
+            accuracy = (outputs.argmax(dim=1) == y_train).float().mean().item()
             if accuracy >= threshold:
                 break
 
