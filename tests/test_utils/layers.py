@@ -57,7 +57,6 @@ class MaskedTransformerEncoderLayer(TransformerEncoderLayer):
     def forward(self, src, mask):
         assert mask.ndim == 2 and mask.dtype == torch.bool and tuple(mask.shape) == tuple(src.shape)[:2]
         src.transpose_(0, 1)
-        mask = (~mask).transpose(0, 1)
         src2 = self.self_attn(src, src, src, mask)[0]
         src = src + self.dropout1(src2)
         src = self.norm1(src)
