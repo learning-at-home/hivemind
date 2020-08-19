@@ -6,7 +6,7 @@ from hivemind.server.run_server import make_dummy_server
 if __name__ == '__main__':
     # fmt:off
     parser = configargparse.ArgParser(default_config_files=["config.yml"])
-    parser.add('-c', '--my-config', required=True, is_config_file=True, help='config file path')
+    parser.add('-c', '--my-config', required=False, is_config_file=True, help='config file path')
     parser.add_argument('--listen_on', type=str, default='0.0.0.0:*', required=False,
                         help="'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6")
     parser.add_argument('--num_experts', type=int, default=1, required=False, help="run this many identical experts")
