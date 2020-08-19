@@ -6,7 +6,7 @@ hidden_dim: 1024 #main dimension for expert_cls
 expert_prefix: expert #all expert uids will be {expert_prefix}.{index}
 expert_offset: 0 #expert uid will use indices in range(expert_offset, expert_offset + num_experts)
 max_batch_size: 16384 #total num examples in the same batch will not exceed this value
-device:  #all experts will use this device in torch notation; default: cuda if available else cpu
+#device:  #all experts will use this device in torch notation; default: cuda if available else cpu
 no_optimizer: True #if specified, all optimizers use learning rate=0
 no_dht: True #if specified, the server will not be attached to a dht
 initial_peers: "[]" #a list of peers that will introduce this node to the dht, e.g. [("1.2.3.4", 1337), ("127.0.0.1", 4321)]
