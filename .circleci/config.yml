@@ -13,7 +13,7 @@ jobs:
       - python/install-deps
       - python/save-cache
       - run:
-          command: python setup.py develop
+          command: pip install -e .
           name: setup
       - run:
           command: pytest ./tests
