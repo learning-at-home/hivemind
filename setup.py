@@ -1,8 +1,7 @@
 import codecs
+import glob
 import os
 import re
-import sys
-import glob
 
 import grpc_tools.protoc
 from pkg_resources import parse_requirements

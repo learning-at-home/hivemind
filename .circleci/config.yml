@@ -9,11 +9,11 @@ jobs:
     steps:
       - checkout
       - python/load-cache
-      - run: sudo pip install codecov pytest tqdm scikit-learn
+      - run: pip install codecov pytest tqdm scikit-learn
       - python/install-deps
       - python/save-cache
       - run:
-          command: sudo python setup.py develop
+          command: python setup.py develop
           name: setup
       - run:
           command: pytest ./tests
