@@ -1,17 +1,18 @@
 from __future__ import annotations
-import time
+
 import asyncio
+import time
 from typing import Tuple, List, Optional, Awaitable, Set, Dict
 
+import grpc.experimental.aio
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
-import grpc.experimental.aio
 
 import hivemind
 from hivemind.client.expert import RemoteExpert, DUMMY, _get_expert_stub
-from hivemind.utils import nested_map, nested_pack, nested_flatten, runtime_grpc, runtime_pb2, \
-    serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
+from hivemind.utils import nested_pack, nested_flatten, serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
