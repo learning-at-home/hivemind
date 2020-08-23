@@ -19,8 +19,6 @@ with codecs.open(os.path.join(here, 'hivemind/__init__.py'), encoding='utf-8') a
     version_string = version_match.group(1)
 
 
-
-
 class ProtoCompileBuild(build_ext):
     def run(self):
         super().run()
