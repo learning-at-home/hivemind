@@ -16,15 +16,12 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 import sys
-import os
 
 from recommonmark.transform import AutoStructify
 from recommonmark.parser import CommonMarkParser
 
 
 # -- Project information -----------------------------------------------------
-# sys.path.insert(0, '..')
-# print(os.listdir('../hivemind/proto'))
 src_path = '../hivemind'
 project = 'hivemind'
 copyright = '2020, Learning@home & contributors'
