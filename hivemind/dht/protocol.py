@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import heapq
-import os
 from typing import Optional, List, Tuple, Dict, Iterator, Any, Sequence, Union, Collection
 from warnings import warn
 
@@ -11,12 +10,10 @@ import grpc
 import grpc.experimental.aio
 
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, get_dht_time
-from hivemind.utils import Endpoint, compile_grpc, get_logger, replace_port, get_port
+from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
+from hivemind.utils import Endpoint, get_logger, replace_port
 
 logger = get_logger(__name__)
-
-with open(os.path.join(os.path.dirname(__file__), 'dht.proto'), 'r') as f_proto:
-    dht_pb2, dht_grpc = compile_grpc(f_proto.read())
 
 
 class DHTProtocol(dht_grpc.DHTServicer):
