@@ -2,6 +2,7 @@ import codecs
 import glob
 import os
 import re
+import sys
 
 import grpc_tools.protoc
 from pkg_resources import parse_requirements
@@ -14,16 +15,19 @@ def proto_compile(command_class):
     orig_run = command_class.run
 
     def run(self):
+        print(os.getcwd(), file=sys.stderr)
+        print(os.listdir('hivemind/proto'), file=sys.stderr)
+        print(os.listdir(self.build_lib), file=sys.stderr)
         cli_args = ['grpc_tools.protoc',
-                    '--proto_path=hivemind/proto', '--python_out=hivemind/proto',
-                    '--grpc_python_out=hivemind/proto'] + glob.glob('hivemind/proto/*.proto')
+                    '--proto_path=hivemind/proto', f'--python_out={os.path.join(self.build_lib, "hivemind", "proto")}',
+                    f'--grpc_python_out={os.path.join(self.build_lib, "hivemind", "proto")}'] + glob.glob('hivemind/proto/*.proto')
 
         code = grpc_tools.protoc.main(cli_args)
         if code:  # hint: if you get this error in jupyter, run in console for richer error message
             raise ValueError(f"{' '.join(cli_args)} finished with exit code {code}")
-
+        print(os.listdir(os.path.join(self.build_lib, "hivemind", "proto")), file=sys.stderr)
         # Make pb2 imports in generated scripts relative
-        for script in glob.iglob('hivemind/proto/*.py'):
+        for script in glob.iglob(f'{self.build_lib}/hivemind/proto/*.py'):
             with open(script, 'r+') as file:
                 code = file.read()
                 file.seek(0)
