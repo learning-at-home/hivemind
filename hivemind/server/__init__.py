@@ -61,15 +61,6 @@ class Server(threading.Thread):
         if start:
             self.run_in_background(await_ready=True)
 
-    def __enter__(self):
-        if not self.ready:
-            self.run_in_background(await_ready=True)
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.shutdown()
-        return False
-
     @staticmethod
     def create(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
                num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
