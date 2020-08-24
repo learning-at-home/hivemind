@@ -1,11 +1,15 @@
 import multiprocessing as mp
 import multiprocessing.synchronize
 import threading
+from contextlib import contextmanager
+
 import torch
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import hivemind
+from hivemind import logger
 from hivemind.dht import DHT
+from hivemind.server.run_server import _server_runner, logger
 from hivemind.server.runtime import Runtime
 from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
 from hivemind.server.expert_backend import ExpertBackend
@@ -225,3 +229,24 @@ class Server(threading.Thread):
             self.dht.join()
 
         self.runtime.shutdown()
+
+
+@contextmanager
+def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs) -> Tuple[hivemind.Endpoint, hivemind.Endpoint]:
+    """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
+    pipe, runners_pipe = mp.Pipe(duplex=True)
+    runner = mp.get_context("spawn").Process(
+        target=_server_runner, args=(runners_pipe, *args), kwargs=dict(verbose=verbose, **kwargs))
+
+    try:
+        runner.start()
+        yield pipe.recv()  # once the server is ready, runner will send us a tuple(hostname, port, dht port)
+        pipe.send('SHUTDOWN')  # on exit from context, send shutdown signal
+    finally:
+        runner.join(timeout=shutdown_timeout)
+        if runner.is_alive():
+            if verbose:
+                logger.info("Server failed to shutdown gracefully, terminating it the hard way...")
+            runner.kill()
+            if verbose:
+                logger.info("Server terminated.")
