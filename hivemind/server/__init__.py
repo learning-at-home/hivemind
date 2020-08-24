@@ -59,10 +59,20 @@ class Server(threading.Thread):
         if start:
             self.run_in_background(await_ready=True)
 
-    def create(self, listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
-                      num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
-                      no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
-                      start=False, **kwargs):  # removed type specification (-> Server)
+    def __enter__(self):
+        if not self.ready():
+            self.run_in_background(await_ready=True)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.shutdown()
+        return False
+
+    @staticmethod
+    def create(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
+               num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
+               no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
+               start=False, **kwargs):  # removed type specification (-> Server)
         """
         Instantiate a server with several identical experts. See argparse comments below for details
         :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
