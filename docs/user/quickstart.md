@@ -1,57 +1,115 @@
-# Quick start [nothing here yet]
+# Quickstart
 
-This will eventually become a tutorial on how to host a hivemind node or connect to an existing node.
+This tutorial will teach you how to install `hivemind`, host your own experts and train them remotely.
 
-![img](https://media.giphy.com/media/3oz8xtBx06mcZWoNJm/giphy.gif)
 
-## What do I need to run it?
+#### Installation
 
-- One or several computers, each equipped with at least one GPU
-- Each computer should have at least two open ports (if not, consider ssh port
-  forwarding)
-- Some popular Linux x64 distribution
-  - Tested on Ubuntu16.04, should work fine on any popular linux64 and even
-    MacOS;
-  - Running on Windows natively is not supported, please use vm or docker;
+Just `pip install hivemind` to get the latest release.
 
-## How do I run it?
+You can also install the bleeding edge version from github:
+```
+git clone https://github.com/learning-at-home/hivemind
+cd hivemind
+python setup.py install
+```
 
-Currently, there is no way to do it easily. There are some tests (you can check [`./tests/benchmark_throughput.py`](https://github.com/learning-at-home/hivemind/blob/master/tests/benchmark_throughput.py)
- or look into CI logs) and we want to expand them. If you want to
-do something complex with it, please contact us by opening an issue (less preferred: [telegram](https://t.me/justheuristic)).
+You can also install it in editable mode with `python setup.py develop`.
 
-## `hivemind` quick tour
+__OS support:__ Linux and Mac OS should [just work](https://github.com/learning-at-home/hivemind/issues).
+We do not officially support Windows, but you are welcome to try and contribute your windows build :)
 
-**Trainer process:**
 
-- **`RemoteExpert`**(`hivemind/client/remote_expert.py`) behaves like a pytorch
-  module with autograd support but actually sends request to a remote runtime.
-- **`RemoteMixtureOfExperts`**(`hivemind/client/remote_moe.py`) finds best experts
-  for a given input and either returns them as `RemoteExpert` or applies them
-  right away.
+#### Basic use
 
-**Runtime process:**
+Hivemind.Server hosts one or several experts (torch modules) for remote access. These experts are responsible for 
+most of the model parameters and computation.
 
-- **`Runtime`** (`hivemind/runtime/__init__.py`) aggregates batches
-  and performs inference/training of experts according to their priority.
-- **`Server`** (`hivemind/server/__init__.py`) wraps runtime and
-  periodically uploads experts into `DHT`.
+To host a server with default experts, run this in your shell:
+```sh
+python -m TODOPATH.run_server --expert_cls ffn --hidden_dim 512 --num_experts 5 --uid_space TODO \
+                              --listen_on 0.0.0.0:1337 --dht_port 1338
+# note: if you omit listen_on and/or dht_port, they will be chosen automatically and printed to stdout.
+```
 
-**DHT:**
+This server accepts requests to experts on port 1337 and start a DHT peer on port 1338.
+In total, it serves 5 feedforward experts with ReLU and LayerNorm (see architecture [TODOhere][TODO]).
 
-- **`DHT`**(`hivemind/dht/__init__.py`) is a node of
-  Kademlia-based DHT that stores metadata used by trainer and runtime.
+You (and anyone) can create additional servers in the same decentralized network using `--initial_peers` argument:
+```sh
+python -m TODOPATH.run_server --expert_cls ffn --hidden_dim 512 --num_experts 5 --uid_space TODO \
+                              --initial-peers localhost:1338
+```
 
-## Limitations
+Here and below, if you are running on a different machine, replace `localhost:1338` with your original server's
+public IP address (e.g. `12.34.56.78:1338`). Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
+as [gRPC](https://grpc.io/docs/languages/python/basics/#starting-the-server).
 
-**DHT**:
 
-- DHT functionality is severely limited by its inability to traverse NAT.
-- Because of this all the features that require DHT are in deep pre-alpha state
-  and cannot be used without special setup.
+Now let's put these experts to work. Create a python console (or a jupyter) and run: 
+```python
+import torch
+import hivemind
 
-**Runtime**:
-* You can achieve 4x less network load by passing quantized uint8 activations across experts.
-    Implement your own quantization or wait for hivemind v0.8.
-* Currently runtime can form batches that exceed maximal batch_size by task_size - 1. 
-    We will fix that in the nearest patch.
+dht = hivemind.DHT(initial_peers=["localhost:1338"], listen=False, start=True)
+# note: listen=False means that your peer will operate in "client only" mode: 
+# this means that it can request other peers, but will not accept requests in return 
+
+expert1, expert4 = dht.get_experts(["expert.1", "expert.4"])
+assert expert1 is not None and expert4 is not None, "server hasn't declared experts (yet?)"
+```
+
+The experts (e.g. `expert1`) can be used as a pytorch module with autograd support:
+```python
+dummy = torch.randn(3, 512)
+out = expert1(dummy)  # forward pass
+out.sum().backward()  # backward pass
+```
+
+When called, expert1 will submit a request to the corresponding server (which you created above) and return
+ the outputs tensor(s) or raise an exception. During backward, pytorch will submit the backward requests
+ for the experts as they appear in the computation graph.
+ 
+By default, the experts will automatically update their parameters with one step of SGD after each backward pass.
+This allows you to quickly run training using a mixture of local and remote layers:
+```python
+# generate dummy data
+x = torch.randn(3, 512)
+y = 0.01 * x.sum(dim=-1, keepdim=True)
+
+# local torch module
+proj_out = torch.nn.Sequential(
+    torch.nn.Linear(512, 3)
+)
+opt = torch.optim.SGD(proj_out.parameters(), lr=0.01)
+
+for i in range(100):
+    prediction = proj_out(expert1(expert4(x)))
+    loss = torch.mean(abs(prediction - y))
+    print(loss.item())
+    opt.zero_grad()
+    loss.backward()
+    opt.step()
+```
+
+Finally, you can create a Mixture-of-Experts layer over our humble band of experts:
+```python
+import nest_asyncio;  nest_asyncio.apply()  # asyncio patch for jupyter. for now, we recommend using MoE from console
+dmoe = hivemind.RemoteMixtureOfExperts(in_features=512, uid_prefix="expert", grid_size=(5,),
+                                       dht=dht, k_best=2)
+
+out = dmoe(torch.randn(3, 512))
+out.sum().backward()
+```
+
+The `dmoe` layer dynamically selects the right experts using a linear gating function. It will then dispatch parallel
+forward (and backward) requests to those experts and collect results.
+You can find more details on how MoE works in Section 2.3 of the [paper](https://arxiv.org/abs/2002.04013)
+
+Congratulations, you've made it through the basic tutorial. Time to give yourself a pat on the back and decide what's next:
+* Run a small training experiment in TODO
+* Set up custom experts in TODO
+* TODO
+
+
+
