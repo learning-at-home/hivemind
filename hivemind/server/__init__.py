@@ -69,7 +69,7 @@ class Server(threading.Thread):
         return False
 
     @classmethod
-    def create(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
+    def create(cls, listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
                num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
                no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
                start=False, **kwargs):  # removed type specification (-> Server)
