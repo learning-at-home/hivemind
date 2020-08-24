@@ -5,7 +5,7 @@ import sys
 import time
 
 import torch
-from hivemind.server.layers import __init__
+from hivemind.server import layers
 from test_utils import print_device_info, increase_file_limit
 
 import hivemind
@@ -34,7 +34,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
                          device=None, port=None):
     assert not hasattr(torch.cuda, 'is_initialized') or not torch.cuda.is_initialized() \
            or torch.device(device) == torch.device('cpu')
-    assert expert_cls in __init__.name_to_block
+    assert expert_cls in layers.name_to_block
     port = port or find_open_port()
     max_batch_size = max_batch_size or batch_size * 4
     num_handlers = max(1, num_handlers or num_clients // 2)
@@ -62,7 +62,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
         device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         experts = {}
         for i in range(num_experts):
-            expert = torch.jit.script(__init__.name_to_block[expert_cls](hid_dim))
+            expert = torch.jit.script(layers.name_to_block[expert_cls](hid_dim))
             experts[f'expert{i}'] = hivemind.ExpertBackend(name=f'expert{i}',
                                                            expert=expert, opt=torch.optim.Adam(expert.parameters()),
                                                            args_schema=(hivemind.BatchTensorDescriptor(hid_dim),),
