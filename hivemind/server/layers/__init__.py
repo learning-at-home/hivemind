@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from hivemind.utils.custom_layers import DeterministicDropout
+from hivemind.server.layers.dropout import DeterministicDropout
 
 
 class FeedforwardBlock(nn.Module):
