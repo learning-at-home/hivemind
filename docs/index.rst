@@ -19,8 +19,9 @@ documentation below.
   :maxdepth: 2
   :glob:
 
-  user/*
+  user/quickstart
   modules/index
+  user/contributing
 
 Indices and tables
 ~~~~~~~~~~~~~~~~~~

@@ -5,7 +5,7 @@ This tutorial will teach you how to install `hivemind`, host your own experts an
 
 #### Installation
 
-Just `pip install hivemind` to get the latest release.
+Just `pip install hivemind` to get the latest release. 
 
 You can also install the bleeding edge version from github:
 ```
@@ -16,7 +16,8 @@ python setup.py install
 
 You can also install it in editable mode with `python setup.py develop`.
 
-__OS support:__ Linux and Mac OS should [just work](https://github.com/learning-at-home/hivemind/issues).
+* __Dependencies:__ Hivemind requires python 3.7+ (3.8 is recommended), it will install [requirements](https://github.com/learning-at-home/hivemind/blob/master/requirements.txt) automatically; 
+* __OS support:__ Linux and Mac OS should [just work](https://github.com/learning-at-home/hivemind/issues).
 We do not officially support Windows, but you are welcome to try and contribute your windows build :)
 
 

@@ -53,9 +53,10 @@ setup(
     name='hivemind',
     version=version_string,
     cmdclass={'install': ProtoCompileInstall, 'develop': ProtoCompileDevelop},
-    description='',
-    long_description='',
-    author='Learning@home authors',
+    description='Decentralized deep learning framework in pytorch.',
+    long_description='Decentralized deep learning framework in pytorch. Built to train GPT-3-sized models on '
+                     'thousands on volunteers across the world. ',
+    author='Learning@home & contributors',
     author_email='mryabinin@hse.ru',
     url="https://github.com/learning-at-home/hivemind",
     packages=find_packages(exclude=['tests']),
@@ -78,5 +79,5 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
     # What does your project relate to?
-    keywords='pytorch, deep learning, machine learning, gpu, distributed computing',
+    keywords='pytorch, deep learning, machine learning, gpu, distributed computing, volunteer computing, dht',
 )
