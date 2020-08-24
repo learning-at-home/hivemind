@@ -1,7 +1,7 @@
 from typing import Optional
 import configargparse
 import resource
-from hivemind.server.run_server import make_dummy_server
+from hivemind.server import Server
 
 if __name__ == '__main__':
     # fmt:off
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     args['initial_peers'] = eval(args['initial_peers'])
 
     try:
-        server = make_dummy_server(**args, start=True, verbose=True)
+        server = Server.create(**args, start=True, verbose=True)
         server.join()
     finally:
         server.shutdown()

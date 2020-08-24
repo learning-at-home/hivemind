@@ -7,16 +7,14 @@ import torch
 from typing import Dict, Optional, Tuple
 
 import hivemind
-from hivemind import logger
 from hivemind.dht import DHT
-from hivemind.server.run_server import _server_runner, logger
 from hivemind.server.runtime import Runtime
 from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
 from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.checkpoint_saver import CheckpointSaver
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread
-from hivemind.server.layers.__init__ import name_to_block, name_to_input
+from hivemind.server.layers import name_to_block, name_to_input
 from hivemind.utils import Endpoint, get_port, replace_port, find_open_port, get_logger
 
 logger = get_logger(__name__)
@@ -250,3 +248,21 @@ def background_server(*args, shutdown_timeout=5, verbose=True, **kwargs) -> Tupl
             runner.kill()
             if verbose:
                 logger.info("Server terminated.")
+
+
+def _server_runner(pipe, *args, verbose, **kwargs):
+    server = Server.create(*args, verbose=verbose, start=True, **kwargs)
+    try:
+        if server.dht is not None:
+            dht_listen_on = hivemind.replace_port(server.dht.listen_on, server.dht.port)
+        else:
+            dht_listen_on = None
+        pipe.send((server.listen_on, dht_listen_on))
+        pipe.recv()  # wait for shutdown signal
+    finally:
+        if verbose:
+            logger.info("Shutting down server...")
+        server.shutdown()
+        server.join()
+        if verbose:
+            logger.info("Server shut down successfully.")
