@@ -60,7 +60,7 @@ class Server(threading.Thread):
             self.run_in_background(await_ready=True)
 
     def __enter__(self):
-        if not self.ready():
+        if not self.ready:
             self.run_in_background(await_ready=True)
         return self
 
