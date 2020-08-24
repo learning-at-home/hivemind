@@ -8,7 +8,7 @@ A library to train large neural networks across the internet. Imagine training o
 ![img](https://i.imgur.com/GPxolxb.gif)
 
 ##### Links:
- * What is hivemind all about? Here's a [3-minute read](https://learning-at-home.github.io) and a [8-page paper](https://arxiv.org/abs/2002.04013)
+ * What is hivemind all about? Here's a [3-minute read](https://learning-at-home.github.io) or a [full paper](https://arxiv.org/abs/2002.04013)
  * [Quickstart tutorial](https://learning-at-home.readthedocs.io/en/latest/user/quickstart.html) - install hivemind, 
     set up a server and train experts  
  * Documentation & guides: [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
