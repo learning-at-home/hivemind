@@ -20,7 +20,7 @@ __OS support:__ Linux and Mac OS should [just work](https://github.com/learning-
 We do not officially support Windows, but you are welcome to try and contribute your windows build :)
 
 
-#### Basic use
+#### Host a server
 
 Hivemind.Server hosts one or several experts (torch modules) for remote access. These experts are responsible for 
 most of the model parameters and computation.
@@ -45,6 +45,7 @@ Here and below, if you are running on a different machine, replace `localhost:13
 public IP address (e.g. `12.34.56.78:1338`). Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
 as [gRPC](https://grpc.io/docs/languages/python/basics/#starting-the-server).
 
+#### Run the experts
 
 Now let's put these experts to work. Create a python console (or a jupyter) and run: 
 ```python
@@ -110,6 +111,3 @@ Congratulations, you've made it through the basic tutorial. Time to give yoursel
 * Run a small training experiment in TODO
 * Set up custom experts in TODO
 * TODO
-
-
-
