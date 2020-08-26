@@ -28,7 +28,7 @@ most of the model parameters and computation. The server can be started using ei
 [a shell script](https://github.com/learning-at-home/hivemind/blob/master/scripts/run_server.py). We'll use the shell for now. 
 To host a server with default experts, run this in your shell:
 ```sh
-python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 --uids "expert.[0:5]" \
+python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_pattern expert.[0:5] \
                              --listen_on 0.0.0.0:1337 --dht_port 1338
 # note: if you omit listen_on and/or dht_port, they will be chosen automatically and printed to stdout.
 ```
@@ -68,15 +68,65 @@ python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 -
 
 This server accepts requests to experts on port 1337 and start a DHT peer on port 1338.
 In total, it serves 5 feedforward experts with ReLU and LayerNorm
- (see architecture [here][https://github.com/learning-at-home/hivemind/blob/master/hivemind/server/layers/__init__.py#L7-L21]).
+ (see architecture [here](https://github.com/learning-at-home/hivemind/blob/master/hivemind/server/layers/__init__.py#L7-L21)).
 
 You can create additional servers in the same decentralized network using `--initial_peers` argument:
 ```sh
-python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 --uids "expert.[5:10]" \
-                              --initial-peers localhost:1338
+python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_pattern "expert.[5:250]" \
+                              --initial_peers localhost:1338
 ```
 <details style="margin-top:-24px; margin-bottom: 16px;">
-  <summary>TODO Console outputs</summary>
+  <summary>Console outputs</summary>
+  
+  ```sh
+[2020/08/26 13:15:05.078][INFO][server.create:103] Bootstrapping DHT node, initial peers = ['localhost:1338']
+[2020/08/26 13:15:05.101][INFO][server.create:107] Running dht node on port 44291
+expert.[5:250]
+[2020/08/26 13:15:06.326][INFO][server.task_pool.run:130] expert.113_forward starting, pid=29517
+[2020/08/26 13:15:06.326][INFO][server.task_pool.run:130] expert.113_forward starting, pid=29517
+[2020/08/26 13:15:06.333][INFO][server.task_pool.run:130] expert.113_backward starting, pid=29519
+[2020/08/26 13:15:06.333][INFO][server.task_pool.run:130] expert.113_backward starting, pid=29519
+[2020/08/26 13:15:06.340][INFO][server.task_pool.run:130] expert.149_forward starting, pid=29521
+[2020/08/26 13:15:06.340][INFO][server.task_pool.run:130] expert.149_forward starting, pid=29521
+[2020/08/26 13:15:06.352][INFO][server.task_pool.run:130] expert.149_backward starting, pid=29523
+[2020/08/26 13:15:06.352][INFO][server.task_pool.run:130] expert.149_backward starting, pid=29523
+[2020/08/26 13:15:06.363][INFO][server.task_pool.run:130] expert.185_forward starting, pid=29525
+[2020/08/26 13:15:06.363][INFO][server.task_pool.run:130] expert.185_forward starting, pid=29525
+[2020/08/26 13:15:06.375][INFO][server.task_pool.run:130] expert.185_backward starting, pid=29527
+[2020/08/26 13:15:06.375][INFO][server.task_pool.run:130] expert.185_backward starting, pid=29527
+[2020/08/26 13:15:06.381][INFO][server.task_pool.run:130] expert.189_forward starting, pid=29529
+[2020/08/26 13:15:06.381][INFO][server.task_pool.run:130] expert.189_forward starting, pid=29529
+[2020/08/26 13:15:06.388][INFO][server.task_pool.run:130] expert.189_backward starting, pid=29531
+[2020/08/26 13:15:06.388][INFO][server.task_pool.run:130] expert.189_backward starting, pid=29531
+[2020/08/26 13:15:06.400][INFO][server.task_pool.run:130] expert.191_forward starting, pid=29533
+[2020/08/26 13:15:06.400][INFO][server.task_pool.run:130] expert.191_forward starting, pid=29533
+[2020/08/26 13:15:06.407][INFO][server.task_pool.run:130] expert.191_backward starting, pid=29535
+[2020/08/26 13:15:06.407][INFO][server.task_pool.run:130] expert.191_backward starting, pid=29535
+[2020/08/26 13:15:06.415][INFO][server.task_pool.run:130] expert.196_forward starting, pid=29537
+[2020/08/26 13:15:06.415][INFO][server.task_pool.run:130] expert.196_forward starting, pid=29537
+[2020/08/26 13:15:06.426][INFO][server.task_pool.run:130] expert.196_backward starting, pid=29539
+[2020/08/26 13:15:06.426][INFO][server.task_pool.run:130] expert.196_backward starting, pid=29539
+[2020/08/26 13:15:06.435][INFO][server.task_pool.run:130] expert.225_forward starting, pid=29541
+[2020/08/26 13:15:06.435][INFO][server.task_pool.run:130] expert.225_forward starting, pid=29541
+[2020/08/26 13:15:06.445][INFO][server.task_pool.run:130] expert.225_backward starting, pid=29543
+[2020/08/26 13:15:06.445][INFO][server.task_pool.run:130] expert.225_backward starting, pid=29543
+[2020/08/26 13:15:06.454][INFO][server.task_pool.run:130] expert.227_forward starting, pid=29545
+[2020/08/26 13:15:06.454][INFO][server.task_pool.run:130] expert.227_forward starting, pid=29545
+[2020/08/26 13:15:06.467][INFO][server.task_pool.run:130] expert.227_backward starting, pid=29547
+[2020/08/26 13:15:06.467][INFO][server.task_pool.run:130] expert.227_backward starting, pid=29547
+[2020/08/26 13:15:06.475][INFO][server.task_pool.run:130] expert.36_forward starting, pid=29549
+[2020/08/26 13:15:06.475][INFO][server.task_pool.run:130] expert.36_forward starting, pid=29549
+[2020/08/26 13:15:06.482][INFO][server.task_pool.run:130] expert.36_backward starting, pid=29551
+[2020/08/26 13:15:06.482][INFO][server.task_pool.run:130] expert.36_backward starting, pid=29551
+[2020/08/26 13:15:06.497][INFO][server.task_pool.run:130] expert.58_forward starting, pid=29553
+[2020/08/26 13:15:06.497][INFO][server.task_pool.run:130] expert.58_forward starting, pid=29553
+[2020/08/26 13:15:06.507][INFO][server.task_pool.run:130] expert.58_backward starting, pid=29555
+[2020/08/26 13:15:06.507][INFO][server.task_pool.run:130] expert.58_backward starting, pid=29555
+[2020/08/26 13:15:06.509][INFO][server.runtime.run:60] Started
+[2020/08/26 13:15:06.509][INFO][server.runtime.run:60] Started
+[2020/08/26 13:15:06.510][INFO][server.create:166] Server started at 0.0.0.0:40089
+[2020/08/26 13:15:06.510][INFO][server.create:167] Got 10 active experts of type ffn: ['expert.113', 'expert.149', 'expert.185', 'expert.189', 'expert.191', 'expert.196', 'expert.225', 'expert.227', 'expert.36', 'expert.58']
+```
 </details>
 
 Here and below, if you are running on a different machine, replace `localhost:1338` with your original server's

@@ -91,6 +91,8 @@ class Server(threading.Thread):
         """
         assert (expert_pattern is None) or (expert_uids is None), \
             "Please provide either expert_uids *or* num_experts and expert_pattern, but not both"
+        if expert_uids is not None:
+            num_experts = len(expert_uids)
         if verbose and len(kwargs) != 0:
             print("Ignored kwargs:", kwargs)
         assert expert_cls in name_to_block
