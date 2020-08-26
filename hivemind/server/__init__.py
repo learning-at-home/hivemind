@@ -72,7 +72,7 @@ class Server(threading.Thread):
         Instantiate a server with several identical experts. See argparse comments below for details
         :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
         :param num_experts: run this many identical experts
-        :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]
+        :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]\
          means "sample random experts between myprefix.0.0 and myprefix.255.255;
         :param expert_uids: spawn experts with these exact uids, overrides num_experts and expert_pattern
         :param expert_cls: expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
@@ -82,8 +82,8 @@ class Server(threading.Thread):
         :param device: all experts will use this device in torch notation; default: cuda if available else cpu
         :param no_optimizer: if specified, all optimizers use learning rate=0
         :param no_dht: if specified, the server will not be attached to a dht
-        :param initial_peers: a list of peers that will introduce this node to the dht,
-        e.g. ('123.11.22.33:1337', '[fe80::abe2:db1c:be7d:5a85]:4567'), default = no peers
+        :param initial_peers: a list of peers that will introduce this node to the dht,\
+         e.g. ('123.11.22.33:1337', '[fe80::abe2:db1c:be7d:5a85]:4567'), default = no peers
         :param dht_port:  DHT node will listen on this port, default = find open port
         You can then use this node as initial peer for subsequent servers.
         :param verbose: whether to print server started / finished / terminated events
