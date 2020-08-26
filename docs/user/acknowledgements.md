@@ -11,7 +11,7 @@ We kindly thank (in random order)
 * [Lidi Zheng](https://github.com/lidizheng) (google) and grpc-aio contributors for their awesome framework and [this pr](https://github.com/grpc/grpc/pull/23265)
 * [Brian Muller](https://github.com/bmuller/kademlia) (parallel markets) for his implementations of [kademlia](https://github.com/bmuller/kademlia) and [rpcudp](https://github.com/bmuller/rpcudp)  
 * Alexander Sherbakov (itsoft) for helpful discussions on PC and server component architecture,
-* Our early adopters, contributors, reviewers and (see github)
+* Our early adopters, [contributors](https://github.com/learning-at-home/hivemind/graphs/contributors), and reviewers
 
 
 ### Related projects
