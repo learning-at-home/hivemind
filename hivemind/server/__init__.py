@@ -64,7 +64,7 @@ class Server(threading.Thread):
     @staticmethod
     def create(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
                num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
-               no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, root_port=None, verbose=True,
+               no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, verbose=True,
                start=False, **kwargs):  # removed type specification (-> Server)
         """
         Instantiate a server with several identical experts. See argparse comments below for details
@@ -83,7 +83,6 @@ class Server(threading.Thread):
         :param initial_peers: a list of peers that will introduce this node to the dht,
         e.g. ('123.11.22.33:1337', '[fe80::abe2:db1c:be7d:5a85]:4567'), default = no peers
         :param dht_port:  DHT node will listen on this port, default = find open port
-        :param root_port: if this server does not have initial_peers, it will create a virtual dht node on this port.
         You can then use this node as initial peer for subsequent servers.
         :param verbose: whether to print server started / finished / terminated events
         :param start: if True, starts server right away and returns when server is ready for requests
@@ -99,17 +98,7 @@ class Server(threading.Thread):
         # initialize dht
         dht = None
         if not no_dht:
-            if not len(initial_peers):
-                logger.info("No initial peers provided. Starting additional dht as an initial peer.")
-                dht_root = hivemind.DHT(initial_peers=initial_peers, start=True,
-                                        listen_on=f"{hivemind.LOCALHOST}:{root_port or hivemind.find_open_port()}")
-                logger.info(f"Initializing DHT with port {dht_root.port}")
-                initial_peers = [f"{hivemind.LOCALHOST}:{dht_root.port}"]
-            else:
-                logger.info("Bootstrapping dht with peers:", initial_peers)
-                if root_port is not None:
-                    logger.info(f"Warning: root_port={root_port} will not be used since we already have peers.")
-
+            logger.info("Bootstrapping DHT node, initial peers =", initial_peers)
             dht = hivemind.DHT(initial_peers=initial_peers, start=True,
                                listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}")
             if verbose:
