@@ -81,10 +81,10 @@ class Server(threading.Thread):
         :param no_optimizer: if specified, all optimizers use learning rate=0
         :param no_dht: if specified, the server will not be attached to a dht
         :param initial_peers: a list of peers that will introduce this node to the dht,
-          e.g. [("1.2.3.4", 1337), ("127.0.0.1", 4321)]'), default = no peers
+        e.g. ('123.11.22.33:1337', '[fe80::abe2:db1c:be7d:5a85]:4567'), default = no peers
         :param dht_port:  DHT node will listen on this port, default = find open port
         :param root_port: if this server does not have initial_peers, it will create a virtual dht node on this port.
-            You can then use this node as initial peer for subsequent servers.
+        You can then use this node as initial peer for subsequent servers.
         :param verbose: whether to print server started / finished / terminated events
         :param start: if True, starts server right away and returns when server is ready for requests
         """
