@@ -4,9 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.datasets import load_digits
-from test_utils.run_server import background_server
 
-from hivemind import RemoteExpert
+from hivemind import RemoteExpert, background_server
 
 
 def test_training(port: Optional[int] = None, max_steps: int = 100, threshold: float = 0.9):

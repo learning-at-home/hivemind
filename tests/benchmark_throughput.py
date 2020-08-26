@@ -5,7 +5,8 @@ import sys
 import time
 
 import torch
-from test_utils import layers, print_device_info, increase_file_limit
+from hivemind.server import layers
+from test_utils import print_device_info, increase_file_limit
 
 import hivemind
 from hivemind import find_open_port
