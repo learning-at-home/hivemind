@@ -12,5 +12,5 @@ A library to train large neural networks across the internet. Imagine training o
  * [Quickstart tutorial](https://learning-at-home.readthedocs.io/en/latest/user/quickstart.html) - install hivemind, 
     set up a server and train experts  
  * Documentation & guides: [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
- * [Contributor's manual](https://learning-at-home.readthedocs.io/en/latest/user/contributing.html): best practices, tests and performance benchmarks
+ * [Contributor's guide](https://learning-at-home.readthedocs.io/en/latest/user/contributing.html): best practices, tests and performance benchmarks
  * [Related](https://learning-at-home.readthedocs.io/en/latest/user/acknowledgements.html) projects and acknowledgements

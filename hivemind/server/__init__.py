@@ -1,8 +1,10 @@
+from __future__ import annotations
 import multiprocessing as mp
 import multiprocessing.synchronize
 import threading
 from contextlib import contextmanager
 
+import numpy as np
 import torch
 from typing import Dict, Optional, Tuple
 
@@ -62,17 +64,17 @@ class Server(threading.Thread):
             self.run_in_background(await_ready=True)
 
     @staticmethod
-    def create(listen_on='0.0.0.0:*', num_experts=None, expert_uids=None, expert_cls='ffn', hidden_dim=1024,
-               num_handlers=None, expert_prefix='expert', expert_offset=0, max_batch_size=16384, device=None,
+    def create(listen_on='0.0.0.0:*', num_experts: int = None, expert_uids: str = None, expert_pattern: str = None,
+               expert_cls='ffn', hidden_dim=1024, num_handlers=None,  max_batch_size=4096, device=None,
                no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, verbose=True,
-               start=False, **kwargs):  # removed type specification (-> Server)
+               start=False, **kwargs) -> Server:
         """
         Instantiate a server with several identical experts. See argparse comments below for details
         :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
         :param num_experts: run this many identical experts
-        :param expert_prefix: all expert uids will be {expert_prefix}.{index}
-        :param expert_offset: expert uid will use indices in range(expert_offset, expert_offset + num_experts)
-        :param expert_uids: spawn experts with these exact uids, overrides num_experts, expert_prefix and expert_offset
+        :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]
+         means "sample random experts between myprefix.0.0 and myprefix.255.255;
+        :param expert_uids: spawn experts with these exact uids, overrides num_experts and expert_pattern
         :param expert_cls: expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
         :param hidden_dim: main dimension for expert_cls
         :param num_handlers: server will use this many parallel processes to handle incoming requests
@@ -87,8 +89,8 @@ class Server(threading.Thread):
         :param verbose: whether to print server started / finished / terminated events
         :param start: if True, starts server right away and returns when server is ready for requests
         """
-        assert (expert_uids is None) != (num_experts is None and expert_prefix == 'expert' and expert_offset == 0), \
-            "Please provide either expert uids *or* (num_experts, expert_prefix and expert_offset), not both"
+        assert (expert_pattern is None) or (expert_uids is None), \
+            "Please provide either expert_uids *or* num_experts and expert_pattern, but not both"
         if verbose and len(kwargs) != 0:
             print("Ignored kwargs:", kwargs)
         assert expert_cls in name_to_block
@@ -98,7 +100,7 @@ class Server(threading.Thread):
         # initialize dht
         dht = None
         if not no_dht:
-            logger.info("Bootstrapping DHT node, initial peers =", initial_peers)
+            logger.info(f"Bootstrapping DHT node, initial peers = {initial_peers}")
             dht = hivemind.DHT(initial_peers=initial_peers, start=True,
                                listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}")
             if verbose:
@@ -113,8 +115,36 @@ class Server(threading.Thread):
         # initialize experts
         if expert_uids is None:
             num_experts = num_experts if num_experts is not None else 1
-            expert_uids = [f'{expert_prefix}{hivemind.DHT.UID_DELIMITER}{i + expert_offset}'
-                           for i in range(num_experts)]
+            expert_pattern = expert_pattern if expert_pattern is not None else f"expert.[0:{num_experts}]"
+            print(expert_pattern)
+
+            # parse expert pattern
+            expert_pattern_blocks = expert_pattern.split(hivemind.DHT.UID_DELIMITER)
+
+            def generate_uid():
+                uid = ''
+                for block in expert_pattern_blocks:
+                    try:
+                        if '[' not in block and ']' not in block:
+                            uid += block
+                        elif block.startswith('[') and block.endswith(']') and ':' in block:
+                            slice_start, slice_end = map(int, block[1:-1].split(':'))
+                            uid += f"{hivemind.DHT.UID_DELIMITER}{np.random.randint(slice_start, slice_end)}"
+                        else:
+                            raise ValueError("Block must be either fixed or a range [from:to]")
+                    except KeyboardInterrupt as e:
+                        raise e
+                    except Exception as e:
+                        raise ValueError(f"Expert pattern {expert_pattern} has invalid block {block} , {e}")
+                return uid
+
+            expert_uids = []
+            while len(expert_uids) < num_experts:
+                new_uid = generate_uid()
+                if new_uid not in expert_uids:
+                    expert_uids.append(new_uid)
+            expert_uids = sorted(expert_uids)
+            #TODO deduplicate across DHT!! in batches!!
 
         experts = {}
         for expert_uid in expert_uids:

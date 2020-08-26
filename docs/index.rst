@@ -1,4 +1,4 @@
-|logo| **Welcome to hivemind**
+|logo| **Hivemind docs & tutorials**
 ====================================
 
  .. |logo| image:: _static/favicon.png

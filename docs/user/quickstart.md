@@ -24,23 +24,60 @@ We do not officially support Windows, but you are welcome to try and contribute 
 #### Host a server
 
 Hivemind.Server hosts one or several experts (torch modules) for remote access. These experts are responsible for 
-most of the model parameters and computation.
-
+most of the model parameters and computation. The server can be started using either python or 
+[a shell script](https://github.com/learning-at-home/hivemind/blob/master/scripts/run_server.py). We'll use the shell for now. 
 To host a server with default experts, run this in your shell:
 ```sh
-python -m TODOPATH.run_server --expert_cls ffn --hidden_dim 512 --num_experts 5 --uid_space TODO \
-                              --listen_on 0.0.0.0:1337 --dht_port 1338
+python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 --uids "expert.[0:5]" \
+                             --listen_on 0.0.0.0:1337 --dht_port 1338
 # note: if you omit listen_on and/or dht_port, they will be chosen automatically and printed to stdout.
 ```
+<details style="margin-top:-24px; margin-bottom: 16px;">
+  <summary><i>Console outputs</i></summary>
+  
+  ```sh
+[2020/08/26 11:54:52.645][INFO][server.create:101] Bootstrapping DHT node, initial peers = []
+[2020/08/26 11:54:52.660][INFO][server.create:105] Running dht node on port 1338
+[2020/08/26 11:54:53.182][INFO][server.task_pool.run:130] expert.0_forward starting, pid=19382
+[2020/08/26 11:54:53.182][INFO][server.task_pool.run:130] expert.0_forward starting, pid=19382
+[2020/08/26 11:54:53.189][INFO][server.task_pool.run:130] expert.0_backward starting, pid=19384
+[2020/08/26 11:54:53.189][INFO][server.task_pool.run:130] expert.0_backward starting, pid=19384
+[2020/08/26 11:54:53.196][INFO][server.task_pool.run:130] expert.1_forward starting, pid=19386
+[2020/08/26 11:54:53.196][INFO][server.task_pool.run:130] expert.1_forward starting, pid=19386
+[2020/08/26 11:54:53.206][INFO][server.task_pool.run:130] expert.1_backward starting, pid=19388
+[2020/08/26 11:54:53.206][INFO][server.task_pool.run:130] expert.1_backward starting, pid=19388
+[2020/08/26 11:54:53.212][INFO][server.task_pool.run:130] expert.2_forward starting, pid=19390
+[2020/08/26 11:54:53.212][INFO][server.task_pool.run:130] expert.2_forward starting, pid=19390
+[2020/08/26 11:54:53.218][INFO][server.task_pool.run:130] expert.2_backward starting, pid=19392
+[2020/08/26 11:54:53.218][INFO][server.task_pool.run:130] expert.2_backward starting, pid=19392
+[2020/08/26 11:54:53.225][INFO][server.task_pool.run:130] expert.3_forward starting, pid=19394
+[2020/08/26 11:54:53.225][INFO][server.task_pool.run:130] expert.3_forward starting, pid=19394
+[2020/08/26 11:54:53.232][INFO][server.task_pool.run:130] expert.3_backward starting, pid=19396
+[2020/08/26 11:54:53.232][INFO][server.task_pool.run:130] expert.3_backward starting, pid=19396
+[2020/08/26 11:54:53.235][INFO][server.task_pool.run:130] expert.4_forward starting, pid=19398
+[2020/08/26 11:54:53.235][INFO][server.task_pool.run:130] expert.4_forward starting, pid=19398
+[2020/08/26 11:54:53.241][INFO][server.task_pool.run:130] expert.4_backward starting, pid=19400
+[2020/08/26 11:54:53.241][INFO][server.task_pool.run:130] expert.4_backward starting, pid=19400
+[2020/08/26 11:54:53.244][INFO][server.runtime.run:60] Started
+[2020/08/26 11:54:53.244][INFO][server.runtime.run:60] Started
+[2020/08/26 11:54:53.245][INFO][server.create:136] Server started at 0.0.0.0:1337
+[2020/08/26 11:54:53.245][INFO][server.create:137] Got 5 active experts of type ffn: ['expert.0', 'expert.1', 'expert.2', 'expert.3', 'expert.4']
+  ```
+</details>
+
 
 This server accepts requests to experts on port 1337 and start a DHT peer on port 1338.
-In total, it serves 5 feedforward experts with ReLU and LayerNorm (see architecture [TODOhere][TODO]).
+In total, it serves 5 feedforward experts with ReLU and LayerNorm
+ (see architecture [here][https://github.com/learning-at-home/hivemind/blob/master/hivemind/server/layers/__init__.py#L7-L21]).
 
-You (and anyone) can create additional servers in the same decentralized network using `--initial_peers` argument:
+You can create additional servers in the same decentralized network using `--initial_peers` argument:
 ```sh
-python -m TODOPATH.run_server --expert_cls ffn --hidden_dim 512 --num_experts 5 --uid_space TODO \
+python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 --uids "expert.[5:10]" \
                               --initial-peers localhost:1338
 ```
+<details style="margin-top:-24px; margin-bottom: 16px;">
+  <summary>TODO Console outputs</summary>
+</details>
 
 Here and below, if you are running on a different machine, replace `localhost:1338` with your original server's
 public IP address (e.g. `12.34.56.78:1338`). Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
@@ -73,7 +110,7 @@ When called, expert1 will submit a request to the corresponding server (which yo
  for the experts as they appear in the computation graph.
  
 By default, the experts will automatically update their parameters with one step of SGD after each backward pass.
-This allows you to quickly run training using a mixture of local and remote layers:
+This allows you to quickly run training using both local and remote layers:
 ```python
 # generate dummy data
 x = torch.randn(3, 512)
@@ -109,6 +146,6 @@ forward (and backward) requests to those experts and collect results.
 You can find more details on how MoE works in Section 2.3 of the [paper](https://arxiv.org/abs/2002.04013)
 
 Congratulations, you've made it through the basic tutorial. Time to give yourself a pat on the back and decide what's next:
-* Run a small training experiment in TODO
-* Set up custom experts in TODO
-* TODO
+* Run a small training experiment
+* Set up custom experts in pytorch
+* [Develop and contribute to hivemind](./contributing.md)
