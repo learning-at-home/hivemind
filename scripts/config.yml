@@ -1,0 +1,15 @@
+listen_on: 0.0.0.0:* #'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6
+num_experts: 1 #run this many identical experts
+expert_cls: ffn #expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop'.
+hidden_dim: 1024 #main dimension for expert_cls
+#num_handlers:  #'server will use this many processes to handle incoming requests
+expert_prefix: expert #all expert uids will be {expert_prefix}.{index}
+expert_offset: 0 #expert uid will use indices in range(expert_offset, expert_offset + num_experts)
+max_batch_size: 16384 #total num examples in the same batch will not exceed this value
+#device:  #all experts will use this device in torch notation; default: cuda if available else cpu
+no_optimizer: True #if specified, all optimizers use learning rate=0
+no_dht: True #if specified, the server will not be attached to a dht
+initial_peers: "[]" #a list of peers that will introduce this node to the dht, e.g. [("1.2.3.4", 1337), ("127.0.0.1", 4321)]
+#dht_port:  #DHT node will listen on this port
+#root_port:  #If this server does not have peers, it will create a virtual dht node on this port. You can then use this node as initial peer.
+increase_file_limit: True #On *nix, this will increase the max number of processes a server can spawn before hitting "Too many open files"; Use at your own risk.
