@@ -196,6 +196,6 @@ forward (and backward) requests to those experts and collect results.
 You can find more details on how MoE works in Section 2.3 of the [paper](https://arxiv.org/abs/2002.04013)
 
 Congratulations, you've made it through the basic tutorial. Time to give yourself a pat on the back and decide what's next:
-* Run a small training experiment
-* Set up custom experts in pytorch
+* Run a small training experiment (TBA)
+* Set up custom experts in pytorch (TBA)
 * [Develop and contribute to hivemind](./contributing.md)
