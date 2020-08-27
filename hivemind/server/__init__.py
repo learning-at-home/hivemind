@@ -2,11 +2,11 @@ from __future__ import annotations
 import multiprocessing as mp
 import multiprocessing.synchronize
 import threading
+import random
 from contextlib import contextmanager
 
-import numpy as np
 import torch
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 
 import hivemind
 from hivemind.dht import DHT
@@ -89,15 +89,9 @@ class Server(threading.Thread):
         :param verbose: whether to print server started / finished / terminated events
         :param start: if True, starts server right away and returns when server is ready for requests
         """
-        assert (expert_pattern is None) or (expert_uids is None), \
-            "Please provide either expert_uids *or* num_experts and expert_pattern, but not both"
-        if expert_uids is not None:
-            num_experts = len(expert_uids)
         if verbose and len(kwargs) != 0:
             print("Ignored kwargs:", kwargs)
         assert expert_cls in name_to_block
-        num_handlers = num_handlers if num_handlers is not None else num_experts * 8
-        device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
         # initialize dht
         dht = None
@@ -108,6 +102,17 @@ class Server(threading.Thread):
             if verbose:
                 logger.info(f"Running dht node on port {dht.port}")
 
+        # get expert uids
+        assert (expert_pattern is None and num_experts is None) or (expert_uids is None), \
+            "Please provide either expert_uids *or* num_experts and expert_pattern, but not both"
+        if expert_uids is None:
+            assert num_experts is not None, "Please specify either expert_uids or num_experts [and expert_pattern]"
+            expert_uids = generate_uids_from_pattern(num_experts, expert_pattern, dht=dht)
+
+        num_experts = len(expert_uids)
+        num_handlers = num_handlers if num_handlers is not None else num_experts * 8
+        device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+
         sample_input = name_to_input[expert_cls](4, hidden_dim)
         if isinstance(sample_input, tuple):
             args_schema = tuple(hivemind.BatchTensorDescriptor.from_tensor(arg) for arg in sample_input)
@@ -115,37 +120,6 @@ class Server(threading.Thread):
             args_schema = (hivemind.BatchTensorDescriptor.from_tensor(sample_input),)
 
         # initialize experts
-        if expert_uids is None:
-            num_experts = num_experts if num_experts is not None else 1
-            expert_pattern = expert_pattern if expert_pattern is not None else f"expert.[0:{num_experts}]"
-
-            # parse expert pattern
-            expert_pattern_blocks = expert_pattern.split(hivemind.DHT.UID_DELIMITER)
-
-            def generate_uid():
-                uid = []
-                for block in expert_pattern_blocks:
-                    try:
-                        if '[' not in block and ']' not in block:
-                            uid.append(block)
-                        elif block.startswith('[') and block.endswith(']') and ':' in block:
-                            slice_start, slice_end = map(int, block[1:-1].split(':'))
-                            uid.append(str(np.random.randint(slice_start, slice_end)))
-                        else:
-                            raise ValueError("Block must be either fixed or a range [from:to]")
-                    except KeyboardInterrupt as e:
-                        raise e
-                    except Exception as e:
-                        raise ValueError(f"Expert pattern {expert_pattern} has invalid block {block} , {e}")
-                return hivemind.DHT.UID_DELIMITER.join(uid)
-
-            expert_uids = []
-            while len(expert_uids) < num_experts:
-                new_uid = generate_uid()
-                if new_uid not in expert_uids:
-                    expert_uids.append(new_uid)
-            expert_uids = sorted(expert_uids)
-            #TODO deduplicate across DHT!! in batches!!
 
         experts = {}
         for expert_uid in expert_uids:
@@ -277,3 +251,65 @@ def _server_runner(pipe, *args, verbose, **kwargs):
         server.join()
         if verbose:
             logger.info("Server shut down successfully.")
+
+
+def generate_uids_from_pattern(num_experts: int, expert_pattern: Optional[str], dht: Optional[DHT] = None,
+                               attempts_per_expert=10) -> List[str]:
+    """
+    Sample experts from a given pattern, remove duplicates.
+    :param num_experts: sample this many unique expert uids
+    :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]\
+     means "sample random experts between myprefix.0.0 and myprefix.255.255;
+    :param dht: if specified, uses this DHT to check that expert uids are not yet occupied by other peers
+    :param attempts_per_expert: give up if unable to generate a new expert uid after this many attempts per uid
+    :note: this method is not strictly process-safe. If several servers run it concurrently, they have
+     a small chance of sampling duplicate expert uids.
+    """
+    logger.info("Generating expert uids...")
+    remaining_attempts = attempts_per_expert * num_experts
+    found_uids, attempted_uids = list(), set()
+
+    def _generate_uid():
+        if expert_pattern is None:
+            return f"expert{hivemind.DHT.UID_DELIMITER}{attempts_per_expert * num_experts - remaining_attempts}"
+
+        uid = []
+        for block in expert_pattern.split(hivemind.DHT.UID_DELIMITER):
+            try:
+                if '[' not in block and ']' not in block:
+                    uid.append(block)
+                elif block.startswith('[') and block.endswith(']') and ':' in block:
+                    slice_start, slice_end = map(int, block[1:-1].split(':'))
+                    uid.append(str(random.randint(slice_start, slice_end - 1)))
+                else:
+                    raise ValueError("Block must be either fixed or a range [from:to]")
+            except KeyboardInterrupt as e:
+                raise e
+            except Exception as e:
+                raise ValueError(f"Expert pattern {expert_pattern} has invalid block {block} , {e}")
+        return hivemind.DHT.UID_DELIMITER.join(uid)
+
+    while remaining_attempts > 0 and len(found_uids) < num_experts:
+
+        # 1. sample new expert uids at random
+        new_uids = []
+        while len(new_uids) + len(found_uids) < num_experts and remaining_attempts > 0:
+            remaining_attempts -= 1
+            new_uid = _generate_uid()
+            if new_uid not in attempted_uids:
+                attempted_uids.add(new_uid)
+                new_uids.append(new_uid)
+
+        # 2. look into DHT (if given) and remove duplicates
+        if dht:
+            existing_expert_uids = {found_expert.uid for found_expert in dht.get_experts(new_uids)
+                                    if found_expert is not None}
+            new_uids = [new_uid for new_uid in new_uids if new_uid not in existing_expert_uids]
+
+        found_uids += new_uids
+
+    if len(found_uids) != num_experts:
+        logger.warning(f"Found only {len(found_uids)} out of {num_experts} free expert uids after "
+                       f"{attempts_per_expert * num_experts} attempts")
+    return found_uids
+
