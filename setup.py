@@ -54,7 +54,7 @@ setup(
     version=version_string,
     cmdclass={'install': ProtoCompileInstall, 'develop': ProtoCompileDevelop},
     description='Decentralized deep learning framework in pytorch.',
-    long_description='Decentralized deep learning framework in pytorch. Built to train GPT-3-sized models on '
+    long_description='Decentralized deep learning framework in pytorch. Built to train giant models on '
                      'thousands on volunteers across the world. ',
     author='Learning@home & contributors',
     author_email='mryabinin@hse.ru',

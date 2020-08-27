@@ -118,27 +118,26 @@ class Server(threading.Thread):
         if expert_uids is None:
             num_experts = num_experts if num_experts is not None else 1
             expert_pattern = expert_pattern if expert_pattern is not None else f"expert.[0:{num_experts}]"
-            print(expert_pattern)
 
             # parse expert pattern
             expert_pattern_blocks = expert_pattern.split(hivemind.DHT.UID_DELIMITER)
 
             def generate_uid():
-                uid = ''
+                uid = []
                 for block in expert_pattern_blocks:
                     try:
                         if '[' not in block and ']' not in block:
-                            uid += block
+                            uid.append(block)
                         elif block.startswith('[') and block.endswith(']') and ':' in block:
                             slice_start, slice_end = map(int, block[1:-1].split(':'))
-                            uid += f"{hivemind.DHT.UID_DELIMITER}{np.random.randint(slice_start, slice_end)}"
+                            uid.append(str(np.random.randint(slice_start, slice_end)))
                         else:
                             raise ValueError("Block must be either fixed or a range [from:to]")
                     except KeyboardInterrupt as e:
                         raise e
                     except Exception as e:
                         raise ValueError(f"Expert pattern {expert_pattern} has invalid block {block} , {e}")
-                return uid
+                return hivemind.DHT.UID_DELIMITER.join(uid)
 
             expert_uids = []
             while len(expert_uids) < num_experts:
