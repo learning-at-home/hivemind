@@ -1,5 +1,10 @@
+from functools import partial
+
 import configargparse
 import resource
+
+import torch
+
 from hivemind.server import Server
 
 if __name__ == '__main__':
@@ -24,7 +29,7 @@ if __name__ == '__main__':
                         help='total num examples in the same batch will not exceed this value')
     parser.add_argument('--device', type=str, default=None, required=False,
                         help='all experts will use this device in torch notation; default: cuda if available else cpu')
-    parser.add_argument('--no_optimizer', action='store_true', help='if specified, all optimizers use learning rate=0')
+    parser.add_argument('--optimizer', type=str, default='adam', required=False, help='adam, sgd or none')
     parser.add_argument('--no_dht', action='store_true', help='if specified, the server will not be attached to a dht')
     parser.add_argument('--initial_peers', type=str, nargs='*', required=False, default=[], help='one or more peers'
                         ' that can welcome you to the dht, e.g. 1.2.3.4:1337 192.132.231.4:4321')
@@ -34,6 +39,15 @@ if __name__ == '__main__':
     # fmt:on
     args = vars(parser.parse_args())
     args.pop('config', None)
+    optimizer = args.pop('optimizer')
+    if optimizer == 'adam':
+        Optimizer = torch.optim.Adam
+    elif optimizer == 'sgd':
+        Optimizer = partial(torch.optim.SGD, lr=0.01)
+    elif optimizer == 'none':
+        Optimizer = None
+    else:
+        raise ValueError("Optimizer must be adam, sgd or none")
 
     if args.pop('increase_file_limit'):
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -44,7 +58,7 @@ if __name__ == '__main__':
             print("Could not increase open file limit, currently at soft={}, hard={}".format(soft, hard))
 
     try:
-        server = Server.create(**args, start=True, verbose=True)
+        server = Server.create(**args, Optimizer=Optimizer, start=True, verbose=True)
         server.join()
     finally:
         server.shutdown()

@@ -65,9 +65,9 @@ class Server(threading.Thread):
 
     @staticmethod
     def create(listen_on='0.0.0.0:*', num_experts: int = None, expert_uids: str = None, expert_pattern: str = None,
-               expert_cls='ffn', hidden_dim=1024, num_handlers=None,  max_batch_size=4096, device=None,
-               no_optimizer=False, no_dht=False, initial_peers=(), dht_port=None, verbose=True,
-               start=False, **kwargs) -> Server:
+               expert_cls='ffn', hidden_dim=1024, Optimizer=torch.optim.Adam, num_handlers=None, max_batch_size=4096,
+               device=None, no_dht=False, initial_peers=(), dht_port=None, verbose=True,
+               *, start: bool, **kwargs) -> Server:
         """
         Instantiate a server with several identical experts. See argparse comments below for details
         :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
@@ -80,7 +80,7 @@ class Server(threading.Thread):
         :param num_handlers: server will use this many parallel processes to handle incoming requests
         :param max_batch_size: total num examples in the same batch will not exceed this value
         :param device: all experts will use this device in torch notation; default: cuda if available else cpu
-        :param no_optimizer: if specified, all optimizers use learning rate=0
+        :param Optimizer: uses this optimizer to train all experts
         :param no_dht: if specified, the server will not be attached to a dht
         :param initial_peers: a list of peers that will introduce this node to the dht,\
          e.g. ('123.11.22.33:1337', '[fe80::abe2:db1c:be7d:5a85]:4567'), default = no peers
@@ -111,6 +111,7 @@ class Server(threading.Thread):
 
         num_experts = len(expert_uids)
         num_handlers = num_handlers if num_handlers is not None else num_experts * 8
+        Optimizer = Optimizer if Optimizer is not None else partial(torch.optim.SGD, lr=0.0)
         device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
         sample_input = name_to_input[expert_cls](4, hidden_dim)
@@ -124,10 +125,10 @@ class Server(threading.Thread):
         experts = {}
         for expert_uid in expert_uids:
             expert = name_to_block[expert_cls](hidden_dim)
-            opt = torch.optim.SGD(expert.parameters(), 0.0 if no_optimizer else 0.05)
-            experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert, opt=opt,
+            experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert,
                                                          args_schema=args_schema,
                                                          outputs_schema=hivemind.BatchTensorDescriptor(hidden_dim),
+                                                         opt=Optimizer(expert.parameters()),
                                                          max_batch_size=max_batch_size,
                                                          )
         # actually start server
