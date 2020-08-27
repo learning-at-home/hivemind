@@ -1,4 +1,3 @@
-from typing import Optional
 import configargparse
 import resource
 from hivemind.server import Server
