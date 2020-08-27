@@ -196,3 +196,5 @@ forward (and backward) requests to those experts and collect results.
 You can find more details on how MoE works in Section 2.3 of the [paper](https://arxiv.org/abs/2002.04013)
 
 Congratulations, you've made it through the basic tutorial. Give yourself a pat on the back :)
+
+More advanced tutorials are coming soon :)
