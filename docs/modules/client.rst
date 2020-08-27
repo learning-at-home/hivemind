@@ -1,4 +1,4 @@
-``hidemind.client``
+**hivemind.client**
 ====================
 
 .. automodule:: hivemind.client

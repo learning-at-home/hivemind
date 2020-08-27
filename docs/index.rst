@@ -1,30 +1,31 @@
-``learning@home::hivemind``
+|logo| **Hivemind docs & tutorials**
 ====================================
 
-Hivemind lets you train huge neural networks on computers provided by volunteers. Powered by pytorch.
+ .. |logo| image:: _static/favicon.png
+  :scale: 48
 
-.. image:: _static/bug.gif
+This is a library for decentralized deep learning. It allows you to train large neural networks using vast numbers
+of unreliable computers.
+Learn how to create or join a hivemind run in the `quickstart tutorial <./user/quickstart.html>`__ or browse the API
+documentation below.
 
-User guide:
+| Hivemind is currently in active development, so expect some adventures. If you encounter any issues, please let us know
+  `on github <https://github.com/learning-at-home/hivemind/issues>`__.
 
+
+**Table of contents:**
+~~~~~~~~~~~~~~~~~~~~~~
 .. toctree::
   :maxdepth: 2
+  :glob:
 
-  user/quickstart.md
-
-
-API documentation:
-
-.. toctree::
-  :maxdepth: 2
-
-  modules/client.rst
-  modules/server.rst
-  modules/dht.rst
+  user/quickstart
+  modules/index
+  user/contributing
+  user/acknowledgements
 
 Indices and tables
-==================
-
+~~~~~~~~~~~~~~~~~~
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`

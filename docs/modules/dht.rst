@@ -1,4 +1,4 @@
-**Hivemind DHT**
+**hivemind.dht**
 ====================
 
 .. automodule:: hivemind.dht
