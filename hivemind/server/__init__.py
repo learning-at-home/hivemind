@@ -4,6 +4,7 @@ import multiprocessing.synchronize
 import threading
 import random
 from contextlib import contextmanager
+from functools import partial
 
 import torch
 from typing import Dict, Optional, Tuple, List
