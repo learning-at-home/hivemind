@@ -294,8 +294,8 @@ def generate_uids_from_pattern(num_experts: int, expert_pattern: Optional[str], 
         # 1. sample new expert uids at random
         new_uids = []
         while len(new_uids) + len(found_uids) < num_experts and remaining_attempts > 0:
-            remaining_attempts -= 1
             new_uid = _generate_uid()
+            remaining_attempts -= 1
             if new_uid not in attempted_uids:
                 attempted_uids.add(new_uid)
                 new_uids.append(new_uid)
