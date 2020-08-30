@@ -341,7 +341,6 @@ class DHT(mp.Process):
     async def _batch_find_best_experts(self, node: DHTNode, prefix: str, grid_scores: List[torch.Tensor],
                                        grid_indices: List[torch.Tensor], k_best: int, time_budget: float = float('inf'),
                                        future: Optional[MPFuture] = None, **kwargs) -> List[List[RemoteExpert]]:
-        batch_size = grid_scores[0].shape[0]
         results = await asyncio.gather(*[
             asyncio.create_task(
                 self._find_best_experts(node, prefix, grid_scores=grid_scores_i, grid_indices=grid_indices,
