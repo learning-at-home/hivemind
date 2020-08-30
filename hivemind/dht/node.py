@@ -364,10 +364,9 @@ class DHTNode:
                 key_id, *latest_results[key_id], nearest_nodes=nearest_nodes, node_to_endpoint=node_to_endpoint),
             await_all_tasks=False,
         ))
-
+        wait_for_termination = asyncio.create_task()
         _, unfinished = await asyncio.wait([traverse_task, stop_event.wait()], return_when=asyncio.FIRST_COMPLETED)
-        for task in unfinished:
-            task.cancel()
+        wait_for_termination.cancel()
 
         # stage 4: deserialize data and assemble function output
         find_result: Dict[DHTKey, Tuple[Optional[DHTValue], Optional[DHTExpiration]]] = {}
