@@ -92,6 +92,7 @@ async def traverse_dht(
     :param found_callback: if specified, call this callback for each finished query the moment it finishes or is stopped
         More specifically, run asyncio.create_task(found_found_callback(query, nearest_to_query, visited_for_query))
         Using this callback allows one to process results faster before traverse_dht is finishes for all queries.
+        It is guaranteed that found_callback will be called exactly once on each query in queries.
 
     :param await_all_tasks: if True, wait for all tasks to finish before returning, otherwise returns after finding
         nearest neighbors and finishes the remaining tasks (callbacks and queries to known-but-unvisited nodes)
