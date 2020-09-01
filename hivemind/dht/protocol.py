@@ -306,3 +306,11 @@ class LocalStorage:
         """ Iterate over (key, value, expiration_time) tuples stored in this storage """
         self.remove_outdated()
         return ((key, value, expiration_time) for key, (value, expiration_time) in self.data.items())
+
+    def top(self) -> Optional[Tuple[DHTID, BinaryDHTValue, DHTExpiration]]:
+        """ Return the entry with earliest expiration or None if there isn't any """
+        self.remove_outdated()
+        if self.expiration_heap:
+            _, key = self.expiration_heap[0]
+            value, expiration = self.data[key]
+            return key, value, expiration
