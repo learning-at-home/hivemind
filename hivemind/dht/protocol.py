@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import heapq
+from contextlib import contextmanager
 from typing import Optional, List, Tuple, Dict, Iterator, Any, Sequence, Union, Collection
 from warnings import warn
 
@@ -268,10 +269,11 @@ class LocalStorage:
         self.data: Dict[DHTID, Tuple[BinaryDHTValue, DHTExpiration]] = dict()
         self.expiration_heap: List[Tuple[DHTExpiration, DHTID]] = []
         self.key_to_heap: Dict[DHTID, Tuple[DHTExpiration, DHTID]] = dict()
+        self.frozen = False  # if True, do not remove outdated elements
 
     def remove_outdated(self):
-        while self.expiration_heap and (self.expiration_heap[0][0] < get_dht_time()
-                                        or len(self.expiration_heap) > self.cache_size):
+        while not self.frozen and self.expiration_heap and (self.expiration_heap[0][0] < get_dht_time()
+                                                            or len(self.expiration_heap) > self.cache_size):
             heap_entry = heapq.heappop(self.expiration_heap)
             key = heap_entry[1]
             if self.key_to_heap[key] == heap_entry:
@@ -318,3 +320,16 @@ class LocalStorage:
     def __contains__(self, key: DHTID):
         self.remove_outdated()
         return key in self.data
+
+    def __len__(self):
+        self.remove_outdated()
+        return len(self.data)
+
+    @contextmanager
+    def freeze(self):
+        """ Temporarily cease to remove outdated elements when this context is active """
+        prev_frozen, self.frozen = self.frozen, True
+        try:
+            yield self
+        finally:
+            self.frozen = prev_frozen
