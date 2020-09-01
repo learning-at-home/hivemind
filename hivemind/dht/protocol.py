@@ -265,9 +265,9 @@ class LocalStorage:
 
     def __init__(self, maxsize: Optional[int] = None):
         self.cache_size = maxsize or float("inf")
-        self.data = dict()
-        self.expiration_heap = []
-        self.key_to_heap = dict()
+        self.data: Dict[DHTID, Tuple[BinaryDHTValue, DHTExpiration]] = dict()
+        self.expiration_heap: List[Tuple[DHTExpiration, DHTID]] = []
+        self.key_to_heap: Dict[DHTID, Tuple[DHTExpiration, DHTID]] = dict()
 
     def remove_outdated(self):
         while self.expiration_heap and (self.expiration_heap[0][0] < get_dht_time()
