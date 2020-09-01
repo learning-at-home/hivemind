@@ -265,9 +265,9 @@ class LocalStorage:
 
     def __init__(self, maxsize: Optional[int] = None):
         self.cache_size = maxsize or float("inf")
-        self.data = dict()
-        self.expiration_heap = []
-        self.key_to_heap = dict()
+        self.data: Dict[DHTID, Tuple[BinaryDHTValue, DHTExpiration]] = dict()
+        self.expiration_heap: List[Tuple[DHTExpiration, DHTID]] = []
+        self.key_to_heap: Dict[DHTID, Tuple[DHTExpiration, DHTID]] = dict()
 
     def remove_outdated(self):
         while self.expiration_heap and (self.expiration_heap[0][0] < get_dht_time()
@@ -306,3 +306,15 @@ class LocalStorage:
         """ Iterate over (key, value, expiration_time) tuples stored in this storage """
         self.remove_outdated()
         return ((key, value, expiration_time) for key, (value, expiration_time) in self.data.items())
+
+    def top(self) -> Optional[Tuple[DHTID, BinaryDHTValue, DHTExpiration]]:
+        """ Return the entry with earliest expiration or None if there isn't any """
+        self.remove_outdated()
+        if self.expiration_heap:
+            _, key = self.expiration_heap[0]
+            value, expiration = self.data[key]
+            return key, value, expiration
+
+    def __contains__(self, key: DHTID):
+        self.remove_outdated()
+        return key in self.data
