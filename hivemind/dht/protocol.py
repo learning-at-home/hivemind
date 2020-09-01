@@ -306,3 +306,7 @@ class LocalStorage:
         """ Iterate over (key, value, expiration_time) tuples stored in this storage """
         self.remove_outdated()
         return ((key, value, expiration_time) for key, (value, expiration_time) in self.data.items())
+
+    def __contains__(self, key: DHTID):
+        self.remove_outdated()
+        return key in self.data
