@@ -265,7 +265,7 @@ def test_dht_node():
         proc.terminate()
 
 
-def test_dhtnode_caching(T = 0.05):
+def test_dhtnode_caching(T=0.05):
     node2 = await hivemind.DHTNode.create(cache_refresh_before_expiry=5 * T)
     node1 = await hivemind.DHTNode.create(initial_peers=[f'localhost:{node2.port}'],
                                           cache_refresh_before_expiry=5 * T, listen=False)
