@@ -313,6 +313,8 @@ class LocalStorage:
         """ Return the entry with earliest expiration or None if there isn't any """
         self._remove_outdated()
         if self.data:
+            while self.expiration_heap[0][1] not in self.data:
+                heapq.heappop(self.expiration_heap)
             _, key = self.expiration_heap[0]
             value, expiration = self.data[key]
             return key, value, expiration

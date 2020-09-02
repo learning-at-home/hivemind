@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+
 import random
 from collections import namedtuple
-from typing import Optional, Tuple, List, Dict, Collection, Union, Set
+from typing import Optional, Tuple, List, Dict, Collection, Union, Set, Awaitable
 from warnings import warn
 
-from hivemind.dht.protocol import DHTProtocol
-from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue
+from hivemind.dht.protocol import DHTProtocol, LocalStorage
+from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue
 from hivemind.dht.traverse import traverse_dht
 from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer
+
+SearchResult = namedtuple("SearchResult", ["binary_value", "expiration_time", "source_node_id"])
 
 
 class DHTNode:
@@ -45,8 +48,9 @@ class DHTNode:
 
     """
     # fmt:off
-    node_id: DHTID; port: int; num_replicas: int; cache_locally: bool; cache_nearest: int; num_workers: int
-    refresh_timeout: float; protocol: DHTProtocol
+    node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
+    refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
+    cache_refresh_available: asyncio.Event; cache_refresh_queue: LocalStorage  # min-heap[time, key_id]
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     # fmt:on
 
@@ -55,8 +59,8 @@ class DHTNode:
             cls, node_id: Optional[DHTID] = None, initial_peers: List[Endpoint] = (),
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
-            num_workers: int = 1, cache_locally: bool = True, cache_nearest: int = 1, cache_size=None,
-            listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
+            cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
+            num_workers: int = 1, listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
         :param initial_peers: connects to these peers to populate routing table, defaults to no peers
@@ -71,11 +75,13 @@ class DHTNode:
         :param refresh_timeout: refresh buckets if no node from that bucket was updated in this many seconds
           if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
         :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
-        :param num_workers: concurrent workers in traverse_dht (see traverse_dht num_workers param)
         :param cache_locally: if True, caches all values (stored or found) in a node-local cache
         :param cache_nearest: whenever DHTNode finds a value, it will also store (cache) this value on this many
           nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet
         :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
+        :param cache_refresh_before_expiry: if nonzero, refreshes locally cached values
+          if they are accessed this many seconds before expiration time.
+        :param num_workers: concurrent workers in traverse_dht (see traverse_dht num_workers param)
         :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
           if False, this node will refuse any incoming request, effectively being only a "client"
         :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
@@ -86,8 +92,16 @@ class DHTNode:
         self = cls(_initialized_with_create=True)
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.num_replicas, self.num_workers = num_replicas, num_workers
-        self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
+        self.is_alive = True
+
+        # caching policy
         self.refresh_timeout = refresh_timeout
+        self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
+        self.cache_refresh_before_expiry = cache_refresh_before_expiry
+        self.cache_refresh_queue = LocalStorage()
+        self.cache_refresh_available = asyncio.Event()
+        if cache_refresh_before_expiry:
+            asyncio.create_task(self._refresh_stale_cache_entries())
 
         self.protocol = await DHTProtocol.create(self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
                                                  parallel_rpc, cache_size, listen, listen_on, **kwargs)
@@ -129,7 +143,9 @@ class DHTNode:
 
     async def shutdown(self, timeout=None):
         """ Process existing requests, close all connections and stop the server """
-        await self.protocol.shutdown(timeout)
+        self.is_alive = False
+        if self.protocol.server:
+            await self.protocol.shutdown(timeout)
 
     async def find_nearest_nodes(
             self, queries: Collection[DHTID], k_nearest: Optional[int] = None, beam_size: Optional[int] = None,
@@ -289,7 +305,7 @@ class DHTNode:
         Search for a key across DHT and return either first or latest entry.
         :param key: same key as in node.store(...)
         :param latest: if True, finds the latest value, otherwise finds any non-expired value (which is much faster)
-        :param kwargs: parameters forwarded to get_many
+        :param kwargs: parameters forwarded to get_many_by_id
         :returns: (value, expiration time); if value was not found, returns (None, None)
         """
         if latest:
@@ -297,44 +313,75 @@ class DHTNode:
         result = await self.get_many([key])
         return result[key]
 
-    async def get_many(
-            self, keys: Collection[DHTKey], sufficient_expiration_time: Optional[DHTExpiration] = None,
-            num_workers: Optional[int] = None, beam_size: Optional[int] = None, stop_event: asyncio.Event = None,
-    ) -> Dict[DHTKey, Tuple[Optional[DHTValue], Optional[DHTExpiration]]]:
+    async def get_many(self, keys: Collection[DHTKey], sufficient_expiration_time: Optional[DHTExpiration] = None,
+                       **kwargs) -> Dict[DHTKey, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
+                                                       Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
         """
+        Traverse DHT to find a list of keys. For each key, return latest (value, expiration) or None if not found.
         :param keys: traverse the DHT and find the value for each of these keys (or (None, None) if not key found)
+        :param sufficient_expiration_time: if the search finds a value that expires after this time,
+            default = time of call, find any value that did not expire by the time of call
+            If min_expiration_time=float('inf'), this method will find a value with _latest_ expiration
+        :param kwargs: for full list of parameters, see DHTNode.get_many_by_id
+        :returns: for each key: value and its expiration time. If nothing is found, returns (None, None) for that key
+        :note: in order to check if get returned a value, please check if (expiration_time is None)
+        """
+        keys = list(keys)
+        key_ids = [DHTID.generate(key) for key in keys]
+        id_to_original_key = dict(zip(key_ids, keys))
+        results_by_id = await self.get_many_by_id(key_ids, sufficient_expiration_time, **kwargs)
+        return {id_to_original_key[key]: result_or_future for key, result_or_future in results_by_id.items()}
+
+    async def get_many_by_id(
+            self, key_ids: Collection[DHTID], sufficient_expiration_time: Optional[DHTExpiration] = None,
+            num_workers: Optional[int] = None, beam_size: Optional[int] = None, return_futures: bool = False,
+            **_flags) -> Dict[DHTID, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
+                                           Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
+        """
+        Traverse DHT to find a list of DHTIDs. For each key, return latest (value, expiration) or None if not found.
+        :param key_ids: traverse the DHT and find the value for each of these keys (or (None, None) if not key found)
         :param sufficient_expiration_time: if the search finds a value that expires after this time,
             default = time of call, find any value that did not expire by the time of call
             If min_expiration_time=float('inf'), this method will find a value with _latest_ expiration
         :param beam_size: maintains up to this many nearest nodes when crawling dht, default beam_size = bucket_size
         :param num_workers: override for default num_workers, see traverse_dht num_workers param
-        :param stop_event: if specified, triggering this event will interrupt search and return current best values
-        :returns: for each key: value and its expiration time. If nothing is found , returns (None, None) for that key
+        :param return_futures: if True, immediately return asyncio.Future for every before interacting with the nework.
+         The algorithm will populate these futures with (value, expiration) when it finds the corresponding key
+         Note: canceling a future will stop search for the corresponding key
+        :param _flags: internal optional flags for self._update_cache
+        :returns: for each key: value and its expiration time. If nothing is found, returns (None, None) for that key
         :note: in order to check if get returned a value, please check (expiration_time is None)
         """
-        key_ids = [DHTID.generate(key) for key in keys]
-        id_to_original_key = dict(zip(key_ids, keys))
         sufficient_expiration_time = sufficient_expiration_time or get_dht_time()
         beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
         num_workers = num_workers if num_workers is not None else self.num_workers
-        stop_event = stop_event if stop_event is not None else asyncio.Event()
 
         # search metadata
-        unfinished_key_ids = set(key_ids)  # track key ids for which the search is not terminated
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()  # global routing table for all queries
-
-        SearchResult = namedtuple("SearchResult", ["binary_value", "expiration_time", "source_node_id"])
+        unfinished_key_ids = set(key_ids)  # track key ids for which the search is not terminated
         latest_results = {key_id: SearchResult(b'', -float('inf'), None) for key_id in key_ids}
+        result_futures: Dict[DHTID, asyncio.Future[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]] = {
+            key_id: asyncio.Future() for key_id in key_ids}  # future for final deserialized result and expiration
+
+        def finalize_search(key_id: DHTID, **kwargs):
+            """ this function is called exactly once after a given key is over """
+            unfinished_key_ids.remove(key_id)
+            latest_value_bytes, latest_expiration_time, source_node_id = latest_results[key_id]
+            if source_node_id is None:  # found nothing
+                result_futures[key_id].set_result((None, None))
+            else:  # found something
+                result_futures[key_id].set_result((self.serializer.loads(latest_value_bytes), latest_expiration_time))
+            self._update_cache(key_id, latest_value_bytes, latest_expiration_time, source_node_id, **kwargs, **_flags)
 
         # stage 1: value can be stored in our local cache
         for key_id in key_ids:
-            maybe_value, maybe_expiration_time = self.protocol.storage.get(key_id)
+            maybe_value_bytes, maybe_expiration_time = self.protocol.storage.get(key_id)
             if maybe_expiration_time is None:
-                maybe_value, maybe_expiration_time = self.protocol.cache.get(key_id)
+                maybe_value_bytes, maybe_expiration_time = self.protocol.cache.get(key_id)
             if maybe_expiration_time is not None and maybe_expiration_time > latest_results[key_id].expiration_time:
-                latest_results[key_id] = SearchResult(maybe_value, maybe_expiration_time, self.node_id)
+                latest_results[key_id] = SearchResult(maybe_value_bytes, maybe_expiration_time, self.node_id)
                 if maybe_expiration_time >= sufficient_expiration_time:
-                    unfinished_key_ids.remove(key_id)
+                    finalize_search(key_id)
 
         # stage 2: traverse the DHT for any unfinished keys
         for key_id in unfinished_key_ids:
@@ -348,61 +395,95 @@ class DHTNode:
                 return {query: ([], False) for query in queries}
 
             output: Dict[DHTID, Tuple[List[DHTID], bool]] = {}
-            for key_id, (maybe_value, maybe_expiration_time, peers) in response.items():
+            for key_id, (maybe_value_bytes, maybe_expiration_time, peers) in response.items():
                 node_to_endpoint.update(peers)
                 if maybe_expiration_time is not None and maybe_expiration_time > latest_results[key_id].expiration_time:
-                    latest_results[key_id] = SearchResult(maybe_value, maybe_expiration_time, peer)
-                should_interrupt = (latest_results[key_id].expiration_time >= sufficient_expiration_time)
-                output[key_id] = list(peers.keys()), (should_interrupt or stop_event.is_set())
+                    latest_results[key_id] = SearchResult(maybe_value_bytes, maybe_expiration_time, peer)
+                key_is_found = latest_results[key_id].expiration_time >= sufficient_expiration_time
+                output[key_id] = list(peers.keys()), (key_is_found or result_futures[key_id].cancelled())
+                #         stop search if either key is already found or user cancelled its future
             return output
 
-        traverse_task = asyncio.create_task(traverse_dht(
+        async def found_callback(key_id: DHTID, nearest_nodes: List[DHTID], _visited: Set[DHTID]):
+            return finalize_search(key_id, nearest_nodes=nearest_nodes, node_to_endpoint=node_to_endpoint)
+
+        asyncio.create_task(traverse_dht(
             queries=list(unfinished_key_ids), initial_nodes=list(node_to_endpoint),
             beam_size=beam_size, num_workers=num_workers, queries_per_call=int(len(unfinished_key_ids) ** 0.5),
             get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in unfinished_key_ids},
-            found_callback=lambda key_id, nearest_nodes, _visited: self._cache_results(
-                key_id, *latest_results[key_id], nearest_nodes=nearest_nodes, node_to_endpoint=node_to_endpoint),
-            await_all_tasks=False,
-        ))
-        wait_for_termination = asyncio.create_task(stop_event.wait())
-        _, unfinished = await asyncio.wait([traverse_task, wait_for_termination], return_when=asyncio.FIRST_COMPLETED)
-        wait_for_termination.cancel()
+            found_callback=found_callback, await_all_tasks=False))
 
-        # stage 4: deserialize data and assemble function output
-        find_result: Dict[DHTKey, Tuple[Optional[DHTValue], Optional[DHTExpiration]]] = {}
-        for key_id, (latest_value_bytes, latest_expiration_time, _) in latest_results.items():
-            if latest_expiration_time != -float('inf'):
-                latest_value = self.serializer.loads(latest_value_bytes)
-                find_result[id_to_original_key[key_id]] = (latest_value, latest_expiration_time)
-            else:
-                find_result[id_to_original_key[key_id]] = None, None
-        return find_result
+        return result_futures if return_futures else {key_id: await future for key_id, future in result_futures.items()}
 
-    async def _cache_results(
-            self, key_id: DHTID, value_bytes: DHTValue, expiration: DHTExpiration,
-            source_node_id: DHTID, nearest_nodes: List[DHTID], node_to_endpoint: Dict[DHTID, Endpoint]) -> None:
-        """ Internal: save value to cache according to caching parameters """
-        previous_expiration = max(self.protocol.storage.get(key_id)[1] or -float('inf'),
-                                  self.protocol.cache.get(key_id)[1] or -float('inf'))
-        if expiration > previous_expiration:  # if this value has better expiration
-            if self.cache_locally:
-                self.protocol.cache.store(key_id, value_bytes, expiration)
-            if self.cache_nearest:
-                num_cached_nodes = 0
-                for node_id in nearest_nodes:
-                    if node_id == source_node_id:
-                        continue
-                    asyncio.create_task(self.protocol.call_store(
-                        node_to_endpoint[node_id], [key_id], [value_bytes], [expiration],
-                        in_cache=True))
-                    num_cached_nodes += 1
-                    if num_cached_nodes >= self.cache_nearest:
-                        break
+    def _update_cache(
+            self, key_id: DHTID, value_bytes: DHTValue, expiration: DHTExpiration, source_node_id: Optional[DHTID],
+            nearest_nodes: Optional[List[DHTID]] = None, node_to_endpoint: Optional[Dict[DHTID, Endpoint]] = None,
+            _trigger_cache_refresh: bool = True):
+        """ after key_id is found, update cache according to caching policy. used internally in get and get_many """
+        if source_node_id is None:
+            pass  # not found value at all
+        elif source_node_id != self.node_id:  # found value on a remote peer => consider adding it to cache
+            previous_expiration = max(self.protocol.storage.get(key_id)[1] or -float('inf'),
+                                      self.protocol.cache.get(key_id)[1] or -float('inf'))
+            if expiration > previous_expiration:  # if this value has better expiration
+                if self.cache_locally:
+                    self.protocol.cache.store(key_id, value_bytes, expiration)
+                if self.cache_nearest:
+                    num_cached_nodes = 0
+                    for node_id in nearest_nodes:
+                        if node_id == source_node_id:
+                            continue
+                        asyncio.create_task(self.protocol.call_store(
+                            node_to_endpoint[node_id], [key_id], [value_bytes], [expiration],
+                            in_cache=True))
+                        num_cached_nodes += 1
+                        if num_cached_nodes >= self.cache_nearest:
+                            break
+        elif source_node_id == self.node_id and _trigger_cache_refresh:  # we used cache => consider refreshing it
+            with self.protocol.cache.freeze():  # do not clear outdated cache for now...
+                if self.cache_refresh_before_expiry and key_id in self.protocol.cache:
+                    previous_earliest_item: Tuple[DHTID, BinaryDHTValue, DHTExpiration] = self.cache_refresh_queue.top()
+                    self.cache_refresh_queue.store(key_id, value_bytes, expiration)
+                    if previous_earliest_item is None or expiration < previous_earliest_item[-1]:  # [-1] = expiration
+                        self.cache_refresh_available.set()  # if we added new earliest element, notify the cache updater
 
+    async def _refresh_stale_cache_entries(self):
+        """ periodically refresh keys near-expired keys that were accessed at least once during previous lifetime """
+        while self.is_alive:
+            with self.cache_refresh_queue.freeze():
+                while len(self.cache_refresh_queue) == 0:
+                    await self.cache_refresh_available.wait()
+                    self.cache_refresh_available.clear()
+                key_id, _, nearest_expiration = self.cache_refresh_queue.top()
+
+            try:
+                # step 1: await until :cache_refresh_before_expiry: seconds before earliest first element expires
+                time_to_wait = nearest_expiration - get_dht_time() - self.cache_refresh_before_expiry
+                await asyncio.wait_for(self.cache_refresh_available.wait(), timeout=time_to_wait)
+                # note: the line above will cause TimeoutError when we are ready to refresh cache
+                self.cache_refresh_available.clear()  # no timeout error => someone added new entry to queue and ...
+                continue  # ... and this element is earlier than nearest_expiration. we should refresh this entry first
+
+            except asyncio.TimeoutError:  # caught TimeoutError => it is time to refresh the most recent cached entry
+                # step 2: find all keys that we should already refresh and remove them from queue
+                with self.cache_refresh_queue.freeze():
+                    keys_to_refresh = {key_id}
+                    del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
+                    while self.cache_refresh_queue:
+                        key_id, _, nearest_expiration = self.cache_refresh_queue.top()
+                        if nearest_expiration > get_dht_time() + self.cache_refresh_before_expiry:
+                            break
+                        del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
+                        keys_to_refresh.add(key_id)
+
+                # step 3: search newer versions of these keys, cache them as a side-effect of self.get_many_by_id
+                await self.get_many_by_id(
+                    keys_to_refresh, sufficient_expiration_time=nearest_expiration + self.cache_refresh_before_expiry,
+                    _trigger_cache_refresh=False)  # if we found value locally, this shouldn't cause another refresh
 
     async def _refresh_routing_table(self, *, period: Optional[float]) -> None:
         """ Tries to find new nodes for buckets that were unused for more than self.staleness_timeout """
-        while period is not None:  # if None run once, otherwise run forever
+        while self.is_alive and period is not None:  # if None run once, otherwise run forever
             refresh_time = get_dht_time()
             staleness_threshold = refresh_time - period
             stale_buckets = [bucket for bucket in self.protocol.routing_table.buckets
