@@ -271,12 +271,12 @@ class LocalStorage:
         self.key_to_heap: Dict[DHTID, Tuple[DHTExpiration, DHTID]] = dict()
         self.frozen = False  # if True, do not remove outdated elements
 
-    def remove_outdated(self):
+    def _remove_outdated(self):
         while not self.frozen and self.expiration_heap and (self.expiration_heap[0][0] < get_dht_time()
                                                             or len(self.expiration_heap) > self.cache_size):
             heap_entry = heapq.heappop(self.expiration_heap)
             key = heap_entry[1]
-            if self.key_to_heap[key] == heap_entry:
+            if self.key_to_heap.get(key) == heap_entry:
                 del self.data[key], self.key_to_heap[key]
 
     def store(self, key: DHTID, value: BinaryDHTValue, expiration_time: DHTExpiration) -> bool:
@@ -294,40 +294,48 @@ class LocalStorage:
                 return True
             return False
         self.data[key] = (value, expiration_time)
-        self.remove_outdated()
+        self._remove_outdated()
         return True
 
     def get(self, key: DHTID) -> (Optional[BinaryDHTValue], Optional[DHTExpiration]):
         """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
-        self.remove_outdated()
+        self._remove_outdated()
         if key in self.data:
             return self.data[key]
         return None, None
 
     def items(self) -> Iterator[Tuple[DHTID, BinaryDHTValue, DHTExpiration]]:
         """ Iterate over (key, value, expiration_time) tuples stored in this storage """
-        self.remove_outdated()
+        self._remove_outdated()
         return ((key, value, expiration_time) for key, (value, expiration_time) in self.data.items())
 
     def top(self) -> Optional[Tuple[DHTID, BinaryDHTValue, DHTExpiration]]:
         """ Return the entry with earliest expiration or None if there isn't any """
-        self.remove_outdated()
-        if self.expiration_heap:
+        self._remove_outdated()
+        if self.data:
             _, key = self.expiration_heap[0]
             value, expiration = self.data[key]
             return key, value, expiration
 
     def __contains__(self, key: DHTID):
-        self.remove_outdated()
+        self._remove_outdated()
         return key in self.data
 
     def __len__(self):
-        self.remove_outdated()
+        self._remove_outdated()
         return len(self.data)
+
+    def __delitem__(self, key: DHTID):
+        if key in self.key_to_heap:
+            del self.data[key], self.key_to_heap[key]
+        # note: key may still be in self.expiration_heap, but it will not be used and eventually .remove_outdated()
+
+    def __bool__(self):
+        return bool(self.data)
 
     @contextmanager
     def freeze(self):
-        """ Temporarily cease to remove outdated elements when this context is active """
+        """ Temporarily cease to .remove_outdated() elements inside this context to ensure consistency """
         prev_frozen, self.frozen = self.frozen, True
         try:
             yield self
