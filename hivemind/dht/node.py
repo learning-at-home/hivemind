@@ -318,6 +318,7 @@ class DHTNode:
                                                        Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
         """
         Traverse DHT to find a list of keys. For each key, return latest (value, expiration) or None if not found.
+
         :param keys: traverse the DHT and find the value for each of these keys (or (None, None) if not key found)
         :param sufficient_expiration_time: if the search finds a value that expires after this time,
             default = time of call, find any value that did not expire by the time of call
@@ -339,6 +340,7 @@ class DHTNode:
                                            Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
         """
         Traverse DHT to find a list of DHTIDs. For each key, return latest (value, expiration) or None if not found.
+
         :param key_ids: traverse the DHT and find the value for each of these keys (or (None, None) if not key found)
         :param sufficient_expiration_time: if the search finds a value that expires after this time,
             default = time of call, find any value that did not expire by the time of call
