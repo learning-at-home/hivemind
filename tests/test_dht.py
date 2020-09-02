@@ -265,6 +265,45 @@ def test_dht_node():
         proc.terminate()
 
 
+def test_dhtnode_caching(T = 0.05):
+    node2 = await hivemind.DHTNode.create(cache_refresh_before_expiry=5 * T)
+    node1 = await hivemind.DHTNode.create(initial_peers=[f'localhost:{node2.port}'],
+                                          cache_refresh_before_expiry=5 * T, listen=False)
+    await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
+    await node2.store('k2', [654, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
+    await node2.store('k3', [654, 'value'], expiration_time=hivemind.get_dht_time() + 15 * T)
+    await node1.get_many(['k', 'k2', 'k3', 'k4'])
+    assert len(node1.protocol.cache) == 3
+    assert len(node1.cache_refresh_queue) == 0
+
+    await node1.get_many(['k', 'k2', 'k3', 'k4'])
+    assert len(node1.cache_refresh_queue) == 3
+
+    await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 10 * T)
+    await asyncio.sleep(5 * T)
+    await node1.get('k')
+    assert len(node1.protocol.cache) == 3
+    assert len(node1.cache_refresh_queue) == 2
+    await asyncio.sleep(3 * T)
+
+    assert len(node1.cache_refresh_queue) == 1
+
+    await asyncio.sleep(5 * T)
+    assert len(node1.cache_refresh_queue) == 0
+    await asyncio.sleep(5 * T)
+    assert len(node1.cache_refresh_queue) == 0
+
+    await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
+    await node1.get('k')
+    assert len(node1.cache_refresh_queue) == 0
+    await node1.get('k')
+    assert len(node1.cache_refresh_queue) == 1
+
+    await asyncio.sleep(5 * T)
+    assert len(node1.cache_refresh_queue) == 0
+
+    await asyncio.gather(node1.shutdown(), node2.shutdown())
+
 def test_hivemind_dht():
     peers = [hivemind.DHT(start=True)]
     for i in range(10):
