@@ -315,7 +315,7 @@ def test_dhtnode_reuse_get():
 
     async def _tester():
         peers = []
-        for i in range(64):
+        for i in range(10):
             neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
             peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
 
@@ -323,6 +323,7 @@ def test_dhtnode_reuse_get():
         await random.choice(peers).store('k2', 567, hivemind.get_dht_time() + 999)
 
         you = random.choice(peers)
+
         futures1, futures2, futures3 = await asyncio.gather(
             you.get_many(['k1', 'k2'], return_futures=True),
             you.get_many(['k2', 'k3'], return_futures=True),

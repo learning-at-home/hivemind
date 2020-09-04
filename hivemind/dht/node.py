@@ -4,6 +4,7 @@ import asyncio
 
 import random
 from collections import namedtuple
+from functools import partial
 from typing import Optional, Tuple, List, Dict, Collection, Union, Set, Awaitable
 from warnings import warn
 
@@ -372,18 +373,15 @@ class DHTNode:
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()  # global routing table for all queries
         remaining_key_ids = set(key_ids)  # key ids for which the search we still need to search
         latest_results = {key_id: SearchResult(b'', -float('inf'), None) for key_id in key_ids}
-
         result_futures: Dict[DHTID, asyncio.Future[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]] = {
             key_id: asyncio.Future() for key_id in key_ids}
 
+        # if we have concurrent get request for some of the same keys, subscribe to their results
         if self.reuse_get_requests:
-            # if we have concurrent get request for some of the same keys, reuse their results
-            for key_id in result_futures.keys():
-                if key_id in self.pending_get_requests and not self.pending_get_requests[key_id].done():
-                    result_futures[key_id] = self.pending_get_requests[key_id]
-                    remaining_key_ids.discard(key_id)  # someone else will find it for us
-                else:  # otherwise, let other queries reuse us
-                    self.pending_get_requests[key_id] = result_futures[key_id]
+            reused_key_ids: Set[DHTID] = self._reuse_when_possible(
+                result_futures, sufficient_expiration_time=sufficient_expiration_time,
+                num_workers=num_workers, beam_size=beam_size, **_flags)
+            remaining_key_ids -= reused_key_ids
 
         def finalize_search(key_id: DHTID, **kwargs):
             """ this function is called exactly once after a given key is over """
@@ -431,7 +429,6 @@ class DHTNode:
         async def found_callback(key_id: DHTID, nearest_nodes: List[DHTID], _visited: Set[DHTID]):
             if self.reuse_get_requests and self.pending_get_requests.get(key_id) == result_futures[key_id]:
                 del self.pending_get_requests[key_id]
-
             return finalize_search(key_id, nearest_nodes=nearest_nodes, node_to_endpoint=node_to_endpoint)
 
         asyncio.create_task(traverse_dht(
@@ -440,7 +437,14 @@ class DHTNode:
             get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in remaining_key_ids},
             found_callback=found_callback, await_all_tasks=False))
 
-        return result_futures if return_futures else {key_id: await future for key_id, future in result_futures.items()}
+        if return_futures:
+            return result_futures
+        try:
+            return {key_id: await future for key_id, future in result_futures.items()}
+        except asyncio.CancelledError:
+            TODO cancel futures, but only if they don't have pending callbacks?
+            TODO think: maybe we should always expose user with a different future and handle its cancellation ourselves?
+
 
     def _update_cache(
             self, key_id: DHTID, value_bytes: DHTValue, expiration: DHTExpiration, source_node_id: Optional[DHTID],
@@ -520,3 +524,29 @@ class DHTNode:
                 await self.find_nearest_nodes(refresh_id)
 
             await asyncio.sleep(max(0.0, period - (get_dht_time() - refresh_time)))
+
+    def _reuse_when_possible(self, result_futures: Dict[DHTID, asyncio.Future], **kwargs_for_rerun) -> Set[DHTID]:
+        """ Find which of :result_futures: are already pending, subscribe to these results; return reused keys """
+        reused_keys: Set[DHTID] = set()
+
+        def _reuse_results_for_key(key_id: DHTID, reused_future: asyncio.Future):
+            if not reused_future.cancelled() and not reused_future.exception():
+                result_futures[key_id].set_result(reused_future.result())
+            else:
+                logger.warning(f"Get request for key id {key_id} reused on a concurrent task {reused_future}"
+                               f"to be finished but it was cancelled by original task owner. Rerunning.")
+
+                async def _fetch_again():
+                    res = await self.get_many_by_id([key_id], return_futures=False, **kwargs_for_rerun)
+                    result_futures[key_id].set_result(res[key_id])
+
+                asyncio.create_task(_fetch_again())
+
+        for key_id in result_futures.keys():
+            if key_id in self.pending_get_requests and not self.pending_get_requests[key_id].done():
+                self.pending_get_requests[key_id].add_done_callback(partial(_reuse_results_for_key, key_id))
+                reused_keys.add(key_id)
+            else:  # otherwise, let other queries reuse us
+                self.pending_get_requests[key_id] = result_futures[key_id]
+        return reused_keys
+
