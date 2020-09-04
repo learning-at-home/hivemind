@@ -10,9 +10,10 @@ from warnings import warn
 from hivemind.dht.protocol import DHTProtocol, LocalStorage
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue
 from hivemind.dht.traverse import traverse_dht
-from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer
+from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger
 
 SearchResult = namedtuple("SearchResult", ["binary_value", "expiration_time", "source_node_id"])
+logger = get_logger(__name__)
 
 
 class DHTNode:
@@ -50,7 +51,8 @@ class DHTNode:
     # fmt:off
     node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
-    cache_refresh_available: asyncio.Event; cache_refresh_queue: LocalStorage  # min-heap[time, key_id]
+    cache_refresh_available: asyncio.Event; cache_refresh_queue: LocalStorage
+    reuse_get_requests: bool; pending_get_requests: Dict[DHTID, asyncio.Future]
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     # fmt:on
 
@@ -60,7 +62,8 @@ class DHTNode:
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
-            num_workers: int = 1, listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
+            reuse_get_requests: bool = True, num_workers: int = 1, listen: bool = True,
+            listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
         :param initial_peers: connects to these peers to populate routing table, defaults to no peers
@@ -81,6 +84,8 @@ class DHTNode:
         :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
         :param cache_refresh_before_expiry: if nonzero, refreshes locally cached values
           if they are accessed this many seconds before expiration time.
+        :param reuse_get_requests: if True, DHTNode allows only one traverse_dht procedure for every key
+          all concurrent get requests for the same key will reuse the procedure that is currently in progress
         :param num_workers: concurrent workers in traverse_dht (see traverse_dht num_workers param)
         :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
           if False, this node will refuse any incoming request, effectively being only a "client"
@@ -89,10 +94,15 @@ class DHTNode:
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
         :param kwargs: extra parameters used in grpc.aio.server
         """
+        if cache_refresh_before_expiry > 0 and not cache_locally:
+            logger.warning("If cache_locally is False, cache_refresh_before_expiry has no effect. To silence this"
+                           " warning, please specify cache_refresh_before_expiry=0")
+
         self = cls(_initialized_with_create=True)
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
+        self.is_alive = True  # if set to False, cancels all background jobs such as routing table refresh
+        self.reuse_get_requests, self.pending_get_requests = reuse_get_requests, {}
         self.num_replicas, self.num_workers = num_replicas, num_workers
-        self.is_alive = True
 
         # caching policy
         self.refresh_timeout = refresh_timeout
@@ -360,14 +370,24 @@ class DHTNode:
 
         # search metadata
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()  # global routing table for all queries
-        unfinished_key_ids = set(key_ids)  # track key ids for which the search is not terminated
+        remaining_key_ids = set(key_ids)  # key ids for which the search we still need to search
         latest_results = {key_id: SearchResult(b'', -float('inf'), None) for key_id in key_ids}
+
         result_futures: Dict[DHTID, asyncio.Future[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]] = {
-            key_id: asyncio.Future() for key_id in key_ids}  # future for final deserialized result and expiration
+            key_id: asyncio.Future() for key_id in key_ids}
+
+        if self.reuse_get_requests:
+            # if we have concurrent get request for some of the same keys, reuse their results
+            for key_id in result_futures.keys():
+                if key_id in self.pending_get_requests and not self.pending_get_requests[key_id].done():
+                    result_futures[key_id] = self.pending_get_requests[key_id]
+                    remaining_key_ids.discard(key_id)  # someone else will find it for us
+                else:  # otherwise, let other queries reuse us
+                    self.pending_get_requests[key_id] = result_futures[key_id]
 
         def finalize_search(key_id: DHTID, **kwargs):
             """ this function is called exactly once after a given key is over """
-            unfinished_key_ids.remove(key_id)
+            remaining_key_ids.discard(key_id)
             latest_value_bytes, latest_expiration_time, source_node_id = latest_results[key_id]
             if source_node_id is None:  # found nothing
                 result_futures[key_id].set_result((None, None))
@@ -375,7 +395,7 @@ class DHTNode:
                 result_futures[key_id].set_result((self.serializer.loads(latest_value_bytes), latest_expiration_time))
             self._update_cache(key_id, latest_value_bytes, latest_expiration_time, source_node_id, **kwargs, **_flags)
 
-        # stage 1: value can be stored in our local cache
+        # stage 1: check for value in this node's local storage and cache
         for key_id in key_ids:
             maybe_value_bytes, maybe_expiration_time = self.protocol.storage.get(key_id)
             if maybe_expiration_time is None:
@@ -386,10 +406,11 @@ class DHTNode:
                     finalize_search(key_id)
 
         # stage 2: traverse the DHT for any unfinished keys
-        for key_id in unfinished_key_ids:
+        for key_id in remaining_key_ids:  # populate initial candidates
             node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
+        # V-- this function will be called every time traverse_dht decides to request neighbors from a remote peer
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
             queries = list(queries)
             response = await self.protocol.call_find(node_to_endpoint[peer], queries)
@@ -402,17 +423,21 @@ class DHTNode:
                 if maybe_expiration_time is not None and maybe_expiration_time > latest_results[key_id].expiration_time:
                     latest_results[key_id] = SearchResult(maybe_value_bytes, maybe_expiration_time, peer)
                 key_is_found = latest_results[key_id].expiration_time >= sufficient_expiration_time
-                output[key_id] = list(peers.keys()), (key_is_found or result_futures[key_id].cancelled())
-                #         stop search if either key is already found or user cancelled its future
+                output[key_id] = list(peers.keys()), (key_is_found or result_futures[key_id].done())
+                #         stop search if either key is already found or future is done otherwise (e.g. cancelled)
             return output
 
+        # V-- this function will be called exactly once when traverse_dht finished search for a given key
         async def found_callback(key_id: DHTID, nearest_nodes: List[DHTID], _visited: Set[DHTID]):
+            if self.reuse_get_requests and self.pending_get_requests.get(key_id) == result_futures[key_id]:
+                del self.pending_get_requests[key_id]
+
             return finalize_search(key_id, nearest_nodes=nearest_nodes, node_to_endpoint=node_to_endpoint)
 
         asyncio.create_task(traverse_dht(
-            queries=list(unfinished_key_ids), initial_nodes=list(node_to_endpoint),
-            beam_size=beam_size, num_workers=num_workers, queries_per_call=int(len(unfinished_key_ids) ** 0.5),
-            get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in unfinished_key_ids},
+            queries=list(remaining_key_ids), initial_nodes=list(node_to_endpoint),
+            beam_size=beam_size, num_workers=num_workers, queries_per_call=int(len(remaining_key_ids) ** 0.5),
+            get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in remaining_key_ids},
             found_callback=found_callback, await_all_tasks=False))
 
         return result_futures if return_futures else {key_id: await future for key_id, future in result_futures.items()}

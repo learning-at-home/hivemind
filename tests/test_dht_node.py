@@ -310,3 +310,33 @@ def test_dhtnode_caching(T=0.05):
     assert test_success.is_set()
 
 
+def test_dhtnode_reuse_get():
+    test_success = mp.Event()
+
+    async def _tester():
+        peers = []
+        for i in range(64):
+            neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
+            peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
+
+        await random.choice(peers).store('k1', 123, hivemind.get_dht_time() + 999)
+        await random.choice(peers).store('k2', 567, hivemind.get_dht_time() + 999)
+
+        you = random.choice(peers)
+        futures1, futures2, futures3 = await asyncio.gather(
+            you.get_many(['k1', 'k2'], return_futures=True),
+            you.get_many(['k2', 'k3'], return_futures=True),
+            you.get_many(['k3'], return_futures=True)
+        )
+
+        assert futures1['k2'] == futures2['k2']
+        assert (await futures1['k2'])[0] == 567
+        assert futures1['k2'] != futures2['k3']
+        assert futures2['k3'] == futures3['k3']
+        assert (await futures3['k3'])[0] == None
+        test_success.set()
+
+    proc = mp.Process(target=lambda: asyncio.run(_tester()))
+    proc.start()
+    proc.join()
+    assert test_success.is_set()
