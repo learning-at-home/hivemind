@@ -42,6 +42,7 @@ def test_maxsize_cache():
     assert d.get(DHTID.generate("key2"))[0] == b"val2", "Value with bigger exp. time must be kept"
     assert d.get(DHTID.generate("key1"))[0] is None, "Value with less exp time, must be deleted"
 
+
 def test_localstorage_top():
     d = LocalStorage(maxsize=3)
     d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 1)
@@ -55,6 +56,24 @@ def test_localstorage_top():
     del d[DHTID.generate('key2')]
     assert d.top()[:2] == (DHTID.generate("key1"), b"val1_new")
     d.store(DHTID.generate("key2"), b"val2_new", get_dht_time() + 5)
-    d.store(DHTID.generate("key4"), b"val3", get_dht_time() + 6)
+    d.store(DHTID.generate("key4"), b"val4", get_dht_time() + 6)  # key4 will push out key1 due to maxsize
+
     assert d.top()[:2] == (DHTID.generate("key3"), b"val3")
 
+
+def test_localstorage_freeze():
+    d = LocalStorage(maxsize=2)
+
+    with d.freeze():
+        d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 0.01)
+        assert DHTID.generate("key1") in d
+        time.sleep(0.03)
+        assert DHTID.generate("key1") in d
+    assert DHTID.generate("key1") not in d
+
+    with d.freeze():
+        d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 1)
+        d.store(DHTID.generate("key2"), b"val2", get_dht_time() + 2)
+        d.store(DHTID.generate("key3"), b"val3", get_dht_time() + 3)  # key3 will push key1 out due to maxsize
+        assert DHTID.generate("key1") in d
+    assert DHTID.generate("key1") not in d
