@@ -159,7 +159,7 @@ class DHT(mp.Process):
         :param uids: a list of expert ids to update
         :param endpoint: endpoint that serves these experts, usually your server endpoint (e.g. "201.111.222.333:1337")
         :param wait: if True, awaits for declaration to finish, otherwise runs in background
-        :param timeout: waits for the procedure to finish, None means wait indeninitely
+        :param timeout: waits for the procedure to finish for up to this long, None means wait indefinitely
         :returns: if wait, returns a list of booleans, (True = store succeeded, False = store rejected)
         """
         assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
