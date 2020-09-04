@@ -284,7 +284,7 @@ class LocalStorage:
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
         :returns: True if new value was stored, False it was rejected (current value is newer)
         """
-        if expiration_time < get_dht_time():
+        if expiration_time < get_dht_time() and not self.frozen:
             return False
         self.key_to_heap[key] = (expiration_time, key)
         heapq.heappush(self.expiration_heap, (expiration_time, key))
@@ -330,14 +330,14 @@ class LocalStorage:
     def __delitem__(self, key: DHTID):
         if key in self.key_to_heap:
             del self.data[key], self.key_to_heap[key]
-        # note: key may still be in self.expiration_heap, but it will not be used and eventually .remove_outdated()
+        # note: key may still be in self.expiration_heap, but it will not be used and eventually ._remove_outdated()
 
     def __bool__(self):
         return bool(self.data)
 
     @contextmanager
     def freeze(self):
-        """ Temporarily cease to .remove_outdated() elements inside this context to ensure consistency """
+        """ Temporarily cease to ._remove_outdated() elements inside this context to ensure consistency """
         prev_frozen, self.frozen = self.frozen, True
         try:
             yield self
