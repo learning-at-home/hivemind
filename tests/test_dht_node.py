@@ -333,7 +333,7 @@ def test_dhtnode_reuse_get():
         assert (await futures1['k2'])[0] == 567
         assert futures1['k2'] != futures2['k3']
         assert futures2['k3'] == futures3['k3']
-        assert (await futures3['k3'])[0] == None
+        assert (await futures3['k3'])[0] is None
         test_success.set()
 
     proc = mp.Process(target=lambda: asyncio.run(_tester()))
