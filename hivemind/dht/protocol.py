@@ -313,11 +313,12 @@ class LocalStorage:
         """ Return the entry with earliest expiration or None if there isn't any """
         self._remove_outdated()
         if self.data:
-            while self.expiration_heap[0][1] not in self.data:
-                heapq.heappop(self.expiration_heap)
-            _, key = self.expiration_heap[0]
-            value, expiration = self.data[key]
-            return key, value, expiration
+            top_entry, top_key = self.expiration_heap[0], self.expiration_heap[0][1]
+            while self.key_to_heap.get(top_key) != top_entry:
+                heapq.heappop(self.expiration_heap)  # skip leftover "ghost" entries until first real entry
+                top_entry, top_key = self.expiration_heap[0], self.expiration_heap[0][1]
+            value, expiration = self.data[top_key]
+            return top_key, value, expiration
 
     def __contains__(self, key: DHTID):
         self._remove_outdated()
