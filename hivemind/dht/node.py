@@ -442,9 +442,9 @@ class DHTNode:
         try:
             return {key_id: await future for key_id, future in result_futures.items()}
         except asyncio.CancelledError:
-            TODO cancel futures, but only if they don't have pending callbacks?
-            TODO think: maybe we should always expose user with a different future and handle its cancellation ourselves?
-
+            pass
+            # TODO cancel futures, but only if they don't have pending callbacks?
+            # TODO think: maybe we should always expose user with a different future and handle its cancellation ourselves?
 
     def _update_cache(
             self, key_id: DHTID, value_bytes: DHTValue, expiration: DHTExpiration, source_node_id: Optional[DHTID],
