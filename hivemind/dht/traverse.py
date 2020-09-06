@@ -141,7 +141,7 @@ async def traverse_dht(
 
     def has_candidates(query: DHTID):
         """ Whether this query's heap contains at least one candidate node that can be explored """
-        return candidate_nodes[query] and candidate_nodes[query][ROOT][0] > upper_bound(query)
+        return candidate_nodes[query] and candidate_nodes[query][ROOT][0] <= upper_bound(query)
 
     def upper_bound(query: DHTID):
         """ Any node that is farther from query than upper_bound(query) will not be added to heaps """
