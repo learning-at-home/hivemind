@@ -24,7 +24,7 @@ class Runtime(threading.Thread):
     >>> expert_backends = {'expert_name': ExpertBackend(**kwargs)}
     >>> runtime = Runtime(expert_backends)
     >>> runtime.start()  # start runtime in background thread. To start in current thread, use runtime.run()
-    >>> runtime.ready.wait()  # await for runtime to load all experts on device and create request pools
+    >>> runtime.found_enough.wait()  # await for runtime to load all experts on device and create request pools
     >>> future = runtime.expert_backends['expert_name'].forward_pool.submit_task(*expert_inputs)
     >>> print("Returned:", future.result())
     >>> runtime.shutdown()

@@ -10,6 +10,7 @@ from typing import List, Dict
 
 from hivemind import get_dht_time
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, DHTProtocol
+from hivemind.dht.protocol import DHTProtocol
 
 
 def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping: Optional[Endpoint] = None):
@@ -265,9 +266,9 @@ def test_dhtnode_caching(T=0.05):
     test_success = mp.Event()
 
     async def _tester():
-        node2 = await hivemind.DHTNode.create(cache_refresh_before_expiry=5 * T)
+        node2 = await hivemind.DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
         node1 = await hivemind.DHTNode.create(initial_peers=[f'localhost:{node2.port}'],
-                                              cache_refresh_before_expiry=5 * T, listen=False)
+                                              cache_refresh_before_expiry=5 * T, listen=False, reuse_get_requests=False)
         await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
         await node2.store('k2', [654, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
         await node2.store('k3', [654, 'value'], expiration_time=hivemind.get_dht_time() + 15 * T)
@@ -278,10 +279,13 @@ def test_dhtnode_caching(T=0.05):
         await node1.get_many(['k', 'k2', 'k3', 'k4'])
         assert len(node1.cache_refresh_queue) == 3
 
-        await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 10 * T)
-        await asyncio.sleep(5 * T)
+        await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 12 * T)
+        await asyncio.sleep(4 * T)
         await node1.get('k')
+        await asyncio.sleep(1 * T)
+
         assert len(node1.protocol.cache) == 3
+        print([k for k in node1.cache_refresh_queue.data])
         assert len(node1.cache_refresh_queue) == 2
         await asyncio.sleep(3 * T)
 
@@ -292,10 +296,12 @@ def test_dhtnode_caching(T=0.05):
         await asyncio.sleep(5 * T)
         assert len(node1.cache_refresh_queue) == 0
 
-        await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
+        await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 10 * T)
         await node1.get('k')
+        await asyncio.sleep(1 * T)
         assert len(node1.cache_refresh_queue) == 0
         await node1.get('k')
+        await asyncio.sleep(1 * T)
         assert len(node1.cache_refresh_queue) == 1
 
         await asyncio.sleep(5 * T)
@@ -311,8 +317,6 @@ def test_dhtnode_caching(T=0.05):
 
 
 def test_dhtnode_reuse_get():
-    return
-    #TODO monkey-patch replace protocol.call_find to add manual delay
     test_success = mp.Event()
 
     async def _tester():
@@ -321,22 +325,29 @@ def test_dhtnode_reuse_get():
             neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
             peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
 
-        await random.choice(peers).store('k1', 123, hivemind.get_dht_time() + 999)
-        await random.choice(peers).store('k2', 567, hivemind.get_dht_time() + 999)
+        await asyncio.gather(
+            random.choice(peers).store('k1', 123, hivemind.get_dht_time() + 999),
+            random.choice(peers).store('k2', 567, hivemind.get_dht_time() + 999)
+        )
 
         you = random.choice(peers)
 
-        futures1, futures2, futures3 = await asyncio.gather(
-            you.get_many(['k1', 'k2'], return_futures=True),
-            you.get_many(['k2', 'k3'], return_futures=True),
-            you.get_many(['k3'], return_futures=True)
-        )
+        futures1 = await you.get_many(['k1', 'k2'], return_futures=True)
+        assert len(you.pending_get_requests[DHTID.generate('k1')]) == 1
+        assert len(you.pending_get_requests[DHTID.generate('k2')]) == 1
 
-        assert futures1['k2'] == futures2['k2']
-        assert (await futures1['k2'])[0] == 567
-        assert futures1['k2'] != futures2['k3']
-        assert futures2['k3'] == futures3['k3']
-        assert (await futures3['k3'])[0] is None
+        futures2 = await you.get_many(['k2', 'k3'], return_futures=True)
+        assert len(you.pending_get_requests[DHTID.generate('k2')]) == 2
+
+        await asyncio.gather(*futures1.values(), *futures2.values())
+        futures3 = await you.get_many(['k3'], return_futures=True)
+        assert len(you.pending_get_requests[DHTID.generate('k1')]) == 0
+        assert len(you.pending_get_requests[DHTID.generate('k2')]) == 0
+        assert len(you.pending_get_requests[DHTID.generate('k3')]) == 1
+
+        assert (await futures1['k1'])[0] == 123
+        assert await futures1['k2'] == await futures2['k2'] and (await futures1['k2'])[0] == 567
+        assert await futures2['k3'] == await futures3['k3'] and (await futures3['k3']) == (None, None)
         test_success.set()
 
     proc = mp.Process(target=lambda: asyncio.run(_tester()))

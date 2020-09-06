@@ -194,8 +194,8 @@ class Server(threading.Thread):
         Example
         =======
         >>> server.start()
-        >>> server.ready.wait(timeout=10)
-        >>> print("Server ready" if server.ready.is_set() else "Server didn't start in 10 seconds")
+        >>> server.found_enough.wait(timeout=10)
+        >>> print("Server ready" if server.found_enough.is_set() else "Server didn't start in 10 seconds")
         """
         return self.runtime.ready  # mp.Event that is true if self is ready to process batches
 
