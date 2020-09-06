@@ -19,7 +19,7 @@ import time
 import warnings
 from collections import deque, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict
+from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable
 
 import uvloop
 import torch
@@ -185,15 +185,16 @@ class DHT(mp.Process):
             future.set_result([store_ok[key] for key in data_to_store.keys()])
 
     def first_k_active(self, uid_prefixes: List[str], k: int, max_prefetch: int = 1, chunk_size: Optional[int] = None,
-                       return_future=False) -> TOrderedDict[str, RemoteExpert]:
+                       return_future=False) -> Union[TOrderedDict[str, RemoteExpert],
+                                                     Awaitable[TOrderedDict[str, RemoteExpert]]]:
         """
         Find k prefixes with active experts; may return less if there aren't enough; used for DMoE beam search
 
         :param uid_prefixes: a list of uid prefixes ordered from highest to lowest priority
         :param k: return at most *this many* active prefixes
         :param max_prefetch: pre-dispatch up to *this many* tasks (each for chunk_size experts)
-        :param chunk_size: dispatch this many requests in one task (default = k)
-        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
+        :param chunk_size: dispatch this many requests in one task
+        :param return_future: if False (default), return when experts are returned. Otherwise return MPFuture.
         :returns: a ordered dict{uid_prefix -> RemoteExpert} mapping at most :k: prefixes to matching experts
             The keys in the returned dict are ordered same as in uid_prefixes.
         """
@@ -205,8 +206,7 @@ class DHT(mp.Process):
         return future if return_future else future.result()
 
     async def _first_k_active(
-            self, node: DHTNode, uid_prefixes: List[str], k: int, *, max_prefetch: int = 1,
-            chunk_size: Optional[int] = None, future: Optional[MPFuture] = None) -> TOrderedDict[str, RemoteExpert]:
+            self, node: DHTNode, uid_prefixes: List[str], k: int, max_prefetch: int, chunk_size: int, future: MPFuture):
         chunk_size = chunk_size if chunk_size is not None else k
         num_workers_per_chunk = min(chunk_size, self.max_workers or chunk_size)
         total_chunks = (len(uid_prefixes) - 1) // chunk_size + 1
@@ -241,7 +241,4 @@ class DHT(mp.Process):
             task.cancel()
 
         # return k active prefixes or as many as we could find
-        results: OrderedDict[str, RemoteExpert] = OrderedDict(found)
-        if future:
-            future.set_result(results)
-        return results
+        future.set_result(OrderedDict(found))
