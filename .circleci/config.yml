@@ -9,7 +9,8 @@ jobs:
     steps:
       - checkout
       - python/load-cache
-      - run: pip install codecov pytest tqdm scikit-learn --ignore-installed
+      - run: pip uninstall pytest  # temporary override for broken cache
+      - run: pip install codecov pytest tqdm scikit-learn
       - python/install-deps
       - python/save-cache
       - run:
