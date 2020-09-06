@@ -126,6 +126,6 @@ If one wants to account for these factors, one must introduce them manually by c
   
 
 #### Tips & tricks
-* You can find a wealth of pytorch debugging tricks at [their contributing page](https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md).
+* You can find a wealth of pytorch debugging tricks at [their contributing page](https://tinyurl.com/pytorch-contributing).
 * Hivemind is optimized for development in pycharm CE 2019.3 or newer.
   * When working on tests, please mark "tests" as sources root.
