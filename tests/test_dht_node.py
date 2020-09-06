@@ -285,7 +285,6 @@ def test_dhtnode_caching(T=0.05):
         await asyncio.sleep(1 * T)
 
         assert len(node1.protocol.cache) == 3
-        print([k for k in node1.cache_refresh_queue.data])
         assert len(node1.cache_refresh_queue) == 2
         await asyncio.sleep(3 * T)
 
