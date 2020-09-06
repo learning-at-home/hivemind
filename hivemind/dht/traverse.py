@@ -139,6 +139,10 @@ async def traverse_dht(
         else:  # prefer candidates in heaps with least number of concurrent workers, break ties by distance to query
             return active_workers[heap_query], candidate_nodes[heap_query][ROOT][0]
 
+    def has_candidates(query: DHTID):
+        """ Whether this query's heap contains at least one candidate node that can be explored """
+        return candidate_nodes[query] and candidate_nodes[query][ROOT][0] > upper_bound(query)
+
     def upper_bound(query: DHTID):
         """ Any node that is farther from query than upper_bound(query) will not be added to heaps """
         return -nearest_nodes[query][ROOT][0] if len(nearest_nodes[query]) >= beam_size else float('inf')
@@ -157,7 +161,8 @@ async def traverse_dht(
             # select the heap based on priority
             chosen_query: DHTID = min(unfinished_queries, key=heuristic_priority)
 
-            if len(candidate_nodes[chosen_query]) == 0:  # if there are no peers to explore...
+            # if there are no peers to explore...
+            if not has_candidates(chosen_query):
                 other_workers_pending = active_workers.most_common(1)[0][1] > 0
                 if other_workers_pending:  # ... wait for other workers (if any) or add more peers
                     heap_updated_event.clear()
@@ -170,10 +175,7 @@ async def traverse_dht(
 
             # select vertex to be explored
             chosen_distance_to_query, chosen_peer = heapq.heappop(candidate_nodes[chosen_query])
-            if chosen_peer in visited_nodes[chosen_query]:
-                continue
-            if chosen_distance_to_query > upper_bound(chosen_query):
-                finish_search(chosen_query)
+            if chosen_peer in visited_nodes[chosen_query] or chosen_distance_to_query > upper_bound(chosen_query):
                 continue
 
             # find additional queries to pack in the same request
