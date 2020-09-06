@@ -447,7 +447,6 @@ class DHTNode:
 
     def _trigger_cache_refresh(self, result: _IntermediateResult):
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
-        print(f"TRIGGERED, {result.key_id} {result.found_something=}, {result.source_node_id == self.node_id}")
         if result.found_something and result.source_node_id == self.node_id:
             with self.protocol.cache.freeze():  # do not clear outdated cache for now...
                 if self.cache_refresh_before_expiry and result.key_id in self.protocol.cache:
@@ -486,11 +485,9 @@ class DHTNode:
                         keys_to_refresh.add(key_id)
 
                 # step 3: search newer versions of these keys, cache them as a side-effect of self.get_many_by_id
-                print('BEGAN REFRESHING', keys_to_refresh)
                 await self.get_many_by_id(
                     keys_to_refresh, sufficient_expiration_time=nearest_expiration + self.cache_refresh_before_expiry,
                     _refresh_cache=False)  # if we found value locally, we shouldn't trigger another refresh
-                print('REFRESHED', keys_to_refresh)
 
     def _cache_new_result(self, result: _IntermediateResult, nearest_nodes: List[DHTID],
                           node_to_endpoint: Dict[DHTID, Endpoint]):
