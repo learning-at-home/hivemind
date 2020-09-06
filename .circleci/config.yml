@@ -9,7 +9,7 @@ jobs:
     steps:
       - checkout
       - python/load-cache
-      - run: pip uninstall pytest  # temporary override for broken cache
+      - run: pip uninstall -y pytest  # temporary override for broken cache
       - run: pip install codecov pytest tqdm scikit-learn
       - python/install-deps
       - python/save-cache
