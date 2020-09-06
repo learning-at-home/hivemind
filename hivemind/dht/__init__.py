@@ -15,14 +15,12 @@ The code is organized as follows:
 import asyncio
 import ctypes
 import multiprocessing as mp
-import time
 import warnings
 from collections import deque, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable
 
 import uvloop
-import torch
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
