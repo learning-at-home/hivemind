@@ -184,9 +184,9 @@ class DHT(mp.Process):
         if future is not None:
             future.set_result([store_ok[key] for key in data_to_store.keys()])
 
-    def first_k_active(self, uid_prefixes: List[str], k: int, max_prefetch: int = 1, chunk_size: Optional[int] = None,
-                       return_future=False) -> Union[TOrderedDict[str, RemoteExpert],
-                                                     Awaitable[TOrderedDict[str, RemoteExpert]]]:
+    def first_k_active(
+            self, uid_prefixes: List[str], k: int, max_prefetch: int = 1, chunk_size: Optional[int] = None,
+            return_future=False) -> Union[TOrderedDict[str, RemoteExpert], Awaitable[TOrderedDict[str, RemoteExpert]]]:
         """
         Find k prefixes with active experts; may return less if there aren't enough; used for DMoE beam search
 
