@@ -428,22 +428,20 @@ class DHTNode:
             try:
                 # note: this should be first time when we await something, there's no need to "try" the entire function
                 return {key_id: await search_result.future for key_id, search_result in search_results.items()}
-            except asyncio.CancelledError:
-                # if user cancelled this procedure, we can cancel all our remaining futures and terminate search ASAP
+            except asyncio.CancelledError as e:  # terminate remaining tasks ASAP
                 for key_id, search_result in search_results.items():
                     search_result.future.cancel()
+                raise e
 
     def _reuse_finished_search_result(self, finished: _IntermediateResult):
-        expiration_time_threshold = finished.expiration_time or finished.sufficient_expiration_time
+        expiration_time_threshold = max(finished.expiration_time or -float('inf'), finished.sufficient_expiration_time)
         concurrent_requests = self.pending_get_requests[finished.key_id]
         # note: this is a SortedList in the order of descending sufficient_expiration_time
-        while concurrent_requests:
+        while concurrent_requests and expiration_time_threshold >= concurrent_requests[-1].sufficient_expiration_time:
             concurrent_requests[-1].add_candidate(finished.binary_value, finished.expiration_time,
                                                   source_node_id=finished.source_node_id)
-            if expiration_time_threshold >= concurrent_requests[-1].sufficient_expiration_time:
-                concurrent_requests[-1].finish_search()
-            if concurrent_requests[-1].finished:
-                concurrent_requests.pop(-1)
+            concurrent_requests[-1].finish_search()
+            concurrent_requests.pop(-1)
 
     def _trigger_cache_refresh(self, result: _IntermediateResult):
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
