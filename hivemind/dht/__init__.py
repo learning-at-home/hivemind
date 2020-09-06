@@ -207,7 +207,6 @@ class DHT(mp.Process):
 
     async def _first_k_active(
             self, node: DHTNode, uid_prefixes: List[str], k: int, max_prefetch: int, chunk_size: int, future: MPFuture):
-        chunk_size = chunk_size if chunk_size is not None else k
         num_workers_per_chunk = min(chunk_size, self.max_workers or chunk_size)
         total_chunks = (len(uid_prefixes) - 1) // chunk_size + 1
         found: List[Tuple[str, RemoteExpert]] = []
