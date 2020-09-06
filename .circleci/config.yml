@@ -9,7 +9,7 @@ jobs:
     steps:
       - checkout
       - python/load-cache
-      - run: pip install codecov pytest tqdm scikit-learn
+      - run: pip install codecov pytest scikit-learn tqdm
       - python/install-deps
       - python/save-cache
       - run:
