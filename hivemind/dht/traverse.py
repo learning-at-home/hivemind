@@ -176,6 +176,8 @@ async def traverse_dht(
             # select vertex to be explored
             chosen_distance_to_query, chosen_peer = heapq.heappop(candidate_nodes[chosen_query])
             if chosen_peer in visited_nodes[chosen_query] or chosen_distance_to_query > upper_bound(chosen_query):
+                if chosen_distance_to_query > upper_bound(chosen_query) and active_workers[chosen_query] == 0:
+                    finish_search(chosen_query)
                 continue
 
             # find additional queries to pack in the same request
