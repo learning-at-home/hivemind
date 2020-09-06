@@ -134,10 +134,10 @@ async def traverse_dht(
 
     def heuristic_priority(heap_query: DHTID):
         """ Workers prioritize expanding nodes that lead to under-explored queries (by other workers) """
-        if len(candidate_nodes[heap_query]) == 0:
-            return float('inf'), float('inf')
-        else:  # prefer candidates in heaps with least number of concurrent workers, break ties by distance to query
+        if has_candidates(heap_query):
+            # prefer candidates in heaps with least number of concurrent workers, break ties by distance to query
             return active_workers[heap_query], candidate_nodes[heap_query][ROOT][0]
+        return float('inf'), float('inf')  # try not to explore vertices with no candidates
 
     def has_candidates(query: DHTID):
         """ Whether this query's heap contains at least one candidate node that can be explored """
