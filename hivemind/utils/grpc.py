@@ -28,7 +28,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
             requires_grad=tensor.requires_grad)
     else:
         proto = runtime_pb2.Tensor(
-            compression=runtime_pb2.Tensor.NONE,
+            compression=compression_type,
             buffer=array.tobytes(),
             size=array.shape,
             dtype=array.dtype.name,
