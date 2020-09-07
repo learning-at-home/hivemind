@@ -187,15 +187,15 @@ class DHTNode:
                 node_to_endpoint.update(
                     self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id))
 
-        async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
+        async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[Tuple[DHTID], bool]]:
             response = await self.protocol.call_find(node_to_endpoint[peer], queries)
             if not response:
                 return {query: ([], False) for query in queries}
 
-            output: Dict[DHTID, Tuple[List[DHTID], bool]] = {}
+            output: Dict[DHTID, Tuple[Tuple[DHTID], bool]] = {}
             for query, (_, _, peers) in response.items():
                 node_to_endpoint.update(peers)
-                output[query] = list(peers.keys()), False  # False means "do not interrupt search"
+                output[query] = tuple(peers.keys()), False  # False means "do not interrupt search"
             return output
 
         nearest_nodes_per_query, visited_nodes = await traverse_dht(
@@ -397,17 +397,17 @@ class DHTNode:
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
         # V-- this function will be called every time traverse_dht decides to request neighbors from a remote peer
-        async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[List[DHTID], bool]]:
+        async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[Tuple[DHTID], bool]]:
             queries = list(queries)
             response = await self.protocol.call_find(node_to_endpoint[peer], queries)
             if not response:
                 return {query: ([], False) for query in queries}
 
-            output: Dict[DHTID, Tuple[List[DHTID], bool]] = {}
+            output: Dict[DHTID, Tuple[Tuple[DHTID], bool]] = {}
             for key_id, (maybe_value_bytes, maybe_expiration_time, peers) in response.items():
                 node_to_endpoint.update(peers)
                 search_results[key_id].add_candidate(maybe_value_bytes, maybe_expiration_time, source_node_id=peer)
-                output[key_id] = list(peers.keys()), search_results[key_id].finished
+                output[key_id] = tuple(peers.keys()), search_results[key_id].finished
                 # note: we interrupt search either if key is either found or finished otherwise (e.g. cancelled by user)
             return output
 

@@ -11,7 +11,7 @@ ROOT = 0  # alias for heap root
 
 async def simple_traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID], beam_size: int,
                               get_neighbors: Callable[[DHTID], Awaitable[Tuple[Collection[DHTID], bool]]],
-                              visited_nodes: Collection[DHTID] = ()) -> Tuple[List[DHTID], Set[DHTID]]:
+                              visited_nodes: Collection[DHTID] = ()) -> Tuple[Tuple[DHTID], Set[DHTID]]:
     """
     Traverse the DHT graph using get_neighbors function, find :beam_size: nearest nodes according to DHTID.xor_distance.
 
@@ -64,7 +64,7 @@ async def simple_traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID],
 
 async def traverse_dht(
         queries: Collection[DHTID], initial_nodes: List[DHTID], beam_size: int, num_workers: int, queries_per_call: int,
-        get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[List[DHTID], bool]]]],
+        get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[Tuple[DHTID], bool]]]],
         found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None,
         await_all_tasks: bool = True, visited_nodes: Optional[Dict[DHTID, Set[DHTID]]] = (),
 ) -> Tuple[Dict[DHTID, List[DHTID]], Dict[DHTID, Set[DHTID]]]:
