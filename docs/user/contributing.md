@@ -98,7 +98,7 @@ to measure performance impact of changes to hivemind.dht. It spawns a DHT with `
 then chooses one peer that will declare `num_experts` total experts in batches of `expert_batch_size`.
 Then, another peer will consecutively get all peers and check if they are there.
 
-Here's a run with 1024 participants on the same machine that was used benchmark_throughput:
+Here's a run with 1024 participants on the same machine that was used for benchmark_throughput:
 
 `python benchmark_dht.py --num_peers 1024 --num_experts 16384 --expert_batch_size 64 --expiration 99999 --increase_file_limit`
 <details style="margin-top:-24px; margin-bottom: 16px;">
