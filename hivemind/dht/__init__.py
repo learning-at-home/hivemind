@@ -25,7 +25,9 @@ import uvloop
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import get_dht_time
-from hivemind.utils import MPFuture, Endpoint
+from hivemind.utils import MPFuture, Endpoint, get_logger
+
+logger = get_logger(__name__)
 
 
 class DHT(mp.Process):
@@ -155,7 +157,7 @@ class DHT(mp.Process):
         :param uids: a list of expert ids to update
         :param endpoint: endpoint that serves these experts, usually your server endpoint (e.g. "201.111.222.333:1337")
         :param wait: if True, awaits for declaration to finish, otherwise runs in background
-        :param timeout: waits for the procedure to finish, None means wait indeninitely
+        :param timeout: waits for the procedure to finish for up to this long, None means wait indefinitely
         :returns: if wait, returns a list of booleans, (True = store succeeded, False = store rejected)
         """
         assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
