@@ -2,6 +2,8 @@ from dataclasses import dataclass, asdict
 
 import torch
 
+from hivemind.proto.runtime_pb2 import CompressionType
+
 DUMMY_BATCH_SIZE = 3  # used for dummy runs only
 
 
@@ -18,6 +20,7 @@ class TensorDescriptor(DescriptorBase):
     device: torch.device = None
     requires_grad: bool = False
     pin_memory: bool = False
+    compression: CompressionType = CompressionType.NONE
 
     @property
     def shape(self):
