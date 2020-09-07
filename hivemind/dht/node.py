@@ -341,7 +341,7 @@ class DHTNode:
         :returns: for each key: value and its expiration time. If nothing is found, returns (None, None) for that key
         :note: in order to check if get returned a value, please check if (expiration_time is None)
         """
-        keys = list(keys)
+        keys = tuple(keys)
         key_ids = [DHTID.generate(key) for key in keys]
         id_to_original_key = dict(zip(key_ids, keys))
         results_by_id = await self.get_many_by_id(key_ids, sufficient_expiration_time, **kwargs)
