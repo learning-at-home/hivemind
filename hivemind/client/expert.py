@@ -104,4 +104,4 @@ class _RemoteModuleCall(torch.autograd.Function):
             runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[serialize_torch_tensor(tensor) for tensor in payload]))
 
         deserialized_grad_inputs = [deserialize_torch_tensor(tensor) for tensor in grad_inputs.tensors]
-        return (DUMMY, None, None, *deserialized_grad_inputs)
+        return (DUMMY, None, None, None, *deserialized_grad_inputs)
