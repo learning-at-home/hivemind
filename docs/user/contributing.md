@@ -19,7 +19,7 @@ Hivemind is still in the early stage of development, we expect only a handful of
    * If you face any challenges or want feedback, please submit a [draft](https://github.blog/2019-02-14-introducing-draft-pull-requests/) pull request.
 
 
-#### Developer's quickstart
+#### Developer quickstart
 
 First, install hivemind in the development mode, preferably with python 3.8 on linux/mac_OS.
 ```
@@ -98,7 +98,7 @@ to measure performance impact of changes to hivemind.dht. It spawns a DHT with `
 then chooses one peer that will declare `num_experts` total experts in batches of `expert_batch_size`.
 Then, another peer will consecutively get all peers and check if they are there.
 
-Here's a run with 1024 participants on the same machine that was used benchmark_throughput:
+Here's a run with 1024 participants on the same machine that was used for benchmark_throughput:
 
 `python benchmark_dht.py --num_peers 1024 --num_experts 16384 --expert_batch_size 64 --expiration 99999 --increase_file_limit`
 <details style="margin-top:-24px; margin-bottom: 16px;">
