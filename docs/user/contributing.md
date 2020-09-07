@@ -19,7 +19,7 @@ Hivemind is still in the early stage of development, we expect only a handful of
    * If you face any challenges or want feedback, please submit a [draft](https://github.blog/2019-02-14-introducing-draft-pull-requests/) pull request.
 
 
-#### Developer's quickstart
+#### Developer quickstart
 
 First, install hivemind in the development mode, preferably with python 3.8 on linux/mac_OS.
 ```
