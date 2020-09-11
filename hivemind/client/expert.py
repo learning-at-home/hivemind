@@ -86,7 +86,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         # Note: *inputs are flattened input tensors that follow the expert's info['input_schema']
         inputs = tuple(map(torch.Tensor.detach, inputs))  # detach to avoid pickling the computation graph
         ctx.uid, ctx.stub = uid, stub
-        ctx.backward_schema_flatten = list(nested_flatten(info["outputs_schema"]))
+        ctx.backward_schema_flatten = list(nested_flatten((info["forward_schema"], info["outputs_schema"])))
         forward_schema_flatten = list(nested_flatten(info["forward_schema"]))
 
         ctx.save_for_backward(*inputs)
