@@ -54,7 +54,7 @@ class DHTNode:
     node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
     cache_refresh_available: asyncio.Event; cache_refresh_queue: LocalStorage
-    reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_SearchState]]
+    reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_IntermediateResult]]
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     # fmt:on
 
@@ -336,7 +336,7 @@ class DHTNode:
         :param keys: traverse the DHT and find the value for each of these keys (or (None, None) if not key found)
         :param sufficient_expiration_time: if the search finds a value that expires after this time,
             default = time of call, find any value that did not expire by the time of call
-            If min_expiration_time == float('inf'), this method will find a value with _latest_ expiration
+            If min_expiration_time=float('inf'), this method will find a value with _latest_ expiration
         :param kwargs: for full list of parameters, see DHTNode.get_many_by_id
         :returns: for each key: value and its expiration time. If nothing is found, returns (None, None) for that key
         :note: in order to check if get returned a value, please check if (expiration_time is None)
@@ -350,9 +350,8 @@ class DHTNode:
     async def get_many_by_id(
             self, key_ids: Collection[DHTID], sufficient_expiration_time: Optional[DHTExpiration] = None,
             num_workers: Optional[int] = None, beam_size: Optional[int] = None, return_futures: bool = False,
-            _refresh_cache: bool = True, local_only: bool = False
-    ) -> Dict[DHTID, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
-                           Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
+            _refresh_cache=True) -> Dict[DHTID, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
+                                                      Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
         """
         Traverse DHT to find a list of DHTIDs. For each key, return latest (value, expiration) or None if not found.
 
@@ -365,56 +364,35 @@ class DHTNode:
         :param return_futures: if True, immediately return asyncio.Future for every before interacting with the nework.
          The algorithm will populate these futures with (value, expiration) when it finds the corresponding key
          Note: canceling a future will stop search for the corresponding key
-        :param local_only: if True, search only this node's own storage and cache and make NO network requests
         :param _refresh_cache: internal flag, whether or not to self._trigger_cache_refresh
         :returns: for each key: value and its expiration time. If nothing is found, returns (None, None) for that key
         :note: in order to check if get returned a value, please check (expiration_time is None)
         """
         sufficient_expiration_time = sufficient_expiration_time or get_dht_time()
-        search_states: Dict[DHTID, _SearchState] = {key_id: _SearchState(
+        beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
+        num_workers = num_workers if num_workers is not None else self.num_workers
+        search_results: Dict[DHTID, _IntermediateResult] = {key_id: _IntermediateResult(
             key_id, sufficient_expiration_time, serializer=self.serializer) for key_id in key_ids}
 
         if _refresh_cache:
             for key_id in key_ids:
-                search_states[key_id].add_done_callback(self._trigger_cache_refresh)
+                search_results[key_id].add_done_callback(self._trigger_cache_refresh)
 
         # if we have concurrent get request for some of the same keys, subscribe to their results
         if self.reuse_get_requests:
-            for key_id, search_state in search_states.items():
-                self.pending_get_requests[key_id].add(search_state)
-                search_state.add_done_callback(self._reuse_finished_search_result)
+            for key_id, search_result in search_results.items():
+                self.pending_get_requests[key_id].add(search_result)
+                search_result.add_done_callback(self._reuse_finished_search_result)
 
         # stage 1: check for value in this node's local storage and cache
         for key_id in key_ids:
-            search_states[key_id].add_candidate(*self.protocol.storage.get(key_id), source_node_id=self.node_id)
-            search_states[key_id].add_candidate(*self.protocol.cache.get(key_id), source_node_id=self.node_id)
+            search_results[key_id].add_candidate(*self.protocol.storage.get(key_id), source_node_id=self.node_id)
+            search_results[key_id].add_candidate(*self.protocol.cache.get(key_id), source_node_id=self.node_id)
 
         # stage 2: traverse the DHT to get the remaining keys from remote peers
-        unfinished_search_results = {key_id: search for key_id, search in search_states.items() if not search.finished}
-        if not local_only:
-            asyncio.create_task(self._get_from_other_peers(unfinished_search_results, num_workers, beam_size))
-        else:  # if we're not allowed to traverse DHT, finish search right now
-            for key_id, search_state in unfinished_search_results.items():
-                search_state.finish_search()
-
-        if return_futures:
-            return {key_id: search_state.future for key_id, search_state in search_states.items()}
-        else:
-            try:
-                # note: this should be first time when we await something, there's no need to "try" the entire function
-                return {key_id: await search_state.future for key_id, search_state in search_states.items()}
-            except asyncio.CancelledError as e:  # terminate remaining tasks ASAP
-                for key_id, search_state in search_states.items():
-                    search_state.future.cancel()
-                raise e
-
-    async def _get_from_other_peers(self, search_states: Dict[DHTID, _SearchState], num_workers: Optional[int],
-                                    beam_size: Optional[int]) -> Awaitable:
-        """ Internal method: call traverse_dht to get keys from across DHT, add results to search_states """
-        beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
-        num_workers = num_workers if num_workers is not None else self.num_workers
+        unfinished_key_ids = [key_id for key_id in key_ids if not search_results[key_id].finished]
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()  # global routing table for all keys
-        for key_id in search_states.keys():
+        for key_id in unfinished_key_ids:
             node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
@@ -428,40 +406,51 @@ class DHTNode:
             output: Dict[DHTID, Tuple[Tuple[DHTID], bool]] = {}
             for key_id, (maybe_value_bytes, maybe_expiration_time, peers) in response.items():
                 node_to_endpoint.update(peers)
-                search_states[key_id].add_candidate(maybe_value_bytes, maybe_expiration_time, source_node_id=peer)
-                output[key_id] = tuple(peers.keys()), search_states[key_id].finished
+                search_results[key_id].add_candidate(maybe_value_bytes, maybe_expiration_time, source_node_id=peer)
+                output[key_id] = tuple(peers.keys()), search_results[key_id].finished
                 # note: we interrupt search either if key is either found or finished otherwise (e.g. cancelled by user)
             return output
 
         # V-- this function will be called exactly once when traverse_dht finishes search for a given key
         async def found_callback(key_id: DHTID, nearest_nodes: List[DHTID], _visited: Set[DHTID]):
-            search_states[key_id].finish_search()  # finish search whether or we found something
-            self._cache_new_result(search_states[key_id], nearest_nodes, node_to_endpoint)
+            search_results[key_id].finish_search()  # finish search whether or we found something
+            self._cache_new_result(search_results[key_id], nearest_nodes, node_to_endpoint)
 
-        return traverse_dht(
-            queries=list(search_states.keys()), initial_nodes=list(node_to_endpoint),
-            beam_size=beam_size, num_workers=num_workers, queries_per_call=int(len(search_states) ** 0.5),
-            get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in search_states.keys()},
-            found_callback=found_callback, await_all_tasks=False)
+        asyncio.create_task(traverse_dht(
+            queries=list(unfinished_key_ids), initial_nodes=list(node_to_endpoint),
+            beam_size=beam_size, num_workers=num_workers, queries_per_call=int(len(unfinished_key_ids) ** 0.5),
+            get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in unfinished_key_ids},
+            found_callback=found_callback, await_all_tasks=False))
 
-    def _reuse_finished_search_result(self, finished: _SearchState):
+        if return_futures:
+            return {key_id: search_result.future for key_id, search_result in search_results.items()}
+        else:
+            try:
+                # note: this should be first time when we await something, there's no need to "try" the entire function
+                return {key_id: await search_result.future for key_id, search_result in search_results.items()}
+            except asyncio.CancelledError as e:  # terminate remaining tasks ASAP
+                for key_id, search_result in search_results.items():
+                    search_result.future.cancel()
+                raise e
+
+    def _reuse_finished_search_result(self, finished: _IntermediateResult):
         expiration_time_threshold = max(finished.expiration_time or -float('inf'), finished.sufficient_expiration_time)
-        concurrent_requests: SortedList[_SearchState] = self.pending_get_requests[finished.key_id]
-        # note: concurrent_requests is sorted in the order of descending sufficient_expiration_time
+        concurrent_requests: SortedList[_IntermediateResult] = self.pending_get_requests[finished.key_id]
+        # note: concurrent_requests is sorded in the order of descending sufficient_expiration_time
         while concurrent_requests and expiration_time_threshold >= concurrent_requests[-1].sufficient_expiration_time:
             concurrent_requests[-1].add_candidate(finished.binary_value, finished.expiration_time,
                                                   source_node_id=finished.source_node_id)
             concurrent_requests[-1].finish_search()
             concurrent_requests.pop(-1)
 
-    def _trigger_cache_refresh(self, search: _SearchState):
+    def _trigger_cache_refresh(self, result: _IntermediateResult):
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
-        if search.found_something and search.source_node_id == self.node_id:
+        if result.found_something and result.source_node_id == self.node_id:
             with self.protocol.cache.freeze():  # do not clear outdated cache for now...
-                if self.cache_refresh_before_expiry and search.key_id in self.protocol.cache:
+                if self.cache_refresh_before_expiry and result.key_id in self.protocol.cache:
                     previous_earliest_item: Tuple[DHTID, BinaryDHTValue, DHTExpiration] = self.cache_refresh_queue.top()
-                    self.cache_refresh_queue.store(search.key_id, search.binary_value, search.expiration_time)
-                    if previous_earliest_item is None or search.expiration_time < previous_earliest_item[-1]:
+                    self.cache_refresh_queue.store(result.key_id, result.binary_value, result.expiration_time)
+                    if previous_earliest_item is None or result.expiration_time < previous_earliest_item[-1]:
                         self.cache_refresh_available.set()  # if we new element is now earliest, notify the cache queue
 
     async def _refresh_stale_cache_entries(self):
@@ -498,22 +487,22 @@ class DHTNode:
                     keys_to_refresh, sufficient_expiration_time=nearest_expiration + self.cache_refresh_before_expiry,
                     _refresh_cache=False)  # if we found value locally, we shouldn't trigger another refresh
 
-    def _cache_new_result(self, search: _SearchState, nearest_nodes: List[DHTID],
+    def _cache_new_result(self, result: _IntermediateResult, nearest_nodes: List[DHTID],
                           node_to_endpoint: Dict[DHTID, Endpoint]):
         """ after key_id is found, update cache according to caching policy. used internally in get and get_many """
-        if search.found_something:
-            previous_expiration_time = max(self.protocol.storage.get(search.key_id)[1] or -float('inf'),
-                                           self.protocol.cache.get(search.key_id)[1] or -float('inf'))
-            if search.expiration_time > previous_expiration_time:  # if this value has better expiration
+        if result.found_something:
+            previous_expiration_time = max(self.protocol.storage.get(result.key_id)[1] or -float('inf'),
+                                           self.protocol.cache.get(result.key_id)[1] or -float('inf'))
+            if result.expiration_time > previous_expiration_time:  # if this value has better expiration
                 if self.cache_locally:
-                    self.protocol.cache.store(search.key_id, search.binary_value, search.expiration_time)
+                    self.protocol.cache.store(result.key_id, result.binary_value, result.expiration_time)
                 if self.cache_nearest:
                     num_cached_nodes = 0
                     for node_id in nearest_nodes:
-                        if node_id == search.source_node_id:
+                        if node_id == result.source_node_id:
                             continue
                         asyncio.create_task(self.protocol.call_store(
-                            node_to_endpoint[node_id], [search.key_id], [search.binary_value], [search.expiration_time],
+                            node_to_endpoint[node_id], [result.key_id], [result.binary_value], [result.expiration_time],
                             in_cache=True))
                         num_cached_nodes += 1
                         if num_cached_nodes >= self.cache_nearest:
@@ -534,8 +523,8 @@ class DHTNode:
 
 
 @dataclass(init=True, repr=True, frozen=False, order=False)
-class _SearchState:
-    """ A helper class that stores current-best GET results and all search metadata """
+class _IntermediateResult:
+    """ A helper class that stores current-best GET results with metadata """
     key_id: DHTID
     sufficient_expiration_time: DHTExpiration
     binary_value: Optional[BinaryDHTValue] = None
@@ -551,13 +540,13 @@ class _SearchState:
             if self.expiration_time >= self.sufficient_expiration_time:
                 self.finish_search()
 
-    def add_done_callback(self, callback: Callable[[_SearchState], Any]):
-        """ Add callback that will be called when _SearchState is done (found OR cancelled by user) """
+    def add_done_callback(self, callback: Callable[[_IntermediateResult], Any]):
+        """ Add callback that will be called when _IntermediateSearchResult is done (found OR cancelled by user) """
         self.future.add_done_callback(lambda _future: callback(self))
 
     def finish_search(self):
         if self.future.done():
-            return  # either user cancelled our search or someone sent it before us. Nothing more to do here.
+            return  # either user cancelled our result or someone sent it before us. Nothing more to do here.
         deserialized_value = self.serializer.loads(self.binary_value) if self.found_something else None
         self.future.set_result((deserialized_value, self.expiration_time))
 
@@ -570,6 +559,6 @@ class _SearchState:
     def finished(self) -> bool:
         return self.future.done()
 
-    def __lt__(self, other: _SearchState):
-        """ _SearchState instances will be sorted by their target expiration time """
+    def __lt__(self, other: _IntermediateResult):
+        """ _IntermediateResult instances will be sorted by their target expiration time """
         return self.sufficient_expiration_time < other.sufficient_expiration_time
