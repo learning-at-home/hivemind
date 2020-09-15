@@ -443,7 +443,7 @@ class DHTNode:
     def _reuse_finished_search_result(self, finished: _IntermediateResult):
         expiration_time_threshold = max(finished.expiration_time or -float('inf'), finished.sufficient_expiration_time)
         concurrent_requests: SortedList[_IntermediateResult] = self.pending_get_requests[finished.key_id]
-        # note: concurrent_requests is sorded in the order of descending sufficient_expiration_time
+        # note: concurrent_requests is sorted in the order of descending sufficient_expiration_time
         while concurrent_requests and expiration_time_threshold >= concurrent_requests[-1].sufficient_expiration_time:
             concurrent_requests[-1].add_candidate(finished.binary_value, finished.expiration_time,
                                                   source_node_id=finished.source_node_id)
