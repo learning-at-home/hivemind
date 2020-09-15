@@ -350,8 +350,9 @@ class DHTNode:
     async def get_many_by_id(
             self, key_ids: Collection[DHTID], sufficient_expiration_time: Optional[DHTExpiration] = None,
             num_workers: Optional[int] = None, beam_size: Optional[int] = None, return_futures: bool = False,
-            _refresh_cache=True) -> Dict[DHTID, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
-                                                      Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
+            _refresh_cache: bool = True, local_only: bool = False
+    ) -> Dict[DHTID, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
+                           Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
         """
         Traverse DHT to find a list of DHTIDs. For each key, return latest (value, expiration) or None if not found.
 
@@ -364,6 +365,7 @@ class DHTNode:
         :param return_futures: if True, immediately return asyncio.Future for every before interacting with the nework.
          The algorithm will populate these futures with (value, expiration) when it finds the corresponding key
          Note: canceling a future will stop search for the corresponding key
+        :param local_only: if True, search only this node's own storage and cache and make NO network requests
         :param _refresh_cache: internal flag, whether or not to self._trigger_cache_refresh
         :returns: for each key: value and its expiration time. If nothing is found, returns (None, None) for that key
         :note: in order to check if get returned a value, please check (expiration_time is None)
@@ -416,11 +418,16 @@ class DHTNode:
             search_results[key_id].finish_search()  # finish search whether or we found something
             self._cache_new_result(search_results[key_id], nearest_nodes, node_to_endpoint)
 
-        asyncio.create_task(traverse_dht(
-            queries=list(unfinished_key_ids), initial_nodes=list(node_to_endpoint),
-            beam_size=beam_size, num_workers=num_workers, queries_per_call=int(len(unfinished_key_ids) ** 0.5),
-            get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in unfinished_key_ids},
-            found_callback=found_callback, await_all_tasks=False))
+        if not local_only:
+            asyncio.create_task(traverse_dht(
+                queries=list(unfinished_key_ids), initial_nodes=list(node_to_endpoint),
+                beam_size=beam_size, num_workers=num_workers, queries_per_call=int(len(unfinished_key_ids) ** 0.5),
+                get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in unfinished_key_ids},
+                found_callback=found_callback, await_all_tasks=False))
+        else:
+            for key_id in unfinished_key_ids:
+                search_results[key_id].finish_search()
+
 
         if return_futures:
             return {key_id: search_result.future for key_id, search_result in search_results.items()}
