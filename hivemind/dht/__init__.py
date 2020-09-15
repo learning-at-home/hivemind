@@ -12,6 +12,7 @@ The code is organized as follows:
 - [1] Maymounkov P., Mazieres D. (2002) Kademlia: A Peer-to-Peer Information System Based on the XOR Metric.
 - [2] https://github.com/bmuller/kademlia , Brian, if you're reading this: THANK YOU! you're awesome :)
 """
+import time
 import asyncio
 import ctypes
 import multiprocessing as mp
@@ -21,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable
 
 import uvloop
+import torch
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
@@ -239,3 +241,107 @@ class DHT(mp.Process):
 
         # return k active prefixes or as many as we could find
         future.set_result(OrderedDict(found))
+
+    def find_best_experts(self, prefix: str, grid_scores: List[torch.Tensor], k_best: int, *,
+                          time_budget: float = float('inf'), grid_indices: Optional[List[torch.Tensor]] = None,
+                          return_future=False, **kwargs) -> Union[List[RemoteExpert], MPFuture[List[RemoteExpert]]]:
+        """
+        Find and return k active experts with highest scores, use both local cache and DHT
+
+
+        :param prefix: common prefix for all expert uids in grid
+        :param grid_scores: scores predicted for each dimension in the grid,
+        :type grid_scores: a sequence of tensors of shape[batch_size, grid_size[i]]
+        :param grid_indices: optional, indices for each grid dimension. Default = 0, 1, ... len(grid_scores[i]) - 1
+
+        :param k_best: how many best experts should beam search return
+        :param time_budget: how much time beam_search is can spend on queries to other peers (default = unlimited)
+         After time_budget is reached, beam search won't search for more experts and instead fall back on local cache
+         Please note that any queries that fall outside the budget will still be performed in background and cached
+         for subsequent iterations as long as DHTNode.cache_locally is True
+        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
+        :param kwargs: extra keyword parameters passed to self.dht.first_k_active
+        :returns: a list that contains *up to* k_best RemoteExpert instances
+        """
+        if grid_indices is None:
+            grid_indices = [torch.arange(len(dim_scores)) for dim_scores in grid_scores]
+        grid_scores = [dim_scores.cpu().detach() for dim_scores in grid_scores]
+        grid_indices = [dim_indices.cpu() for dim_indices in grid_indices]
+        assert len(grid_indices) == len(grid_scores), "grid_indices (if provided) must be of same length as grid_scores"
+        assert all(dim_scores.ndim == 1 and dim_scores.shape == dim_indices.shape
+                   for dim, dim_scores, dim_indices in enumerate(zip(grid_scores, grid_indices)))
+
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_find_best_experts', [],
+                        dict(prefix=prefix, grid_scores=grid_scores, grid_indices=grid_indices, k_best=k_best,
+                             time_budget=time_budget, future=_future, **kwargs)))
+        return future if return_future else future.result()
+
+    async def _find_best_experts(self, node: DHTNode, prefix: str, grid_scores: List[torch.Tensor],
+                                 grid_indices: List[torch.Tensor], k_best: int, time_budget: float = float('inf'),
+                                 future: Optional[MPFuture] = None, **kwargs) -> List[RemoteExpert]:
+        deadline_time = time.perf_counter() + time_budget
+        beam_experts: List[RemoteExpert] = []
+        beam: List[str] = [prefix]
+        beam_scores = torch.zeros(1)
+
+        for dim_index, dim_scores, dim_indices in enumerate(zip(grid_scores, grid_indices)):
+            # create all possible successors from current beam and sort them by total score
+            expanded_scores = beam_scores[:, None] + dim_scores[None, :]
+            sorted_indices = [(flat_i // len(dim_scores), flat_i % len(dim_scores))
+                              for flat_i in (-expanded_scores).flatten().argsort().numpy()]
+
+            sorted_candidates = [f"{beam[row]}{self.UID_DELIMITER}{dim_indices[col]:d}" for row, col in sorted_indices]
+            candidate_to_sorted_indices = dict(zip(sorted_candidates, sorted_indices))
+
+            # select k best candidates according to scores but only those that are still active
+            best_alive_prefixes: TOrderedDict[str, RemoteExpert] = await self._first_k_active(
+                node, sorted_candidates, k=k_best, time_budget=deadline_time - time.perf_counter(), **kwargs)
+
+            if not best_alive_prefixes:
+                logger.warning(f"Grid is empty: found neither of {sorted_candidates}")
+                break
+
+            beam = list(best_alive_prefixes.keys())
+            beam_scores = expanded_scores[tuple(zip(*map(candidate_to_sorted_indices.get, beam)))]
+            beam_experts = list(best_alive_prefixes.values())
+
+        if future:
+            future.set_result(beam_experts)
+        return beam_experts
+
+    def batch_find_best_experts(self, prefix: str, grid_scores: List[torch.Tensor], k_best: int, *,
+                                time_budget: float = float('inf'), grid_indices: Optional[List[torch.Tensor]],
+                                return_future=False, **kwargs) -> List[RemoteExpert]:
+        """
+        Batch-parallel version of find_best_experts (see find_best_experts docstring for details)
+        The only exception is that grid_scores must now be a list of 2d tensors [batch_size, grid_size[i]]
+        :returns: a list of batch_size lists, each contains *up to* k_best RemoteExpert instances
+        """
+        if grid_indices is None:
+            grid_indices = [torch.arange(len(dim_scores)) for dim_scores in grid_scores]
+        grid_scores = [dim_scores.cpu().detach() for dim_scores in grid_scores]
+        grid_indices = [dim_indices.cpu() for dim_indices in grid_indices]
+        assert len(grid_indices) == len(grid_scores), "grid_indices (if provided) must be of same length as grid_scores"
+        batch_size = len(grid_scores[0])
+        assert all(dim_scores.ndim == 2 and dim_indices.ndim == 1 and len(dim_scores) == len(dim_indices) == batch_size
+                   for dim, dim_scores, dim_indices in enumerate(zip(grid_scores, grid_indices)))
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_batch_find_best_experts', [],
+                        dict(prefix=prefix, grid_scores=grid_scores, grid_indices=grid_indices, k_best=k_best,
+                             time_budget=time_budget, future=_future, **kwargs)))
+        return future if return_future else future.result()
+
+    async def _batch_find_best_experts(self, node: DHTNode, prefix: str, grid_scores: List[torch.Tensor],
+                                       grid_indices: List[torch.Tensor], k_best: int, time_budget: float = float('inf'),
+                                       future: Optional[MPFuture] = None, **kwargs) -> List[List[RemoteExpert]]:
+        results = await asyncio.gather(*[
+            asyncio.create_task(
+                self._find_best_experts(node, prefix, grid_scores=grid_scores_i, grid_indices=grid_indices,
+                                        k_best=k_best, time_budget=time_budget, **kwargs)
+            ) for grid_scores_i in map(list, zip(*grid_scores))
+        ])
+        if future:
+            future.set_result(results)
+        return results
+
