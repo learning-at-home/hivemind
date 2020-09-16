@@ -211,6 +211,11 @@ class DHTNode:
             nearest_nodes_with_endpoints[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
         return nearest_nodes_with_endpoints
 
+    def store_locally(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration, in_cache=False) -> bool:
+        """ (synchronous) Add key->value pair to this node's local storage or cache until expiration_time """
+        chosen_storage = self.protocol.cache if in_cache else self.protocol.storage
+        return chosen_storage.store(DHTID.generate(key), self.serializer.dumps(value), expiration_time)
+
     async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration, **kwargs) -> bool:
         """
         Find num_replicas best nodes to store (key, value) and store it there at least until expiration time.
@@ -313,6 +318,15 @@ class DHTNode:
         except asyncio.CancelledError as e:
             store_task.cancel()
             raise e
+
+    def get_locally(self, key: DHTKey) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
+        """ (synchronous) Search for key in this node's local storage and cache, return latest (None if not found) """
+        key_id = DHTID.generate(source=key)
+        maybe_value_bytes, maybe_expiration = self.protocol.storage.get(key_id)
+        maybe_cached_value, maybe_cache_expiration = self.protocol.cache.get(key_id)
+        if (maybe_cache_expiration or -float('inf')) > (maybe_expiration or -float('inf')):
+            maybe_value_bytes, maybe_expiration = maybe_cached_value, maybe_cache_expiration
+        return maybe_value_bytes, maybe_expiration
 
     async def get(self, key: DHTKey, latest=False, **kwargs) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
@@ -520,19 +534,6 @@ class DHTNode:
                 await self.find_nearest_nodes(refresh_id)
 
             await asyncio.sleep(max(0.0, period - (get_dht_time() - refresh_time)))
-
-    def local_get(self, key: DHTKey) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
-        """ (synchronous) Like DHTNode.get, but only search for key in node's local storage and cache """
-        key_id = DHTID.generate(source=key)
-        maybe_value_bytes, maybe_expiration = self.protocol.storage.get(key_id)
-        maybe_cached_value, maybe_cache_expiration = self.protocol.cache.get(key_id)
-        if (maybe_cache_expiration or -float('inf')) > (maybe_expiration or -float('inf')):
-            maybe_value_bytes, maybe_expiration = maybe_cached_value, maybe_cache_expiration
-        return maybe_value_bytes, maybe_expiration
-
-    def local_cache(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration) -> bool:
-        """ (synchronous) Add key->value pair to this node's local cache until expiration_time """
-        return self.protocol.cache.store(DHTID.generate(key), self.serializer.dumps(value), expiration_time)
 
 
 @dataclass(init=True, repr=True, frozen=False, order=False)

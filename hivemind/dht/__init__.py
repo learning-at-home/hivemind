@@ -291,7 +291,7 @@ class DHT(mp.Process):
                 # check for remaining uids in node's local storage/cache
                 while len(found) < k and unattempted_uids_reversed:
                     uid_prefix = unattempted_uids_reversed.pop()
-                    maybe_expert_data, maybe_expiration_time = node.local_get(uid_prefix)
+                    maybe_expert_data, maybe_expiration_time = node.get_locally(uid_prefix)
                     if maybe_expiration_time is not None:  # found active expert
                         found[uid_prefix] = RemoteExpert(**maybe_expert_data)
 
