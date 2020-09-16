@@ -282,7 +282,7 @@ class LocalStorage:
     def store(self, key: DHTID, value: BinaryDHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
-        :returns: True if new value was stored, False it was rejected (current value is newer)
+        :returns: True if new value was stored, False it was rejected (e.g. if there is a newer value for that key)
         """
         if expiration_time < get_dht_time() and not self.frozen:
             return False
