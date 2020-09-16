@@ -212,7 +212,10 @@ class DHTNode:
         return nearest_nodes_with_endpoints
 
     def store_locally(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration, in_cache=False) -> bool:
-        """ (synchronous) Add key->value pair to this node's local storage or cache until expiration_time """
+        """
+        (synchronous) Add key->value pair to this node's local storage or cache until expiration_time
+        Note: this does NOT guarantee that the key will be available to other peers. Use DHTNode.store for that.
+        """
         chosen_storage = self.protocol.cache if in_cache else self.protocol.storage
         return chosen_storage.store(DHTID.generate(key), self.serializer.dumps(value), expiration_time)
 
