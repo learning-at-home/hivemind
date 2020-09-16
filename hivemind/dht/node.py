@@ -327,17 +327,9 @@ class DHTNode:
         result = await self.get_many([key])
         return result[key]
 
-    def get_local(self, key: DHTKey) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
-        """ Like DHTNode.get, but only search for key in node's local storage and cache """
-        key_id = DHTID.generate(source=key)
-        maybe_value_bytes, maybe_expiration = self.protocol.storage.get(key_id)
-        maybe_cached_value, maybe_cache_expiration = self.protocol.cache.get(key_id)
-        if (maybe_cache_expiration or -float('inf')) > (maybe_expiration or -float('inf')):
-            maybe_value_bytes, maybe_expiration = maybe_cached_value, maybe_cache_expiration
-        return maybe_value_bytes, maybe_expiration
-
     async def get_many(self, keys: Collection[DHTKey], sufficient_expiration_time: Optional[DHTExpiration] = None,
-                       **kwargs) -> Dict[DHTKey, Tuple[Optional[DHTValue], Optional[DHTExpiration]]]:
+                       **kwargs) -> Dict[DHTKey, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
+                                                       Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
         """
         Traverse DHT to find a list of keys. For each key, return latest (value, expiration) or None if not found.
 
@@ -357,8 +349,9 @@ class DHTNode:
 
     async def get_many_by_id(
             self, key_ids: Collection[DHTID], sufficient_expiration_time: Optional[DHTExpiration] = None,
-            num_workers: Optional[int] = None, beam_size: Optional[int] = None, _refresh_cache=True
-    ) -> Dict[DHTID, Tuple[Optional[DHTValue], Optional[DHTExpiration]]]:
+            num_workers: Optional[int] = None, beam_size: Optional[int] = None, return_futures: bool = False,
+            _refresh_cache=True) -> Dict[DHTID, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
+                                                      Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
         """
         Traverse DHT to find a list of DHTIDs. For each key, return latest (value, expiration) or None if not found.
 
@@ -368,6 +361,9 @@ class DHTNode:
             If min_expiration_time=float('inf'), this method will find a value with _latest_ expiration
         :param beam_size: maintains up to this many nearest nodes when crawling dht, default beam_size = bucket_size
         :param num_workers: override for default num_workers, see traverse_dht num_workers param
+        :param return_futures: if True, immediately return asyncio.Future for every before interacting with the nework.
+         The algorithm will populate these futures with (value, expiration) when it finds the corresponding key
+         Note: canceling a future will stop search for the corresponding key
         :param _refresh_cache: internal flag, whether or not to self._trigger_cache_refresh
         :returns: for each key: value and its expiration time. If nothing is found, returns (None, None) for that key
         :note: in order to check if get returned a value, please check (expiration_time is None)
@@ -426,13 +422,16 @@ class DHTNode:
             get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in unfinished_key_ids},
             found_callback=found_callback, await_all_tasks=False))
 
-        try:
-            # note: this should be first time when we await something, there's no need to "try" the entire function
-            return {key_id: await search_result for key_id, search_result in search_results.items()}
-        except asyncio.CancelledError as e:  # terminate remaining tasks ASAP
-            for key_id, search_result in search_results.items():
-                search_result.finish_search()
-            raise e
+        if return_futures:
+            return {key_id: search_result.future for key_id, search_result in search_results.items()}
+        else:
+            try:
+                # note: this should be first time when we await something, there's no need to "try" the entire function
+                return {key_id: await search_result.future for key_id, search_result in search_results.items()}
+            except asyncio.CancelledError as e:  # terminate remaining tasks ASAP
+                for key_id, search_result in search_results.items():
+                    search_result.future.cancel()
+                raise e
 
     def _reuse_finished_search_result(self, finished: _IntermediateResult):
         expiration_time_threshold = max(finished.expiration_time or -float('inf'), finished.sufficient_expiration_time)
@@ -522,6 +521,19 @@ class DHTNode:
 
             await asyncio.sleep(max(0.0, period - (get_dht_time() - refresh_time)))
 
+    def local_get(self, key: DHTKey) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
+        """ (synchronous) Like DHTNode.get, but only search for key in node's local storage and cache """
+        key_id = DHTID.generate(source=key)
+        maybe_value_bytes, maybe_expiration = self.protocol.storage.get(key_id)
+        maybe_cached_value, maybe_cache_expiration = self.protocol.cache.get(key_id)
+        if (maybe_cache_expiration or -float('inf')) > (maybe_expiration or -float('inf')):
+            maybe_value_bytes, maybe_expiration = maybe_cached_value, maybe_cache_expiration
+        return maybe_value_bytes, maybe_expiration
+
+    def local_cache(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration) -> bool:
+        """ (synchronous) Add key->value pair to this node's local cache until expiration_time """
+        return self.protocol.cache.store(DHTID.generate(key), self.serializer.dumps(value), expiration_time)
+
 
 @dataclass(init=True, repr=True, frozen=False, order=False)
 class _IntermediateResult:
@@ -563,6 +575,3 @@ class _IntermediateResult:
     def __lt__(self, other: _IntermediateResult):
         """ _IntermediateResult instances will be sorted by their target expiration time """
         return self.sufficient_expiration_time < other.sufficient_expiration_time
-
-    def __await__(self):
-        return self.future.__await__()
