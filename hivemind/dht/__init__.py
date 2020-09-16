@@ -242,12 +242,12 @@ class DHT(mp.Process):
         future.set_result(beam_experts)
         return beam_experts
 
-    def first_k_active(self, uid_prefixes: List[str], k: int, **kwargs):
+    def first_k_active(self, uid_prefixes: List[str], k: int, return_future=False, **kwargs):
         """ TODO(jheuristic) remove this, also remove future arg from _first_k_active """
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_first_k_active', [], dict(uid_prefixes=uid_prefixes, k=k, future=_future,
                                                     max_pending=k, time_budget=float('inf'), **kwargs)))
-        return future.result()
+        return future if return_future else future.result()
 
     async def _first_k_active(self, node: DHTNode, uid_prefixes: List[str], k: int, max_pending: int,
                               time_budget: float, future=None, **kwargs) -> TOrderedDict[str, RemoteExpert]:
