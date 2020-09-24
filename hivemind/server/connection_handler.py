@@ -63,7 +63,7 @@ class ConnectionHandler(mp.Process):
         future = self.experts[request.uid].forward_pool.submit_task(*inputs)
         forward_schema_flatten = list(nested_flatten(self.experts[request.uid].forward_schema))
         serialized_response = [serialize_torch_tensor(tensor, forward_schema_flatten[i].compression)
-                               for tensor, i in enumerate(await future)]
+                               for i, tensor in enumerate(await future)]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
 
     async def backward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
@@ -71,5 +71,5 @@ class ConnectionHandler(mp.Process):
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
         backward_schema_flatten = list(nested_flatten(self.experts[request.uid].backward_schema))
         serialized_response = [serialize_torch_tensor(tensor, backward_schema_flatten[i].compression)
-                               for tensor, i in enumerate(await future)]
+                               for i, tensor in enumerate(await future)]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
