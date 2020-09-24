@@ -1,10 +1,7 @@
-import time
 import asyncio
 import multiprocessing as mp
 import random
 import heapq
-import uuid
-from itertools import chain
 from typing import Optional
 import numpy as np
 
@@ -13,7 +10,7 @@ from typing import List, Dict
 
 from hivemind import get_dht_time
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, DHTProtocol
-from hivemind.dht.protocol import LocalStorage
+from hivemind.dht.protocol import DHTProtocol
 
 
 def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping: Optional[Endpoint] = None):
@@ -265,111 +262,94 @@ def test_dht_node():
         proc.terminate()
 
 
-def test_hivemind_dht():
-    peers = [hivemind.DHT(start=True)]
-    for i in range(10):
-        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(hivemind.DHT(initial_peers=neighbors_i, start=True))
+def test_dhtnode_caching(T=0.05):
+    test_success = mp.Event()
 
-    you: hivemind.dht.DHT = random.choice(peers)
-    theguyshetoldyounottoworryabout: hivemind.dht.DHT = random.choice(peers)
+    async def _tester():
+        node2 = await hivemind.DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
+        node1 = await hivemind.DHTNode.create(initial_peers=[f'localhost:{node2.port}'],
+                                              cache_refresh_before_expiry=5 * T, listen=False, reuse_get_requests=False)
+        await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
+        await node2.store('k2', [654, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
+        await node2.store('k3', [654, 'value'], expiration_time=hivemind.get_dht_time() + 15 * T)
+        await node1.get_many(['k', 'k2', 'k3', 'k4'])
+        assert len(node1.protocol.cache) == 3
+        assert len(node1.cache_refresh_queue) == 0
 
-    expert_uids = [str(uuid.uuid4()) for _ in range(110)]
-    batch_size = 10
-    for batch_start in range(0, len(expert_uids), batch_size):
-        you.declare_experts(expert_uids[batch_start: batch_start + batch_size], 'localhost', 1234)
+        await node1.get_many(['k', 'k2', 'k3', 'k4'])
+        assert len(node1.cache_refresh_queue) == 3
 
-    found = theguyshetoldyounottoworryabout.get_experts(random.sample(expert_uids, 5) + ['foo', 'bar'])
-    assert all(res is not None for res in found[:-2]), "Could not find some existing experts"
-    assert all(res is None for res in found[-2:]), "Found non-existing experts"
+        await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 12 * T)
+        await asyncio.sleep(4 * T)
+        await node1.get('k')
+        await asyncio.sleep(1 * T)
 
-    that_guys_expert, that_guys_port = str(uuid.uuid4()), random.randint(1000, 9999)
-    theguyshetoldyounottoworryabout.declare_experts([that_guys_expert], f'that_host:{that_guys_port}')
-    you_notfound, you_found = you.get_experts(['foobar', that_guys_expert])
-    assert isinstance(you_found, hivemind.RemoteExpert)
-    assert you_found.endpoint == f'that_host:{that_guys_port}'
+        assert len(node1.protocol.cache) == 3
+        assert len(node1.cache_refresh_queue) == 2
+        await asyncio.sleep(3 * T)
 
-    # test first_k_active
-    assert list(theguyshetoldyounottoworryabout.first_k_active(expert_uids, k=10)) == expert_uids[:10]
+        assert len(node1.cache_refresh_queue) == 1
 
-    some_permuted_experts = random.sample(expert_uids, k=32)
-    assert list(theguyshetoldyounottoworryabout.first_k_active(some_permuted_experts, k=32)) == some_permuted_experts
-    assert list(theguyshetoldyounottoworryabout.first_k_active(some_permuted_experts, k=1)) == some_permuted_experts[:1]
-    fake_and_real_experts = list(chain(*zip(
-        [str(uuid.uuid4()) for _ in some_permuted_experts], some_permuted_experts)))
-    assert list(theguyshetoldyounottoworryabout.first_k_active(fake_and_real_experts, k=9)) == some_permuted_experts[:9]
+        await asyncio.sleep(5 * T)
+        assert len(node1.cache_refresh_queue) == 0
+        await asyncio.sleep(5 * T)
+        assert len(node1.cache_refresh_queue) == 0
 
-    for peer in peers:
-        peer.shutdown()
+        await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 10 * T)
+        await node1.get('k')
+        await asyncio.sleep(1 * T)
+        assert len(node1.cache_refresh_queue) == 0
+        await node1.get('k')
+        await asyncio.sleep(1 * T)
+        assert len(node1.cache_refresh_queue) == 1
 
+        await asyncio.sleep(5 * T)
+        assert len(node1.cache_refresh_queue) == 0
 
-def test_dht_single_node():
-    node = hivemind.DHT(start=True)
-    assert node.first_k_active(['e3', 'e2'], k=3) == {}
-    assert node.get_experts(['e3', 'e2']) == [None, None]
+        await asyncio.gather(node1.shutdown(), node2.shutdown())
+        test_success.set()
 
-    assert all(node.declare_experts(['e1', 'e2', 'e3'], f"{hivemind.LOCALHOST}:1337"))
-    for expert in node.get_experts(['e3', 'e2']):
-        assert expert.endpoint == f"{hivemind.LOCALHOST}:1337"
-    active_found = node.first_k_active(['e0', 'e1', 'e3', 'e5', 'e2'], k=2)
-    assert list(active_found.keys()) == ['e1', 'e3']
-    assert all(expert.uid.startswith(prefix) for prefix, expert in active_found.items())
-
-    assert all(node.declare_experts(['e1', 'e2', 'e3'], f"{hivemind.LOCALHOST}:1337"))
-
-
-def test_first_k_active():
-    node = hivemind.DHT(start=True)
-    assert all(node.declare_experts(['e.1.2.3', 'e.1.2.4', 'e.3.4.5'], endpoint=f"{hivemind.LOCALHOST}:1337"))
-    assert all(node.declare_experts(['e.2.1.1'], endpoint=f"{hivemind.LOCALHOST}:1338"))
-
-    results = node.first_k_active(['e.0', 'e.1', 'e.2', 'e.3'], k=2)
-    assert len(results) == 2 and next(iter(results.keys())) == 'e.1'
-    assert results['e.1'].uid in ('e.1.2.3', 'e.1.2.4') and results['e.1'].endpoint == f"{hivemind.LOCALHOST}:1337"
-    assert results['e.2'].uid == 'e.2.1.1' and results['e.2'].endpoint == f"{hivemind.LOCALHOST}:1338"
-
-    results = node.first_k_active(['e', 'e.1', 'e.1.2', 'e.1.2.3'], k=10)
-    assert len(results) == 4
-    assert 'e' in results
-    for k in ('e.1', 'e.1.2', 'e.1.2.3'):
-        assert results[k].uid in ('e.1.2.3', 'e.1.2.4') and results[k].endpoint == f"{hivemind.LOCALHOST}:1337"
+    proc = mp.Process(target=lambda: asyncio.run(_tester()))
+    proc.start()
+    proc.join()
+    assert test_success.is_set()
 
 
+def test_dhtnode_reuse_get():
+    test_success = mp.Event()
 
-def test_store():
-    d = LocalStorage()
-    d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.5)
-    assert d.get(DHTID.generate("key"))[0] == b"val", "Wrong value"
-    print("Test store passed")
+    async def _tester():
+        peers = []
+        for i in range(10):
+            neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
+            peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
 
+        await asyncio.gather(
+            random.choice(peers).store('k1', 123, hivemind.get_dht_time() + 999),
+            random.choice(peers).store('k2', 567, hivemind.get_dht_time() + 999)
+        )
 
-def test_get_expired():
-    d = LocalStorage()
-    d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.1)
-    time.sleep(0.5)
-    assert d.get(DHTID.generate("key")) == (None, None), "Expired value must be deleted"
-    print("Test get expired passed")
+        you = random.choice(peers)
 
+        futures1 = await you.get_many(['k1', 'k2'], return_futures=True)
+        assert len(you.pending_get_requests[DHTID.generate('k1')]) == 1
+        assert len(you.pending_get_requests[DHTID.generate('k2')]) == 1
 
-def test_get_empty():
-    d = LocalStorage()
-    assert d.get(DHTID.generate(source="key")) == (None, None), "LocalStorage returned non-existent value"
-    print("Test get expired passed")
+        futures2 = await you.get_many(['k2', 'k3'], return_futures=True)
+        assert len(you.pending_get_requests[DHTID.generate('k2')]) == 2
 
+        await asyncio.gather(*futures1.values(), *futures2.values())
+        futures3 = await you.get_many(['k3'], return_futures=True)
+        assert len(you.pending_get_requests[DHTID.generate('k1')]) == 0
+        assert len(you.pending_get_requests[DHTID.generate('k2')]) == 0
+        assert len(you.pending_get_requests[DHTID.generate('k3')]) == 1
 
-def test_change_expiration_time():
-    d = LocalStorage()
-    d.store(DHTID.generate("key"), b"val1", get_dht_time() + 1)
-    assert d.get(DHTID.generate("key"))[0] == b"val1", "Wrong value"
-    d.store(DHTID.generate("key"), b"val2", get_dht_time() + 200)
-    time.sleep(1)
-    assert d.get(DHTID.generate("key"))[0] == b"val2", "Value must be changed, but still kept in table"
-    print("Test change expiration time passed")
+        assert (await futures1['k1'])[0] == 123
+        assert await futures1['k2'] == await futures2['k2'] and (await futures1['k2'])[0] == 567
+        assert await futures2['k3'] == await futures3['k3'] and (await futures3['k3']) == (None, None)
+        test_success.set()
 
-
-def test_maxsize_cache():
-    d = LocalStorage(maxsize=1)
-    d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 1)
-    d.store(DHTID.generate("key2"), b"val2", get_dht_time() + 200)
-    assert d.get(DHTID.generate("key2"))[0] == b"val2", "Value with bigger exp. time must be kept"
-    assert d.get(DHTID.generate("key1"))[0] is None, "Value with less exp time, must be deleted"
+    proc = mp.Process(target=lambda: asyncio.run(_tester()))
+    proc.start()
+    proc.join()
+    assert test_success.is_set()
