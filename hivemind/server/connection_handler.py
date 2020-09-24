@@ -62,7 +62,7 @@ class ConnectionHandler(mp.Process):
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].forward_pool.submit_task(*inputs)
         forward_schema_flatten = list(nested_flatten(self.experts[request.uid].forward_schema))
-        serialized_response = [serialize_torch_tensor(tensor, forward_schema_flatten[i])
+        serialized_response = [serialize_torch_tensor(tensor, forward_schema_flatten[i].compression)
                                for tensor, i in enumerate(await future)]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
 
@@ -70,6 +70,6 @@ class ConnectionHandler(mp.Process):
         inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
         backward_schema_flatten = list(nested_flatten(self.experts[request.uid].backward_schema))
-        serialized_response = [serialize_torch_tensor(tensor, backward_schema_flatten[i])
+        serialized_response = [serialize_torch_tensor(tensor, backward_schema_flatten[i].compression)
                                for tensor, i in enumerate(await future)]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
