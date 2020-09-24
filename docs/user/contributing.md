@@ -1,4 +1,4 @@
-## Contributing
+## Developer zone
 
 #### Collaborating best practices:
 Hivemind is still in the early stage of development, we expect only a handful of collaborators with individual roles.
@@ -19,7 +19,7 @@ Hivemind is still in the early stage of development, we expect only a handful of
    * If you face any challenges or want feedback, please submit a [draft](https://github.blog/2019-02-14-introducing-draft-pull-requests/) pull request.
 
 
-#### Contributor's manual
+#### Developer quickstart
 
 First, install hivemind in the development mode, preferably with python 3.8 on linux/mac_OS.
 ```
@@ -98,23 +98,24 @@ to measure performance impact of changes to hivemind.dht. It spawns a DHT with `
 then chooses one peer that will declare `num_experts` total experts in batches of `expert_batch_size`.
 Then, another peer will consecutively get all peers and check if they are there.
 
-Here's a run with 1024 participants on the same machine that was used benchmark_throughput:
+Here's a run with 1024 participants on the same machine that was used for benchmark_throughput:
 
+`python benchmark_dht.py --num_peers 1024 --num_experts 16384 --expert_batch_size 64 --expiration 99999 --increase_file_limit`
 <details style="margin-top:-24px; margin-bottom: 16px;">
   <summary>Console outputs</summary>
   
   ```sh
 Increasing file limit - soft 1024=>32768, hard 1048576=>32768
 Creating peers...
-100%|███████████████████████████████████████████████████| 1024/1024 [01:51<00:00,  9.22it/s]
+100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1024/1024 [01:45<00:00,  9.74it/s]
 Sampled 16384 unique ids (after deduplication)
 Storing peers to dht in batches of 64...
-100%|█████████████████████████████████████████████████████| 256/256 [13:00<00:00,  3.05s/it]
-Store success rate: 100.0% (48904 / 48904)
-Mean store time: 0.015967, Total: 780.85
-100%|█████████████████████████████████████████████████████| 256/256 [02:01<00:00,  2.11it/s]
-Get success rate: 100.0 (16383 / 16384)
-Mean get time: 0.00740, Total: 121.29011
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 256/256 [12:07<00:00,  2.84s/it]
+Store success rate: 100.0% (48920 / 48920)
+Mean store time: 0.01487, Total: 727.46
+100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 256/256 [01:48<00:00,  2.35it/s]
+Get success rate: 100.0 (16384 / 16384)
+Mean get time: 0.00664, Total: 108.73952
 Node survival rate: 100.000%
   ```
 </details>
@@ -125,6 +126,6 @@ If one wants to account for these factors, one must introduce them manually by c
   
 
 #### Tips & tricks
-* You can find a wealth of pytorch debugging tricks at [their contributing page](https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md).
+* You can find a wealth of pytorch debugging tricks at [their contributing page](https://tinyurl.com/pytorch-contributing).
 * Hivemind is optimized for development in pycharm CE 2019.3 or newer.
   * When working on tests, please mark "tests" as sources root.
