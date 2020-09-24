@@ -10,7 +10,7 @@ import uvloop
 
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
 from hivemind.server.expert_backend import ExpertBackend
-from hivemind.utils import get_logger, serialize_torch_tensor, deserialize_torch_tensor, Endpoint
+from hivemind.utils import get_logger, serialize_torch_tensor, deserialize_torch_tensor, Endpoint, nested_flatten
 
 logger = get_logger(__name__)
 
@@ -61,11 +61,15 @@ class ConnectionHandler(mp.Process):
         # TODO: add loading compression parameter
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].forward_pool.submit_task(*inputs)
-        serialized_response = [serialize_torch_tensor(tensor) for tensor in await future]
+        forward_schema_flatten = list(nested_flatten(self.experts[request.uid].forward_schema))
+        serialized_response = [serialize_torch_tensor(tensor, forward_schema_flatten[i])
+                               for tensor, i in enumerate(await future)]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
 
     async def backward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
         inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
-        serialized_response = [serialize_torch_tensor(tensor) for tensor in await future]
+        backward_schema_flatten = list(nested_flatten(self.experts[request.uid].backward_schema))
+        serialized_response = [serialize_torch_tensor(tensor, backward_schema_flatten[i])
+                               for tensor, i in enumerate(await future)]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
