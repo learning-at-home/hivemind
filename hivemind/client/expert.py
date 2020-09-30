@@ -1,6 +1,6 @@
 import pickle
 from functools import lru_cache
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional, Any, Dict
 
 import grpc
 import grpc.experimental.aio
@@ -82,7 +82,7 @@ class _RemoteModuleCall(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, dummy: torch.Tensor, uid: str, stub: runtime_grpc.ConnectionHandlerStub,
-                info, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+                info: Dict[str, Any], *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         # Note: *inputs are flattened input tensors that follow the expert's info['input_schema']
         inputs = tuple(map(torch.Tensor.detach, inputs))  # detach to avoid pickling the computation graph
         ctx.uid, ctx.stub, ctx.info = uid, stub, info
@@ -101,10 +101,10 @@ class _RemoteModuleCall(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
-        payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
+        inputs_and_grad_outputs = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
         backward_schema = tuple(nested_flatten((ctx.info["forward_schema"], ctx.info["outputs_schema"])))
         serialized_tensors = [serialize_torch_tensor(tensor, proto.compression)
-                              for tensor, proto in zip(payload, backward_schema)]
+                              for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)]
 
         grad_inputs = ctx.stub.backward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
 
