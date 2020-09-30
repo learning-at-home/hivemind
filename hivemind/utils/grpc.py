@@ -42,17 +42,21 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
     return proto
 
 
-def deserialize_torch_tensor(tensor: runtime_pb2.Tensor) -> torch.Tensor:
+def deserialize_torch_tensor(compressed_tensor: runtime_pb2.Tensor) -> torch.Tensor:
     # TODO avoid copying the array (need to silence pytorch warning,x because array is not writable)
-    if tensor.compression == CompressionType.NONE:
-        array = np.frombuffer(tensor.buffer, dtype=np.dtype(tensor.dtype)).copy()
-        array.reshape(tuple(tensor.size))
-    elif tensor.compression == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
-        means, stds = tensor.buffer[-8*tensor.size[-1]:-4*tensor.size[-1]], tensor.buffer[-4*tensor.size[-1]:]
-        means = torch.as_tensor(np.frombuffer(means, dtype=np.float32))
-        stds = torch.as_tensor(np.frombuffer(stds, dtype=np.float32))
-        array = np.frombuffer(tensor.buffer[:-8*tensor.size[-1]], dtype=np.float16).astype(np.float32)
-        array.reshape(tuple(tensor.size))
-        array *= stds
-        array += means
-    return torch.as_tensor(array).requires_grad_(tensor.requires_grad)
+    if compressed_tensor.compression == CompressionType.NONE:
+        array = np.frombuffer(compressed_tensor.buffer, dtype=np.dtype(compressed_tensor.dtype)).copy()
+        array.reshape(tuple(compressed_tensor.size))
+        tensor = torch.as_tensor(array).requires_grad_(compressed_tensor.requires_grad)
+    elif compressed_tensor.compression == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
+        stats_size = compressed_tensor.size
+        stats_size[-1] = 1
+        stats_count = 1
+        for i in stats_size:
+            stats_count *= i
+        means, stds = compressed_tensor.buffer[-8*stats_count:-4*stats_count], compressed_tensor.buffer[-4*stats_count:]
+        means = torch.as_tensor(np.frombuffer(means, dtype=np.float32)).reshape(stats_size)
+        stds = torch.as_tensor(np.frombuffer(stds, dtype=np.float32)).reshape(stats_size)s
+        array = np.frombuffer(compressed_tensor.buffer[:-8 * stats_count], dtype=np.float16)
+        tensor = torch.as_tensor(array).to(torch.float32).view(*compressed_tensor.size).mul_(stds).add_(means)
+    return tensor
