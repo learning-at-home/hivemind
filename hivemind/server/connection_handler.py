@@ -58,18 +58,15 @@ class ConnectionHandler(mp.Process):
         return runtime_pb2.ExpertInfo(serialized_info=pickle.dumps(self.experts[request.uid].get_info()))
 
     async def forward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
-        # TODO: add loading compression parameter
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].forward_pool.submit_task(*inputs)
-        forward_schema_flatten = list(nested_flatten(self.experts[request.uid].forward_schema))
-        serialized_response = [serialize_torch_tensor(tensor, forward_schema_flatten[i].compression)
-                               for i, tensor in enumerate(await future)]
+        serialized_response = [serialize_torch_tensor(tensor, proto.compression) for tensor, proto in zip(
+            await future, nested_flatten(self.experts[request.uid].outputs_schema))]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
 
     async def backward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
         inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
-        backward_schema_flatten = list(nested_flatten(self.experts[request.uid].backward_schema))
-        serialized_response = [serialize_torch_tensor(tensor, backward_schema_flatten[i].compression)
-                               for i, tensor in enumerate(await future)]
+        serialized_response = [serialize_torch_tensor(tensor, proto.compression) for tensor, proto in zip(
+            await future, nested_flatten(self.experts[request.uid].forward_schema))]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
