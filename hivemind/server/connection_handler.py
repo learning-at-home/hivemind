@@ -68,5 +68,5 @@ class ConnectionHandler(mp.Process):
         inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
         serialized_response = [serialize_torch_tensor(tensor, proto.compression) for tensor, proto in zip(
-            await future, nested_flatten(self.experts[request.uid].grad_input_schema))]
+            await future, nested_flatten(self.experts[request.uid].grad_inputs_schema))]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)

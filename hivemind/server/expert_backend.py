@@ -57,7 +57,7 @@ class ExpertBackend(nn.Module):
         self.outputs_schema = outputs_schema  # outputs from forward
 
         self.backward_schema = (self.forward_schema, self.outputs_schema)  # inputs to backward
-        self.grad_input_schema = self.forward_schema  # outputs from backward
+        self.grad_inputs_schema = self.forward_schema  # outputs from backward
         self.forward_pool = TaskPool(self.forward, uid=f'{self.name}_forward', **kwargs)
         self.backward_pool = TaskPool(self.backward, uid=f'{self.name}_backward', **kwargs)
 
