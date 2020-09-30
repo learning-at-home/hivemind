@@ -120,5 +120,13 @@ def test_await_mpfuture():
     asyncio.new_event_loop().run_until_complete(_run())
 
 
-def test_vector_compression():
-    test_X = torch.rand
+def test_vector_compression(size=(128, 128, 64), alpha=1):
+    torch.manual_seed(0)
+    from hivemind.proto.runtime_pb2 import CompressionType
+    from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
+    X = torch.randn(*size)
+    assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
+    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16))-X
+    assert error.square().mean() < alpha
+    return error.square().mean()
+

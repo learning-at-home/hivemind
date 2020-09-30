@@ -28,7 +28,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
             compression=compression_type,
             buffer=data,
             size=tensor.shape,
-            dtype=tensor.dtype.name,
+            dtype='compressed_float16',
             requires_grad=tensor.requires_grad)
     else:
         array = tensor.numpy()
