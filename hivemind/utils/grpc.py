@@ -49,8 +49,8 @@ def deserialize_torch_tensor(tensor: runtime_pb2.Tensor) -> torch.Tensor:
         array.reshape(tuple(tensor.size))
     elif tensor.compression == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
         means, stds = tensor.buffer[-8*tensor.size[-1]:-4*tensor.size[-1]], tensor.buffer[-4*tensor.size[-1]:]
-        means = torch.as_tensor(np.frombuffer(means))
-        stds = torch.as_tensor(np.frombuffer(stds))
+        means = torch.as_tensor(np.frombuffer(means, dtype=np.float32))
+        stds = torch.as_tensor(np.frombuffer(stds, dtype=np.float32))
         array = np.frombuffer(tensor.buffer[:-8*tensor.size[-1]], dtype=np.float16).astype(np.float32)
         array.reshape(tuple(tensor.size))
         array *= stds
