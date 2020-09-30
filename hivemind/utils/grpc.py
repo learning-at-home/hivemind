@@ -9,24 +9,29 @@ from hivemind.proto import runtime_pb2
 from hivemind.proto.runtime_pb2 import CompressionType
 
 
-def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionType.NONE) -> runtime_pb2.Tensor:
-    array = tensor.numpy()
+def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionType.NONE, allow_inplace=False) -> runtime_pb2.Tensor:
     if compression_type == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
-        assert array.dtype == np.float32
+        assert tensor.dtype == torch.float32
+        FP16_MAX = 65_504
 
-        mean = array.mean()
-        std = array.std()
-        normalized = (array - mean) / std
+        tensor = tensor if allow_inplace else tensor.clone()
+        means = torch.mean(tensor, dim=-1, keepdim=True)
+        tensor.sub_(means)
 
-        data = array.astype(np.float16).tobytes() + np.array([mean, std], dtype=np.float32).tobytes()
+        stds = torch.square(tensor).sum(dim=-1, keepdim=True).div_(tensor.shape[-1]).sqrt_()
+        tensor.div_(stds)
+        tensor.clamp_(-FP16_MAX, FP16_MAX).to(torch.float16)
+
+        data = tensor.numpy().tobytes() + means.numpy().tobytes() + stds.numpy().tobytes()
 
         proto = runtime_pb2.Tensor(
             compression=compression_type,
             buffer=data,
-            size=array.shape,
-            dtype=array.dtype.name,
+            size=tensor.shape,
+            dtype=tensor.dtype.name,
             requires_grad=tensor.requires_grad)
     else:
+        array = tensor.numpy()
         proto = runtime_pb2.Tensor(
             compression=compression_type,
             buffer=array.tobytes(),
@@ -42,8 +47,10 @@ def deserialize_torch_tensor(tensor: runtime_pb2.Tensor) -> torch.Tensor:
     if tensor.compression == CompressionType.NONE:
         array = np.frombuffer(tensor.buffer, dtype=np.dtype(tensor.dtype)).copy()
     elif tensor.compression == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
-        mean, std = np.frombuffer(tensor.buffer[-8:], dtype=np.float32)
-        array = np.frombuffer(tensor.buffer[:-8], dtype=np.float16).astype(np.float32).copy()
-        array *= std
-        array += mean
+        means, stds = tensor.buffer[-8*tensor.size[-1]:-4*tensor.size[-1]], tensor.buffer[-4*tensor.size[-1]:]
+        means = torch.as_tensor(np.frombuffer(means))
+        stds = torch.as_tensor(np.frombuffer(stds))
+        array = np.frombuffer(tensor.buffer[:-12*tensor.size[-1]], dtype=np.float16).astype(np.float32)
+        array *= stds
+        array += means
     return torch.as_tensor(array).view(tuple(tensor.size)).requires_grad_(tensor.requires_grad)
