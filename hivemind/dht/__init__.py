@@ -19,7 +19,7 @@ import multiprocessing as mp
 import warnings
 from collections import deque, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable, Dict, Deque
+from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable, Dict, Deque, Set
 
 import uvloop
 import numpy as np
@@ -213,8 +213,7 @@ class DHT(mp.Process):
 
     async def _find_best_experts(
             self, node: DHTNode, prefix: str, grid_scores: List[np.ndarray], k_best: int, time_budget: float,
-            max_prefetch: Optional[int] = None, future: MPFuture = None, **kwargs) -> List[RemoteExpert]:
-        max_prefetch = max_prefetch or k_best
+            prefetch_rate: int = 1, future: MPFuture = None, **kwargs) -> List[RemoteExpert]:
         deadline_time = time.perf_counter() + time_budget
         beam_experts: List[RemoteExpert] = []
         beam: List[str] = [prefix]
@@ -231,7 +230,7 @@ class DHT(mp.Process):
 
             # select k best candidates according to scores but only those that are still active
             best_alive_prefixes: TOrderedDict[str, RemoteExpert] = await self._first_k_active(
-                node, sorted_prefix_uids, k=k_best, max_prefetch=max_prefetch,
+                node, sorted_prefix_uids, k=k_best, prefetch_rate=prefetch_rate,
                 time_budget=deadline_time - time.perf_counter(), **kwargs)
 
             if not best_alive_prefixes:
