@@ -53,9 +53,11 @@ class ExpertBackend(nn.Module):
             dummy_outputs = self.expert(*dummy_args, **dummy_kwargs)
             outputs_schema = nested_map(BatchTensorDescriptor.from_tensor, dummy_outputs)
 
-        self.outputs_schema = outputs_schema
-        self.forward_schema = (self.args_schema, self.kwargs_schema)
-        self.backward_schema = (self.forward_schema, self.outputs_schema)  # original inputs and grad w.r.t. outputs
+        self.forward_schema = (self.args_schema, self.kwargs_schema)  # inputs for forward
+        self.outputs_schema = outputs_schema  # outputs from forward
+
+        self.backward_schema = (self.forward_schema, self.outputs_schema)  # inputs to backward
+        self.grad_input_schema = self.forward_schema  # outputs from backward
         self.forward_pool = TaskPool(self.forward, uid=f'{self.name}_forward', **kwargs)
         self.backward_pool = TaskPool(self.backward, uid=f'{self.name}_backward', **kwargs)
 
