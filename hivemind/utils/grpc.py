@@ -56,7 +56,7 @@ def deserialize_torch_tensor(compressed_tensor: runtime_pb2.Tensor) -> torch.Ten
             stats_count *= i
         means, stds = compressed_tensor.buffer[-8*stats_count:-4*stats_count], compressed_tensor.buffer[-4*stats_count:]
         means = torch.as_tensor(np.frombuffer(means, dtype=np.float32)).reshape(stats_size)
-        stds = torch.as_tensor(np.frombuffer(stds, dtype=np.float32)).reshape(stats_size)s
+        stds = torch.as_tensor(np.frombuffer(stds, dtype=np.float32)).reshape(stats_size)
         array = np.frombuffer(compressed_tensor.buffer[:-8 * stats_count], dtype=np.float16)
         tensor = torch.as_tensor(array).to(torch.float32).view(*compressed_tensor.size).mul_(stds).add_(means)
     return tensor
