@@ -289,6 +289,7 @@ class _RemoteCallMany(torch.autograd.Function):
     async def _forward_one_expert(grid_indices: Tuple[int, ...], expert: RemoteExpert, inputs: Tuple[torch.Tensor]):
         stub: runtime_grpc.ConnectionHandlerStub = _get_expert_stub(expert.endpoint, aio=True)
         try:
+            #TODO add compression here
             outputs = await stub.forward(runtime_pb2.ExpertRequest(
                 uid=expert.uid, tensors=[serialize_torch_tensor(tensor) for tensor in inputs]))
             return grid_indices, tuple(deserialize_torch_tensor(tensor) for tensor in outputs.tensors)
