@@ -43,14 +43,16 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
 
 
 def deserialize_torch_tensor(tensor: runtime_pb2.Tensor) -> torch.Tensor:
-    # TODO avoid copying the array (need to silence pytorch warning, because array is not writable)
+    # TODO avoid copying the array (need to silence pytorch warning,x because array is not writable)
     if tensor.compression == CompressionType.NONE:
         array = np.frombuffer(tensor.buffer, dtype=np.dtype(tensor.dtype)).copy()
+        array.reshape(tuple(tensor.size))
     elif tensor.compression == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
         means, stds = tensor.buffer[-8*tensor.size[-1]:-4*tensor.size[-1]], tensor.buffer[-4*tensor.size[-1]:]
         means = torch.as_tensor(np.frombuffer(means))
         stds = torch.as_tensor(np.frombuffer(stds))
-        array = np.frombuffer(tensor.buffer[:-12*tensor.size[-1]], dtype=np.float16).astype(np.float32)
+        array = np.frombuffer(tensor.buffer[:-8*tensor.size[-1]], dtype=np.float16).astype(np.float32)
+        array.reshape(tuple(tensor.size))
         array *= stds
         array += means
-    return torch.as_tensor(array).view(tuple(tensor.size)).requires_grad_(tensor.requires_grad)
+    return torch.as_tensor(array).requires_grad_(tensor.requires_grad)

@@ -1,4 +1,5 @@
 import asyncio
+import torch
 
 import pytest
 import hivemind
@@ -81,6 +82,7 @@ def test_await_mpfuture():
     async def _run():
         # await result
         f1, f2 = hivemind.MPFuture.make_pair()
+
         async def wait_and_assign():
             assert f2.set_running_or_notify_cancel() is True
             await asyncio.sleep(0.1)
@@ -93,6 +95,7 @@ def test_await_mpfuture():
 
         # await cancel
         f1, f2 = hivemind.MPFuture.make_pair()
+
         async def wait_and_cancel():
             await asyncio.sleep(0.1)
             f1.cancel()
@@ -104,6 +107,7 @@ def test_await_mpfuture():
 
         # await exception
         f1, f2 = hivemind.MPFuture.make_pair()
+
         async def wait_and_raise():
             await asyncio.sleep(0.1)
             f1.set_exception(SystemError())
@@ -114,3 +118,7 @@ def test_await_mpfuture():
                 await future
 
     asyncio.new_event_loop().run_until_complete(_run())
+
+
+def test_vector_compression():
+    test_X = torch.rand
