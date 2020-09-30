@@ -203,7 +203,7 @@ class DHT(mp.Process):
         :param kwargs: extra keyword parameters passed to self.dht.first_k_active
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
-        grid_scores = list(map(np.asanyrray, grid_scores))
+        grid_scores = list(map(np.asanyarray, grid_scores))
         assert all(dim_scores.ndim == 1 for dim_scores in grid_scores)
 
         future, _future = MPFuture.make_pair()
@@ -211,8 +211,10 @@ class DHT(mp.Process):
                                                        time_budget=time_budget, future=_future, **kwargs)))
         return future if return_future else future.result()
 
-    async def _find_best_experts(self, node: DHTNode, prefix: str, grid_scores: List[np.ndarray], k_best: int,
-                                 time_budget: float, future: MPFuture, **kwargs) -> List[RemoteExpert]:
+    async def _find_best_experts(
+            self, node: DHTNode, prefix: str, grid_scores: List[np.ndarray], k_best: int, time_budget: float,
+            max_prefetch: Optional[int] = None, future: MPFuture = None, **kwargs) -> List[RemoteExpert]:
+        max_prefetch = max_prefetch or k_best
         deadline_time = time.perf_counter() + time_budget
         beam_experts: List[RemoteExpert] = []
         beam: List[str] = [prefix]
@@ -229,7 +231,8 @@ class DHT(mp.Process):
 
             # select k best candidates according to scores but only those that are still active
             best_alive_prefixes: TOrderedDict[str, RemoteExpert] = await self._first_k_active(
-                node, sorted_prefix_uids, k=k_best, time_budget=deadline_time - time.perf_counter(), **kwargs)
+                node, sorted_prefix_uids, k=k_best, max_prefetch=max_prefetch,
+                time_budget=deadline_time - time.perf_counter(), **kwargs)
 
             if not best_alive_prefixes:
                 logger.warning(f"Grid is empty: found neither of {sorted_prefix_uids}")
@@ -242,15 +245,14 @@ class DHT(mp.Process):
         future.set_result(beam_experts)
         return beam_experts
 
-    def first_k_active(
-            self, uid_prefixes: List[str], k: int, max_pending: Optional[int] = None, time_budget: float = float('inf'),
-            return_future: bool = False, **kwargs) -> Union[TOrderedDict[str, RemoteExpert], Awaitable]:
+    def first_k_active(self, uid_prefixes: List[str], k: int, prefetch_rate: int = 1, time_budget: float = float('inf'),
+                       return_future: bool = False, **kwargs) -> Union[TOrderedDict[str, RemoteExpert], Awaitable]:
         """
         Find k prefixes with active experts; may return less if there aren't enough; used for DMoE beam search
 
         :param uid_prefixes: a list of (unique) uid prefixes ordered from highest to lowest priority
         :param k: return at most *this many* active prefixes
-        :param max_pending: dispatches up to this many GET requests in parallel at any point in time
+        :param prefetch_rate: dispatch up to this many GET requests in parallel for each uid_prefix
         :param time_budget: if the procedure goes on for this many seconds, stop and return the best found experts
         :param return_future: if True, returns MPFuture that can be awaited to get result, default = return result
         :returns: a ordered dict{uid_prefix -> RemoteExpert} mapping at most :k: prefixes to matching experts
@@ -258,11 +260,12 @@ class DHT(mp.Process):
         """
         logger.warning("DHT.first_k_active is deprecated and will be removed in v0.9")
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_first_k_active', [], dict(uid_prefixes=uid_prefixes, k=k, future=_future,
-                                                    max_pending=max_pending or k, time_budget=time_budget, **kwargs)))
+        self.pipe.send(('_first_k_active', [], dict(
+            uid_prefixes=uid_prefixes, k=k, future=_future, prefetch_rate=prefetch_rate or k,
+            time_budget=time_budget, **kwargs)))
         return future if return_future else future.result()
 
-    async def _first_k_active(self, node: DHTNode, uid_prefixes: List[str], k: int, max_pending: int,
+    async def _first_k_active(self, node: DHTNode, uid_prefixes: List[str], k: int, prefetch_rate: int,
                               time_budget: float, future=None, **kwargs) -> TOrderedDict[str, RemoteExpert]:
         deadline_time = time.perf_counter() + time_budget
         unattempted_uids_reversed = list(reversed(uid_prefixes))
@@ -271,7 +274,7 @@ class DHT(mp.Process):
 
         while len(found) < k and (unattempted_uids_reversed or pending_tasks):
             # dispatch additional tasks
-            while unattempted_uids_reversed and len(pending_tasks) < max_pending:
+            while unattempted_uids_reversed and len(pending_tasks) < (prefetch_rate * (k - len(found))):
                 uid_prefix = unattempted_uids_reversed.pop()
                 pending_tasks.append((uid_prefix, asyncio.create_task(node.get(uid_prefix, **kwargs))))
 
