@@ -85,14 +85,11 @@ class _RemoteModuleCall(torch.autograd.Function):
                 info, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         # Note: *inputs are flattened input tensors that follow the expert's info['input_schema']
         inputs = tuple(map(torch.Tensor.detach, inputs))  # detach to avoid pickling the computation graph
-        ctx.uid, ctx.stub = uid, stub
-        ctx.backward_schema_flatten = list(nested_flatten((info["forward_schema"], info["outputs_schema"])))
-        forward_schema_flatten = list(nested_flatten(info["forward_schema"]))
-
+        ctx.uid, ctx.stub, ctx.info = uid, stub, info
         ctx.save_for_backward(*inputs)
 
-        serialized_tensors = [serialize_torch_tensor(inputs[i],
-                                                     forward_schema_flatten[i].compression) for i in range(len(inputs))]
+        serialized_tensors = [serialize_torch_tensor(inp, proto.compression)
+                              for inp, proto in zip(inputs, nested_flatten(info["forward_schema"]))]
 
         outputs = stub.forward(
             runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
@@ -105,7 +102,10 @@ class _RemoteModuleCall(torch.autograd.Function):
     @once_differentiable
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
         payload = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
-        serialized_tensors = [serialize_torch_tensor(payload[i], ctx.backward_schema_flatten[i].compression) for i in range(len(payload))]
+        backward_schema = tuple(nested_flatten((ctx.info["forward_schema"], ctx.info["outputs_schema"])))
+        serialized_tensors = [serialize_torch_tensor(tensor, proto.compression)
+                              for tensor, proto in zip(payload, backward_schema)]
+
         grad_inputs = ctx.stub.backward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
 
         deserialized_grad_inputs = [deserialize_torch_tensor(tensor) for tensor in grad_inputs.tensors]
