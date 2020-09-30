@@ -46,7 +46,7 @@ def deserialize_torch_tensor(compressed_tensor: runtime_pb2.Tensor) -> torch.Ten
     # TODO avoid copying the array (need to silence pytorch warning,x because array is not writable)
     if compressed_tensor.compression == CompressionType.NONE:
         array = np.frombuffer(compressed_tensor.buffer, dtype=np.dtype(compressed_tensor.dtype)).copy()
-        array.reshape(tuple(compressed_tensor.size))
+        array = array.reshape(tuple(compressed_tensor.size))
         tensor = torch.as_tensor(array).requires_grad_(compressed_tensor.requires_grad)
     elif compressed_tensor.compression == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
         stats_size = compressed_tensor.size
