@@ -20,7 +20,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
 
         stds = torch.square(tensor).sum(dim=-1, keepdim=True).div_(tensor.shape[-1]).sqrt_()
         tensor.div_(stds)
-        tensor.clamp_(-FP16_MAX, FP16_MAX).to(torch.float16)
+        tensor = tensor.clamp_(-FP16_MAX, FP16_MAX).to(torch.float16)
 
         data = tensor.numpy().tobytes() + means.numpy().tobytes() + stds.numpy().tobytes()
 
