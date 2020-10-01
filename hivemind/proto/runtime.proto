@@ -26,10 +26,16 @@ message ExpertResponse {
   repeated Tensor tensors = 2;
 }
 
+enum CompressionType{
+  NONE = 0;
+  MEANSTD_LAST_AXIS_FLOAT16 = 1;
+}
+
 message Tensor {
   bytes buffer = 1;
   repeated uint32 size = 2;
   bool requires_grad = 3;
   string dtype = 4;
+  CompressionType compression = 5;
 }
 
