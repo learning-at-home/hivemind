@@ -9,7 +9,8 @@ from hivemind.proto import runtime_pb2
 from hivemind.proto.runtime_pb2 import CompressionType
 
 
-def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionType.NONE, allow_inplace=False) -> runtime_pb2.Tensor:
+def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionType.NONE, 
+                           allow_inplace=False) -> runtime_pb2.Tensor:
     if compression_type == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
         assert tensor.dtype == torch.float32
         FP16_MAX = 65_504
