@@ -43,7 +43,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
 
 
 def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
-    # TODO avoid copying the array (need to silence pytorch warning,x because array is not writable)
+    # TODO avoid copying the array (need to silence pytorch warning, because array is not writable)
     if serialized_tensor.compression == CompressionType.NONE:
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.dtype(serialized_tensor.dtype)).copy()
         array = array.reshape(tuple(serialized_tensor.size))
