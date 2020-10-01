@@ -120,7 +120,7 @@ def test_await_mpfuture():
     asyncio.new_event_loop().run_until_complete(_run())
 
 
-def test_vector_compression(size=(128, 128, 64), alpha=1):
+def test_vector_compression(size=(128, 128, 64), alpha=5e-08):
     torch.manual_seed(0)
     from hivemind.proto.runtime_pb2 import CompressionType
     from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
