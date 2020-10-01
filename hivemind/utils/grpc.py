@@ -8,12 +8,13 @@ import torch
 from hivemind.proto import runtime_pb2
 from hivemind.proto.runtime_pb2 import CompressionType
 
+FP16_MAX = 65_504
+
 
 def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionType.NONE, 
                            allow_inplace=False) -> runtime_pb2.Tensor:
     if compression_type == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
         assert tensor.dtype == torch.float32
-        FP16_MAX = 65_504
 
         tensor = tensor if allow_inplace else tensor.clone()
         means = torch.mean(tensor, dim=-1, keepdim=True)
@@ -47,7 +48,7 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
     # TODO avoid copying the array (need to silence pytorch warning, because array is not writable)
     if serialized_tensor.compression == CompressionType.NONE:
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.dtype(serialized_tensor.dtype)).copy()
-        tensor = torch.as_tensor(array).view(*compressed_tensor.size).requires_grad_(compressed_tensor.requires_grad)
+        tensor = torch.as_tensor(array).view(*serialized_tensor.size).requires_grad_(serialized_tensor.requires_grad)
     elif serialized_tensor.compression == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
         stats_size = list(serialized_tensor.size)
         stats_size[-1] = 1
@@ -58,5 +59,5 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
         array = np.frombuffer(serialized_tensor.buffer[:-8 * stats_count], dtype=np.float16)
         tensor = torch.as_tensor(array).to(torch.float32).view(*serialized_tensor.size).mul_(stds).add_(means)
     else:
-        raise ValueError(f"Unknown compression type: {compressed_tensor.compression}")
+        raise ValueError(f"Unknown compression type: {serialized_tensor.compression}")
     return tensor
