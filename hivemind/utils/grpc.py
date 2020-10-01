@@ -22,7 +22,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
         tensor.div_(stds)
         tensor = tensor.clamp_(-FP16_MAX, FP16_MAX).to(torch.float16)
 
-        data = tensor.numpy().tobytes() + means.numpy().tobytes() + stds.numpy().tobytes()
+        data = b''.join((tensor.numpy().tobytes(), means.numpy().tobytes(), stds.numpy().tobytes()))
 
         proto = runtime_pb2.Tensor(
             compression=compression_type,
