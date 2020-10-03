@@ -1,7 +1,7 @@
 from __future__ import annotations
 import heapq
 from contextlib import contextmanager
-from typing import Generic, Optional, Dict, Tuple, List, Iterator, TypeVar, Any, Union
+from typing import Generic, Optional, Dict, Tuple, List, Iterator, TypeVar, Union
 from hivemind.dht.routing import DHTID, DHTExpiration, get_dht_time, BinaryDHTValue, Subkey
 
 KeyType = TypeVar('KeyType')
@@ -123,6 +123,3 @@ class DHTLocalStorage(ExpirableStorage[DHTID, Union[BinaryDHTValue, DictionaryDH
             return self.store(key, new_storage, new_storage.latest_expiration_time)
         else:
             return False
-
-    #TODO get as a binary dictionary??
-
