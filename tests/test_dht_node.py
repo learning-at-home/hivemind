@@ -85,6 +85,23 @@ def test_dht_protocol():
             dummy_port = hivemind.find_open_port()
             assert loop.run_until_complete(protocol.call_find(f"{LOCALHOST}:{dummy_port}", [key])) is None
 
+            # store/get a dictionary with sub-keys
+            nested_key, subkey1, subkey2 = DHTID.generate(), 'foo', 'bar'
+            value1, value2 = [random.random(), {'ololo': 'pyshpysh'}], 'abacaba'
+            assert loop.run_until_complete(protocol.call_store(
+                f'{LOCALHOST}:{peer1_port}', keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value1)],
+                expiration_time=[expiration], subkeys=[subkey1])
+            )
+            assert loop.run_until_complete(protocol.call_store(
+                f'{LOCALHOST}:{peer1_port}', keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value2)],
+                expiration_time=[expiration + 5], subkeys=[subkey2])
+            )
+            recv_dict_bytes, recv_expiration, nodes_found = loop.run_until_complete(
+                protocol.call_find(f'{LOCALHOST}:{peer1_port}', [nested_key]))[nested_key]
+            recv_dict = protocol.serializer.loads(recv_dict_bytes)
+            assert len(recv_dict) == 2 and recv_expiration == expiration + 5
+            assert recv_dict[subkey1] == [value1, expiration] and recv_dict[subkey2] == [value2, expiration + 5]
+
             if listen:
                 loop.run_until_complete(protocol.shutdown())
             print("DHTProtocol test finished successfully!")
