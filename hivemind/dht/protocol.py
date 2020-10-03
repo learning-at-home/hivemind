@@ -10,7 +10,7 @@ from warnings import warn
 import grpc
 import grpc.experimental.aio
 
-from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, get_dht_time
+from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, get_dht_time, DHTSubkey
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
 from hivemind.utils import Endpoint, get_logger, replace_port
 
@@ -344,3 +344,34 @@ class LocalStorage:
             yield self
         finally:
             self.frozen = prev_frozen
+
+
+# class DictionaryDHTValue(LocalStorage):
+#     """
+#     A dictionary-like DHT value type. Stores subkey-value-expiration tuples under the same DHT key.
+#     To create new dictionary or add keys to existing dictionary, use DHTNode.store(k, v, exp_time, subkey=<...>).
+#
+#     The expiration time of the entire DictionaryDHTValue is the maximum of its children's expiration times.
+#     When overwriting existing normal value (non-dictionary) with a dictionary or vice versa, the overwrite will succeed
+#     if and only if new value's expiration time is greater than old value's expiration.
+#
+#
+#     """
+#     def __init__(self, *args, **kwargs):
+#         super.__init__(*args, **kwargs)
+#
+#     def store(self, subkey: Any, value: BinaryDHTValue, expiration_time: DHTExpiration) -> bool:
+#         """
+#         Store a (subkey, value) pair at least until expiration_time.
+#         :returns: True if new value was stored, False it was rejected (current value is newer)
+#         """
+#         raise NotImplementedError()
+#
+#     @property
+#     def expiraiton(self):
+#         raise NotImplementedError()
+#
+#     def __bytes__(self):
+#         raise NotImplementedError()
+#
+#
