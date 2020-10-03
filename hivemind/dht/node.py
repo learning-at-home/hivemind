@@ -12,7 +12,7 @@ from warnings import warn
 
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.storage import CacheRefreshQueue
-from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue
+from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
 from hivemind.dht.traverse import traverse_dht
 from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase
 
@@ -211,18 +211,19 @@ class DHTNode:
             nearest_nodes_with_endpoints[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
         return nearest_nodes_with_endpoints
 
-    async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration, **kwargs) -> bool:
+    async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
+                    subkey: Optional[Subkey] = None, **kwargs) -> bool:
         """
         Find num_replicas best nodes to store (key, value) and store it there at least until expiration time.
-
         :note: store is a simplified interface to store_many, all kwargs are be forwarded there
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        store_ok = await self.store_many([key], [value], [expiration_time], **kwargs)
+        store_ok = await self.store_many([key], [value], [expiration_time], subkey=[subkey], **kwargs)
         return store_ok[key]
 
     async def store_many(self, keys: List[DHTKey], values: List[DHTValue],
                          expiration_time: Union[DHTExpiration, List[DHTExpiration]],
+                         subkeys: Optional[Union[Subkey, List[Optional[Subkey]]]] = None,
                          exclude_self: bool = False, await_all_replicas=True, **kwargs) -> Dict[DHTKey, bool]:
         """
         Traverse DHT to find up to best nodes to store multiple (key, value, expiration_time) pairs.
@@ -230,6 +231,7 @@ class DHTNode:
         :param keys: arbitrary serializable keys associated with each value
         :param values: serializable "payload" for each key
         :param expiration_time: either one expiration time for all keys or individual expiration times (see class doc)
+        :param subkeys: an optional list of same shape as keys. If specified, this
         :param kwargs: any additional parameters passed to traverse_dht function (e.g. num workers)
         :param exclude_self: if True, never store value locally even if you are one of the nearest nodes
         :note: if exclude_self is True and self.cache_locally == True, value will still be __cached__ locally
@@ -239,20 +241,29 @@ class DHTNode:
         """
         if isinstance(expiration_time, DHTExpiration):
             expiration_time = [expiration_time] * len(keys)
-        assert len(keys) == len(values) == len(expiration_time), "Number of keys, values and expiration doesn't match."
+        if subkeys is None or isinstance(subkeys, Subkey):
+            subkeys = [subkeys] * len(keys)
 
+        assert len(keys) == len(values) == len(expiration_time) == len(subkeys), \
+            "Either of keys, values, subkeys or expiration timestamps have different sequence lengths."
+
+        #TODO form unique key ids, find best values for unique key id, write all corresponding sub-keys to that key id
+        # you may wanna data structures like {key_id: [(subkey1, value1), (subkey2, value2)], etc
         key_ids = list(map(DHTID.generate, keys))
         id_to_original_key = dict(zip(key_ids, keys))
-        binary_values_by_key_id = {key_id: self.protocol.serializer.dumps(val) for key_id, val in zip(key_ids, values)}
-        expiration_by_key_id = {key_id: expiration_time for key_id, expiration_time in zip(key_ids, expiration_time)}
-        unfinished_key_ids = set(key_ids)  # we use this set to ensure that each store request is finished
+        binary_values_by_key, expiration_by_key = {}, {}
+        for key_id, subkey, val, expiration in zip(key_ids, subkeys, values, expiration_time):
+            binary_values_by_key[key_id, subkey] = self.protocol.serializer.dumps(val)
+            expiration_by_key[key_id, subkey] = expiration
 
+        unfinished_keys = set(zip(key_ids, subkeys))  # we use this set to ensure that each store request is finished
         store_ok = {key: False for key in keys}  # outputs, updated during search
         store_finished_events = {key: asyncio.Event() for key in keys}
 
         if self.cache_locally:
-            for key_id in key_ids:
-                self.protocol.cache.store(key_id, binary_values_by_key_id[key_id], expiration_by_key_id[key_id])
+            for key_id, subkey in zip(key_ids, subkeys):
+                self.protocol.cache.store(key_id, binary_values_by_key[key_id, subkey],
+                                          expiration_by_key[key_id, subkey], subkey=subkey)
 
         # pre-populate node_to_endpoint
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()

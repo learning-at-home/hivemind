@@ -104,6 +104,13 @@ class DictionaryDHTValue(ExpirableStorage[Subkey, BinaryDHTValue]):
 
 class DHTLocalStorage(ExpirableStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTValue]]):
     """ A dictionary-like storage that can store binary values and/or nested dictionaries until expiration """
+    def store(self, key: DHTID, value: Union[BinaryDHTValue, DictionaryDHTValue], expiration_time: DHTExpiration,
+              subkey: Optional[Subkey] = None) -> bool:
+        if subkey is not None:
+            return self.store_subkey(key, subkey, value, expiration_time, expiration_time)
+        else:
+            return super().store(key, value, expiration_time)
+
     def store_subkey(self, key: DHTID, subkey: Subkey, value: BinaryDHTValue, expiration_time: DHTExpiration) -> bool:
         """
         Save a (sub-key, value) into a dictionary associated with a given key.

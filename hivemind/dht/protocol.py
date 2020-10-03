@@ -14,7 +14,7 @@ from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
 from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer
 
 logger = get_logger(__name__)
-_NOT_FOUND_VALUE, _NOT_FOUND_EXPIRATION, _NOT_A_DICTIONARY_TYPE = b'', -float('inf'), ''  # constants for missing values
+_NOT_FOUND_VALUE, _NOT_FOUND_EXPIRATION, _NOT_A_DICTIONARY_KEY = b'', -float('inf'), ''  # constants for missing values
 
 
 class DHTProtocol(dht_grpc.DHTServicer):
@@ -113,7 +113,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
     async def call_store(self, peer: Endpoint, keys: Sequence[DHTID], values: Sequence[BinaryDHTValue],
                          expiration_time: Union[DHTExpiration, Sequence[DHTExpiration]],
-                         subkeys: Optional[Union[Subkey, Sequence[Optional[Subkey]]]] = _NOT_A_DICTIONARY_TYPE,
+                         subkeys: Optional[Union[Subkey, Sequence[Optional[Subkey]]]] = None,
                          in_cache: Optional[Union[bool, Sequence[bool]]] = None) -> List[bool]:
         """
         Ask a recipient to store several (key, value : expiration_time) items or update their older value
@@ -133,13 +133,14 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
         :return: list of [True / False] True = stored, False = failed (found newer value or no response)
         """
-        if isinstance(subkeys, Subkey):
-            subkeys = [subkeys] * len(keys)
         if isinstance(expiration_time, DHTExpiration):
             expiration_time = [expiration_time] * len(keys)
+        if subkeys is None or isinstance(subkeys, Subkey):
+            subkeys = [subkeys] * len(keys)
 
         in_cache = in_cache if in_cache is not None else [False] * len(keys)  # default value (None)
         in_cache = [in_cache] * len(keys) if isinstance(in_cache, bool) else in_cache  # single bool
+        subkeys = [subkey if subkey is not None else _NOT_A_DICTIONARY_KEY for subkey in subkeys]
         keys, subkeys, values, expiration_time, in_cache = map(list, [keys, subkeys, values, expiration_time, in_cache])
         assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"
         store_request = dht_pb2.StoreRequest(keys=list(map(DHTID.to_bytes, keys)), subkeys=subkeys, values=values,
@@ -166,7 +167,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         for key_id, subkey, value_bytes, expiration_time, in_cache in zip(
                 keys, request.subkeys, request.values, request.expiration_time, request.in_cache):
             storage = self.cache if in_cache else self.storage
-            if subkey == _NOT_A_DICTIONARY_TYPE:  # store normal value
+            if subkey == _NOT_A_DICTIONARY_KEY:  # store normal value
                 response.store_ok.append(storage.store(key_id, value_bytes, expiration_time))
             else:  # add an entry into a dictionary-like value
                 response.store_ok.append(storage.store_subkey(key_id, subkey, value_bytes, expiration_time))

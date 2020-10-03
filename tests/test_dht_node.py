@@ -269,6 +269,15 @@ def test_dht_node():
         for key, value in zip(keys, values):
             assert key in response and response[key][0] == value
 
+        # test 8: store dictionaries as values (with sub-keys)
+        upper_key, subkey1, subkey2, subkey3 = 'ololo', 'k1', 'k2', 'k3'
+        now = get_dht_time()
+        assert loop.run_until_complete(me.store(upper_key, subkey=subkey1, value=123, expiration_time=now + 1))
+        assert loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=456, expiration_time=now + 2))
+
+        print(other_node.get(upper_key))
+
+
         test_success.set()
 
     tester = mp.Process(target=_tester, daemon=True)
