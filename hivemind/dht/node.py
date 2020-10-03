@@ -243,7 +243,7 @@ class DHTNode:
 
         key_ids = list(map(DHTID.generate, keys))
         id_to_original_key = dict(zip(key_ids, keys))
-        binary_values_by_key_id = {key_id: self.serializer.dumps(value) for key_id, value in zip(key_ids, values)}
+        binary_values_by_key_id = {key_id: self.protocol.serializer.dumps(val) for key_id, val in zip(key_ids, values)}
         expiration_by_key_id = {key_id: expiration_time for key_id, expiration_time in zip(key_ids, expiration_time)}
         unfinished_key_ids = set(key_ids)  # we use this set to ensure that each store request is finished
 
@@ -372,7 +372,7 @@ class DHTNode:
         beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
         num_workers = num_workers if num_workers is not None else self.num_workers
         search_results: Dict[DHTID, _IntermediateResult] = {key_id: _IntermediateResult(
-            key_id, sufficient_expiration_time, serializer=self.serializer) for key_id in key_ids}
+            key_id, sufficient_expiration_time, serializer=self.protocol.serializer) for key_id in key_ids}
 
         if _refresh_cache:
             for key_id in key_ids:
