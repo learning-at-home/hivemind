@@ -1,18 +1,18 @@
 import time
 
 from hivemind import DHTID, get_dht_time
-from hivemind.dht.protocol import LocalStorage
+from hivemind.dht.protocol import ExpirableStorage
 
 
 def test_store():
-    d = LocalStorage()
+    d = ExpirableStorage()
     d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.5)
     assert d.get(DHTID.generate("key"))[0] == b"val", "Wrong value"
     print("Test store passed")
 
 
 def test_get_expired():
-    d = LocalStorage()
+    d = ExpirableStorage()
     d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.1)
     time.sleep(0.5)
     assert d.get(DHTID.generate("key")) == (None, None), "Expired value must be deleted"
@@ -20,13 +20,13 @@ def test_get_expired():
 
 
 def test_get_empty():
-    d = LocalStorage()
-    assert d.get(DHTID.generate(source="key")) == (None, None), "LocalStorage returned non-existent value"
+    d = ExpirableStorage()
+    assert d.get(DHTID.generate(source="key")) == (None, None), "ExpirableStorage returned non-existent value"
     print("Test get expired passed")
 
 
 def test_change_expiration_time():
-    d = LocalStorage()
+    d = ExpirableStorage()
     d.store(DHTID.generate("key"), b"val1", get_dht_time() + 1)
     assert d.get(DHTID.generate("key"))[0] == b"val1", "Wrong value"
     d.store(DHTID.generate("key"), b"val2", get_dht_time() + 200)
@@ -36,7 +36,7 @@ def test_change_expiration_time():
 
 
 def test_maxsize_cache():
-    d = LocalStorage(maxsize=1)
+    d = ExpirableStorage(maxsize=1)
     d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 1)
     d.store(DHTID.generate("key2"), b"val2", get_dht_time() + 200)
     assert d.get(DHTID.generate("key2"))[0] == b"val2", "Value with bigger exp. time must be kept"
@@ -44,7 +44,7 @@ def test_maxsize_cache():
 
 
 def test_localstorage_top():
-    d = LocalStorage(maxsize=3)
+    d = ExpirableStorage(maxsize=3)
     d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 1)
     d.store(DHTID.generate("key2"), b"val2", get_dht_time() + 2)
     d.store(DHTID.generate("key3"), b"val3", get_dht_time() + 4)
@@ -61,8 +61,27 @@ def test_localstorage_top():
     assert d.top()[:2] == (DHTID.generate("key3"), b"val3")
 
 
+def test_localstorage_nested():
+    time = get_dht_time()
+    d1 = ExpirableStorage()
+    d2 = ExpirableStorage()
+    d2.store(DHTID.generate('subkey1'), b'value1', time + 2)
+    d2.store(DHTID.generate('subkey2'), b'value2', time + 3)
+    d2.store(DHTID.generate('subkey3'), b'value3', time + 1)
+
+    assert d2.latest_expiration_time == time + 3
+    assert d1.store(DHTID.generate('foo'), d2, d2.latest_expiration_time)
+    assert d1.store(DHTID.generate('bar'), b'456', time + 2)
+    assert d1.get(DHTID.generate('foo')) == (d2, d2.latest_expiration_time)
+    assert d1.get(DHTID.generate('foo'))[0].get(DHTID.generate('subkey1')) == (b'value1', time + 2)
+    assert d1.store(DHTID.generate('foo'), b'nothing', time + 1) is False  # previous value has better expiration
+    assert d1.get(DHTID.generate('foo'))[0].get(DHTID.generate('subkey2')) == (b'value2', time + 3)
+    assert d1.store(DHTID.generate('foo'), b'nothing', time + 4) is True   # new value has better expiraiton
+    assert d1.get(DHTID.generate('foo')) == (b'nothing', time + 4)         # value should be replaced
+
+
 def test_localstorage_freeze():
-    d = LocalStorage(maxsize=2)
+    d = ExpirableStorage(maxsize=2)
 
     with d.freeze():
         d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 0.01)

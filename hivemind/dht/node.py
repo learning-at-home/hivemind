@@ -10,7 +10,7 @@ from sortedcontainers import SortedList
 from functools import partial
 from warnings import warn
 
-from hivemind.dht.protocol import DHTProtocol, LocalStorage
+from hivemind.dht.protocol import DHTProtocol, ExpirableStorage
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue
 from hivemind.dht.traverse import traverse_dht
 from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase
@@ -53,7 +53,7 @@ class DHTNode:
     # fmt:off
     node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
-    cache_refresh_available: asyncio.Event; cache_refresh_queue: LocalStorage
+    cache_refresh_available: asyncio.Event; cache_refresh_queue: ExpirableStorage
     reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_IntermediateResult]]
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     # fmt:on
@@ -112,7 +112,7 @@ class DHTNode:
         self.refresh_timeout = refresh_timeout
         self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
         self.cache_refresh_before_expiry = cache_refresh_before_expiry
-        self.cache_refresh_queue = LocalStorage()
+        self.cache_refresh_queue = ExpirableStorage()
         self.cache_refresh_available = asyncio.Event()
         if cache_refresh_before_expiry:
             asyncio.create_task(self._refresh_stale_cache_entries())
