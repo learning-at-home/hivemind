@@ -108,7 +108,7 @@ class DHTLocalStorage(ExpirableStorage[DHTID, Union[BinaryDHTValue, DictionaryDH
         """
         Save a (sub-key, value) into a dictionary associated with a given key.
          1) if self[key] is empty, create a new dictionary and add sub-key there
-         2) if self[key] is a dictionary (ExpirableStorage), store {sub-key: value, expiration} to that storage
+         2) if self[key] is a dictionary (DictionaryDHTValue), store {sub-key: value, expiration} to that storage
          3) if self[key] is a normal value with smaller expiration time, overwrite it with a dictionary and add sub-key
         :returns: True if new entry was stored, False it was rejected (current value is newer)
         """
