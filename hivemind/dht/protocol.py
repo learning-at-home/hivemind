@@ -112,7 +112,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
     async def call_store(self, peer: Endpoint, keys: Sequence[DHTID], values: Sequence[BinaryDHTValue],
                          expiration_time: Union[DHTExpiration, Sequence[DHTExpiration]],
-                         in_cache: Optional[Union[bool, Sequence[bool]]] = None) -> Sequence[bool]:
+                         in_cache: Optional[Union[bool, Sequence[bool]]] = None) -> List[bool]:
         """
         Ask a recipient to store several (key, value : expiration_time) items or update their older value
 
