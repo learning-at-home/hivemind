@@ -123,3 +123,7 @@ class DHTLocalStorage(ExpirableStorage[DHTID, Union[BinaryDHTValue, DictionaryDH
             return self.store(key, new_storage, new_storage.latest_expiration_time)
         else:
             return False
+
+
+class CacheRefreshQueue(ExpirableStorage[DHTID, DHTExpiration]):
+    """ a queue of keys scheduled for refresh in future, used in DHTNode """

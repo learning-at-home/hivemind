@@ -10,7 +10,8 @@ from sortedcontainers import SortedList
 from functools import partial
 from warnings import warn
 
-from hivemind.dht.protocol import DHTProtocol, ExpirableStorage
+from hivemind.dht.protocol import DHTProtocol
+from hivemind.dht.storage import CacheRefreshQueue
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue
 from hivemind.dht.traverse import traverse_dht
 from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase
@@ -53,9 +54,8 @@ class DHTNode:
     # fmt:off
     node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
-    cache_refresh_available: asyncio.Event; cache_refresh_queue: ExpirableStorage
+    cache_refresh_available: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
     reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_IntermediateResult]]
-    serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     # fmt:on
 
     @classmethod
@@ -112,7 +112,7 @@ class DHTNode:
         self.refresh_timeout = refresh_timeout
         self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
         self.cache_refresh_before_expiry = cache_refresh_before_expiry
-        self.cache_refresh_queue = ExpirableStorage()
+        self.cache_refresh_queue = CacheRefreshQueue()
         self.cache_refresh_available = asyncio.Event()
         if cache_refresh_before_expiry:
             asyncio.create_task(self._refresh_stale_cache_entries())
@@ -448,7 +448,7 @@ class DHTNode:
         if result.found_something and result.source_node_id == self.node_id:
             with self.protocol.cache.freeze():  # do not clear outdated cache for now...
                 if self.cache_refresh_before_expiry and result.key_id in self.protocol.cache:
-                    previous_earliest_item: Tuple[DHTID, BinaryDHTValue, DHTExpiration] = self.cache_refresh_queue.top()
+                    previous_earliest_item: Tuple[DHTID, Any, DHTExpiration] = self.cache_refresh_queue.top()
                     self.cache_refresh_queue.store(result.key_id, result.binary_value, result.expiration_time)
                     if previous_earliest_item is None or result.expiration_time < previous_earliest_item[-1]:
                         self.cache_refresh_available.set()  # if we new element is now earliest, notify the cache queue
