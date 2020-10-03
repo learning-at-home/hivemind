@@ -125,7 +125,6 @@ class DHTProtocol(dht_grpc.DHTServicer):
          until expiration time (best-effort), whereas cached storage can be evicted early due to limited cache size
 
         :return: list of [True / False] True = stored, False = failed (found newer value or no response)
-         if peer did not respond (e.g. due to timeout or congestion), returns None
         """
         if isinstance(expiration_time, DHTExpiration):
             expiration_time = [expiration_time] * len(keys)
