@@ -328,11 +328,6 @@ class LocalStorage:
         self._remove_outdated()
         return len(self.data)
 
-    def __delitem__(self, key: DHTID):
-        if key in self.key_to_heap:
-            del self.data[key], self.key_to_heap[key]
-        # note: key may still be in self.expiration_heap, but it will not be used and eventually ._remove_outdated()
-
     def __bool__(self):
         return bool(self.data)
 
