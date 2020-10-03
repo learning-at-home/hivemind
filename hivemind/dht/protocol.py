@@ -150,10 +150,10 @@ class DHTProtocol(dht_grpc.DHTServicer):
         """ Some node wants us to store this (key, value) pair """
         if request.peer:  # if requested, add peer to the routing table
             asyncio.create_task(self.rpc_ping(request.peer, context))
-        assert len(request.keys) == len(request.values) == len(request.latest_expiration_time) == len(request.in_cache)
+        assert len(request.keys) == len(request.values) == len(request.expiration_time) == len(request.in_cache)
         response = dht_pb2.StoreResponse(store_ok=[], peer=self.node_info)
         for key_bytes, value_bytes, expiration_time, in_cache in zip(
-                request.keys, request.values, request.latest_expiration_time, request.in_cache):
+                request.keys, request.values, request.expiration_time, request.in_cache):
             local_memory = self.cache if in_cache else self.storage
             response.store_ok.append(local_memory.store(DHTID.from_bytes(key_bytes), value_bytes, expiration_time))
         return response
@@ -178,12 +178,12 @@ class DHTProtocol(dht_grpc.DHTServicer):
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
-            assert len(response.values) == len(response.latest_expiration_time) == len(response.nearest) == len(keys), \
+            assert len(response.values) == len(response.expiration_time) == len(response.nearest) == len(keys), \
                 "DHTProtocol: response is not aligned with keys and/or expiration times"
 
             output = {}  # unpack data without special NOT_FOUND_* values
             for key, value, expiration_time, nearest in zip(
-                    keys, response.values, response.latest_expiration_time, response.nearest):
+                    keys, response.values, response.expiration_time, response.nearest):
                 value = value if value != _NOT_FOUND_VALUE else None
                 expiration_time = expiration_time if expiration_time != _NOT_FOUND_EXPIRATION else None
                 nearest = dict(zip(map(DHTID.from_bytes, nearest.node_ids), nearest.endpoints))
@@ -216,7 +216,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 peer_ids, endpoints = [], []
 
             response.values.append(maybe_value if maybe_value is not None else _NOT_FOUND_VALUE)
-            response.latest_expiration_time.append(maybe_expiration_time if maybe_expiration_time else _NOT_FOUND_EXPIRATION)
+            response.expiration_time.append(maybe_expiration_time if maybe_expiration_time else _NOT_FOUND_EXPIRATION)
             response.nearest.append(dht_pb2.Peers(node_ids=list(map(DHTID.to_bytes, peer_ids)), endpoints=endpoints))
         return response
 
