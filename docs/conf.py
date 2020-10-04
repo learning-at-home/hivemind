@@ -209,14 +209,11 @@ todo_include_todos = True
 
 def setup(app):
     app.add_stylesheet("fix_rtd.css")
-    github_doc_root = 'https://github.com/rtfd/recommonmark/tree/master/doc/'  # TODO
     app.add_config_value('recommonmark_config', {
-        'url_resolver': lambda url: github_doc_root + url,
         'auto_toc_tree_section': 'Contents',
         'enable_math': True,
         'enable_inline_math': True,
         'enable_eval_rst': True,
-        # 'enable_auto_doc_ref': True,
     }, True)
     app.add_transform(AutoStructify)
     app.add_source_suffix('.md', 'markdown')
@@ -247,4 +244,5 @@ def linkcode_resolve(domain, info):
     except Exception:
         filename = info['module'].replace('.', '/') + '.py'
 
-    return "https://github.com/learning-at-home/hivemind/blob/%s/%s" % (branch, filename)
+    relative_filename = filename[filename.rindex('hivemind'):]
+    return "https://github.com/learning-at-home/hivemind/blob/%s/%s" % (branch, relative_filename)
