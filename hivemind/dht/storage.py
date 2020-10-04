@@ -107,7 +107,7 @@ class DHTLocalStorage(ExpirableStorage[DHTID, Union[BinaryDHTValue, DictionaryDH
     def store(self, key: DHTID, value: Union[BinaryDHTValue, DictionaryDHTValue], expiration_time: DHTExpiration,
               subkey: Optional[Subkey] = None) -> bool:
         if subkey is not None:
-            return self.store_subkey(key, subkey, value, expiration_time, expiration_time)
+            return self.store_subkey(key, subkey, value, expiration_time)
         else:
             return super().store(key, value, expiration_time)
 
