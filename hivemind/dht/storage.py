@@ -8,7 +8,7 @@ KeyType = TypeVar('KeyType')
 ValueType = TypeVar('ValueType')
 
 
-class ExpirableStorage(Generic[KeyType, ValueType]):
+class TimedStorage(Generic[KeyType, ValueType]):
     """ A dictionary that maintains up to :maxsize: key-value-expiration tuples until their expiration_time """
 
     def __init__(self, maxsize: Optional[int] = None):
@@ -45,7 +45,7 @@ class ExpirableStorage(Generic[KeyType, ValueType]):
         return True
 
     def get(self, key: KeyType) -> (Optional[ValueType], Optional[DHTExpiration]):
-        """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
+        """ Get a value corresponding to a key if that (key, value) pair was previously stored under this key. """
         self._remove_outdated()
         if key in self.data:
             return self.data[key]
@@ -93,7 +93,7 @@ class ExpirableStorage(Generic[KeyType, ValueType]):
             self.frozen = prev_frozen
 
 
-class DictionaryDHTValue(ExpirableStorage[Subkey, BinaryDHTValue]):
+class DictionaryDHTValue(TimedStorage[Subkey, BinaryDHTValue]):
     """ a dictionary-like DHT value type that maps sub-keys to values with individual expirations """
     latest_expiration_time = float('-inf')
 
@@ -102,10 +102,15 @@ class DictionaryDHTValue(ExpirableStorage[Subkey, BinaryDHTValue]):
         return super().store(key, value, expiration_time)
 
 
-class DHTLocalStorage(ExpirableStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTValue]]):
+class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTValue]]):
     """ A dictionary-like storage that can store binary values and/or nested dictionaries until expiration """
     def store(self, key: DHTID, value: Union[BinaryDHTValue, DictionaryDHTValue], expiration_time: DHTExpiration,
               subkey: Optional[Subkey] = None) -> bool:
+        """
+        Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
+        If subkey is not None, adds a subkey-value pair to a dictionary associated with :key: (see store_subkey below)
+        :returns: True if new value was stored, False it was rejected (current value is newer)
+        """
         if subkey is not None:
             return self.store_subkey(key, subkey, value, expiration_time)
         else:
@@ -132,5 +137,5 @@ class DHTLocalStorage(ExpirableStorage[DHTID, Union[BinaryDHTValue, DictionaryDH
             return False
 
 
-class CacheRefreshQueue(ExpirableStorage[DHTID, DHTExpiration]):
+class CacheRefreshQueue(TimedStorage[DHTID, DHTExpiration]):
     """ a queue of keys scheduled for refresh in future, used in DHTNode """

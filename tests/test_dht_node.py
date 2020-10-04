@@ -274,8 +274,8 @@ def test_dht_node():
         now = get_dht_time()
         assert loop.run_until_complete(me.store(upper_key, subkey=subkey1, value=123, expiration_time=now + 1))
         assert loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=456, expiration_time=now + 2))
-
-        print(other_node.get(upper_key))
+        import time; time.sleep(0.5)
+        print(loop.run_until_complete(other_node.get(upper_key)))
 
 
         test_success.set()
@@ -379,3 +379,6 @@ def test_dhtnode_reuse_get():
     proc.start()
     proc.join()
     assert test_success.is_set()
+
+if __name__ == '__main__':
+    test_dht_node()

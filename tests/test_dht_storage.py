@@ -21,7 +21,7 @@ def test_get_expired():
 
 def test_get_empty():
     d = DHTLocalStorage()
-    assert d.get(DHTID.generate(source="key")) == (None, None), "ExpirableStorage returned non-existent value"
+    assert d.get(DHTID.generate(source="key")) == (None, None), "DHTLocalStorage returned non-existent value"
     print("Test get expired passed")
 
 

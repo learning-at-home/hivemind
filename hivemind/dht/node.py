@@ -218,8 +218,8 @@ class DHTNode:
         :note: store is a simplified interface to store_many, all kwargs are be forwarded there
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        store_ok = await self.store_many([key], [value], [expiration_time], subkey=[subkey], **kwargs)
-        return store_ok[key]
+        store_ok = await self.store_many([key], [value], [expiration_time], subkeys=[subkey], **kwargs)
+        return store_ok[(key, subkey) if subkey is not None else key]
 
     async def store_many(self, keys: List[DHTKey], values: List[DHTValue],
                          expiration_time: Union[DHTExpiration, List[DHTExpiration]],
@@ -280,22 +280,22 @@ class DHTNode:
                                       key=key_id.xor_distance, reverse=True)  # ordered so that .pop() returns nearest
 
             [original_key, *_], current_subkeys, current_values, current_expirations = zip(*key_id_to_data[key_id])
-            assert len(current_values) > 0
+            binary_values = list(map(self.protocol.serializer.dumps, current_values))
 
             while num_successful_stores < self.num_replicas and (store_candidates or pending_store_tasks):
                 while store_candidates and num_successful_stores + len(pending_store_tasks) < self.num_replicas:
                     node_id: DHTID = store_candidates.pop()  # nearest untried candidate
-                    if node_id == self.node_id:
-                        for subkey, value, expiration_time in zip(current_subkeys, current_values, current_expirations):
-                            self.protocol.storage.store(key_id, value, expiration_time, subkey=subkey)
-                        store_ok[original_key] = True
-                        num_successful_stores += 1
-                        if not await_all_replicas:
-                            store_finished_events[original_key].set()
 
+                    if node_id == self.node_id:
+                        num_successful_stores += 1
+                        for subkey, value, expiration_time in zip(current_subkeys, binary_values, current_expirations):
+                            store_ok[original_key, subkey] = self.protocol.storage.store(
+                                key_id, value, expiration_time, subkey=subkey)
+                            if not await_all_replicas:
+                                store_finished_events[original_key, subkey].set()
                     else:
                         pending_store_tasks.add(asyncio.create_task(self.protocol.call_store(
-                            node_to_endpoint[node_id], keys=[key_id] * len(current_values), values=current_values,
+                            node_to_endpoint[node_id], keys=[key_id] * len(current_values), values=binary_values,
                             expiration_time=current_expirations, subkeys=current_subkeys)))  # note: subkeys can be None
 
                 # await nearest task. If it fails, dispatch more on the next iteration
@@ -303,21 +303,21 @@ class DHTNode:
                     finished_store_tasks, pending_store_tasks = await asyncio.wait(
                         pending_store_tasks, return_when=asyncio.FIRST_COMPLETED)
                     for task in finished_store_tasks:
-                        if task.result()[0]:  # if store succeeded
-                            store_ok[original_key] = True
-                            num_successful_stores += 1
-                            if not await_all_replicas:
-                                store_finished_events[original_key].set()
+                        if task.result():
+                            for subkey, store_status in zip(subkeys, task.result()):
+                                store_ok[original_key, subkey] = store_status
+                                if not await_all_replicas:
+                                    store_finished_events[original_key, subkey].set()
+            for subkey in subkeys:
+                store_finished_events[original_key, subkey].set()
 
-            store_finished_events[original_key].set()
-
-        store_task = asyncio.create_task(self.find_nearest_nodes(
+        store_task = await self.find_nearest_nodes(#TODO task
             queries=set(unfinished_key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
-            found_callback=on_found, exclude_self=exclude_self, **kwargs))
+            found_callback=on_found, exclude_self=exclude_self, **kwargs)
         try:
             await asyncio.wait([evt.wait() for evt in store_finished_events.values()])  # wait for items to be stored
             assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
-            return store_ok
+            return {(key, subkey) if subkey is not None else key: status for (key, subkey), status in store_ok.items()}
         except asyncio.CancelledError as e:
             store_task.cancel()
             raise e
