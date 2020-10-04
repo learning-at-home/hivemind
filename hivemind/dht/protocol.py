@@ -114,7 +114,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
     async def call_store(self, peer: Endpoint, keys: Sequence[DHTID], values: Sequence[BinaryDHTValue],
                          expiration_time: Union[DHTExpiration, Sequence[DHTExpiration]],
                          subkeys: Optional[Union[Subkey, Sequence[Optional[Subkey]]]] = None,
-                         in_cache: Optional[Union[bool, Sequence[bool]]] = None) -> List[bool]:
+                         in_cache: Optional[Union[bool, Sequence[bool]]] = None) -> Optional[List[bool]]:
         """
         Ask a recipient to store several (key, value : expiration_time) items or update their older value
 
@@ -130,8 +130,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         :param in_cache: a list of booleans, True = store i-th key in cache, value = store i-th key locally
         :note: the difference between storing normally and in cache is that normal storage is guaranteed to be stored
          until expiration time (best-effort), whereas cached storage can be evicted early due to limited cache size
-
         :return: list of [True / False] True = stored, False = failed (found newer value or no response)
+                 if peer did not respond (e.g. due to timeout or congestion), returns None
         """
         if isinstance(expiration_time, DHTExpiration):
             expiration_time = [expiration_time] * len(keys)
@@ -155,7 +155,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         except grpc.experimental.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to store at {peer}: {error.code()}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
-            return [False] * len(keys)  #TODO return None, rollback docstring comment
+            return None
 
     async def rpc_store(self, request: dht_pb2.StoreRequest, context: grpc.ServicerContext) -> dht_pb2.StoreResponse:
         """ Some node wants us to store this (key, value) pair """
