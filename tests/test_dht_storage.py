@@ -1,7 +1,8 @@
 import time
 
-from hivemind.dht.storage import DHTLocalStorage, DHTID, DictionaryDHTValue
 from hivemind.dht.routing import get_dht_time
+from hivemind.dht.storage import DHTLocalStorage, DHTID, DictionaryDHTValue
+from hivemind.utils.serializer import MSGPackSerializer
 
 
 def test_store():
@@ -91,8 +92,6 @@ def test_localstorage_nested():
     assert d1.get(DHTID.generate('foo')) == (b'nothing', time + 5)         # value should be replaced
 
 
-
-
 def test_localstorage_freeze():
     d = DHTLocalStorage(maxsize=2)
 
@@ -109,3 +108,20 @@ def test_localstorage_freeze():
         d.store(DHTID.generate("key3"), b"val3", get_dht_time() + 3)  # key3 will push key1 out due to maxsize
         assert DHTID.generate("key1") in d
     assert DHTID.generate("key1") not in d
+
+
+def test_localstorage_serialize():
+    d1 = DictionaryDHTValue()
+    d2 = DictionaryDHTValue()
+
+    now = get_dht_time()
+    d1.store('key1', b'ololo', now + 1)
+    d2.store('key2', b'pysh', now + 1)
+    d2.store('key3', b'pyshpysh', now + 2)
+
+    data = MSGPackSerializer.dumps([d1, d2, 123321])
+    assert isinstance(data, bytes)
+    new_d1, new_d2, new_value = MSGPackSerializer.loads(data)
+    assert isinstance(new_d1, DictionaryDHTValue) and isinstance(new_d2, DictionaryDHTValue) and new_value == 123321
+    assert 'key1' in new_d1 and len(new_d1) == 1
+    assert 'key1' not in new_d2 and len(new_d2) == 2 and new_d2.get('key3') == (b'pyshpysh', now + 2)

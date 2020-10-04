@@ -155,7 +155,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         except grpc.experimental.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to store at {peer}: {error.code()}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
-            return [False] * len(keys)
+            return [False] * len(keys)  #TODO return None, rollback docstring comment
 
     async def rpc_store(self, request: dht_pb2.StoreRequest, context: grpc.ServicerContext) -> dht_pb2.StoreResponse:
         """ Some node wants us to store this (key, value) pair """

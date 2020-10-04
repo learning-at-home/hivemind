@@ -2,7 +2,9 @@ from __future__ import annotations
 import heapq
 from contextlib import contextmanager
 from typing import Generic, Optional, Dict, Tuple, List, Iterator, TypeVar, Union
+
 from hivemind.dht.routing import DHTID, DHTExpiration, get_dht_time, BinaryDHTValue, Subkey
+from hivemind.utils.serializer import MSGPackSerializer
 
 KeyType = TypeVar('KeyType')
 ValueType = TypeVar('ValueType')
@@ -93,6 +95,7 @@ class TimedStorage(Generic[KeyType, ValueType]):
             self.frozen = prev_frozen
 
 
+@MSGPackSerializer.ext_serializable(0x50)
 class DictionaryDHTValue(TimedStorage[Subkey, BinaryDHTValue]):
     """ a dictionary-like DHT value type that maps sub-keys to values with individual expirations """
     latest_expiration_time = float('-inf')
@@ -100,6 +103,19 @@ class DictionaryDHTValue(TimedStorage[Subkey, BinaryDHTValue]):
     def store(self, key: KeyType, value: ValueType, expiration_time: DHTExpiration) -> bool:
         self.latest_expiration_time = max(self.latest_expiration_time, expiration_time)
         return super().store(key, value, expiration_time)
+
+    def packb(self) -> bytes:
+        """ custom behavior for MSGPackSerializer.dumps """
+        return MSGPackSerializer.dumps([self.maxsize, self.latest_expiration_time, list(map(list, self.items()))])
+
+    @classmethod
+    def unpackb(cls, raw: bytes) -> DictionaryDHTValue:
+        maxsize, latest_expiration_time, items = MSGPackSerializer.loads(raw)
+        with DictionaryDHTValue(maxsize).freeze() as new_dict:
+            new_dict.latest_expiration_time = latest_expiration_time
+            for key, value, expiration_time in items:
+                new_dict.store(key, value, expiration_time)
+            return new_dict
 
 
 class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTValue]]):
