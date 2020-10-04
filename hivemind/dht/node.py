@@ -244,30 +244,24 @@ class DHTNode:
         if subkeys is None or isinstance(subkeys, Subkey):
             subkeys = [subkeys] * len(keys)
 
-        assert len(keys) == len(values) == len(expiration_time) == len(subkeys), \
+        assert len(keys) == len(subkeys) == len(values) == len(expiration_time), \
             "Either of keys, values, subkeys or expiration timestamps have different sequence lengths."
 
-        #TODO form unique key ids, find best values for unique key id, write all corresponding sub-keys to that key id
-        # you may wanna data structures like {key_id: [(subkey1, value1), (subkey2, value2)], etc
-        key_ids = list(map(DHTID.generate, keys))
-        id_to_original_key = dict(zip(key_ids, keys))
-        binary_values_by_key, expiration_by_key = {}, {}
-        for key_id, subkey, val, expiration in zip(key_ids, subkeys, values, expiration_time):
-            binary_values_by_key[key_id, subkey] = self.protocol.serializer.dumps(val)
-            expiration_by_key[key_id, subkey] = expiration
+        key_id_to_data: DefaultDict[DHTID, List[Tuple[DHTKey, Subkey, DHTValue, DHTExpiration]]] = defaultdict(list)
+        for key, subkey, value, expiration in zip(keys, subkeys, values, expiration_time):
+            key_id_to_data[DHTID.generate(source=key)].append((key, subkey, value, expiration))
 
-        unfinished_keys = set(zip(key_ids, subkeys))  # we use this set to ensure that each store request is finished
-        store_ok = {key: False for key in keys}  # outputs, updated during search
-        store_finished_events = {key: asyncio.Event() for key in keys}
+        unfinished_key_ids = set(key_id_to_data.keys())  # use this set to ensure that each store request is finished
+        store_ok = {(key, subkey): False for key, subkey in zip(keys, subkeys)}  # outputs, updated during search
+        store_finished_events = {(key, subkey): asyncio.Event() for key, subkey in zip(keys, subkeys)}
 
         if self.cache_locally:
-            for key_id, subkey in zip(key_ids, subkeys):
-                self.protocol.cache.store(key_id, binary_values_by_key[key_id, subkey],
-                                          expiration_by_key[key_id, subkey], subkey=subkey)
+            for key_id, (key, subkey, value, expiration) in key_id_to_data.items():
+                self.protocol.cache.store(key_id, value, expiration, subkey=subkey)  # if subkey is None, store normally
 
         # pre-populate node_to_endpoint
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()
-        for key_id in key_ids:
+        for key_id in unfinished_key_ids:
             node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
@@ -284,22 +278,24 @@ class DHTNode:
             store_candidates = sorted(nearest_nodes + ([] if exclude_self else [self.node_id]),
                                       key=key_id.xor_distance, reverse=True)  # ordered so that .pop() returns nearest
 
+            [original_key, *_], current_subkeys, current_values, current_expirations = zip(*key_id_to_data[key_id])
+            assert len(current_values) > 0
+
             while num_successful_stores < self.num_replicas and (store_candidates or pending_store_tasks):
-                # spawn enough tasks to cover all replicas
                 while store_candidates and num_successful_stores + len(pending_store_tasks) < self.num_replicas:
                     node_id: DHTID = store_candidates.pop()  # nearest untried candidate
                     if node_id == self.node_id:
-                        self.protocol.storage.store(key_id, binary_values_by_key_id[key_id],
-                                                    expiration_by_key_id[key_id])
-                        store_ok[id_to_original_key[key_id]] = True
+                        for subkey, value, expiration_time in zip(current_subkeys, current_values, current_expirations):
+                            self.protocol.storage.store(key_id, value, expiration_time, subkey=subkey)
+                        store_ok[original_key] = True
                         num_successful_stores += 1
                         if not await_all_replicas:
-                            store_finished_events[id_to_original_key[key_id]].set()
+                            store_finished_events[original_key].set()
 
                     else:
                         pending_store_tasks.add(asyncio.create_task(self.protocol.call_store(
-                            node_to_endpoint[node_id], [key_id], [binary_values_by_key_id[key_id]],
-                            [expiration_by_key_id[key_id]])))
+                            node_to_endpoint[node_id], keys=[key_id] * len(current_values), values=current_values,
+                            expiration_time=current_expirations, subkeys=current_subkeys)))  # note: subkeys can be None
 
                 # await nearest task. If it fails, dispatch more on the next iteration
                 if pending_store_tasks:
@@ -307,15 +303,15 @@ class DHTNode:
                         pending_store_tasks, return_when=asyncio.FIRST_COMPLETED)
                     for task in finished_store_tasks:
                         if task.result()[0]:  # if store succeeded
-                            store_ok[id_to_original_key[key_id]] = True
+                            store_ok[original_key] = True
                             num_successful_stores += 1
                             if not await_all_replicas:
-                                store_finished_events[id_to_original_key[key_id]].set()
+                                store_finished_events[original_key].set()
 
-            store_finished_events[id_to_original_key[key_id]].set()
+            store_finished_events[original_key].set()
 
         store_task = asyncio.create_task(self.find_nearest_nodes(
-            queries=set(key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
+            queries=set(unfinished_key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
             found_callback=on_found, exclude_self=exclude_self, **kwargs))
         try:
             await asyncio.wait([evt.wait() for evt in store_finished_events.values()])  # wait for items to be stored
