@@ -189,7 +189,8 @@ def test_dht_node():
         # note: we run everything in a separate process to re-initialize all global states from scratch
         # this helps us avoid undesirable side-effects when running multiple tests in sequence
         loop = asyncio.get_event_loop()
-        me = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 5), parallel_rpc=10))
+        me = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 5), parallel_rpc=10,
+                                                    cache_locally=False, cache_refresh_before_expiry=False))
 
         # test 1: find self
         nearest = loop.run_until_complete(me.find_nearest_nodes([me.node_id], k_nearest=1))[me.node_id]
@@ -246,19 +247,24 @@ def test_dht_node():
         assert len(set.difference(set(nearest.keys()), set(all_node_ids) | {me.node_id})) == 0
 
         # test 5: node without peers
-        other_node = loop.run_until_complete(DHTNode.create())
-        nearest = loop.run_until_complete(other_node.find_nearest_nodes([dummy]))[dummy]
-        assert len(nearest) == 1 and nearest[other_node.node_id] == f"{LOCALHOST}:{other_node.port}"
-        nearest = loop.run_until_complete(other_node.find_nearest_nodes([dummy], exclude_self=True))[dummy]
+        detached_node = loop.run_until_complete(DHTNode.create())
+        nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy]))[dummy]
+        assert len(nearest) == 1 and nearest[detached_node.node_id] == f"{LOCALHOST}:{detached_node.port}"
+        nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy], exclude_self=True))[dummy]
         assert len(nearest) == 0
 
         # test 6 store and get value
         true_time = get_dht_time() + 1200
         assert loop.run_until_complete(me.store("mykey", ["Value", 10], true_time))
-        for node in [me, other_node]:
-            val, expiration_time = loop.run_until_complete(me.get("mykey"))
-            assert expiration_time == true_time, "Wrong time"
+        that_guy = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 3), parallel_rpc=10,
+                                                          cache_locally=False, cache_refresh_before_expiry=False))
+
+        for node in [me, that_guy]:
+            val, expiration_time = loop.run_until_complete(node.get("mykey"))
             assert val == ["Value", 10], "Wrong value"
+            assert expiration_time == true_time, f"Wrong time"
+
+        assert loop.run_until_complete(detached_node.get("mykey")) == (None, None)
 
         # test 7: bulk store and bulk get
         keys = 'foo', 'bar', 'baz', 'zzz'
@@ -272,11 +278,31 @@ def test_dht_node():
         # test 8: store dictionaries as values (with sub-keys)
         upper_key, subkey1, subkey2, subkey3 = 'ololo', 'k1', 'k2', 'k3'
         now = get_dht_time()
-        assert loop.run_until_complete(me.store(upper_key, subkey=subkey1, value=123, expiration_time=now + 1))
-        assert loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=456, expiration_time=now + 2))
-        import time; time.sleep(0.5)
-        print(loop.run_until_complete(other_node.get(upper_key)))
+        assert loop.run_until_complete(me.store(upper_key, subkey=subkey1, value=123, expiration_time=now + 10))
+        assert loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=456, expiration_time=now + 20))
+        for node in [that_guy, me]:
+            value, time = loop.run_until_complete(node.get(upper_key))
+            assert isinstance(value, dict) and time == now + 20
+            assert value[subkey1] == (123, now + 10)
+            assert value[subkey2] == (456, now + 20)
+            assert len(value) == 2
 
+        loop.run_until_complete(asyncio.sleep(3))
+        del me.protocol.cache[DHTID.generate(upper_key)]
+        del that_guy.protocol.cache[DHTID.generate(upper_key)]
+        # ^-- manually clear cache to prevent reusing old values
+
+        assert not loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=345, expiration_time=now + 10))
+        assert loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=567, expiration_time=now + 30))
+        assert loop.run_until_complete(me.store(upper_key, subkey=subkey3, value=890, expiration_time=now + 50))
+
+        for node in [that_guy, me]:
+            value, time = loop.run_until_complete(node.get(upper_key))
+            assert isinstance(value, dict) and time == now + 50, (value, time)
+            assert value[subkey1] == (123, now + 10)
+            assert value[subkey2] == (567, now + 30)
+            assert value[subkey3] == (890, now + 50)
+            assert len(value) == 3
 
         test_success.set()
 
@@ -286,6 +312,39 @@ def test_dht_node():
     assert test_success.is_set()
     for proc in processes:
         proc.terminate()
+
+
+def test_dhtnode_replicas():
+    dht_size = 20
+    initial_peers = 3
+    num_replicas = random.randint(1, 20)
+    test_success = mp.Event()
+
+    async def _tester():
+        peers = []
+        for i in range(dht_size):
+            neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(initial_peers, len(peers)))]
+            peers.append(await DHTNode.create(initial_peers=neighbors_i, num_replicas=num_replicas))
+
+        you = random.choice(peers)
+        assert await you.store('key1', 'foo', get_dht_time() + 999)
+
+        actual_key1_replicas = sum(len(peer.protocol.storage) for peer in peers)
+        assert num_replicas == actual_key1_replicas
+
+        assert await you.store('key2', 'bar', get_dht_time() + 999)
+        total_size = sum(len(peer.protocol.storage) for peer in peers)
+        actual_key2_replicas = total_size - actual_key1_replicas
+        assert num_replicas == actual_key2_replicas
+
+        assert await you.store('key2', 'baz', get_dht_time() + 1000)
+        assert sum(len(peer.protocol.storage) for peer in peers) == total_size, "total size should not have changed"
+        test_success.set()
+
+    proc = mp.Process(target=lambda: asyncio.run(_tester()))
+    proc.start()
+    proc.join()
+    assert test_success.is_set()
 
 
 def test_dhtnode_caching(T=0.05):
@@ -379,6 +438,3 @@ def test_dhtnode_reuse_get():
     proc.start()
     proc.join()
     assert test_success.is_set()
-
-if __name__ == '__main__':
-    test_dht_node()
