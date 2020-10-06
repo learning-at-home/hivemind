@@ -558,7 +558,7 @@ class _IntermediateResult:
             deserialized_value = {key: tuple(value) for key, value in self.binary_value.data.items()}
         else:
             deserialized_value = self.serializer.loads(self.binary_value) if self.found_something else None
-        if isinstance(deserialized_value, dict): #TODO!!!
+        if isinstance(deserialized_value, dict) and isinstance(next(iter(deserialized_value.values())), list): #TODO!!!
             deserialized_value = {k: tuple(v) for k, v in deserialized_value.items()}
         self.future.set_result((deserialized_value, self.expiration_time))
 
