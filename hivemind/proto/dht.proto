@@ -24,7 +24,7 @@ message NodeInfo {
 message StoreRequest {
   // three lists of the same length representing dht keys, dht values and expiration
   repeated bytes keys = 1;             // keys in the form of DHTID.generate(raw_key).to_bytes()
-  repeated string subkeys = 2;         // optional subkeys for DictionaryDHTValue type, empty string means no subkey
+  repeated string subkeys = 2;         // [optional] subkeys for DictionaryDHTValue type, empty string means no subkey
   repeated bytes values = 3;           // binary-encoded value for i-th key
   repeated double expiration_time = 4; // expirations for i-th key (type = DHTExpiration)
   repeated bool in_cache = 5;          // if in_cache[i], store i-th key in cache, else store normally
