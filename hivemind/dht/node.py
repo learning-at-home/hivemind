@@ -11,7 +11,7 @@ from functools import partial
 from warnings import warn
 
 from hivemind.dht.protocol import DHTProtocol
-from hivemind.dht.storage import CacheRefreshQueue
+from hivemind.dht.storage import CacheRefreshQueue, DictionaryDHTValue
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
 from hivemind.dht.traverse import traverse_dht
 from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase
@@ -244,6 +244,7 @@ class DHTNode:
         if subkeys is None or isinstance(subkeys, Subkey):
             subkeys = [subkeys] * len(keys)
 
+
         assert len(keys) == len(subkeys) == len(values) == len(expiration_time), \
             "Either of keys, values, subkeys or expiration timestamps have different sequence lengths."
 
@@ -255,11 +256,13 @@ class DHTNode:
         store_ok = {(key, subkey): False for key, subkey in zip(keys, subkeys)}  # outputs, updated during search
         store_finished_events = {(key, subkey): asyncio.Event() for key, subkey in zip(keys, subkeys)}
 
+
         # pre-populate node_to_endpoint
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()
         for key_id in unfinished_key_ids:
             node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
+
 
         async def on_found(key_id: DHTID, nearest_nodes: List[DHTID], visited_nodes: Set[DHTID]) -> None:
             """ This will be called once per key when find_nearest_nodes is done for a particular node """
@@ -307,9 +310,9 @@ class DHTNode:
             for subkey in subkeys:
                 store_finished_events[original_key, subkey].set()
 
-        store_task = await self.find_nearest_nodes(#TODO task
+        store_task = asyncio.create_task(self.find_nearest_nodes(
             queries=set(unfinished_key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
-            found_callback=on_found, exclude_self=exclude_self, **kwargs)
+            found_callback=on_found, exclude_self=exclude_self, **kwargs))
         try:
             await asyncio.wait([evt.wait() for evt in store_finished_events.values()])  # wait for items to be stored
             assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
@@ -551,7 +554,12 @@ class _IntermediateResult:
     def finish_search(self):
         if self.future.done():
             return  # either user cancelled our result or someone sent it before us. Nothing more to do here.
-        deserialized_value = self.serializer.loads(self.binary_value) if self.found_something else None
+        if isinstance(self.binary_value, DictionaryDHTValue): #TODO!!!
+            deserialized_value = {key: tuple(value) for key, value in self.binary_value.data.items()}
+        else:
+            deserialized_value = self.serializer.loads(self.binary_value) if self.found_something else None
+        if isinstance(deserialized_value, dict): #TODO!!!
+            deserialized_value = {k: tuple(v) for k, v in deserialized_value.items()}
         self.future.set_result((deserialized_value, self.expiration_time))
 
     @property
