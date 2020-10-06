@@ -304,6 +304,7 @@ class DHTNode:
                         pending_store_tasks, return_when=asyncio.FIRST_COMPLETED)
                     for task in finished_store_tasks:
                         if task.result() is not None:
+                            num_successful_stores += 1
                             for subkey, store_status in zip(subkeys, task.result()):
                                 store_ok[original_key, subkey] = store_status
                                 if not await_all_replicas:
