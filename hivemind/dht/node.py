@@ -255,11 +255,6 @@ class DHTNode:
         store_ok = {(key, subkey): False for key, subkey in zip(keys, subkeys)}  # outputs, updated during search
         store_finished_events = {(key, subkey): asyncio.Event() for key, subkey in zip(keys, subkeys)}
 
-        if self.cache_locally:
-            for key_id, entries in key_id_to_data.items():
-                for (key, subkey, value, expiration) in entries:
-                    self.protocol.cache.store(key_id, value, expiration, subkey=subkey)  # subkey can be None
-
         # pre-populate node_to_endpoint
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()
         for key_id in unfinished_key_ids:
