@@ -68,11 +68,10 @@ class MSGPackSerializer(SerializerBase):
 
     @classmethod
     def _decode_ext_types(cls, type_code: int, data: bytes):
-        if type_code not in cls._ExtTypeCodes:
-            logger.warning(f"Unknown ExtType code: {type_code}, leaving it as is.")
-            return data
-        else:
+        if type_code in cls._ExtTypeCodes:
             return cls._ExtTypeCodes[type_code].unpackb(data)
+        logger.warning(f"Unknown ExtType code: {type_code}, leaving it as is.")
+        return data
 
     @classmethod
     def dumps(cls, obj: object) -> bytes:
