@@ -557,7 +557,7 @@ class _IntermediateResult:
             self.future.set_result((self.serializer.loads(self.binary_value), self.expiration_time))
         elif isinstance(self.binary_value, DictionaryDHTValue):
             dict_value = {key: (self.serializer.loads(value), item_expiration_time)
-                          for key, (value, item_expiration_time) in self.binary_value.items()}
+                          for key, value, item_expiration_time in self.binary_value.items()}
             self.future.set_result((dict_value, self.expiration_time))
         else:
             logger.error(f"Invalid value type: {type(self.binary_value)}")
