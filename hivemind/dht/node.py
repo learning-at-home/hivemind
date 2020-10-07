@@ -244,7 +244,6 @@ class DHTNode:
         if subkeys is None or isinstance(subkeys, Subkey):
             subkeys = [subkeys] * len(keys)
 
-
         assert len(keys) == len(subkeys) == len(values) == len(expiration_time), \
             "Either of keys, values, subkeys or expiration timestamps have different sequence lengths."
 
@@ -256,13 +255,11 @@ class DHTNode:
         store_ok = {(key, subkey): False for key, subkey in zip(keys, subkeys)}  # outputs, updated during search
         store_finished_events = {(key, subkey): asyncio.Event() for key, subkey in zip(keys, subkeys)}
 
-
         # pre-populate node_to_endpoint
         node_to_endpoint: Dict[DHTID, Endpoint] = dict()
         for key_id in unfinished_key_ids:
             node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
-
 
         async def on_found(key_id: DHTID, nearest_nodes: List[DHTID], visited_nodes: Set[DHTID]) -> None:
             """ This will be called once per key when find_nearest_nodes is done for a particular node """
