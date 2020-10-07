@@ -226,7 +226,7 @@ class DHTNode:
                          subkeys: Optional[Union[Subkey, List[Optional[Subkey]]]] = None,
                          exclude_self: bool = False, await_all_replicas=True, **kwargs) -> Dict[DHTKey, bool]:
         """
-        Traverse DHT to find up to best nodes to store multiple (key, value, expiration_time) pairs.
+        Traverse DHT to find up :num_replicas: to best nodes to store multiple (key, value, expiration_time) pairs.
 
         :param keys: arbitrary serializable keys associated with each value
         :param values: serializable "payload" for each key
