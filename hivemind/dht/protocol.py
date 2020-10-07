@@ -14,7 +14,8 @@ from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
 from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer
 
 logger = get_logger(__name__)
-_NOT_FOUND_VALUE, _NOT_FOUND_EXPIRATION, _NOT_A_DICTIONARY_KEY = b'', -float('inf'), ''  # constants for missing values
+NOT_FOUND_VALUE, NOT_FOUND_EXPIRATION, IS_REGULAR_VALUE, IS_DICTIONARY = b'', -float('inf'), '', '___DictionaryDHTValue'
+RESERVED_SUBKEYS = {IS_REGULAR_VALUE, IS_DICTIONARY}
 
 
 class DHTProtocol(dht_grpc.DHTServicer):
@@ -111,7 +112,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
             asyncio.create_task(self.update_routing_table(sender_id, rpc_endpoint))
         return self.node_info
 
-    async def call_store(self, peer: Endpoint, keys: Sequence[DHTID], values: Sequence[BinaryDHTValue],
+    async def call_store(self, peer: Endpoint, keys: Sequence[DHTID],
+                         values: Sequence[Union[BinaryDHTValue, DictionaryDHTValue]],
                          expiration_time: Union[DHTExpiration, Sequence[DHTExpiration]],
                          subkeys: Optional[Union[Subkey, Sequence[Optional[Subkey]]]] = None,
                          in_cache: Optional[Union[bool, Sequence[bool]]] = None) -> Optional[List[bool]]:
@@ -140,8 +142,13 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
         in_cache = in_cache if in_cache is not None else [False] * len(keys)  # default value (None)
         in_cache = [in_cache] * len(keys) if isinstance(in_cache, bool) else in_cache  # single bool
-        subkeys = [subkey if subkey is not None else _NOT_A_DICTIONARY_KEY for subkey in subkeys]
         keys, subkeys, values, expiration_time, in_cache = map(list, [keys, subkeys, values, expiration_time, in_cache])
+        for i in range(len(keys)):
+            if subkeys[i] is None:  # add default sub-key if not specified
+                subkeys[i] = IS_REGULAR_VALUE if not isinstance(values[i], DictionaryDHTValue) else IS_DICTIONARY
+            if isinstance(values[i], DictionaryDHTValue):
+                assert subkeys[i] == IS_DICTIONARY, "Please do not specify subkey when storing an entire dictionary"
+
         assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"
         store_request = dht_pb2.StoreRequest(keys=list(map(DHTID.to_bytes, keys)), subkeys=subkeys, values=values,
                                              expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info)
@@ -167,9 +174,13 @@ class DHTProtocol(dht_grpc.DHTServicer):
         for key_id, subkey, value_bytes, expiration_time, in_cache in zip(
                 keys, request.subkeys, request.values, request.expiration_time, request.in_cache):
             storage = self.cache if in_cache else self.storage
-            if subkey == _NOT_A_DICTIONARY_KEY:  # store normal value
+            if subkey == IS_REGULAR_VALUE:  # store normal value without subkeys
                 response.store_ok.append(storage.store(key_id, value_bytes, expiration_time))
-            else:  # add an entry into a dictionary-like value
+            elif subkey == IS_DICTIONARY:   # store an entire dictionary with pre-existing subkeys
+                value_dictionary = self.serializer.loads(value_bytes)
+                assert isinstance(value_dictionary, DictionaryDHTValue)
+                response.store_ok.append(storage.store(key_id, value_dictionary, expiration_time))
+            else:  # add new entry into an existing dictionary-like value or create a new dictionary with one sub-key
                 response.store_ok.append(storage.store_subkey(key_id, subkey, value_bytes, expiration_time))
         return response
 
@@ -193,16 +204,19 @@ class DHTProtocol(dht_grpc.DHTServicer):
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
-            assert len(response.values) == len(response.expiration_time) == len(response.nearest) == len(keys), \
-                "DHTProtocol: response is not aligned with keys and/or expiration times"
+            assert len(keys) == len(response.results), "DHTProtocol: response is not aligned with keys"
 
-            output = {}  # unpack data without special NOT_FOUND_* values
-            for key, value, expiration_time, nearest in zip(
-                    keys, response.values, response.expiration_time, response.nearest):
-                value = value if value != _NOT_FOUND_VALUE else None
-                expiration_time = expiration_time if expiration_time != _NOT_FOUND_EXPIRATION else None
-                nearest = dict(zip(map(DHTID.from_bytes, nearest.node_ids), nearest.endpoints))
-                output[key] = (value, expiration_time, nearest)
+            output = {}  # unpack data depending on its type
+            for key, result in zip(keys, response.results):
+                nearest = dict(zip(map(DHTID.from_bytes, result.nearest_node_ids), result.nearest_endpoints))
+                if result.type == dht_pb2.NOT_FOUND:
+                    output[key] = None, None, nearest
+                elif result.type == dht_pb2.FOUND_REGULAR:
+                    output[key] = result.value, result.expiration_time, nearest
+                elif result.type == dht_pb2.FOUND_DICTIONARY:
+                    output[key] = self.serializer.loads(result.value), result.expiration_time, nearest
+                else:
+                    logger.error(f"Unknown result type: {result.type}")
             return output
         except grpc.experimental.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to find at {peer}: {error.code()}")
@@ -215,28 +229,27 @@ class DHTProtocol(dht_grpc.DHTServicer):
         """
         if request.peer:  # if requested, add peer to the routing table
             asyncio.create_task(self.rpc_ping(request.peer, context))
-
-        response = dht_pb2.FindResponse(values=[], expiration_time=[], nearest=[], peer=self.node_info)
-        for key_id in map(DHTID.from_bytes, request.keys):
+        response = dht_pb2.FindResponse(results=[], peer=self.node_info)
+        for i, key_id in enumerate(map(DHTID.from_bytes, request.keys)):
             maybe_value, maybe_expiration_time = self.storage.get(key_id)
             cached_value, cached_expiration_time = self.cache.get(key_id)
             if (cached_expiration_time or -float('inf')) > (maybe_expiration_time or -float('inf')):
                 maybe_value, maybe_expiration_time = cached_value, cached_expiration_time
 
-            if isinstance(maybe_value, DictionaryDHTValue):  # serialize DictionaryDHTValue as regular dictionary
-                maybe_value = self.serializer.dumps({subkey: [self.serializer.loads(value_bytes), expiration_time]
-                                                     for subkey, value_bytes, expiration_time in maybe_value.items()})
+            if maybe_expiration_time is None:  # value not found
+                item = dht_pb2.FindResult(type=dht_pb2.NOT_FOUND)
+            elif isinstance(maybe_value, DictionaryDHTValue):
+                item = dht_pb2.FindResult(type=dht_pb2.FOUND_DICTIONARY, value=self.serializer.dumps(maybe_value),
+                                          expiration_time=maybe_value.latest_expiration_time)
+            else:  # found regular value
+                item = dht_pb2.FindResult(type=dht_pb2.FOUND_REGULAR, value=maybe_value,
+                                          expiration_time=maybe_expiration_time)
 
-            nearest_neighbors = self.routing_table.get_nearest_neighbors(
-                key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id))
-            if nearest_neighbors:
-                peer_ids, endpoints = zip(*nearest_neighbors)
-            else:
-                peer_ids, endpoints = [], []
-
-            response.values.append(maybe_value if maybe_value is not None else _NOT_FOUND_VALUE)
-            response.expiration_time.append(maybe_expiration_time if maybe_expiration_time else _NOT_FOUND_EXPIRATION)
-            response.nearest.append(dht_pb2.Peers(node_ids=list(map(DHTID.to_bytes, peer_ids)), endpoints=endpoints))
+            for node_id, endpoint in self.routing_table.get_nearest_neighbors(
+                key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id)):
+                item.nearest_node_ids.append(node_id.to_bytes())
+                item.nearest_endpoints.append(endpoint)
+            response.results.append(item)
         return response
 
     async def update_routing_table(self, node_id: Optional[DHTID], peer_endpoint: Endpoint, responded=True):

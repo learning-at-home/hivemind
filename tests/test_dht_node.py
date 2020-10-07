@@ -11,6 +11,7 @@ from typing import List, Dict
 from hivemind import get_dht_time
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST, DHTProtocol
 from hivemind.dht.protocol import DHTProtocol
+from hivemind.dht.storage import DictionaryDHTValue
 
 
 def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping: Optional[Endpoint] = None):
@@ -96,11 +97,12 @@ def test_dht_protocol():
                 f'{LOCALHOST}:{peer1_port}', keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value2)],
                 expiration_time=[expiration + 5], subkeys=[subkey2])
             )
-            recv_dict_bytes, recv_expiration, nodes_found = loop.run_until_complete(
+            recv_dict, recv_expiration, nodes_found = loop.run_until_complete(
                 protocol.call_find(f'{LOCALHOST}:{peer1_port}', [nested_key]))[nested_key]
-            recv_dict = protocol.serializer.loads(recv_dict_bytes)
-            assert len(recv_dict) == 2 and recv_expiration == expiration + 5
-            assert recv_dict[subkey1] == [value1, expiration] and recv_dict[subkey2] == [value2, expiration + 5]
+            assert isinstance(recv_dict, DictionaryDHTValue)
+            assert len(recv_dict.data) == 2 and recv_expiration == expiration + 5
+            assert recv_dict.data[subkey1] == (protocol.serializer.dumps(value1), expiration)
+            assert recv_dict.data[subkey2] == (protocol.serializer.dumps(value2), expiration + 5)
 
             if listen:
                 loop.run_until_complete(protocol.shutdown())
@@ -438,3 +440,7 @@ def test_dhtnode_reuse_get():
     proc.start()
     proc.join()
     assert test_success.is_set()
+
+
+if __name__ == '__main__':
+    test_dht_node()
