@@ -32,15 +32,7 @@ class DHTNode:
     Every (key, value) pair in this DHT has an expiration time - float computed as get_dht_time(), UnixTime by default
     DHT nodes always prefer values with higher expiration time and may delete any value past its expiration.
 
-    Compared to Kademlia RPC protocol, hivemind DHT has 3 RPCs:
-
-    * ping - request peer's identifier and update routing table (same as Kademlia PING RPC)
-    * store - send several (key, value, expiration_time) pairs to the same peer (like Kademlia STORE, but in bulk)
-    * find - request one or several keys, get values & expiration (if peer finds it locally) and :bucket_size: of
-        nearest peers from recipient's routing table (ordered nearest-to-farthest, not including recipient itself)
-        This RPC is a mixture between Kademlia FIND_NODE and FIND_VALUE with multiple keys per call.
-
-    Formally, DHTNode follows the following contract:
+    A DHTNode follows the following contract:
 
     - when asked to get(key), a node must find and return a value with highest expiration time that it found across DHT
       IF that time has not come yet. if expiration time is smaller than current get_dht_time(), node may return None;
@@ -49,6 +41,14 @@ class DHTNode:
       has the same key with newer expiration, the older key will not be stored. Return True if stored, False if refused;
     - when requested to store(key: value, expiration_time, in_cache=True), stores (key => value) in a separate "cache".
       Cache operates same as regular storage, but it has a limited size and evicts least recently used nodes when full;
+
+    Compared to Kademlia RPC protocol, hivemind DHT has 3 RPCs:
+
+    * ping - request peer's identifier and update routing table (same as Kademlia PING RPC)
+    * store - send several (key, value, expiration_time) pairs to the same peer (like Kademlia STORE, but in bulk)
+    * find - request one or several keys, get values & expiration (if peer finds it locally) and :bucket_size: of
+        nearest peers from recipient's routing table (ordered nearest-to-farthest, not including recipient itself)
+        This RPC is a mixture between Kademlia FIND_NODE and FIND_VALUE with multiple keys per call.
 
     """
     # fmt:off
