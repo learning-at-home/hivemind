@@ -531,7 +531,7 @@ class _IntermediateResult:
     """ A helper class that stores current-best GET results with metadata """
     key_id: DHTID
     sufficient_expiration_time: DHTExpiration
-    binary_value: Optional[BinaryDHTValue] = None
+    binary_value: Optional[Union[BinaryDHTValue, DictionaryDHTValue]] = None
     expiration_time: Optional[DHTExpiration] = None  # best expiration time so far
     source_node_id: Optional[DHTID] = None  # node that gave us the value
     future: asyncio.Future[Tuple[Optional[DHTValue], Optional[DHTExpiration]]] = field(default_factory=asyncio.Future)
@@ -551,10 +551,16 @@ class _IntermediateResult:
     def finish_search(self):
         if self.future.done():
             return  # either user cancelled our result or someone sent it before us. Nothing more to do here.
-        if isinstance(self.binary_value, DictionaryDHTValue):
-            TODO()
-        deserialized_value = self.serializer.loads(self.binary_value) if self.found_something else None
-        self.future.set_result((deserialized_value, self.expiration_time))
+        elif not self.found_something:
+            self.future.set_result((None, None))
+        elif isinstance(self.binary_value, BinaryDHTValue):
+            self.future.set_result((self.serializer.loads(self.binary_value), self.expiration_time))
+        elif isinstance(self.binary_value, DictionaryDHTValue):
+            dict_value = {key: (self.serializer.loads(value), item_expiration_time)
+                          for key, (value, item_expiration_time) in self.binary_value.items()}
+            self.future.set_result((dict_value, self.expiration_time))
+        else:
+            logger.error(f"Invalid value type: {type(self.binary_value)}")
 
     @property
     def found_something(self) -> bool:

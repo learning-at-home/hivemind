@@ -440,7 +440,3 @@ def test_dhtnode_reuse_get():
     proc.start()
     proc.join()
     assert test_success.is_set()
-
-
-if __name__ == '__main__':
-    test_dht_node()
