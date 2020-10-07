@@ -112,9 +112,9 @@ class DictionaryDHTValue(TimedStorage[Subkey, BinaryDHTValue]):
     def unpackb(cls, raw: bytes) -> DictionaryDHTValue:
         maxsize, latest_expiration_time, items = MSGPackSerializer.loads(raw)
         with DictionaryDHTValue(maxsize).freeze() as new_dict:
-            new_dict.latest_expiration_time = latest_expiration_time
             for key, value, expiration_time in items:
                 new_dict.store(key, value, expiration_time)
+            new_dict.latest_expiration_time = latest_expiration_time
             return new_dict
 
 
