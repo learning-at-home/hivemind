@@ -252,7 +252,7 @@ class DHTNode:
             key_id_to_data[DHTID.generate(source=key)].append((key, subkey, value, expiration))
 
         unfinished_key_ids = set(key_id_to_data.keys())  # use this set to ensure that each store request is finished
-        store_ok = {(key, subkey): False for key, subkey in zip(keys, subkeys)}  # outputs, updated during search
+        store_ok = {(key, subkey): None for key, subkey in zip(keys, subkeys)}  # outputs, updated during search
         store_finished_events = {(key, subkey): asyncio.Event() for key, subkey in zip(keys, subkeys)}
 
         # pre-populate node_to_endpoint
@@ -304,7 +304,9 @@ class DHTNode:
                                 store_ok[original_key, subkey] = store_status
                                 if not await_all_replicas:
                                     store_finished_events[original_key, subkey].set()
-            for subkey in subkeys:
+
+            for subkey, value_bytes, expiration in zip(subkeys, binary_values, current_expirations):
+                self._update_cache_on_store(key_id, subkey, value_bytes, expiration, store_ok[original_key, subkey])
                 store_finished_events[original_key, subkey].set()
 
         store_task = asyncio.create_task(self.find_nearest_nodes(
@@ -313,10 +315,22 @@ class DHTNode:
         try:
             await asyncio.wait([evt.wait() for evt in store_finished_events.values()])  # wait for items to be stored
             assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
-            return {(key, subkey) if subkey is not None else key: status for (key, subkey), status in store_ok.items()}
+            return {(key, subkey) if subkey else key: status or False for (key, subkey), status in store_ok.items()}
         except asyncio.CancelledError as e:
             store_task.cancel()
             raise e
+
+    def _update_cache_on_store(self, key_id: DHTID, subkey: Optional[Subkey],
+                               value_packed: Union[BinaryDHTValue, DictionaryDHTValue],
+                               expiration_time: DHTExpiration, store_ok: bool):
+        if store_ok and subkey is None and self.cache_locally:  # we stored a regular value successfully, lets cache it!
+            self.protocol.cache.store(key_id, value_packed, expiration_time)
+        elif store_ok and subkey is not None and key_id in self.protocol.cache:
+            del self.protocol.cache[key_id]  # we updated a dictionary, but there may have been other updates
+        elif not store_ok:  # we tried to store value, but were rejected because there was a newer value
+            cached_value, cached_expiration = self.protocol.cache.get(key_id)
+            if (subkey is not None) or (cached_expiration is not None and cached_expiration <= expiration_time):
+                del self.protocol.cache[key_id]  # discard key if it is older than what was rejected
 
     async def get(self, key: DHTKey, latest=False, **kwargs) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
