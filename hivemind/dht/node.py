@@ -323,6 +323,7 @@ class DHTNode:
     def _update_cache_on_store(self, key_id: DHTID, subkey: Optional[Subkey],
                                value_packed: Union[BinaryDHTValue, DictionaryDHTValue],
                                expiration_time: DHTExpiration, store_ok: bool):
+        """ Add or remove cache entries after finishing a store """
         if store_ok and subkey is None and self.cache_locally:  # we stored a regular value successfully, lets cache it!
             self.protocol.cache.store(key_id, value_packed, expiration_time)
         elif store_ok and subkey is not None and key_id in self.protocol.cache:
