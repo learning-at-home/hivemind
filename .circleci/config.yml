@@ -5,7 +5,7 @@ orbs:
 
 jobs:
   build-and-test:
-    executor: python/default@3.8
+    executor: python/default
     steps:
       - checkout
       - python/load-cache
