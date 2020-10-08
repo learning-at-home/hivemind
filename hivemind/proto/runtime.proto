@@ -29,6 +29,7 @@ message ExpertResponse {
 enum CompressionType{
   NONE = 0;
   MEANSTD_LAST_AXIS_FLOAT16 = 1;
+  FLOAT16 = 2;
 }
 
 message Tensor {
