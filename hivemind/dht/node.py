@@ -54,7 +54,7 @@ class DHTNode:
     # fmt:off
     node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
-    cache_refresh_available: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
+    discard_cache_on_store: bool; cache_refresh_available: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
     reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_IntermediateResult]]
     # fmt:on
 
@@ -64,8 +64,8 @@ class DHTNode:
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
-            reuse_get_requests: bool = True, num_workers: int = 1, listen: bool = True,
-            listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
+            discard_cache_on_store: bool = False, reuse_get_requests: bool = True, num_workers: int = 1,
+            listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
         :param initial_peers: connects to these peers to populate routing table, defaults to no peers
@@ -81,6 +81,7 @@ class DHTNode:
           if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
         :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
         :param cache_locally: if True, caches all values (stored or found) in a node-local cache
+        :param discard_cache_on_store: if True, drop obsolete cache entries for a key after storing a new item that key
         :param cache_nearest: whenever DHTNode finds a value, it will also store (cache) this value on this many
           nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet
         :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
@@ -111,6 +112,7 @@ class DHTNode:
         # caching policy
         self.refresh_timeout = refresh_timeout
         self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
+        self.discard_cache_on_store = discard_cache_on_store
         self.cache_refresh_before_expiry = cache_refresh_before_expiry
         self.cache_refresh_queue = CacheRefreshQueue()
         self.cache_refresh_available = asyncio.Event()
@@ -326,12 +328,12 @@ class DHTNode:
         """ Add or remove cache entries after finishing a store """
         if store_ok and subkey is None and self.cache_locally:  # we stored a regular value successfully, lets cache it!
             self.protocol.cache.store(key_id, value_packed, expiration_time)
-        elif store_ok and subkey is not None and key_id in self.protocol.cache:
+        elif self.discard_cache_on_store and store_ok and subkey is not None and key_id in self.protocol.cache:
             del self.protocol.cache[key_id]  # we updated a dictionary, but there may have been other updates
-        elif not store_ok:  # we tried to store value, but were rejected because there was a newer value
+        elif self.discard_cache_on_store and not store_ok:  # store rejected because there was a newer value
             cached_value, cached_expiration = self.protocol.cache.get(key_id)
             if (subkey is not None) or (cached_expiration is not None and cached_expiration <= expiration_time):
-                del self.protocol.cache[key_id]  # discard key if it is older than what was rejected
+                del self.protocol.cache[key_id]  # discard key from cache if it is older than what was rejected
 
     async def get(self, key: DHTKey, latest=False, **kwargs) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
