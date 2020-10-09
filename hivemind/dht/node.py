@@ -81,7 +81,7 @@ class DHTNode:
           if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
         :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
         :param cache_locally: if True, caches all values (stored or found) in a node-local cache
-        :param cace_on_store: if True, update cache entries for a key after storing a new item that key
+        :param cache_on_store: if True, update cache entries for a key after storing a new item that key
         :param cache_nearest: whenever DHTNode finds a value, it will also store (cache) this value on this many
           nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet
         :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
@@ -111,7 +111,7 @@ class DHTNode:
 
         # caching policy
         self.refresh_timeout = refresh_timeout
-        self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
+        self.cache_locally, self.cache_nearest, self.cache_on_store = cache_locally, cache_nearest, cache_on_store
         self.cache_refresh_before_expiry = cache_refresh_before_expiry
         self.cache_refresh_queue = CacheRefreshQueue()
         self.cache_refresh_available = asyncio.Event()
