@@ -74,8 +74,8 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
         tensor = torch.as_tensor(array).to(torch.float32).view(*serialized_tensor.size).mul_(stds).add_(means)
     elif serialized_tensor.compression == CompressionType.FLOAT16:
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.float16).copy()
-        tensor = torch.as_tensor(array).view(*serialized_tensor.size).\
-            requires_grad_(serialized_tensor.requires_grad).to(torch.float32)
+        tensor = torch.as_tensor(array).view(*serialized_tensor.size)\
+            .to(torch.float32).requires_grad_(serialized_tensor.requires_grad)
     else:
         raise ValueError(f"Unknown compression type: {serialized_tensor.compression}")
     return tensor
