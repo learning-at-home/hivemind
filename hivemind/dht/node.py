@@ -54,7 +54,7 @@ class DHTNode:
     # fmt:off
     node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
-    discard_cache_on_store: bool; cache_refresh_available: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
+    cache_on_store: bool; cache_refresh_available: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
     reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_IntermediateResult]]
     # fmt:on
 
@@ -64,7 +64,7 @@ class DHTNode:
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
-            discard_cache_on_store: bool = False, reuse_get_requests: bool = True, num_workers: int = 1,
+            cache_on_store: bool = True, reuse_get_requests: bool = True, num_workers: int = 1,
             listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
@@ -81,7 +81,7 @@ class DHTNode:
           if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
         :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
         :param cache_locally: if True, caches all values (stored or found) in a node-local cache
-        :param discard_cache_on_store: if True, drop obsolete cache entries for a key after storing a new item that key
+        :param cace_on_store: if True, update cache entries for a key after storing a new item that key
         :param cache_nearest: whenever DHTNode finds a value, it will also store (cache) this value on this many
           nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet
         :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
@@ -112,7 +112,6 @@ class DHTNode:
         # caching policy
         self.refresh_timeout = refresh_timeout
         self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
-        self.discard_cache_on_store = discard_cache_on_store
         self.cache_refresh_before_expiry = cache_refresh_before_expiry
         self.cache_refresh_queue = CacheRefreshQueue()
         self.cache_refresh_available = asyncio.Event()
@@ -277,7 +276,7 @@ class DHTNode:
                                       key=key_id.xor_distance, reverse=True)  # ordered so that .pop() returns nearest
 
             [original_key, *_], current_subkeys, current_values, current_expirations = zip(*key_id_to_data[key_id])
-            binary_values = list(map(self.protocol.serializer.dumps, current_values))
+            binary_values: List[bytes] = list(map(self.protocol.serializer.dumps, current_values))
 
             while num_successful_stores < self.num_replicas and (store_candidates or pending_store_tasks):
                 while store_candidates and num_successful_stores + len(pending_store_tasks) < self.num_replicas:
@@ -293,7 +292,7 @@ class DHTNode:
                     else:
                         pending_store_tasks.add(asyncio.create_task(self.protocol.call_store(
                             node_to_endpoint[node_id], keys=[key_id] * len(current_values), values=binary_values,
-                            expiration_time=current_expirations, subkeys=current_subkeys)))  # note: subkeys can be None
+                            expiration_time=current_expirations, subkeys=current_subkeys)))
 
                 # await nearest task. If it fails, dispatch more on the next iteration
                 if pending_store_tasks:
@@ -302,13 +301,16 @@ class DHTNode:
                     for task in finished_store_tasks:
                         if task.result() is not None:
                             num_successful_stores += 1
-                            for subkey, store_status in zip(subkeys, task.result()):
+                            for subkey, store_status in zip(current_subkeys, task.result()):
                                 store_ok[original_key, subkey] = store_status
                                 if not await_all_replicas:
                                     store_finished_events[original_key, subkey].set()
 
+            if self.cache_on_store:
+                self._update_cache_on_store(key_id, current_subkeys, binary_values, current_expirations,
+                                            store_ok=[store_ok[original_key, subkey] for subkey in current_subkeys])
+
             for subkey, value_bytes, expiration in zip(subkeys, binary_values, current_expirations):
-                self._update_cache_on_store(key_id, subkey, value_bytes, expiration, store_ok[original_key, subkey])
                 store_finished_events[original_key, subkey].set()
 
         store_task = asyncio.create_task(self.find_nearest_nodes(
@@ -322,18 +324,23 @@ class DHTNode:
             store_task.cancel()
             raise e
 
-    def _update_cache_on_store(self, key_id: DHTID, subkey: Optional[Subkey],
-                               value_packed: Union[BinaryDHTValue, DictionaryDHTValue],
-                               expiration_time: DHTExpiration, store_ok: bool):
-        """ Add or remove cache entries after finishing a store """
-        if store_ok and subkey is None and self.cache_locally:  # we stored a regular value successfully, lets cache it!
-            self.protocol.cache.store(key_id, value_packed, expiration_time)
-        elif self.discard_cache_on_store and store_ok and subkey is not None and key_id in self.protocol.cache:
-            del self.protocol.cache[key_id]  # we updated a dictionary, but there may have been other updates
-        elif self.discard_cache_on_store and not store_ok:  # store rejected because there was a newer value
-            cached_value, cached_expiration = self.protocol.cache.get(key_id)
-            if (subkey is not None) or (cached_expiration is not None and cached_expiration <= expiration_time):
-                del self.protocol.cache[key_id]  # discard key from cache if it is older than what was rejected
+    def _update_cache_on_store(self, key_id: DHTID, subkeys: List[Subkey], binary_values: List[bytes],
+                               expirations: List[DHTExpiration], store_ok: List[bool]):
+        """ Update local cache after finishing a store for one key (with perhaps several subkeys) """
+        store_succeeded = any(store_ok)
+        is_dictionary = any(subkey is not None for subkey in subkeys)
+        if store_succeeded and not is_dictionary:  # stored a new regular value, cache it!
+            stored_value_bytes, stored_expiration = max(zip(binary_values, expirations), key=lambda p: p[1])
+            self.protocol.cache.store(key_id, stored_value_bytes, stored_expiration)
+        elif not store_succeeded and not is_dictionary:  # store rejected, check if local cache is also obsolete
+            rejected_value, rejected_expiration = max(zip(binary_values, expirations), key=lambda p: p[1])
+            self.protocol.cache.store(key_id, rejected_value, rejected_expiration)  # can still be better than cache
+            if (self.protocol.cache.get(key_id)[1] or -float("inf")) <= rejected_expiration:  # cache would be rejected
+                self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
+        else:  # stored (or failed to store) a dictionary, either way, there can be other keys and we should update
+            for subkey, stored_value_bytes, expiration_time in zip(subkeys, binary_values, expirations):
+                self.protocol.cache.store_subkey(key_id, subkey, stored_value_bytes, expiration_time)
+            self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
 
     async def get(self, key: DHTKey, latest=False, **kwargs) -> Tuple[Optional[DHTValue], Optional[DHTExpiration]]:
         """
@@ -467,25 +474,28 @@ class DHTNode:
     def _trigger_cache_refresh(self, result: _IntermediateResult):
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
         if result.found_something and result.source_node_id == self.node_id:
-            with self.protocol.cache.freeze():  # do not clear outdated cache for now...
-                if self.cache_refresh_before_expiry and result.key_id in self.protocol.cache:
-                    previous_earliest_item: Tuple[DHTID, Any, DHTExpiration] = self.cache_refresh_queue.top()
-                    self.cache_refresh_queue.store(result.key_id, result.binary_value, result.expiration_time)
-                    if previous_earliest_item is None or result.expiration_time < previous_earliest_item[-1]:
-                        self.cache_refresh_available.set()  # if we new element is now earliest, notify the cache queue
+            if self.cache_refresh_before_expiry and result.key_id in self.protocol.cache:
+                refresh_time = result.expiration_time - self.cache_refresh_before_expiry
+                self._schedule_for_refresh(result.key_id, refresh_time, result.expiration_time)
+
+    def _schedule_for_refresh(self, key_id: DHTID, refresh_time: DHTExpiration):
+        """ Add key to a refresh queue, refresh at :refresh_time: or later """
+        previous_earliest_item: Tuple[DHTID, Any, DHTExpiration] = self.cache_refresh_queue.top()
+        self.cache_refresh_queue.store(key_id, value=None, expiration_time=refresh_time)
+        if previous_earliest_item is None or refresh_time < previous_earliest_item[-1]:
+            self.cache_refresh_available.set()  # if we new element is now earliest, notify the cache queue
 
     async def _refresh_stale_cache_entries(self):
         """ periodically refresh keys near-expired keys that were accessed at least once during previous lifetime """
         while self.is_alive:
-            with self.cache_refresh_queue.freeze():
-                while len(self.cache_refresh_queue) == 0:
-                    await self.cache_refresh_available.wait()
-                    self.cache_refresh_available.clear()
-                key_id, _, nearest_expiration = self.cache_refresh_queue.top()
+            while len(self.cache_refresh_queue) == 0:
+                await self.cache_refresh_available.wait()
+                self.cache_refresh_available.clear()
+            key_id, _, nearest_refresh_time = self.cache_refresh_queue.top()
 
             try:
                 # step 1: await until :cache_refresh_before_expiry: seconds before earliest first element expires
-                time_to_wait = nearest_expiration - get_dht_time() - self.cache_refresh_before_expiry
+                time_to_wait = nearest_refresh_time - get_dht_time()
                 await asyncio.wait_for(self.cache_refresh_available.wait(), timeout=time_to_wait)
                 # note: the line above will cause TimeoutError when we are ready to refresh cache
                 self.cache_refresh_available.clear()  # no timeout error => someone added new entry to queue and ...
@@ -493,20 +503,18 @@ class DHTNode:
 
             except asyncio.TimeoutError:  # caught TimeoutError => it is time to refresh the most recent cached entry
                 # step 2: find all keys that we should already refresh and remove them from queue
-                with self.cache_refresh_queue.freeze():
-                    keys_to_refresh = {key_id}
+                keys_to_refresh = {key_id}
+                del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
+                while self.cache_refresh_queue:
+                    key_id, _, nearest_refresh_time = self.cache_refresh_queue.top()
+                    if nearest_refresh_time > get_dht_time():
+                        break
                     del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
-                    while self.cache_refresh_queue:
-                        key_id, _, nearest_expiration = self.cache_refresh_queue.top()
-                        if nearest_expiration > get_dht_time() + self.cache_refresh_before_expiry:
-                            break
-                        del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
-                        keys_to_refresh.add(key_id)
+                    keys_to_refresh.add(key_id)
 
                 # step 3: search newer versions of these keys, cache them as a side-effect of self.get_many_by_id
-                await self.get_many_by_id(
-                    keys_to_refresh, sufficient_expiration_time=nearest_expiration + self.cache_refresh_before_expiry,
-                    _refresh_cache=False)  # if we found value locally, we shouldn't trigger another refresh
+                sufficient_expiration_time = get_dht_time() + self.cache_refresh_before_expiry
+                await self.get_many_by_id(keys_to_refresh, sufficient_expiration_time, _refresh_cache=False)
 
     def _cache_new_result(self, result: _IntermediateResult, nearest_nodes: List[DHTID],
                           node_to_endpoint: Dict[DHTID, Endpoint]):

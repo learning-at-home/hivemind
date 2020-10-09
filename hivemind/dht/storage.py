@@ -12,13 +12,13 @@ ValueType = TypeVar('ValueType')
 
 class TimedStorage(Generic[KeyType, ValueType]):
     """ A dictionary that maintains up to :maxsize: key-value-expiration tuples until their expiration_time """
+    frozen = False  # can be set to True. If true, do not remove outdated elements
 
     def __init__(self, maxsize: Optional[int] = None):
         self.maxsize = maxsize or float("inf")
         self.data: Dict[KeyType, Tuple[ValueType, DHTExpiration]] = dict()
         self.expiration_heap: List[Tuple[DHTExpiration, KeyType]] = []
         self.key_to_heap: Dict[KeyType, Tuple[DHTExpiration, KeyType]] = dict()
-        self.frozen = False  # if True, do not remove outdated elements
 
     def _remove_outdated(self):
         while not self.frozen and self.expiration_heap and (self.expiration_heap[0][0] < get_dht_time()
@@ -155,3 +155,4 @@ class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTVal
 
 class CacheRefreshQueue(TimedStorage[DHTID, DHTExpiration]):
     """ a queue of keys scheduled for refresh in future, used in DHTNode """
+    frozen = True
