@@ -128,5 +128,6 @@ def test_vector_compression(size=(128, 128, 64), alpha=5e-08):
     assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
     error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16))-X
     assert error.square().mean() < alpha
-    return error.square().mean()
+    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.FLOAT16)) - X
+    assert error.square().mean() < alpha
 
