@@ -290,16 +290,18 @@ def test_dht_node():
             assert len(value) == 2
 
         loop.run_until_complete(asyncio.sleep(3))
-        del me.protocol.cache[DHTID.generate(upper_key)]
-        del that_guy.protocol.cache[DHTID.generate(upper_key)]
-        # ^-- manually clear cache to prevent reusing old values
 
         assert not loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=345, expiration_time=now + 10))
         assert loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=567, expiration_time=now + 30))
         assert loop.run_until_complete(me.store(upper_key, subkey=subkey3, value=890, expiration_time=now + 50))
 
+        del me.protocol.cache[DHTID.generate(upper_key)]
+        del that_guy.protocol.cache[DHTID.generate(upper_key)]
+        # ^-- manually clear cache to prevent reusing old values
+
         for node in [that_guy, me]:
             value, time = loop.run_until_complete(node.get(upper_key))
+            print('DEBUGPRINT!', value, time)
             assert isinstance(value, dict) and time == now + 50, (value, time)
             assert value[subkey1] == (123, now + 10)
             assert value[subkey2] == (567, now + 30)
