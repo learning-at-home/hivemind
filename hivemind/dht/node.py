@@ -337,7 +337,7 @@ class DHTNode:
             self.protocol.cache.store(key_id, rejected_value, rejected_expiration)  # can still be better than cache
             if (self.protocol.cache.get(key_id)[1] or -float("inf")) <= rejected_expiration:  # cache would be rejected
                 self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
-        else:  # stored (or failed to store) a dictionary, either way, there can be other keys and we should update
+        else:  # stored a dictionary (or failed to store), either way, there can be other keys and we should update
             for subkey, stored_value_bytes, expiration_time in zip(subkeys, binary_values, expirations):
                 self.protocol.cache.store_subkey(key_id, subkey, stored_value_bytes, expiration_time)
             self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
@@ -475,13 +475,12 @@ class DHTNode:
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
         if result.found_something and result.source_node_id == self.node_id:
             if self.cache_refresh_before_expiry and result.key_id in self.protocol.cache:
-                refresh_time = result.expiration_time - self.cache_refresh_before_expiry
-                self._schedule_for_refresh(result.key_id, refresh_time, result.expiration_time)
+                self._schedule_for_refresh(result.key_id, result.expiration_time - self.cache_refresh_before_expiry)
 
     def _schedule_for_refresh(self, key_id: DHTID, refresh_time: DHTExpiration):
         """ Add key to a refresh queue, refresh at :refresh_time: or later """
         previous_earliest_item: Tuple[DHTID, Any, DHTExpiration] = self.cache_refresh_queue.top()
-        self.cache_refresh_queue.store(key_id, value=None, expiration_time=refresh_time)
+        self.cache_refresh_queue.store(key_id, value=refresh_time, expiration_time=refresh_time)
         if previous_earliest_item is None or refresh_time < previous_earliest_item[-1]:
             self.cache_refresh_available.set()  # if we new element is now earliest, notify the cache queue
 
