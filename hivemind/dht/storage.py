@@ -127,9 +127,11 @@ class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTVal
         If subkey is not None, adds a subkey-value pair to a dictionary associated with :key: (see store_subkey below)
         :returns: True if new value was stored, False it was rejected (current value is newer)
         """
-        if subkey is not None:
+        if isinstance(value, DictionaryDHTValue):
+            return all(self.store_subkey(key, subkey, val, expiry) for subkey, val, expiry in value.items())
+        elif subkey is not None:  # add one sub-key
             return self.store_subkey(key, subkey, value, expiration_time)
-        else:
+        else:  # store regular key
             return super().store(key, value, expiration_time)
 
     def store_subkey(self, key: DHTID, subkey: Subkey, value: BinaryDHTValue, expiration_time: DHTExpiration) -> bool:
@@ -143,12 +145,12 @@ class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTVal
         previous_value, previous_expiration_time = self.get(key)
         if isinstance(previous_value, DictionaryDHTValue):  # already a dictionary, just add new subkey
             if expiration_time > previous_value.latest_expiration_time:
-                self.store(key, previous_value, expiration_time)  # refresh expiration time
+                super().store(key, previous_value, expiration_time)  # refresh expiration time
             return previous_value.store(subkey, value, expiration_time)
         elif expiration_time > (previous_expiration_time or float('-inf')):  # create new dictionary, add subkey
             new_storage = DictionaryDHTValue()
             new_storage.store(subkey, value, expiration_time)
-            return self.store(key, new_storage, new_storage.latest_expiration_time)
+            return super().store(key, new_storage, new_storage.latest_expiration_time)
         else:
             return False
 

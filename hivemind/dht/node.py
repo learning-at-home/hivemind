@@ -503,6 +503,7 @@ class DHTNode:
             except asyncio.TimeoutError:  # caught TimeoutError => it is time to refresh the most recent cached entry
                 # step 2: find all keys that we should already refresh and remove them from queue
                 keys_to_refresh = {key_id}
+                max_expiration_time = self.protocol.cache.get(key_id)[1] or get_dht_time()
                 del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
                 while self.cache_refresh_queue:
                     key_id, _, nearest_refresh_time = self.cache_refresh_queue.top()
@@ -510,9 +511,10 @@ class DHTNode:
                         break
                     del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
                     keys_to_refresh.add(key_id)
+                    max_expiration_time = max(max_expiration_time, self.protocol.cache.get(key_id)[1] or float('inf'))
 
                 # step 3: search newer versions of these keys, cache them as a side-effect of self.get_many_by_id
-                sufficient_expiration_time = get_dht_time() + self.cache_refresh_before_expiry
+                sufficient_expiration_time = max_expiration_time + self.cache_refresh_before_expiry
                 await self.get_many_by_id(keys_to_refresh, sufficient_expiration_time, _refresh_cache=False)
 
     def _cache_new_result(self, result: _IntermediateResult, nearest_nodes: List[DHTID],
