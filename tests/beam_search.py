@@ -5,11 +5,14 @@ import hivemind
 from hivemind import LOCALHOST
 from tqdm.auto import trange
 import numpy as np
+from test_utils import increase_file_limit
+
 # TODO THIS FILE SHOULDN'T MAKE IT TO MASTER
 # this is a performance test for beam search debugging;
 # we will need to re-write it as an option for benchmark_dht.py before merging into master
 
 if __name__ == '__main__':
+    increase_file_limit()
     dht_size = 256
     total_experts = 4096
     batch_size = 32
