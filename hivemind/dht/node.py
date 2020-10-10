@@ -467,11 +467,11 @@ class DHTNode:
             concurrent_requests[-1].finish_search()
             concurrent_requests.pop(-1)
 
-    def _trigger_cache_refresh(self, result: _SearchState):
+    def _trigger_cache_refresh(self, search: _SearchState):
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
-        if result.found_something and result.source_node_id == self.node_id:
-            if self.cache_refresh_before_expiry and result.key_id in self.protocol.cache:
-                self._schedule_for_refresh(result.key_id, result.expiration_time - self.cache_refresh_before_expiry)
+        if search.found_something and search.source_node_id == self.node_id:
+            if self.cache_refresh_before_expiry and search.key_id in self.protocol.cache:
+                self._schedule_for_refresh(search.key_id, search.expiration_time - self.cache_refresh_before_expiry)
 
     def _schedule_for_refresh(self, key_id: DHTID, refresh_time: DHTExpiration):
         """ Add key to a refresh queue, refresh at :refresh_time: or later """
@@ -517,22 +517,22 @@ class DHTNode:
                 sufficient_expiration_time = max_expiration_time + self.cache_refresh_before_expiry + 1
                 await self.get_many_by_id(keys_to_refresh, sufficient_expiration_time, _is_refresh=True)
 
-    def _cache_new_result(self, result: _SearchState, nearest_nodes: List[DHTID],
+    def _cache_new_result(self, search: _SearchState, nearest_nodes: List[DHTID],
                           node_to_endpoint: Dict[DHTID, Endpoint], _is_refresh: bool = False):
         """ after key_id is found, update cache according to caching policy. used internally in get and get_many """
-        if result.found_something:
-            previous_expiration_time = max(self.protocol.storage.get(result.key_id)[1] or -float('inf'),
-                                           self.protocol.cache.get(result.key_id)[1] or -float('inf'))
-            if result.expiration_time > previous_expiration_time:  # if this value has better expiration
+        if search.found_something:
+            previous_expiration_time = max(self.protocol.storage.get(search.key_id)[1] or -float('inf'),
+                                           self.protocol.cache.get(search.key_id)[1] or -float('inf'))
+            if search.expiration_time > previous_expiration_time:  # if this value has better expiration
                 if self.cache_locally or _is_refresh:
-                    self.protocol.cache.store(result.key_id, result.binary_value, result.expiration_time)
+                    self.protocol.cache.store(search.key_id, search.binary_value, search.expiration_time)
                 if self.cache_nearest:
                     num_cached_nodes = 0
                     for node_id in nearest_nodes:
-                        if node_id == result.source_node_id:
+                        if node_id == search.source_node_id:
                             continue
                         asyncio.create_task(self.protocol.call_store(
-                            node_to_endpoint[node_id], [result.key_id], [result.binary_value], [result.expiration_time],
+                            node_to_endpoint[node_id], [search.key_id], [search.binary_value], [search.expiration_time],
                             in_cache=True))
                         num_cached_nodes += 1
                         if num_cached_nodes >= self.cache_nearest:
@@ -571,12 +571,12 @@ class _SearchState:
                 self.finish_search()
 
     def add_done_callback(self, callback: Callable[[_SearchState], Any]):
-        """ Add callback that will be called when _IntermediateSearchResult is done (found OR cancelled by user) """
+        """ Add callback that will be called when _SearchState is done (found OR cancelled by user) """
         self.future.add_done_callback(lambda _future: callback(self))
 
     def finish_search(self):
         if self.future.done():
-            return  # either user cancelled our result or someone sent it before us. Nothing more to do here.
+            return  # either user cancelled our search or someone sent it before us. Nothing more to do here.
         elif not self.found_something:
             self.future.set_result((None, None))
         elif isinstance(self.binary_value, BinaryDHTValue):
@@ -590,7 +590,7 @@ class _SearchState:
 
     @property
     def found_something(self) -> bool:
-        """ Whether or not we have at least some result, regardless of its expiration time """
+        """ Whether or not we have found at least some value, regardless of its expiration time """
         return self.expiration_time is not None
 
     @property
@@ -598,5 +598,5 @@ class _SearchState:
         return self.future.done()
 
     def __lt__(self, other: _SearchState):
-        """ _IntermediateResult instances will be sorted by their target expiration time """
+        """ _SearchState instances will be sorted by their target expiration time """
         return self.sufficient_expiration_time < other.sufficient_expiration_time
