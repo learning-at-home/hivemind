@@ -24,10 +24,11 @@ message NodeInfo {
 message StoreRequest {
   // three lists of the same length representing dht keys, dht values and expiration
   repeated bytes keys = 1;             // keys in the form of DHTID.generate(raw_key).to_bytes()
-  repeated bytes values = 2;           // binary-encoded value for i-th key
-  repeated double expiration_time = 3; // expirations for i-th key (type = DHTExpiration)
-  repeated bool in_cache = 4;          // if in_cache[i], store i-th key in cache, else store normally
-  NodeInfo peer = 5;                   // (optional) sender's own node info, same behavior as in DHT.rpc_ping
+  repeated string subkeys = 2;         // [optional] subkeys for DictionaryDHTValue type, empty string means no subkey
+  repeated bytes values = 3;           // binary-encoded value for i-th key
+  repeated double expiration_time = 4; // expirations for i-th key (type = DHTExpiration)
+  repeated bool in_cache = 5;          // if in_cache[i], store i-th key in cache, else store normally
+  NodeInfo peer = 6;                   // (optional) sender's own node info, same behavior as in DHT.rpc_ping
 }
 
 message StoreResponse {
@@ -40,16 +41,21 @@ message FindRequest {
   NodeInfo peer = 2;                   // optional, same behavior as in DHT.ping
 }
 
-message Peers {
-  // two aligned arrays: DHTIDs and Endpoints, i-th endpoint corresponds to peer with i-th node id
-  repeated bytes node_ids = 1;         // DHTID serialized with node_id.to_bytes()
-  repeated string endpoints = 2;       // e.g. 123.123.123.123:1337 or [2a21:6с8:b192:2105]:8888
+enum ResultType {NOT_FOUND = 0; FOUND_REGULAR = 1; FOUND_DICTIONARY = 2;}
+
+message FindResult {
+  ResultType type = 1;                 // NONE |      REGULAR     | DICTIONARY
+  bytes value = 2;                     // n/a  | serialized value | serialized DictionaryDHTValue with serialized fields
+  double expiration_time = 3;          // n/a  | expiration time  | DictionaryDHTValue.latest_expiration_time
+
+  // two aligned arrays: DHTIDs and Endpoints for nearest peers (sorted by XOR distance)
+  repeated bytes nearest_node_ids = 4;      // DHTIDs serialized with node_id.to_bytes()
+  repeated string nearest_endpoints = 5;    // e.g. 123.123.123.123:1337 or [2a21:6с8:b192:2105]:8888
 }
 
+
 message FindResponse {
-  repeated bytes values = 1;           // value for i-th key, b'' means not found locally
-  repeated double expiration_time = 2; // expiration time for i-th value, only valid value is found
-  repeated Peers nearest = 3;          // peers ordered from nearest to farthest based on distance to i-th key
-  NodeInfo peer = 4;                   // respondent's node id, for you to update routing table
+  repeated FindResult results = 1;       // for each item, return value/expiration (if found) and nearest peers
+  NodeInfo peer = 2;                   // respondent's node id, for you to update routing table
 }
 

@@ -2,26 +2,28 @@
 from __future__ import annotations
 
 import asyncio
-import heapq
-from contextlib import contextmanager
-from typing import Optional, List, Tuple, Dict, Iterator, Any, Sequence, Union, Collection
+from typing import Optional, List, Tuple, Dict, Any, Sequence, Union, Collection
 from warnings import warn
 
 import grpc
 import grpc.experimental.aio
 
-from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, get_dht_time
+from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, Subkey
+from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
-from hivemind.utils import Endpoint, get_logger, replace_port
+from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer
 
 logger = get_logger(__name__)
+NOT_FOUND_VALUE, NOT_FOUND_EXPIRATION, IS_REGULAR_VALUE, IS_DICTIONARY = b'', -float('inf'), '', '___DictionaryDHTValue'
+RESERVED_SUBKEYS = {IS_REGULAR_VALUE, IS_DICTIONARY}
 
 
 class DHTProtocol(dht_grpc.DHTServicer):
     # fmt:off
     node_id: DHTID; port: int; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
     channel_options: Optional[Sequence[Tuple[str, Any]]]; server: grpc.experimental.aio.Server
-    storage: LocalStorage; cache: LocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
+    storage: DHTLocalStorage; cache: DHTLocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
+    serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     # fmt:on
 
     @classmethod
@@ -44,7 +46,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         self = cls(_initialized_with_create=True)
         self.node_id, self.bucket_size, self.num_replicas = node_id, bucket_size, num_replicas
         self.wait_timeout, self.channel_options = wait_timeout, channel_options
-        self.storage, self.cache = LocalStorage(), LocalStorage(maxsize=cache_size)
+        self.storage, self.cache = DHTLocalStorage(), DHTLocalStorage(maxsize=cache_size)
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.rpc_semaphore = asyncio.Semaphore(parallel_rpc if parallel_rpc is not None else float('inf'))
 
@@ -110,30 +112,46 @@ class DHTProtocol(dht_grpc.DHTServicer):
             asyncio.create_task(self.update_routing_table(sender_id, rpc_endpoint))
         return self.node_info
 
-    async def call_store(self, peer: Endpoint, keys: Sequence[DHTID], values: Sequence[BinaryDHTValue],
+    async def call_store(self, peer: Endpoint, keys: Sequence[DHTID],
+                         values: Sequence[Union[BinaryDHTValue, DictionaryDHTValue]],
                          expiration_time: Union[DHTExpiration, Sequence[DHTExpiration]],
-                         in_cache: Optional[Union[bool, Sequence[bool]]] = None) -> Sequence[bool]:
+                         subkeys: Optional[Union[Subkey, Sequence[Optional[Subkey]]]] = None,
+                         in_cache: Optional[Union[bool, Sequence[bool]]] = None) -> Optional[List[bool]]:
         """
         Ask a recipient to store several (key, value : expiration_time) items or update their older value
 
         :param peer: request this peer to store the data
         :param keys: a list of N keys digested by DHTID.generate(source=some_dict_key)
         :param values: a list of N serialized values (bytes) for each respective key
-        :param expiration_time: a list of N expiration timestamps for each respective key-value pair (see get_dht_time())
+        :param expiration_time: a list of N expiration timestamps for each respective key-value pair(see get_dht_time())
+        :param subkeys: a list of N optional sub-keys. If None, stores value normally. If not subkey is not None:
+          1) if local storage doesn't have :key:, create a new dictionary {subkey: (value, expiration_time)}
+          2) if local storage already has a dictionary under :key:, try add (subkey, value, exp_time) to that dictionary
+          2) if local storage associates :key: with a normal value with smaller expiration, clear :key: and perform (1)
+          3) finally, if local storage currently associates :key: with a normal value with larger expiration, do nothing
         :param in_cache: a list of booleans, True = store i-th key in cache, value = store i-th key locally
         :note: the difference between storing normally and in cache is that normal storage is guaranteed to be stored
          until expiration time (best-effort), whereas cached storage can be evicted early due to limited cache size
-
         :return: list of [True / False] True = stored, False = failed (found newer value or no response)
-         if peer did not respond (e.g. due to timeout or congestion), returns None
+                 if peer did not respond (e.g. due to timeout or congestion), returns None
         """
         if isinstance(expiration_time, DHTExpiration):
             expiration_time = [expiration_time] * len(keys)
+        if subkeys is None or isinstance(subkeys, Subkey):
+            subkeys = [subkeys] * len(keys)
+
         in_cache = in_cache if in_cache is not None else [False] * len(keys)  # default value (None)
         in_cache = [in_cache] * len(keys) if isinstance(in_cache, bool) else in_cache  # single bool
-        keys, values, expiration_time, in_cache = map(list, [keys, values, expiration_time, in_cache])
+        keys, subkeys, values, expiration_time, in_cache = map(list, [keys, subkeys, values, expiration_time, in_cache])
+        for i in range(len(keys)):
+            if subkeys[i] is None:  # add default sub-key if not specified
+                subkeys[i] = IS_REGULAR_VALUE if not isinstance(values[i], DictionaryDHTValue) else IS_DICTIONARY
+            if isinstance(values[i], DictionaryDHTValue):
+                assert subkeys[i] == IS_DICTIONARY, "Please do not specify subkey when storing an entire dictionary"
+                values[i] = self.serializer.dumps(values[i])
+
         assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"
-        store_request = dht_pb2.StoreRequest(keys=list(map(DHTID.to_bytes, keys)), values=values,
+        store_request = dht_pb2.StoreRequest(keys=list(map(DHTID.to_bytes, keys)), subkeys=subkeys, values=values,
                                              expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info)
         try:
             async with self.rpc_semaphore:
@@ -145,7 +163,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         except grpc.experimental.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to store at {peer}: {error.code()}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
-            return [False] * len(keys)
+            return None
 
     async def rpc_store(self, request: dht_pb2.StoreRequest, context: grpc.ServicerContext) -> dht_pb2.StoreResponse:
         """ Some node wants us to store this (key, value) pair """
@@ -153,10 +171,19 @@ class DHTProtocol(dht_grpc.DHTServicer):
             asyncio.create_task(self.rpc_ping(request.peer, context))
         assert len(request.keys) == len(request.values) == len(request.expiration_time) == len(request.in_cache)
         response = dht_pb2.StoreResponse(store_ok=[], peer=self.node_info)
-        for key_bytes, value_bytes, expiration_time, in_cache in zip(
-                request.keys, request.values, request.expiration_time, request.in_cache):
-            local_memory = self.cache if in_cache else self.storage
-            response.store_ok.append(local_memory.store(DHTID.from_bytes(key_bytes), value_bytes, expiration_time))
+        keys = map(DHTID.from_bytes, request.keys)
+        for key_id, subkey, value_bytes, expiration_time, in_cache in zip(
+                keys, request.subkeys, request.values, request.expiration_time, request.in_cache):
+            storage = self.cache if in_cache else self.storage
+            if subkey == IS_REGULAR_VALUE:  # store normal value without subkeys
+                response.store_ok.append(storage.store(key_id, value_bytes, expiration_time))
+            elif subkey == IS_DICTIONARY:   # store an entire dictionary with pre-existing subkeys
+                value_dictionary = self.serializer.loads(value_bytes)
+                assert isinstance(value_dictionary, DictionaryDHTValue)
+                response.store_ok.append(all(storage.store_subkey(key_id, subkey, subvalue, subkey_expiration)
+                                             for subkey, subvalue, subkey_expiration in value_dictionary.items()))
+            else:  # add new entry into an existing dictionary-like value or create a new dictionary with one sub-key
+                response.store_ok.append(storage.store_subkey(key_id, subkey, value_bytes, expiration_time))
         return response
 
     async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> \
@@ -179,16 +206,19 @@ class DHTProtocol(dht_grpc.DHTServicer):
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
-            assert len(response.values) == len(response.expiration_time) == len(response.nearest) == len(keys), \
-                "DHTProtocol: response is not aligned with keys and/or expiration times"
+            assert len(keys) == len(response.results), "DHTProtocol: response is not aligned with keys"
 
-            output = {}  # unpack data without special NOT_FOUND_* values
-            for key, value, expiration_time, nearest in zip(
-                    keys, response.values, response.expiration_time, response.nearest):
-                value = value if value != _NOT_FOUND_VALUE else None
-                expiration_time = expiration_time if expiration_time != _NOT_FOUND_EXPIRATION else None
-                nearest = dict(zip(map(DHTID.from_bytes, nearest.node_ids), nearest.endpoints))
-                output[key] = (value, expiration_time, nearest)
+            output = {}  # unpack data depending on its type
+            for key, result in zip(keys, response.results):
+                nearest = dict(zip(map(DHTID.from_bytes, result.nearest_node_ids), result.nearest_endpoints))
+                if result.type == dht_pb2.NOT_FOUND:
+                    output[key] = None, None, nearest
+                elif result.type == dht_pb2.FOUND_REGULAR:
+                    output[key] = result.value, result.expiration_time, nearest
+                elif result.type == dht_pb2.FOUND_DICTIONARY:
+                    output[key] = self.serializer.loads(result.value), result.expiration_time, nearest
+                else:
+                    logger.error(f"Unknown result type: {result.type}")
             return output
         except grpc.experimental.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to find at {peer}: {error.code()}")
@@ -201,24 +231,27 @@ class DHTProtocol(dht_grpc.DHTServicer):
         """
         if request.peer:  # if requested, add peer to the routing table
             asyncio.create_task(self.rpc_ping(request.peer, context))
-
-        response = dht_pb2.FindResponse(values=[], expiration_time=[], nearest=[], peer=self.node_info)
-        for key_id in map(DHTID.from_bytes, request.keys):
+        response = dht_pb2.FindResponse(results=[], peer=self.node_info)
+        for i, key_id in enumerate(map(DHTID.from_bytes, request.keys)):
             maybe_value, maybe_expiration_time = self.storage.get(key_id)
             cached_value, cached_expiration_time = self.cache.get(key_id)
             if (cached_expiration_time or -float('inf')) > (maybe_expiration_time or -float('inf')):
                 maybe_value, maybe_expiration_time = cached_value, cached_expiration_time
 
-            nearest_neighbors = self.routing_table.get_nearest_neighbors(
-                key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id))
-            if nearest_neighbors:
-                peer_ids, endpoints = zip(*nearest_neighbors)
-            else:
-                peer_ids, endpoints = [], []
+            if maybe_expiration_time is None:  # value not found
+                item = dht_pb2.FindResult(type=dht_pb2.NOT_FOUND)
+            elif isinstance(maybe_value, DictionaryDHTValue):
+                item = dht_pb2.FindResult(type=dht_pb2.FOUND_DICTIONARY, value=self.serializer.dumps(maybe_value),
+                                          expiration_time=maybe_value.latest_expiration_time)
+            else:  # found regular value
+                item = dht_pb2.FindResult(type=dht_pb2.FOUND_REGULAR, value=maybe_value,
+                                          expiration_time=maybe_expiration_time)
 
-            response.values.append(maybe_value if maybe_value is not None else _NOT_FOUND_VALUE)
-            response.expiration_time.append(maybe_expiration_time if maybe_expiration_time else _NOT_FOUND_EXPIRATION)
-            response.nearest.append(dht_pb2.Peers(node_ids=list(map(DHTID.to_bytes, peer_ids)), endpoints=endpoints))
+            for node_id, endpoint in self.routing_table.get_nearest_neighbors(
+                key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id)):
+                item.nearest_node_ids.append(node_id.to_bytes())
+                item.nearest_endpoints.append(endpoint)
+            response.results.append(item)
         return response
 
     async def update_routing_table(self, node_id: Optional[DHTID], peer_endpoint: Endpoint, responded=True):
@@ -256,91 +289,3 @@ class DHTProtocol(dht_grpc.DHTServicer):
         else:  # we sent outgoing request and peer did not respond
             if node_id is not None and node_id in self.routing_table:
                 del self.routing_table[node_id]
-
-
-_NOT_FOUND_VALUE, _NOT_FOUND_EXPIRATION = b'', -float('inf')  # internal values to represent that a value was not found
-
-
-class LocalStorage:
-    """ Local dictionary that maintains up to :maxsize: tuples of (key, value, expiration_time) """
-
-    def __init__(self, maxsize: Optional[int] = None):
-        self.cache_size = maxsize or float("inf")
-        self.data: Dict[DHTID, Tuple[BinaryDHTValue, DHTExpiration]] = dict()
-        self.expiration_heap: List[Tuple[DHTExpiration, DHTID]] = []
-        self.key_to_heap: Dict[DHTID, Tuple[DHTExpiration, DHTID]] = dict()
-        self.frozen = False  # if True, do not remove outdated elements
-
-    def _remove_outdated(self):
-        while not self.frozen and self.expiration_heap and (self.expiration_heap[0][0] < get_dht_time()
-                                                            or len(self.expiration_heap) > self.cache_size):
-            heap_entry = heapq.heappop(self.expiration_heap)
-            key = heap_entry[1]
-            if self.key_to_heap.get(key) == heap_entry:
-                del self.data[key], self.key_to_heap[key]
-
-    def store(self, key: DHTID, value: BinaryDHTValue, expiration_time: DHTExpiration) -> bool:
-        """
-        Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
-        :returns: True if new value was stored, False it was rejected (current value is newer)
-        """
-        if expiration_time < get_dht_time() and not self.frozen:
-            return False
-        self.key_to_heap[key] = (expiration_time, key)
-        heapq.heappush(self.expiration_heap, (expiration_time, key))
-        if key in self.data:
-            if self.data[key][1] < expiration_time:
-                self.data[key] = (value, expiration_time)
-                return True
-            return False
-        self.data[key] = (value, expiration_time)
-        self._remove_outdated()
-        return True
-
-    def get(self, key: DHTID) -> (Optional[BinaryDHTValue], Optional[DHTExpiration]):
-        """ Get a value corresponding to a key if that (key, value) pair was previously stored here. """
-        self._remove_outdated()
-        if key in self.data:
-            return self.data[key]
-        return None, None
-
-    def items(self) -> Iterator[Tuple[DHTID, BinaryDHTValue, DHTExpiration]]:
-        """ Iterate over (key, value, expiration_time) tuples stored in this storage """
-        self._remove_outdated()
-        return ((key, value, expiration_time) for key, (value, expiration_time) in self.data.items())
-
-    def top(self) -> Optional[Tuple[DHTID, BinaryDHTValue, DHTExpiration]]:
-        """ Return the entry with earliest expiration or None if there isn't any """
-        self._remove_outdated()
-        if self.data:
-            top_entry, top_key = self.expiration_heap[0], self.expiration_heap[0][1]
-            while self.key_to_heap.get(top_key) != top_entry:
-                heapq.heappop(self.expiration_heap)  # skip leftover "ghost" entries until first real entry
-                top_entry, top_key = self.expiration_heap[0], self.expiration_heap[0][1]
-            value, expiration = self.data[top_key]
-            return top_key, value, expiration
-
-    def __contains__(self, key: DHTID):
-        self._remove_outdated()
-        return key in self.data
-
-    def __len__(self):
-        self._remove_outdated()
-        return len(self.data)
-
-    def __delitem__(self, key: DHTID):
-        if key in self.key_to_heap:
-            del self.data[key], self.key_to_heap[key]
-        # note: key may still be in self.expiration_heap, but it will not be used and eventually ._remove_outdated()
-
-    def __bool__(self):
-        return bool(self.data)
-
-    @contextmanager
-    def freeze(self):
-        """ Temporarily cease to ._remove_outdated() elements inside this context to ensure consistency """
-        prev_frozen, self.frozen = self.frozen, True
-        try:
-            yield self
-        finally:
-            self.frozen = prev_frozen

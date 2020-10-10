@@ -6,7 +6,7 @@ import hivemind
 from hivemind import LOCALHOST
 
 
-def test_hivemind_dht():
+def test_store_get_experts():
     peers = [hivemind.DHT(start=True)]
     for i in range(10):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]

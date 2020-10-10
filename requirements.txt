@@ -2,7 +2,7 @@ PyYAML
 torch>=1.3.0
 numpy>=1.17
 prefetch_generator>=1.0.1
-umsgpack
+msgpack>=0.5.6
 sortedcontainers
 uvloop>=0.14.0
 grpcio>=1.31
