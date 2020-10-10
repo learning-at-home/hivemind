@@ -373,8 +373,8 @@ class DHTNode:
     async def get_many_by_id(
             self, key_ids: Collection[DHTID], sufficient_expiration_time: Optional[DHTExpiration] = None,
             num_workers: Optional[int] = None, beam_size: Optional[int] = None, return_futures: bool = False,
-            _refresh_cache=True) -> Dict[DHTID, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
-                                                      Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
+            _is_refresh=False) -> Dict[DHTID, Union[Tuple[Optional[DHTValue], Optional[DHTExpiration]],
+                                                    Awaitable[Tuple[Optional[DHTValue], Optional[DHTExpiration]]]]]:
         """
         Traverse DHT to find a list of DHTIDs. For each key, return latest (value, expiration) or None if not found.
 
@@ -387,7 +387,7 @@ class DHTNode:
         :param return_futures: if True, immediately return asyncio.Future for every before interacting with the nework.
          The algorithm will populate these futures with (value, expiration) when it finds the corresponding key
          Note: canceling a future will stop search for the corresponding key
-        :param _refresh_cache: internal flag, whether or not to self._trigger_cache_refresh
+        :param _is_refresh: internal flag, set to True by an internal cache refresher (if enabled)
         :returns: for each key: value and its expiration time. If nothing is found, returns (None, None) for that key
         :note: in order to check if get returned a value, please check (expiration_time is None)
         """
@@ -397,7 +397,7 @@ class DHTNode:
         search_results: Dict[DHTID, _SearchState] = {key_id: _SearchState(
             key_id, sufficient_expiration_time, serializer=self.protocol.serializer) for key_id in key_ids}
 
-        if _refresh_cache:
+        if not _is_refresh:  # if we're already refreshing cache, there's no need to trigger subsequent refreshes
             for key_id in key_ids:
                 search_results[key_id].add_done_callback(self._trigger_cache_refresh)
 
@@ -410,7 +410,8 @@ class DHTNode:
         # stage 1: check for value in this node's local storage and cache
         for key_id in key_ids:
             search_results[key_id].add_candidate(*self.protocol.storage.get(key_id), source_node_id=self.node_id)
-            search_results[key_id].add_candidate(*self.protocol.cache.get(key_id), source_node_id=self.node_id)
+            if not _is_refresh:
+                search_results[key_id].add_candidate(*self.protocol.cache.get(key_id), source_node_id=self.node_id)
 
         # stage 2: traverse the DHT to get the remaining keys from remote peers
         unfinished_key_ids = [key_id for key_id in key_ids if not search_results[key_id].finished]
@@ -437,7 +438,7 @@ class DHTNode:
         # V-- this function will be called exactly once when traverse_dht finishes search for a given key
         async def found_callback(key_id: DHTID, nearest_nodes: List[DHTID], _visited: Set[DHTID]):
             search_results[key_id].finish_search()  # finish search whether or we found something
-            self._cache_new_result(search_results[key_id], nearest_nodes, node_to_endpoint)
+            self._cache_new_result(search_results[key_id], nearest_nodes, node_to_endpoint, _is_refresh=_is_refresh)
 
         asyncio.create_task(traverse_dht(
             queries=list(unfinished_key_ids), initial_nodes=list(node_to_endpoint),
@@ -478,9 +479,9 @@ class DHTNode:
             self.cache_refresh_task = asyncio.create_task(self._refresh_stale_cache_entries())
             logger.debug("Spawned cache refresh task.")
         previous_earliest_item: Tuple[DHTID, Any, DHTExpiration] = self.cache_refresh_queue.top()
-        self.cache_refresh_queue.store(key_id, value=refresh_time, expiration_time=refresh_time)
         if previous_earliest_item is None or refresh_time < previous_earliest_item[-1]:
             self.cache_refresh_evt.set()  # if we new element is now earliest, notify the cache queue
+        self.cache_refresh_queue.store(key_id, value=refresh_time, expiration_time=refresh_time)
 
     async def _refresh_stale_cache_entries(self):
         """ periodically refresh keys near-expired keys that were accessed at least once during previous lifetime """
@@ -500,29 +501,30 @@ class DHTNode:
 
             except asyncio.TimeoutError:  # caught TimeoutError => it is time to refresh the most recent cached entry
                 # step 2: find all keys that we should already refresh and remove them from queue
+                current_time = get_dht_time()
                 keys_to_refresh = {key_id}
-                max_expiration_time = self.protocol.cache.get(key_id)[1] or get_dht_time()
+                max_expiration_time = self.protocol.cache.get(key_id)[1] or current_time
                 del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
                 while self.cache_refresh_queue:
                     key_id, _, nearest_refresh_time = self.cache_refresh_queue.top()
-                    if nearest_refresh_time > get_dht_time():
+                    if nearest_refresh_time > current_time:
                         break
                     del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
                     keys_to_refresh.add(key_id)
-                    max_expiration_time = max(max_expiration_time, self.protocol.cache.get(key_id)[1] or float('inf'))
+                    max_expiration_time = max(max_expiration_time, self.protocol.cache.get(key_id)[1] or current_time)
 
                 # step 3: search newer versions of these keys, cache them as a side-effect of self.get_many_by_id
-                sufficient_expiration_time = max_expiration_time + self.cache_refresh_before_expiry
-                await self.get_many_by_id(keys_to_refresh, sufficient_expiration_time, _refresh_cache=False)
+                sufficient_expiration_time = max_expiration_time + self.cache_refresh_before_expiry + 1
+                await self.get_many_by_id(keys_to_refresh, sufficient_expiration_time, _is_refresh=True)
 
     def _cache_new_result(self, result: _SearchState, nearest_nodes: List[DHTID],
-                          node_to_endpoint: Dict[DHTID, Endpoint]):
+                          node_to_endpoint: Dict[DHTID, Endpoint], _is_refresh: bool = False):
         """ after key_id is found, update cache according to caching policy. used internally in get and get_many """
         if result.found_something:
             previous_expiration_time = max(self.protocol.storage.get(result.key_id)[1] or -float('inf'),
                                            self.protocol.cache.get(result.key_id)[1] or -float('inf'))
             if result.expiration_time > previous_expiration_time:  # if this value has better expiration
-                if self.cache_locally:
+                if self.cache_locally or _is_refresh:
                     self.protocol.cache.store(result.key_id, result.binary_value, result.expiration_time)
                 if self.cache_nearest:
                     num_cached_nodes = 0

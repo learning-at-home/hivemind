@@ -192,7 +192,7 @@ def test_dht_node():
         # this helps us avoid undesirable side-effects when running multiple tests in sequence
         loop = asyncio.get_event_loop()
         me = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 5), parallel_rpc=10,
-                                                    cache_locally=False, cache_refresh_before_expiry=False))
+                                                    cache_refresh_before_expiry=False))
 
         # test 1: find self
         nearest = loop.run_until_complete(me.find_nearest_nodes([me.node_id], k_nearest=1))[me.node_id]
@@ -259,7 +259,7 @@ def test_dht_node():
         true_time = get_dht_time() + 1200
         assert loop.run_until_complete(me.store("mykey", ["Value", 10], true_time))
         that_guy = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 3), parallel_rpc=10,
-                                                          cache_locally=False, cache_refresh_before_expiry=False))
+                                                          cache_refresh_before_expiry=False, cache_locally=False))
 
         for node in [me, that_guy]:
             val, expiration_time = loop.run_until_complete(node.get("mykey"))
@@ -289,19 +289,13 @@ def test_dht_node():
             assert value[subkey2] == (456, now + 20)
             assert len(value) == 2
 
-        loop.run_until_complete(asyncio.sleep(3))
-
         assert not loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=345, expiration_time=now + 10))
         assert loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=567, expiration_time=now + 30))
         assert loop.run_until_complete(me.store(upper_key, subkey=subkey3, value=890, expiration_time=now + 50))
-
-        del me.protocol.cache[DHTID.generate(upper_key)]
-        del that_guy.protocol.cache[DHTID.generate(upper_key)]
-        # ^-- manually clear cache to prevent reusing old values
+        loop.run_until_complete(asyncio.sleep(0.1))  # wait for cache to refresh
 
         for node in [that_guy, me]:
             value, time = loop.run_until_complete(node.get(upper_key))
-            print('DEBUGPRINT!', value, time)
             assert isinstance(value, dict) and time == now + 50, (value, time)
             assert value[subkey1] == (123, now + 10)
             assert value[subkey2] == (567, now + 30)
