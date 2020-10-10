@@ -10,6 +10,11 @@ Here's a high level scheme of how these components interact with one another:
    :width: 640
    :align: center
 
+
+**Note:** hivemind.DHT is currently being updated to improve beam search latency
+(see `issue 92 <https://github.com/learning-at-home/hivemind/issues>`__). New functionality will be documented
+here by 2020.10.15 23:59:59 AOE (ping justheuristic for details).
+
 DHT and DHTNode
 ###############
 
