@@ -190,7 +190,7 @@ class DHT(mp.Process):
         if future is not None:
             future.set_result([store_ok[key, subkey] for key, subkey in zip(keys, subkeys)])
 
-    def find_best_experts(self, prefix: str, grid_scores: List[Sequence[int]], beam_size: int, *,
+    def find_best_experts(self, prefix: str, grid_scores: Sequence[Sequence[float]], beam_size: int, *,
                           return_future=False, **kwargs) -> Union[List[RemoteExpert], MPFuture]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
@@ -212,7 +212,7 @@ class DHT(mp.Process):
         return future if return_future else future.result()
 
     async def _find_best_experts(
-            self, node: DHTNode, prefix: str, grid_scores: List[Tuple[int]], beam_size: int,
+            self, node: DHTNode, prefix: str, grid_scores: List[Tuple[float]], beam_size: int,
             max_workers: Optional[int] = None, future: Optional[MPFuture] = None, **kwargs) -> List[RemoteExpert]:
         max_workers: Optional[int] = max_workers or self.max_workers or beam_size
 
