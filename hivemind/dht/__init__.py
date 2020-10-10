@@ -171,13 +171,13 @@ class DHT(mp.Process):
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         expiration_time = get_dht_time() + self.expiration
         #                 prefix---v next_dim     uid  endpoint
-        data_to_store: List[Tuple[str, str, Tuple[str, Endpoint]]] = []
+        data_to_store: List[Tuple[str, str, List[str, Endpoint]]] = []
         for uid in uids:
             uid_parts = uid.split(self.UID_DELIMITER)
             for i in range(len(uid_parts) - 1):
                 uid_prefix_i = self.UID_DELIMITER.join(uid_parts[:i + 1])
-                data_to_store.append((uid_prefix_i, uid_parts[i + 1], (uid, endpoint)))
-            data_to_store.append((uid, "expert", (uid, endpoint)))
+                data_to_store.append((uid_prefix_i, uid_parts[i + 1], [uid, endpoint]))
+            data_to_store.append((uid, "expert", [uid, endpoint]))
 
         keys, subkeys, values = map(list, zip(*data_to_store))
         store_ok = await node.store_many(keys, values, expiration_time, subkeys=subkeys, num_workers=num_workers)
@@ -211,7 +211,7 @@ class DHT(mp.Process):
         max_workers: Optional[int] = max_workers or self.max_workers or beam_size
 
         # form initial beam from top-k active L1 prefixes, each row is (score, uid prefix, possible suffixes)
-        beam: List[Tuple[float, str, Dict[str, Tuple[str, Endpoint]]]] = await self._get_initial_beam(
+        beam: List[Tuple[float, str, Dict[str, List[str, Endpoint]]]] = await self._get_initial_beam(
             node, prefix, beam_size, grid_scores[0], num_workers=min(beam_size, max_workers))
         if not beam:
             logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim 0)")
@@ -227,12 +227,12 @@ class DHT(mp.Process):
 
             # search DHT for next step suffixes
             _, best_uid_prefixes = zip(*best_active_pairs)
-            dht_responses: Dict[str, Tuple[Dict[str, Tuple[str, Endpoint]], DHTExpiration]] = await node.get_many(
+            dht_responses: Dict[str, Tuple[Dict[str, List[str, Endpoint]], DHTExpiration]] = await node.get_many(
                 keys=best_uid_prefixes, num_workers=min(len(best_uid_prefixes), max_workers), **kwargs)
             if all(expiration is None for key, (_, expiration) in dht_responses.items()):
                 logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim {dim_index})")
                 break
-            beam: List[Tuple[float, str, Dict[str, Tuple[str, Endpoint]]]] = [
+            beam: List[Tuple[float, str, Dict[str, List[str, Endpoint]]]] = [
                 (prefix_score, prefix, dht_responses[prefix][0])  # add suffix dict if it is found
                 for prefix_score, prefix in best_active_pairs if dht_responses[prefix][1] is not None]
 
@@ -249,9 +249,9 @@ class DHT(mp.Process):
         return best_experts
 
     async def _get_initial_beam(self, node, prefix: str, beam_size: int, scores: Tuple[float, ...], num_workers: int
-                                ) -> List[Tuple[float, str, Dict[str, Tuple[str, Endpoint]]]]:
+                                ) -> List[Tuple[float, str, Dict[str, List[str, Endpoint]]]]:
         """ Fetch a list of all active level-one prefixes of a given prefix. Used for beam search """
-        beam: List[Tuple[float, str, Dict[str, Tuple[str, Endpoint]]]] = []  # results will be stored here
+        beam: List[Tuple[float, str, Dict[str, List[str, Endpoint]]]] = []  # results will be stored here
         unattempted_indices: List[int] = sorted(range(len(scores)), key=scores.__getitem__)  # order: worst to best
         pending_tasks: Deque[Tuple[int, str, asyncio.Task]] = deque()  # up to num_workers concurrent get tasks
 
