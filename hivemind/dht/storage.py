@@ -1,7 +1,7 @@
 from __future__ import annotations
 import heapq
 from contextlib import contextmanager
-from typing import Generic, Optional, Dict, Tuple, List, Iterator, TypeVar, Union
+from typing import Generic, Optional, Dict, Tuple, List, Iterator, TypeVar, Union, Any
 
 from hivemind.dht.routing import DHTID, DHTExpiration, get_dht_time, BinaryDHTValue, Subkey
 from hivemind.utils.serializer import MSGPackSerializer
@@ -84,6 +84,9 @@ class TimedStorage(Generic[KeyType, ValueType]):
 
     def __bool__(self):
         return bool(self.data)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.data})"
 
     @contextmanager
     def freeze(self):
