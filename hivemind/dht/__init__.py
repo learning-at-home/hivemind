@@ -19,7 +19,7 @@ import multiprocessing as mp
 import warnings
 from collections import deque, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable, Dict, Deque
+from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable, Dict, Deque, Set
 
 import uvloop
 import heapq
@@ -148,7 +148,8 @@ class DHT(mp.Process):
             expiration_time = get_dht_time()
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         response = await node.get_many(uids, expiration_time, num_workers=num_workers)
-        future.set_result([RemoteExpert(*expert_data['expert']) if maybe_expiration_time else None
+        future.set_result([RemoteExpert(*expert_data['expert'][0])
+                           if maybe_expiration_time else None and expert_data['expert'][1] is not None
                            for uid, (expert_data, maybe_expiration_time) in response.items()])
 
     def declare_experts(self, uids: List[str], endpoint: Endpoint, wait=True, timeout=None) -> Optional[List[bool]]:
@@ -171,13 +172,18 @@ class DHT(mp.Process):
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         expiration_time = get_dht_time() + self.expiration
         #                 prefix---v next_dim     uid  endpoint
+        unique_entries: Set[Tuple[str, str]] = set()
         data_to_store: List[Tuple[str, str, List[str, Endpoint]]] = []
-        for uid in uids:
+        for uid in uids:  # first k entries are expert uids themselves
+            data_to_store.append((uid, "expert", [uid, endpoint]))
+        for uid in uids:  # and then, add all prefixes
             uid_parts = uid.split(self.UID_DELIMITER)
             for i in range(len(uid_parts) - 1):
                 uid_prefix_i = self.UID_DELIMITER.join(uid_parts[:i + 1])
+                if (uid_prefix_i, uid_parts[i + 1]) in unique_entries:
+                    continue
+                unique_entries.add((uid_prefix_i, uid_parts[i + 1]))
                 data_to_store.append((uid_prefix_i, uid_parts[i + 1], [uid, endpoint]))
-            data_to_store.append((uid, "expert", [uid, endpoint]))
 
         keys, subkeys, values = map(list, zip(*data_to_store))
         store_ok = await node.store_many(keys, values, expiration_time, subkeys=subkeys, num_workers=num_workers)
@@ -312,8 +318,8 @@ class DHT(mp.Process):
             response = await pending_tasks.popleft()
             for uid_prefix in uid_prefixes[chunk_i * chunk_size: (chunk_i + 1) * chunk_size]:
                 maybe_expert_data, maybe_expiration_time = response[uid_prefix]
-                if maybe_expiration_time is not None:  # found active peer
-                    found.append((uid_prefix, RemoteExpert(**maybe_expert_data)))
+                if maybe_expiration_time is not None and len(maybe_expert_data) > 0:  # found active peer
+                    found.append((uid_prefix, RemoteExpert(*next(iter(maybe_expert_data.values()))[0])))
                     # if we found enough active experts, finish immediately
                     if len(found) >= k:
                         break
