@@ -254,6 +254,39 @@ class DHT(mp.Process):
             future.set_result(best_experts)
         return best_experts
 
+    def batch_find_best_experts(self, prefix: str, batch_grid_scores: Sequence[Sequence[Sequence[float]]], beam_size: int, *,
+                                return_future=False, **kwargs) -> Union[List[RemoteExpert], MPFuture]:
+        """
+        Find and return :beam_size: active experts with highest scores, use both local cache and DHT
+
+        :param prefix: common prefix for all expert uids in grid
+        :param batch_grid_scores: scores predicted for each batch example and each dimension in the grid,
+        :type batch_grid_scores: model scores for each example and each grid dimension,  list of arrays of shape (batch_size, grid_size[i])
+        :param beam_size: how many best experts should beam search return
+         After time_budget is reached, beam search won't search for more experts and instead fall back on local cache
+         Please note that any queries that fall outside the budget will still be performed in background and cached
+         for subsequent iterations as long as DHTNode.cache_locally is True
+        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
+        :param kwargs: extra keyword parameters passed to DHTNode.get_many
+        :returns: a list that contains *up to* k_best RemoteExpert instances
+        """
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_batch_find_best_experts', [], dict(prefix=prefix, batch_grid_scores=batch_grid_scores,
+                                                             beam_size=beam_size, future=_future, **kwargs)))
+        return future if return_future else future.result()
+
+    async def _batch_find_best_experts(
+            self, node: DHTNode, prefix: str, batch_grid_scores: Sequence[Sequence[Tuple[float]]], beam_size: int,
+            max_workers: Optional[int] = None, future: Optional[MPFuture] = None, **kwargs) -> List[List[RemoteExpert]]:
+
+        batch_grid_scores = [[tuple(grid_score[i]) for grid_score in batch_grid_scores] for i in range(len(batch_grid_scores[0]))]
+        coros = [self._find_best_experts(node, prefix, grid_scores, beam_size, max_workers, **kwargs) for grid_scores in batch_grid_scores]
+
+        best_experts_batch = await asyncio.gather(*coros)
+        if future is not None:
+            future.set_result(best_experts_batch)
+        return best_experts_batch
+
     async def _get_initial_beam(self, node, prefix: str, beam_size: int, scores: Tuple[float, ...], num_workers: int
                                 ) -> List[Tuple[float, str, Dict[str, List[str, Endpoint]]]]:
         """ Fetch a list of all active level-one prefixes of a given prefix. Used for beam search """

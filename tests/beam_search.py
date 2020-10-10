@@ -46,4 +46,5 @@ if __name__ == '__main__':
 
     print("Running beam search...")
     for i in trange(num_beam_searches):
-        topk_experts = you.find_best_experts('expert', [np.random.randn(dim) for dim in grid_dims], beam_size)
+        batch_scores = [np.random.randn(batch_size, dim) for dim in grid_dims]
+        topk_experts = you.batch_find_best_experts('expert', batch_scores, beam_size)
