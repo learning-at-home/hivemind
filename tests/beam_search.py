@@ -20,7 +20,7 @@ if __name__ == '__main__':
     beam_size = 4
     parallel_rpc = 256
     grid_dims = [256, 256, 256]
-    num_beam_searches = 100_000
+    num_beam_searches = 10_000
 
     print("Spawning dht peers...")
 
