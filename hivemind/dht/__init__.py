@@ -289,7 +289,7 @@ class DHT(mp.Process):
         return best_experts_batch
 
     async def _get_initial_beam(self, node, prefix: str, beam_size: int, scores: Tuple[float, ...], num_workers: int
-                                ) -> List[Tuple[float, str, Dict[str, List[str, Endpoint]]]]:
+                                ) -> List[Tuple[float, str, Dict[str, List[str]]]]:
         """ Fetch a list of all active level-one prefixes of a given prefix. Used for beam search """
         beam: List[Tuple[float, str, Dict[str, List[str, Endpoint]]]] = []  # results will be stored here
         unattempted_indices: List[int] = sorted(range(len(scores)), key=scores.__getitem__)  # order: worst to best
