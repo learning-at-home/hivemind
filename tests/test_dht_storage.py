@@ -71,9 +71,11 @@ def test_localstorage_nested():
     d2.store('subkey3', b'value3', time + 1)
 
     assert d2.latest_expiration_time == time + 3
-    assert d1.store(DHTID.generate('foo'), d2, d2.latest_expiration_time)
+    for subkey, subvalue, subexpiration in d2.items():
+        assert d1.store_subkey(DHTID.generate('foo'), subkey, subvalue, subexpiration)
     assert d1.store(DHTID.generate('bar'), b'456', time + 2)
-    assert d1.get(DHTID.generate('foo')) == (d2, d2.latest_expiration_time)
+    assert d1.get(DHTID.generate('foo'))[0].data == d2.data
+    assert d1.get(DHTID.generate('foo'))[1] == d2.latest_expiration_time
     assert d1.get(DHTID.generate('foo'))[0].get('subkey1') == (b'value1', time + 2)
     assert len(d1.get(DHTID.generate('foo'))[0]) == 3
     assert d1.store_subkey(DHTID.generate('foo'), 'subkey4', b'value4', time + 4)

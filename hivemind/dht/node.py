@@ -54,8 +54,8 @@ class DHTNode:
     # fmt:off
     node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
-    cache_on_store: bool; cache_refresh_available: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
-    reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_IntermediateResult]]
+    cache_on_store: bool; reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_SearchState]]
+    cache_refresh_task: Optional[asyncio.Task]; cache_refresh_evt: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
     # fmt:on
 
     @classmethod
@@ -97,10 +97,6 @@ class DHTNode:
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
         :param kwargs: extra parameters used in grpc.aio.server
         """
-        if cache_refresh_before_expiry > 0 and not cache_locally:
-            logger.warning("If cache_locally is False, cache_refresh_before_expiry has no effect. To silence this"
-                           " warning, please specify cache_refresh_before_expiry=0")
-
         self = cls(_initialized_with_create=True)
         self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
         self.num_replicas, self.num_workers = num_replicas, num_workers
@@ -114,9 +110,8 @@ class DHTNode:
         self.cache_locally, self.cache_nearest, self.cache_on_store = cache_locally, cache_nearest, cache_on_store
         self.cache_refresh_before_expiry = cache_refresh_before_expiry
         self.cache_refresh_queue = CacheRefreshQueue()
-        self.cache_refresh_available = asyncio.Event()
-        if cache_refresh_before_expiry:
-            asyncio.create_task(self._refresh_stale_cache_entries())
+        self.cache_refresh_evt = asyncio.Event()
+        self.cache_refresh_task = None
 
         self.protocol = await DHTProtocol.create(self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
                                                  parallel_rpc, cache_size, listen, listen_on, **kwargs)
@@ -399,7 +394,7 @@ class DHTNode:
         sufficient_expiration_time = sufficient_expiration_time or get_dht_time()
         beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
         num_workers = num_workers if num_workers is not None else self.num_workers
-        search_results: Dict[DHTID, _IntermediateResult] = {key_id: _IntermediateResult(
+        search_results: Dict[DHTID, _SearchState] = {key_id: _SearchState(
             key_id, sufficient_expiration_time, serializer=self.protocol.serializer) for key_id in key_ids}
 
         if _refresh_cache:
@@ -461,9 +456,9 @@ class DHTNode:
                     search_result.future.cancel()
                 raise e
 
-    def _reuse_finished_search_result(self, finished: _IntermediateResult):
+    def _reuse_finished_search_result(self, finished: _SearchState):
         expiration_time_threshold = max(finished.expiration_time or -float('inf'), finished.sufficient_expiration_time)
-        concurrent_requests: SortedList[_IntermediateResult] = self.pending_get_requests[finished.key_id]
+        concurrent_requests: SortedList[_SearchState] = self.pending_get_requests[finished.key_id]
         # note: concurrent_requests is sorded in the order of descending sufficient_expiration_time
         while concurrent_requests and expiration_time_threshold >= concurrent_requests[-1].sufficient_expiration_time:
             concurrent_requests[-1].add_candidate(finished.binary_value, finished.expiration_time,
@@ -471,7 +466,7 @@ class DHTNode:
             concurrent_requests[-1].finish_search()
             concurrent_requests.pop(-1)
 
-    def _trigger_cache_refresh(self, result: _IntermediateResult):
+    def _trigger_cache_refresh(self, result: _SearchState):
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
         if result.found_something and result.source_node_id == self.node_id:
             if self.cache_refresh_before_expiry and result.key_id in self.protocol.cache:
@@ -479,25 +474,28 @@ class DHTNode:
 
     def _schedule_for_refresh(self, key_id: DHTID, refresh_time: DHTExpiration):
         """ Add key to a refresh queue, refresh at :refresh_time: or later """
+        if self.cache_refresh_task is None or self.cache_refresh_task.done() or self.cache_refresh_task.cancelled():
+            self.cache_refresh_task = asyncio.create_task(self._refresh_stale_cache_entries())
+            logger.debug("Spawned cache refresh task.")
         previous_earliest_item: Tuple[DHTID, Any, DHTExpiration] = self.cache_refresh_queue.top()
         self.cache_refresh_queue.store(key_id, value=refresh_time, expiration_time=refresh_time)
         if previous_earliest_item is None or refresh_time < previous_earliest_item[-1]:
-            self.cache_refresh_available.set()  # if we new element is now earliest, notify the cache queue
+            self.cache_refresh_evt.set()  # if we new element is now earliest, notify the cache queue
 
     async def _refresh_stale_cache_entries(self):
         """ periodically refresh keys near-expired keys that were accessed at least once during previous lifetime """
         while self.is_alive:
             while len(self.cache_refresh_queue) == 0:
-                await self.cache_refresh_available.wait()
-                self.cache_refresh_available.clear()
+                await self.cache_refresh_evt.wait()
+                self.cache_refresh_evt.clear()
             key_id, _, nearest_refresh_time = self.cache_refresh_queue.top()
 
             try:
                 # step 1: await until :cache_refresh_before_expiry: seconds before earliest first element expires
                 time_to_wait = nearest_refresh_time - get_dht_time()
-                await asyncio.wait_for(self.cache_refresh_available.wait(), timeout=time_to_wait)
+                await asyncio.wait_for(self.cache_refresh_evt.wait(), timeout=time_to_wait)
                 # note: the line above will cause TimeoutError when we are ready to refresh cache
-                self.cache_refresh_available.clear()  # no timeout error => someone added new entry to queue and ...
+                self.cache_refresh_evt.clear()  # no timeout error => someone added new entry to queue and ...
                 continue  # ... and this element is earlier than nearest_expiration. we should refresh this entry first
 
             except asyncio.TimeoutError:  # caught TimeoutError => it is time to refresh the most recent cached entry
@@ -517,7 +515,7 @@ class DHTNode:
                 sufficient_expiration_time = max_expiration_time + self.cache_refresh_before_expiry
                 await self.get_many_by_id(keys_to_refresh, sufficient_expiration_time, _refresh_cache=False)
 
-    def _cache_new_result(self, result: _IntermediateResult, nearest_nodes: List[DHTID],
+    def _cache_new_result(self, result: _SearchState, nearest_nodes: List[DHTID],
                           node_to_endpoint: Dict[DHTID, Endpoint]):
         """ after key_id is found, update cache according to caching policy. used internally in get and get_many """
         if result.found_something:
@@ -553,7 +551,7 @@ class DHTNode:
 
 
 @dataclass(init=True, repr=True, frozen=False, order=False)
-class _IntermediateResult:
+class _SearchState:
     """ A helper class that stores current-best GET results with metadata """
     key_id: DHTID
     sufficient_expiration_time: DHTExpiration
@@ -570,7 +568,7 @@ class _IntermediateResult:
             if self.expiration_time >= self.sufficient_expiration_time:
                 self.finish_search()
 
-    def add_done_callback(self, callback: Callable[[_IntermediateResult], Any]):
+    def add_done_callback(self, callback: Callable[[_SearchState], Any]):
         """ Add callback that will be called when _IntermediateSearchResult is done (found OR cancelled by user) """
         self.future.add_done_callback(lambda _future: callback(self))
 
@@ -597,6 +595,6 @@ class _IntermediateResult:
     def finished(self) -> bool:
         return self.future.done()
 
-    def __lt__(self, other: _IntermediateResult):
+    def __lt__(self, other: _SearchState):
         """ _IntermediateResult instances will be sorted by their target expiration time """
         return self.sufficient_expiration_time < other.sufficient_expiration_time

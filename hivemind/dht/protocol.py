@@ -180,7 +180,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
             elif subkey == IS_DICTIONARY:   # store an entire dictionary with pre-existing subkeys
                 value_dictionary = self.serializer.loads(value_bytes)
                 assert isinstance(value_dictionary, DictionaryDHTValue)
-                response.store_ok.append(storage.store(key_id, value_dictionary, expiration_time))
+                response.store_ok.append(all(storage.store_subkey(key_id, subkey, subvalue, subkey_expiration)
+                                             for subkey, subvalue, subkey_expiration in value_dictionary.items()))
             else:  # add new entry into an existing dictionary-like value or create a new dictionary with one sub-key
                 response.store_ok.append(storage.store_subkey(key_id, subkey, value_bytes, expiration_time))
         return response
