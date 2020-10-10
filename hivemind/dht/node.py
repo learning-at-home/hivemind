@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import asyncio
-
 import random
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Optional, Tuple, List, Dict, DefaultDict, Collection, Union, Set, Awaitable, Callable, Any, Iterable
-from sortedcontainers import SortedList
 from functools import partial
+from typing import Optional, Tuple, List, Dict, DefaultDict, Collection, Union, Set, Awaitable, Callable, Any
 from warnings import warn
 
+from sortedcontainers import SortedList
+
 from hivemind.dht.protocol import DHTProtocol
-from hivemind.dht.storage import CacheRefreshQueue, DictionaryDHTValue
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
+from hivemind.dht.storage import CacheRefreshQueue, DictionaryDHTValue
 from hivemind.dht.traverse import traverse_dht
 from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase
 
@@ -81,7 +81,7 @@ class DHTNode:
           if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
         :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
         :param cache_locally: if True, caches all values (stored or found) in a node-local cache
-        :param cache_on_store: if True, update cache entries for a key after storing a new item that key
+        :param cache_on_store: if True, update cache entries for a key after storing a new item for that key
         :param cache_nearest: whenever DHTNode finds a value, it will also store (cache) this value on this many
           nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet
         :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
@@ -329,7 +329,7 @@ class DHTNode:
         elif not store_succeeded and not is_dictionary:  # store rejected, check if local cache is also obsolete
             rejected_value, rejected_expiration = max(zip(binary_values, expirations), key=lambda p: p[1])
             self.protocol.cache.store(key_id, rejected_value, rejected_expiration)  # can still be better than cache
-            if (self.protocol.cache.get(key_id)[1] or -float("inf")) <= rejected_expiration:  # cache would be rejected
+            if (self.protocol.cache.get(key_id)[1] or float("inf")) <= rejected_expiration:  # cache would be rejected
                 self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
         else:  # stored a dictionary (or failed to store), either way, there can be other keys and we should update
             for subkey, stored_value_bytes, expiration_time in zip(subkeys, binary_values, expirations):

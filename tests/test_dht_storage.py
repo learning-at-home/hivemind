@@ -90,8 +90,8 @@ def test_localstorage_nested():
 
     assert d1.store(DHTID.generate('foo'), b'nothing', time + 3.5) is False  # previous value has better expiration
     assert d1.get(DHTID.generate('foo'))[0].get('subkey2') == (b'value2', time + 3)
-    assert d1.store(DHTID.generate('foo'), b'nothing', time + 5) is True   # new value has better expiraiton
-    assert d1.get(DHTID.generate('foo')) == (b'nothing', time + 5)         # value should be replaced
+    assert d1.store(DHTID.generate('foo'), b'nothing', time + 5) is True  # new value has better expiraiton
+    assert d1.get(DHTID.generate('foo')) == (b'nothing', time + 5)  # value should be replaced
 
 
 def test_localstorage_freeze():

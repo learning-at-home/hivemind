@@ -12,9 +12,9 @@ The code is organized as follows:
 - [1] Maymounkov P., Mazieres D. (2002) Kademlia: A Peer-to-Peer Information System Based on the XOR Metric.
 - [2] https://github.com/bmuller/kademlia , Brian, if you're reading this: THANK YOU! you're awesome :)
 """
-from __future__ import annotations
 import asyncio
 import ctypes
+import heapq
 import multiprocessing as mp
 import warnings
 from collections import deque, OrderedDict
@@ -22,7 +22,6 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable, Dict, Deque, Set
 
 import uvloop
-import heapq
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
@@ -148,6 +147,7 @@ class DHT(mp.Process):
             expiration_time = get_dht_time()
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         response = await node.get_many(uids, expiration_time, num_workers=num_workers)
+        # TODO expert_data['expert'] -> namedtuple with meaningful field names
         future.set_result([RemoteExpert(*expert_data['expert'][0])
                            if maybe_expiration_time else None and expert_data['expert'][1] is not None
                            for uid, (expert_data, maybe_expiration_time) in response.items()])
@@ -171,8 +171,8 @@ class DHT(mp.Process):
     async def _declare_experts(self, node: DHTNode, uids: List[str], endpoint: Endpoint, future: Optional[MPFuture]):
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         expiration_time = get_dht_time() + self.expiration
-        #                 prefix---v next_dim     uid  endpoint
         unique_entries: Set[Tuple[str, str]] = set()
+        #                 prefix---v next_dim     uid  endpoint
         data_to_store: List[Tuple[str, str, List[str, Endpoint]]] = []
         for uid in uids:  # first k entries are expert uids themselves
             data_to_store.append((uid, "expert", [uid, endpoint]))
@@ -229,18 +229,19 @@ class DHT(mp.Process):
             best_active_pairs: List[Tuple[float, str]] = heapq.nlargest(beam_size, (
                 (prefix_score + dim_scores[int(suffix_i)], f"{prefix}{self.UID_DELIMITER}{suffix_i}")
                 for prefix_score, prefix, suffixes in beam for suffix_i in suffixes.keys()
+                # TODO get rid of str.isdecimal
                 if str.isdecimal(suffix_i) and 0 <= int(suffix_i) < len(dim_scores)))
 
             # search DHT for next step suffixes
             _, best_uid_prefixes = zip(*best_active_pairs)
+            # TODO Tuple[Dict[str, List[str, Endpoint]], DHTExpiration] -> namedtuple
             dht_responses: Dict[str, Tuple[Dict[str, List[str, Endpoint]], DHTExpiration]] = await node.get_many(
                 keys=best_uid_prefixes, num_workers=min(len(best_uid_prefixes), max_workers), **kwargs)
             if all(expiration is None for key, (_, expiration) in dht_responses.items()):
                 logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim {dim_index})")
                 break
-            beam: List[Tuple[float, str, Dict[str, List[str, Endpoint]]]] = [
-                (prefix_score, prefix, dht_responses[prefix][0])  # add suffix dict if it is found
-                for prefix_score, prefix in best_active_pairs if dht_responses[prefix][1] is not None]
+            beam = [(prefix_score, prefix, dht_responses[prefix][0])  # add suffix dict if it is found
+                    for prefix_score, prefix in best_active_pairs if dht_responses[prefix][1] is not None]
 
         # select best experts from the final beam
         dim_scores = grid_scores[-1]
