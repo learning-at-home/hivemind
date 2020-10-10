@@ -15,9 +15,10 @@ if __name__ == '__main__':
     increase_file_limit()
     dht_size = 256
     total_experts = 4096
-    batch_size = 32
+    batch_size = 65
     initial_peers = 3
     beam_size = 4
+    parallel_rpc = 256
     grid_dims = [256, 256, 256]
     num_beam_searches = 100_000
 
@@ -26,7 +27,7 @@ if __name__ == '__main__':
     dht = []
     for i in trange(dht_size):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
-        dht.append(hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=256))
+        dht.append(hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc))
 
     print("Declaring experts...")
     real_experts = sorted({
@@ -36,11 +37,11 @@ if __name__ == '__main__':
     for batch_start in trange(0, len(real_experts), batch_size):
         random.choice(dht).declare_experts(
             real_experts[batch_start: batch_start + batch_size], wait=True,
-            endpoint=f"host{batch_start // batch_size}:{random.randint(0, 65535)}")
+            endpoint=f"host{batch_start // batch_size}:{random.randint(0, 65536)}")
 
     print("Creating you...")
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
-    you = hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=256)
+    you = hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
     time.sleep(1)
 
     print("Running beam search...")
