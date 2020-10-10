@@ -46,4 +46,4 @@ if __name__ == '__main__':
     print("Running beam search...")
     for i in trange(num_beam_searches):
         topk_experts = you.find_best_experts('expert', [np.random.randn(dim) for dim in grid_dims], beam_size)
-        assert len(topk) == beam_size and len(set(expert.uid for topk_experts in topk_experts))
+        assert len(topk_experts) == beam_size and len(set(expert.uid for expert in topk_experts)) == beam_size
