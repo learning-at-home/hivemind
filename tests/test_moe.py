@@ -15,8 +15,6 @@ def test_moe():
     with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn',
                            num_handlers=1, hidden_dim=16) as (server_endpoint, dht_endpoint):
         dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
-        # declare expert uids. Server *should* declare them by itself, but it takes time.
-        assert all(dht.declare_experts(all_expert_uids, endpoint=server_endpoint))
 
         dmoe = hivemind.RemoteMixtureOfExperts(
             in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn')
