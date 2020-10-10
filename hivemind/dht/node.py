@@ -269,7 +269,6 @@ class DHTNode:
             pending_store_tasks = set()
             store_candidates = sorted(nearest_nodes + ([] if exclude_self else [self.node_id]),
                                       key=key_id.xor_distance, reverse=True)  # ordered so that .pop() returns nearest
-
             [original_key, *_], current_subkeys, current_values, current_expirations = zip(*key_id_to_data[key_id])
             binary_values: List[bytes] = list(map(self.protocol.serializer.dumps, current_values))
 
@@ -305,7 +304,7 @@ class DHTNode:
                 self._update_cache_on_store(key_id, current_subkeys, binary_values, current_expirations,
                                             store_ok=[store_ok[original_key, subkey] for subkey in current_subkeys])
 
-            for subkey, value_bytes, expiration in zip(subkeys, binary_values, current_expirations):
+            for subkey, value_bytes, expiration in zip(current_subkeys, binary_values, current_expirations):
                 store_finished_events[original_key, subkey].set()
 
         store_task = asyncio.create_task(self.find_nearest_nodes(
