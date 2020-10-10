@@ -240,10 +240,10 @@ class DHT(mp.Process):
         dim_scores = grid_scores[-1]
         final_best_pairs: List[Tuple[float, str, Endpoint]] = heapq.nlargest(beam_size, (
             (prefix_score + dim_scores[int(suffix_i)], uid, endpoint)
-            for prefix_score, prefix, suffixes in beam for suffix_i, (uid, endpoint) in suffixes.items()
+            for prefix_score, prefix, suffixes in beam for suffix_i, ((uid, endpoint), _) in suffixes.items()
             if str.isdecimal(suffix_i) and 0 <= int(suffix_i) < len(dim_scores)
         ))
-        best_experts = [RemoteExpert(uid, endpoint) for score, uid, endpoint in final_best_pairs]
+        best_experts = [RemoteExpert(uid, endpoint) for score, (uid, endpoint) in final_best_pairs]
         if future is not None:
             future.set_result(best_experts)
         return best_experts
