@@ -243,7 +243,7 @@ class DHT(mp.Process):
             for prefix_score, prefix, suffixes in beam for suffix_i, ((uid, endpoint), _) in suffixes.items()
             if str.isdecimal(suffix_i) and 0 <= int(suffix_i) < len(dim_scores)
         ))
-        best_experts = [RemoteExpert(uid, endpoint) for score, (uid, endpoint) in final_best_pairs]
+        best_experts = [RemoteExpert(uid, endpoint) for score, uid, endpoint in final_best_pairs]
         if future is not None:
             future.set_result(best_experts)
         return best_experts
