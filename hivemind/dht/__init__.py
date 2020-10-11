@@ -223,8 +223,7 @@ class DHT(mp.Process):
         if not beam:
             logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim 0)")
             return []
-        #TODO warn user if indices are out of range on the _last_ level! (rationale: beam search may return <k results)
-        #TODO use heap to harness all results?
+        # TODO warn user if indices are out of range on the _last_ level! (rationale: beam search may return <k results)
 
         for dim_index in range(1, len(grid_scores) - 1):
             # select beam_size best suffixes from current beam
@@ -248,6 +247,7 @@ class DHT(mp.Process):
 
         # select best experts from the final beam
         dim_scores = grid_scores[-1]
+        # TODO use heap to harness all results, get rid of five-line expression
         final_best_pairs: List[Tuple[float, str, Endpoint]] = heapq.nlargest(beam_size, chain((
             (prefix_score + dim_scores[int(suffix_i)], uid, endpoint)
             for prefix_score, prefix, suffixes in beam for suffix_i, ((uid, endpoint), _) in suffixes.items()

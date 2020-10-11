@@ -45,8 +45,8 @@ class TimedStorage(Generic[KeyType, ValueType]):
         """
         if expiration_time < get_dht_time() and not self.frozen:
             return False
-        self.key_to_heap[key] = heap_entry = HeapEntry(expiration_time, key)
-        heapq.heappush(self.expiration_heap, heap_entry)
+        self.key_to_heap[key] = HeapEntry(expiration_time, key)
+        heapq.heappush(self.expiration_heap, self.key_to_heap[key])
         if key in self.data:
             if self.data[key].expiration_time < expiration_time:
                 self.data[key] = ValueWithExpiration(value, expiration_time)

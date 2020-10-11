@@ -179,7 +179,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             storage = self.cache if in_cache else self.storage
             if tag == self.IS_REGULAR_VALUE:  # store normal value without subkeys
                 response.store_ok.append(storage.store(key_id, value_bytes, expiration_time))
-            elif tag == self.IS_DICTIONARY:   # store an entire dictionary with several subkeys
+            elif tag == self.IS_DICTIONARY:  # store an entire dictionary with several subkeys
                 value_dictionary = self.serializer.loads(value_bytes)
                 assert isinstance(value_dictionary, DictionaryDHTValue)
                 response.store_ok.append(all(storage.store_subkey(key_id, subkey, item.value, item.expiration_time)
@@ -190,7 +190,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         return response
 
     async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> Optional[
-            Dict[DHTID, Tuple[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]], Dict[DHTID, Endpoint]]]]:
+            Dict[DHTID, Tuple[Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]], Dict[DHTID, Endpoint]]]]:
         """
         Request keys from a peer. For each key, look for its (value, expiration time) locally and
          k additional peers that are most likely to have this key (ranked by XOR distance)
@@ -241,7 +241,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         for i, key_id in enumerate(map(DHTID.from_bytes, request.keys)):
             maybe_item = self.storage.get(key_id)
             cached_item = self.cache.get(key_id)
-            if cached_item and (maybe_item is None or cached_item.expiration_time > maybe_item.expiration_time):
+            if cached_item is not None and (maybe_item is None or cached_item.expiration_time > maybe_item.expiration_time):
                 maybe_item = cached_item
 
             if maybe_item is None:  # value not found
