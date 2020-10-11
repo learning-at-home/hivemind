@@ -19,6 +19,7 @@ import multiprocessing as mp
 import warnings
 from collections import deque, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
+from itertools import chain
 from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable, Dict, Deque, Set
 
 import uvloop
@@ -246,11 +247,11 @@ class DHT(mp.Process):
 
         # select best experts from the final beam
         dim_scores = grid_scores[-1]
-        final_best_pairs: List[Tuple[float, str, Endpoint]] = heapq.nlargest(beam_size, (
+        final_best_pairs: List[Tuple[float, str, Endpoint]] = heapq.nlargest(beam_size, chain((
             (prefix_score + dim_scores[int(suffix_i)], uid, endpoint)
             for prefix_score, prefix, suffixes in beam for suffix_i, ((uid, endpoint), _) in suffixes.items()
             if str.isdecimal(suffix_i) and 0 <= int(suffix_i) < len(dim_scores)
-        ))
+        ), ((score, *suffixes['expert']) for score, _, suffixes in beam if 'expert' in suffixes)))
         best_experts = [RemoteExpert(uid, endpoint) for score, uid, endpoint in final_best_pairs]
         if future is not None:
             future.set_result(best_experts)
