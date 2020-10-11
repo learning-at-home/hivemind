@@ -1,11 +1,12 @@
-import time
 import argparse
 import random
+import time
 from warnings import warn
-import hivemind
+
 from tqdm import trange
 
-from test_utils import increase_file_limit
+import hivemind
+from hivemind.utils.threading import increase_file_limit
 
 
 def random_endpoint() -> hivemind.Endpoint:
