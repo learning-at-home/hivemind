@@ -34,7 +34,7 @@ def test_call_many():
     atol = 1e-6
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
-                           Optimizer=None, no_dht=True) as (server_endpoint, dht_endpoint):
+                           optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
         inputs = torch.randn(4, 64, requires_grad=True)
         inputs_clone = inputs.clone().detach().requires_grad_(True)
         e0, e1, e2, e3, e4 = [hivemind.RemoteExpert(f'expert.{i}', server_endpoint) for i in range(5)]
@@ -76,7 +76,7 @@ def test_call_many():
 
 def test_remote_module_call():
     with background_server(num_experts=1, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=1024,
-                           Optimizer=None, no_dht=True) as (server_endpoint, dht_endpoint):
+                           optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
         real_expert = hivemind.RemoteExpert('expert.0', server_endpoint)
         fake_expert = hivemind.RemoteExpert('oiasfjiasjf', server_endpoint)
 
@@ -128,7 +128,7 @@ def test_determinism():
     mask = torch.randint(0, 1, (32, 1024))
 
     with background_server(num_experts=1, device='cpu', expert_cls='det_dropout', num_handlers=1,
-                           Optimizer=None, no_dht=True) as (server_endpoint, dht_endpoint):
+                           optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
         expert = hivemind.RemoteExpert(uid=f'expert.0', endpoint=server_endpoint)
 
         out = expert(xx, mask)

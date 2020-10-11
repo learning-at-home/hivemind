@@ -1,5 +1,6 @@
 import torch.autograd
 import torch.nn as nn
+from torch import nn as nn
 
 
 class DeterministicDropoutFunction(torch.autograd.Function):
@@ -29,3 +30,16 @@ class DeterministicDropout(nn.Module):
             return DeterministicDropoutFunction.apply(x, self.keep_prob, mask)
         else:
             return x
+
+
+class DeterministicDropoutNetwork(nn.Module):
+    def __init__(self, hid_dim, dropout_prob):
+        super().__init__()
+        self.linear_in = nn.Linear(hid_dim, 2 * hid_dim)
+        self.activation = nn.ReLU()
+        self.dropout = DeterministicDropout(dropout_prob)
+        self.linear_out = nn.Linear(2 * hid_dim, hid_dim)
+
+    def forward(self, x, mask):
+        x = self.linear_in(self.dropout(x, mask))
+        return self.linear_out(self.activation(x))
