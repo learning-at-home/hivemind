@@ -338,11 +338,11 @@ class DHTNode:
 
     async def get(self, key: DHTKey, latest=False, **kwargs) -> Optional[ValueWithExpiration[DHTValue]]:
         """
-        Search for a key across DHT and return either first or latest entry.
+        Search for a key across DHT and return either first or latest entry (if found).
         :param key: same key as in node.store(...)
         :param latest: if True, finds the latest value, otherwise finds any non-expired value (which is much faster)
         :param kwargs: parameters forwarded to get_many_by_id
-        :returns: (value, expiration time); if value was not found, returns (None, None)
+        :returns: (value, expiration time); if value was not found, returns None
         """
         if latest:
             kwargs["sufficient_expiration_time"] = float('inf')
