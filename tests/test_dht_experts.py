@@ -1,6 +1,7 @@
 import random
 import uuid
 from itertools import chain
+import numpy as np
 
 import hivemind
 from hivemind import LOCALHOST
@@ -42,6 +43,38 @@ def test_store_get_experts():
 
     for peer in peers:
         peer.shutdown()
+
+
+def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peers=3, beam_size=4, parallel_rpc=256,
+                     grid_dims=(32, 32, 32)):
+    dht = []
+    for i in range(dht_size):
+        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
+        dht.append(hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc))
+
+    real_experts = sorted({
+        'expert.' + '.'.join([str(random.randint(0, dim - 1)) for dim in grid_dims])
+        for _ in range(total_experts)
+    })
+    for batch_start in range(0, len(real_experts), batch_size):
+        random.choice(dht).declare_experts(
+            real_experts[batch_start: batch_start + batch_size], wait=True,
+            endpoint=f"host{batch_start // batch_size}:{random.randint(0, 65536)}")
+
+    neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
+    you = hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
+
+    for i in range(50):
+        topk_experts = you.find_best_experts('expert', [np.random.randn(dim) for dim in grid_dims], beam_size=beam_size)
+        assert all(isinstance(e, hivemind.RemoteExpert) for e in topk_experts)
+        assert len(topk_experts) == beam_size
+
+    for i in range(10):
+        batch_experts = you.batch_find_best_experts('expert', [np.random.randn(batch_size, dim) for dim in grid_dims],
+                                                    beam_size=beam_size)
+        assert isinstance(batch_experts, list) and len(batch_experts) == batch_size
+        assert all(isinstance(e, hivemind.RemoteExpert) for experts in batch_experts for e in experts)
+        assert all(len(experts) == beam_size for experts in batch_experts)
 
 
 def test_first_k_active():
