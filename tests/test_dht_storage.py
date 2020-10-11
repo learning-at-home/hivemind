@@ -16,13 +16,13 @@ def test_get_expired():
     d = DHTLocalStorage()
     d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.1)
     time.sleep(0.5)
-    assert d.get(DHTID.generate("key")) == (None, None), "Expired value must be deleted"
+    assert d.get(DHTID.generate("key")) is None, "Expired value must be deleted"
     print("Test get expired passed")
 
 
 def test_get_empty():
     d = DHTLocalStorage()
-    assert d.get(DHTID.generate(source="key")) == (None, None), "DHTLocalStorage returned non-existent value"
+    assert d.get(DHTID.generate(source="key")) is None, "DHTLocalStorage returned non-existent value"
     print("Test get expired passed")
 
 
@@ -41,7 +41,7 @@ def test_maxsize_cache():
     d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 1)
     d.store(DHTID.generate("key2"), b"val2", get_dht_time() + 200)
     assert d.get(DHTID.generate("key2"))[0] == b"val2", "Value with bigger exp. time must be kept"
-    assert d.get(DHTID.generate("key1"))[0] is None, "Value with less exp time, must be deleted"
+    assert d.get(DHTID.generate("key1")) is None, "Value with less exp time, must be deleted"
 
 
 def test_localstorage_top():
@@ -49,17 +49,17 @@ def test_localstorage_top():
     d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 1)
     d.store(DHTID.generate("key2"), b"val2", get_dht_time() + 2)
     d.store(DHTID.generate("key3"), b"val3", get_dht_time() + 4)
-    assert d.top()[:2] == (DHTID.generate("key1"), b"val1")
+    assert d.top()[0] == DHTID.generate("key1") and d.top()[1].value == b"val1"
 
     d.store(DHTID.generate("key1"), b"val1_new", get_dht_time() + 3)
-    assert d.top()[:2] == (DHTID.generate("key2"), b"val2")
+    assert d.top()[0] == DHTID.generate("key2") and d.top()[1].value == b"val2"
 
     del d[DHTID.generate('key2')]
-    assert d.top()[:2] == (DHTID.generate("key1"), b"val1_new")
+    assert d.top()[0] == DHTID.generate("key1") and d.top()[1].value == b"val1_new"
     d.store(DHTID.generate("key2"), b"val2_new", get_dht_time() + 5)
     d.store(DHTID.generate("key4"), b"val4", get_dht_time() + 6)  # key4 will push out key1 due to maxsize
 
-    assert d.top()[:2] == (DHTID.generate("key3"), b"val3")
+    assert d.top()[0] == DHTID.generate("key3") and d.top()[1].value == b"val3"
 
 
 def test_localstorage_nested():
@@ -71,7 +71,7 @@ def test_localstorage_nested():
     d2.store('subkey3', b'value3', time + 1)
 
     assert d2.latest_expiration_time == time + 3
-    for subkey, subvalue, subexpiration in d2.items():
+    for subkey, (subvalue, subexpiration) in d2.items():
         assert d1.store_subkey(DHTID.generate('foo'), subkey, subvalue, subexpiration)
     assert d1.store(DHTID.generate('bar'), b'456', time + 2)
     assert d1.get(DHTID.generate('foo'))[0].data == d2.data

@@ -9,13 +9,11 @@ import grpc
 import grpc.experimental.aio
 
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, Subkey
-from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
+from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue, ValueWithExpiration
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
 from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer
 
 logger = get_logger(__name__)
-NOT_FOUND_VALUE, NOT_FOUND_EXPIRATION, IS_REGULAR_VALUE, IS_DICTIONARY = b'', -float('inf'), '', '___DictionaryDHTValue'
-RESERVED_SUBKEYS = {IS_REGULAR_VALUE, IS_DICTIONARY}
 
 
 class DHTProtocol(dht_grpc.DHTServicer):
@@ -23,8 +21,10 @@ class DHTProtocol(dht_grpc.DHTServicer):
     node_id: DHTID; port: int; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
     channel_options: Optional[Sequence[Tuple[str, Any]]]; server: grpc.experimental.aio.Server
     storage: DHTLocalStorage; cache: DHTLocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
-    serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     # fmt:on
+
+    serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
+    RESERVED_SUBKEYS = IS_REGULAR_VALUE, IS_DICTIONARY = serializer.dumps(None), b''
 
     @classmethod
     async def create(
@@ -137,17 +137,19 @@ class DHTProtocol(dht_grpc.DHTServicer):
         """
         if isinstance(expiration_time, DHTExpiration):
             expiration_time = [expiration_time] * len(keys)
-        if subkeys is None or isinstance(subkeys, Subkey):
-            subkeys = [subkeys] * len(keys)
+        if subkeys is None:
+            subkeys = [None] * len(keys)
 
         in_cache = in_cache if in_cache is not None else [False] * len(keys)  # default value (None)
         in_cache = [in_cache] * len(keys) if isinstance(in_cache, bool) else in_cache  # single bool
         keys, subkeys, values, expiration_time, in_cache = map(list, [keys, subkeys, values, expiration_time, in_cache])
         for i in range(len(keys)):
             if subkeys[i] is None:  # add default sub-key if not specified
-                subkeys[i] = IS_REGULAR_VALUE if not isinstance(values[i], DictionaryDHTValue) else IS_DICTIONARY
+                subkeys[i] = self.IS_DICTIONARY if isinstance(values[i], DictionaryDHTValue) else self.IS_REGULAR_VALUE
+            else:
+                subkeys[i] = self.serializer.dumps(subkeys[i])
             if isinstance(values[i], DictionaryDHTValue):
-                assert subkeys[i] == IS_DICTIONARY, "Please do not specify subkey when storing an entire dictionary"
+                assert subkeys[i] == self.IS_DICTIONARY, "Please don't specify subkey when storing an entire dictionary"
                 values[i] = self.serializer.dumps(values[i])
 
         assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"
@@ -172,22 +174,23 @@ class DHTProtocol(dht_grpc.DHTServicer):
         assert len(request.keys) == len(request.values) == len(request.expiration_time) == len(request.in_cache)
         response = dht_pb2.StoreResponse(store_ok=[], peer=self.node_info)
         keys = map(DHTID.from_bytes, request.keys)
-        for key_id, subkey, value_bytes, expiration_time, in_cache in zip(
+        for key_id, tag, value_bytes, expiration_time, in_cache in zip(
                 keys, request.subkeys, request.values, request.expiration_time, request.in_cache):
             storage = self.cache if in_cache else self.storage
-            if subkey == IS_REGULAR_VALUE:  # store normal value without subkeys
+            if tag == self.IS_REGULAR_VALUE:  # store normal value without subkeys
                 response.store_ok.append(storage.store(key_id, value_bytes, expiration_time))
-            elif subkey == IS_DICTIONARY:   # store an entire dictionary with pre-existing subkeys
+            elif tag == self.IS_DICTIONARY:  # store an entire dictionary with several subkeys
                 value_dictionary = self.serializer.loads(value_bytes)
                 assert isinstance(value_dictionary, DictionaryDHTValue)
-                response.store_ok.append(all(storage.store_subkey(key_id, subkey, subvalue, subkey_expiration)
-                                             for subkey, subvalue, subkey_expiration in value_dictionary.items()))
-            else:  # add new entry into an existing dictionary-like value or create a new dictionary with one sub-key
+                response.store_ok.append(all(storage.store_subkey(key_id, subkey, item.value, item.expiration_time)
+                                             for subkey, item in value_dictionary.items()))
+            else:  # add a new entry into an existing dictionary value or create a new dictionary with one sub-key
+                subkey = self.serializer.loads(tag)
                 response.store_ok.append(storage.store_subkey(key_id, subkey, value_bytes, expiration_time))
         return response
 
-    async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> \
-            Optional[Dict[DHTID, Tuple[Optional[BinaryDHTValue], Optional[DHTExpiration], Dict[DHTID, Endpoint]]]]:
+    async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> Optional[
+            Dict[DHTID, Tuple[Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]], Dict[DHTID, Endpoint]]]]:
         """
         Request keys from a peer. For each key, look for its (value, expiration time) locally and
          k additional peers that are most likely to have this key (ranked by XOR distance)
@@ -211,14 +214,17 @@ class DHTProtocol(dht_grpc.DHTServicer):
             output = {}  # unpack data depending on its type
             for key, result in zip(keys, response.results):
                 nearest = dict(zip(map(DHTID.from_bytes, result.nearest_node_ids), result.nearest_endpoints))
+
                 if result.type == dht_pb2.NOT_FOUND:
-                    output[key] = None, None, nearest
+                    output[key] = None, nearest
                 elif result.type == dht_pb2.FOUND_REGULAR:
-                    output[key] = result.value, result.expiration_time, nearest
+                    output[key] = ValueWithExpiration(result.value, result.expiration_time), nearest
                 elif result.type == dht_pb2.FOUND_DICTIONARY:
-                    output[key] = self.serializer.loads(result.value), result.expiration_time, nearest
+                    deserialized_dictionary = self.serializer.loads(result.value)
+                    output[key] = ValueWithExpiration(deserialized_dictionary, result.expiration_time), nearest
                 else:
                     logger.error(f"Unknown result type: {result.type}")
+
             return output
         except grpc.experimental.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to find at {peer}: {error.code()}")
@@ -233,22 +239,22 @@ class DHTProtocol(dht_grpc.DHTServicer):
             asyncio.create_task(self.rpc_ping(request.peer, context))
         response = dht_pb2.FindResponse(results=[], peer=self.node_info)
         for i, key_id in enumerate(map(DHTID.from_bytes, request.keys)):
-            maybe_value, maybe_expiration_time = self.storage.get(key_id)
-            cached_value, cached_expiration_time = self.cache.get(key_id)
-            if (cached_expiration_time or -float('inf')) > (maybe_expiration_time or -float('inf')):
-                maybe_value, maybe_expiration_time = cached_value, cached_expiration_time
+            maybe_item = self.storage.get(key_id)
+            cached_item = self.cache.get(key_id)
+            if cached_item is not None and (maybe_item is None or cached_item.expiration_time > maybe_item.expiration_time):
+                maybe_item = cached_item
 
-            if maybe_expiration_time is None:  # value not found
+            if maybe_item is None:  # value not found
                 item = dht_pb2.FindResult(type=dht_pb2.NOT_FOUND)
-            elif isinstance(maybe_value, DictionaryDHTValue):
-                item = dht_pb2.FindResult(type=dht_pb2.FOUND_DICTIONARY, value=self.serializer.dumps(maybe_value),
-                                          expiration_time=maybe_value.latest_expiration_time)
+            elif isinstance(maybe_item.value, DictionaryDHTValue):
+                item = dht_pb2.FindResult(type=dht_pb2.FOUND_DICTIONARY, value=self.serializer.dumps(maybe_item.value),
+                                          expiration_time=maybe_item.expiration_time)
             else:  # found regular value
-                item = dht_pb2.FindResult(type=dht_pb2.FOUND_REGULAR, value=maybe_value,
-                                          expiration_time=maybe_expiration_time)
+                item = dht_pb2.FindResult(type=dht_pb2.FOUND_REGULAR, value=maybe_item.value,
+                                          expiration_time=maybe_item.expiration_time)
 
             for node_id, endpoint in self.routing_table.get_nearest_neighbors(
-                key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id)):
+                    key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id)):
                 item.nearest_node_ids.append(node_id.to_bytes())
                 item.nearest_endpoints.append(endpoint)
             response.results.append(item)
@@ -268,7 +274,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             if node_id not in self.routing_table:
                 # we just met a new node, maybe we know some values that it *should* store
                 data_to_send: List[Tuple[DHTID, BinaryDHTValue, DHTExpiration]] = []
-                for key, value, expiration_time in list(self.storage.items()):
+                for key, item in list(self.storage.items()):
                     neighbors = self.routing_table.get_nearest_neighbors(key, self.num_replicas, exclude=self.node_id)
                     if neighbors:
                         nearest_distance = neighbors[0][0].xor_distance(key)
@@ -276,7 +282,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                         new_node_should_store = node_id.xor_distance(key) < farthest_distance
                         this_node_is_responsible = self.node_id.xor_distance(key) < nearest_distance
                     if not neighbors or (new_node_should_store and this_node_is_responsible):
-                        data_to_send.append((key, value, expiration_time))
+                        data_to_send.append((key, item.value, item.expiration_time))
                 if data_to_send:
                     asyncio.create_task(self.call_store(peer_endpoint, *zip(*data_to_send), in_cache=False))
 

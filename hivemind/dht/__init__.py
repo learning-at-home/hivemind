@@ -19,6 +19,7 @@ import multiprocessing as mp
 import warnings
 from collections import deque, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
+from itertools import chain
 from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable, Dict, Deque, Set
 
 import uvloop
@@ -148,9 +149,9 @@ class DHT(mp.Process):
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         response = await node.get_many(uids, expiration_time, num_workers=num_workers)
         # TODO expert_data['expert'] -> namedtuple with meaningful field names
-        future.set_result([RemoteExpert(*expert_data['expert'][0])
-                           if maybe_expiration_time else None and expert_data['expert'][1] is not None
-                           for uid, (expert_data, maybe_expiration_time) in response.items()])
+        future.set_result([RemoteExpert(*expert_data.value['expert'].value)
+                           if expert_data is not None and 'expert' in expert_data.value else None
+                           for uid, expert_data in response.items()])
 
     def declare_experts(self, uids: List[str], endpoint: Endpoint, wait=True, timeout=None) -> Optional[List[bool]]:
         """
@@ -222,6 +223,7 @@ class DHT(mp.Process):
         if not beam:
             logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim 0)")
             return []
+        # TODO warn user if indices are out of range on the _last_ level! (rationale: beam search may return <k results)
 
         for dim_index in range(1, len(grid_scores) - 1):
             # select beam_size best suffixes from current beam
@@ -245,11 +247,12 @@ class DHT(mp.Process):
 
         # select best experts from the final beam
         dim_scores = grid_scores[-1]
-        final_best_pairs: List[Tuple[float, str, Endpoint]] = heapq.nlargest(beam_size, (
+        # TODO use heap to harness all results, get rid of five-line expression
+        final_best_pairs: List[Tuple[float, str, Endpoint]] = heapq.nlargest(beam_size, chain((
             (prefix_score + dim_scores[int(suffix_i)], uid, endpoint)
             for prefix_score, prefix, suffixes in beam for suffix_i, ((uid, endpoint), _) in suffixes.items()
             if str.isdecimal(suffix_i) and 0 <= int(suffix_i) < len(dim_scores)
-        ))
+        ), ((score, *suffixes['expert']) for score, _, suffixes in beam if 'expert' in suffixes)))
         best_experts = [RemoteExpert(uid, endpoint) for score, uid, endpoint in final_best_pairs]
         if future is not None:
             future.set_result(best_experts)
@@ -305,9 +308,9 @@ class DHT(mp.Process):
             # await the next best prefix to be fetched
             pending_best_index, pending_best_prefix, pending_task = pending_tasks.popleft()
             try:
-                maybe_prefix_data, maybe_expiration_time = await pending_task
-                if maybe_expiration_time is not None:
-                    beam.append((scores[pending_best_index], pending_best_prefix, maybe_prefix_data))
+                maybe_prefix_data = await pending_task
+                if maybe_prefix_data is not None:
+                    beam.append((scores[pending_best_index], pending_best_prefix, maybe_prefix_data.value))
             except asyncio.CancelledError:
                 for _, pending_task in pending_tasks:
                     pending_task.cancel()
@@ -328,7 +331,7 @@ class DHT(mp.Process):
         :returns: a ordered dict{uid_prefix -> RemoteExpert} mapping at most :k: prefixes to matching experts
             The keys in the returned dict are ordered same as in uid_prefixes.
         """
-        logger.warning("first_k_active is deprecated and will be removed in 0.8.7")
+        logger.warning("first_k_active is deprecated and will be removed in 0.8.8")
         assert not isinstance(uid_prefixes, str), "please provide a list/tuple of prefixes as the first argument"
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_first_k_active', [],
@@ -352,9 +355,8 @@ class DHT(mp.Process):
             # parse task results in chronological order, launch additional tasks on demand
             response = await pending_tasks.popleft()
             for uid_prefix in uid_prefixes[chunk_i * chunk_size: (chunk_i + 1) * chunk_size]:
-                maybe_expert_data, maybe_expiration_time = response[uid_prefix]
-                if maybe_expiration_time is not None and len(maybe_expert_data) > 0:  # found active peer
-                    found.append((uid_prefix, RemoteExpert(*next(iter(maybe_expert_data.values()))[0])))
+                if response[uid_prefix] is not None and len(response[uid_prefix].value) > 0:  # found active peer
+                    found.append((uid_prefix, RemoteExpert(*next(iter(response[uid_prefix].value.values()))[0])))
                     # if we found enough active experts, finish immediately
                     if len(found) >= k:
                         break
