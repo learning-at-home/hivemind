@@ -224,6 +224,7 @@ class DHT(mp.Process):
             logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim 0)")
             return []
         #TODO warn user if indices are out of range on the _last_ level! (rationale: beam search may return <k results)
+        #TODO use heap to harness all results?
 
         for dim_index in range(1, len(grid_scores) - 1):
             # select beam_size best suffixes from current beam
