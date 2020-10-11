@@ -1,23 +1,24 @@
 from __future__ import annotations
+
 import multiprocessing as mp
 import multiprocessing.synchronize
-import threading
 import random
+import threading
 from contextlib import contextmanager
 from functools import partial
+from typing import Dict, Optional, Tuple, List
 
 import torch
-from typing import Dict, Optional, Tuple, List
 
 import hivemind
 from hivemind.dht import DHT
-from hivemind.server.runtime import Runtime
-from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
-from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.checkpoint_saver import CheckpointSaver
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread
+from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.layers import name_to_block, name_to_input
+from hivemind.server.runtime import Runtime
+from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
 from hivemind.utils import Endpoint, get_port, replace_port, find_open_port, get_logger
 
 logger = get_logger(__name__)
@@ -66,7 +67,7 @@ class Server(threading.Thread):
 
     @staticmethod
     def create(listen_on='0.0.0.0:*', num_experts: int = None, expert_uids: str = None, expert_pattern: str = None,
-               expert_cls='ffn', hidden_dim=1024, Optimizer=torch.optim.Adam, num_handlers=None, max_batch_size=4096,
+               expert_cls='ffn', hidden_dim=1024, optim_cls=torch.optim.Adam, num_handlers=None, max_batch_size=4096,
                device=None, no_dht=False, initial_peers=(), dht_port=None, verbose=True,
                *, start: bool, **kwargs) -> Server:
         """
@@ -76,12 +77,12 @@ class Server(threading.Thread):
         :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]\
          means "sample random experts between myprefix.0.0 and myprefix.255.255;
         :param expert_uids: spawn experts with these exact uids, overrides num_experts and expert_pattern
-        :param expert_cls: expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
+        :param expert_cls: expert type from hivemind.server.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
         :param hidden_dim: main dimension for expert_cls
         :param num_handlers: server will use this many parallel processes to handle incoming requests
         :param max_batch_size: total num examples in the same batch will not exceed this value
         :param device: all experts will use this device in torch notation; default: cuda if available else cpu
-        :param Optimizer: uses this optimizer to train all experts
+        :param optim_cls: uses this optimizer to train all experts
         :param no_dht: if specified, the server will not be attached to a dht
         :param initial_peers: a list of peers that will introduce this node to the dht,\
          e.g. ('123.11.22.33:1337', '[fe80::abe2:db1c:be7d:5a85]:4567'), default = no peers
@@ -112,7 +113,7 @@ class Server(threading.Thread):
 
         num_experts = len(expert_uids)
         num_handlers = num_handlers if num_handlers is not None else num_experts * 8
-        Optimizer = Optimizer if Optimizer is not None else partial(torch.optim.SGD, lr=0.0)
+        optim_cls = optim_cls if optim_cls is not None else partial(torch.optim.SGD, lr=0.0)
         device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
         sample_input = name_to_input[expert_cls](4, hidden_dim)
@@ -129,7 +130,7 @@ class Server(threading.Thread):
             experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert,
                                                          args_schema=args_schema,
                                                          outputs_schema=hivemind.BatchTensorDescriptor(hidden_dim),
-                                                         opt=Optimizer(expert.parameters()),
+                                                         opt=optim_cls(expert.parameters()),
                                                          max_batch_size=max_batch_size,
                                                          )
         # actually start server
@@ -314,4 +315,3 @@ def generate_uids_from_pattern(num_experts: int, expert_pattern: Optional[str], 
         logger.warning(f"Found only {len(found_uids)} out of {num_experts} free expert uids after "
                        f"{attempts_per_expert * num_experts} attempts")
     return found_uids
-

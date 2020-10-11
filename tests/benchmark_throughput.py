@@ -5,11 +5,12 @@ import sys
 import time
 
 import torch
-from hivemind.server import layers
-from test_utils import print_device_info, increase_file_limit
+from test_utils import print_device_info
 
 import hivemind
 from hivemind import find_open_port
+from hivemind.server import layers
+from hivemind.utils.threading import increase_file_limit
 
 
 def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
