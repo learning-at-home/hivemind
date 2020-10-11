@@ -149,9 +149,9 @@ class DHT(mp.Process):
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         response = await node.get_many(uids, expiration_time, num_workers=num_workers)
         # TODO expert_data['expert'] -> namedtuple with meaningful field names
-        future.set_result([RemoteExpert(*expert_data['expert'][0])
-                           if maybe_expiration_time else None and expert_data['expert'][1] is not None
-                           for uid, (expert_data, maybe_expiration_time) in response.items()])
+        future.set_result([RemoteExpert(*expert_data.value['expert'].value)
+                           if expert_data is not None and 'expert' in expert_data.value else None
+                           for uid, expert_data in response.items()])
 
     def declare_experts(self, uids: List[str], endpoint: Endpoint, wait=True, timeout=None) -> Optional[List[bool]]:
         """
@@ -308,9 +308,9 @@ class DHT(mp.Process):
             # await the next best prefix to be fetched
             pending_best_index, pending_best_prefix, pending_task = pending_tasks.popleft()
             try:
-                maybe_prefix_data, maybe_expiration_time = await pending_task
-                if maybe_expiration_time is not None:
-                    beam.append((scores[pending_best_index], pending_best_prefix, maybe_prefix_data))
+                maybe_prefix_data = await pending_task
+                if maybe_prefix_data is not None:
+                    beam.append((scores[pending_best_index], pending_best_prefix, maybe_prefix_data.value))
             except asyncio.CancelledError:
                 for _, pending_task in pending_tasks:
                     pending_task.cancel()
@@ -355,9 +355,8 @@ class DHT(mp.Process):
             # parse task results in chronological order, launch additional tasks on demand
             response = await pending_tasks.popleft()
             for uid_prefix in uid_prefixes[chunk_i * chunk_size: (chunk_i + 1) * chunk_size]:
-                maybe_expert_data, maybe_expiration_time = response[uid_prefix]
-                if maybe_expiration_time is not None and len(maybe_expert_data) > 0:  # found active peer
-                    found.append((uid_prefix, RemoteExpert(*next(iter(maybe_expert_data.values()))[0])))
+                if response[uid_prefix] is not None and len(response[uid_prefix].value) > 0:  # found active peer
+                    found.append((uid_prefix, RemoteExpert(*next(iter(response[uid_prefix].value.values()))[0])))
                     # if we found enough active experts, finish immediately
                     if len(found) >= k:
                         break

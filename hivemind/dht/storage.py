@@ -11,13 +11,13 @@ ValueType = TypeVar('ValueType')
 ROOT = 0
 
 
-class ValueAndExpiration(NamedTuple, Generic[ValueType]):
+class ValueWithExpiration(NamedTuple, Generic[ValueType]):
     value: ValueType
-    expiration: DHTExpiration
+    expiration_time: DHTExpiration
 
 
 class HeapEntry(NamedTuple, Generic[KeyType]):
-    expiration: DHTExpiration
+    expiration_time: DHTExpiration
     key: KeyType
 
 
@@ -27,12 +27,12 @@ class TimedStorage(Generic[KeyType, ValueType]):
 
     def __init__(self, maxsize: Optional[int] = None):
         self.maxsize = maxsize or float("inf")
-        self.data: Dict[KeyType, ValueAndExpiration[ValueType]] = dict()
+        self.data: Dict[KeyType, ValueWithExpiration[ValueType]] = dict()
         self.expiration_heap: List[HeapEntry[KeyType]] = []
         self.key_to_heap: Dict[KeyType, HeapEntry[KeyType]] = dict()
 
     def _remove_outdated(self):
-        while not self.frozen and self.expiration_heap and (self.expiration_heap[ROOT].expiration < get_dht_time()
+        while not self.frozen and self.expiration_heap and (self.expiration_heap[ROOT].expiration_time < get_dht_time()
                                                             or len(self.expiration_heap) > self.maxsize):
             heap_entry = heapq.heappop(self.expiration_heap)
             if self.key_to_heap.get(heap_entry.key) == heap_entry:
@@ -48,27 +48,27 @@ class TimedStorage(Generic[KeyType, ValueType]):
         self.key_to_heap[key] = heap_entry = HeapEntry(expiration_time, key)
         heapq.heappush(self.expiration_heap, heap_entry)
         if key in self.data:
-            if self.data[key].expiration < expiration_time:
-                self.data[key] = ValueAndExpiration(value, expiration_time)
+            if self.data[key].expiration_time < expiration_time:
+                self.data[key] = ValueWithExpiration(value, expiration_time)
                 return True
             return False
-        self.data[key] = ValueAndExpiration(value, expiration_time)
+        self.data[key] = ValueWithExpiration(value, expiration_time)
         self._remove_outdated()
         return True
 
-    def get(self, key: KeyType) -> Optional[ValueAndExpiration[ValueType]]:
+    def get(self, key: KeyType) -> Optional[ValueWithExpiration[ValueType]]:
         """ Get a value corresponding to a key if that (key, value) pair was previously stored under this key. """
         self._remove_outdated()
         if key in self.data:
             return self.data[key]
         return None
 
-    def items(self) -> Iterator[Tuple[KeyType, ValueAndExpiration[ValueType]]]:
+    def items(self) -> Iterator[Tuple[KeyType, ValueWithExpiration[ValueType]]]:
         """ Iterate over (key, value, expiration_time) tuples stored in this storage """
         self._remove_outdated()
         return ((key, value_and_expiration) for key, value_and_expiration in self.data.items())
 
-    def top(self) -> Optional[Tuple[KeyType, ValueAndExpiration[ValueType]]]:
+    def top(self) -> Tuple[Optional[KeyType], Optional[ValueWithExpiration[ValueType]]]:
         """ Return the entry with earliest expiration or None if there isn't any """
         self._remove_outdated()
         if self.data:
@@ -77,6 +77,7 @@ class TimedStorage(Generic[KeyType, ValueType]):
                 heapq.heappop(self.expiration_heap)
             top_key = self.expiration_heap[ROOT].key
             return top_key, self.data[top_key]
+        return None, None
 
     def __contains__(self, key: KeyType):
         self._remove_outdated()
@@ -118,7 +119,8 @@ class DictionaryDHTValue(TimedStorage[Subkey, BinaryDHTValue]):
 
     def packb(self) -> bytes:
         """ custom behavior for MSGPackSerializer.dumps """
-        return MSGPackSerializer.dumps([self.maxsize, self.latest_expiration_time, list(map(list, self.items()))])
+        packed_items = [[key, value, expiration_time] for key, (value, expiration_time) in self.items()]
+        return MSGPackSerializer.dumps([self.maxsize, self.latest_expiration_time, packed_items])
 
     @classmethod
     def unpackb(cls, raw: bytes) -> DictionaryDHTValue:
@@ -152,15 +154,15 @@ class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTVal
          3) if self[key] is a normal value with smaller expiration time, overwrite it with a dictionary and add sub-key
         :returns: True if new entry was stored, False it was rejected (current value is newer)
         """
-        previous_value, previous_expiration_time = self.get(key)
-        if isinstance(previous_value, DictionaryDHTValue):  # already a dictionary, just add new subkey
-            if expiration_time > previous_value.latest_expiration_time:
-                super().store(key, previous_value, expiration_time)  # refresh expiration time
-            return previous_value.store(subkey, value, expiration_time)
-        elif expiration_time > (previous_expiration_time or float('-inf')):  # create new dictionary, add subkey
+        previous_value, previous_expiration_time = self.get(key) or (b'', -float('inf'))
+        if isinstance(previous_value, BinaryDHTValue) and expiration_time > previous_expiration_time:
             new_storage = DictionaryDHTValue()
             new_storage.store(subkey, value, expiration_time)
             return super().store(key, new_storage, new_storage.latest_expiration_time)
+        elif isinstance(previous_value, DictionaryDHTValue):
+            if expiration_time > previous_value.latest_expiration_time:
+                super().store(key, previous_value, expiration_time)  # refresh expiration time
+            return previous_value.store(subkey, value, expiration_time)
         else:
             return False
 

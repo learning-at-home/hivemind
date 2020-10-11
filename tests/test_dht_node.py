@@ -62,7 +62,7 @@ def test_dht_protocol():
             assert all(store_ok), "DHT rejected a trivial store"
 
             # peer 1 must know about peer 2
-            recv_value_bytes, recv_expiration, nodes_found = loop.run_until_complete(
+            (recv_value_bytes, recv_expiration), nodes_found = loop.run_until_complete(
                 protocol.call_find(f'{LOCALHOST}:{peer1_port}', [key]))[key]
             recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
             (recv_id, recv_endpoint) = next(iter(nodes_found.items()))
@@ -75,9 +75,9 @@ def test_dht_protocol():
 
             # peer 2 must know about peer 1, but not have a *random* nonexistent value
             dummy_key = DHTID.generate()
-            recv_dummy_value, recv_dummy_expiration, nodes_found_2 = loop.run_until_complete(
+            empty_item, nodes_found_2 = loop.run_until_complete(
                 protocol.call_find(f'{LOCALHOST}:{peer2_port}', [dummy_key]))[dummy_key]
-            assert recv_dummy_value is None and recv_dummy_expiration is None, "Non-existent keys shouldn't have values"
+            assert empty_item is None, "Non-existent keys shouldn't have values"
             (recv_id, recv_endpoint) = next(iter(nodes_found_2.items()))
             assert recv_id == peer1_id and recv_endpoint == f"{LOCALHOST}:{peer1_port}", \
                 f"expected id={peer1_id}, peer={LOCALHOST}:{peer1_port} but got {recv_id}, {recv_endpoint}"
@@ -97,7 +97,7 @@ def test_dht_protocol():
                 f'{LOCALHOST}:{peer1_port}', keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value2)],
                 expiration_time=[expiration + 5], subkeys=[subkey2])
             )
-            recv_dict, recv_expiration, nodes_found = loop.run_until_complete(
+            (recv_dict, recv_expiration), nodes_found = loop.run_until_complete(
                 protocol.call_find(f'{LOCALHOST}:{peer1_port}', [nested_key]))[nested_key]
             assert isinstance(recv_dict, DictionaryDHTValue)
             assert len(recv_dict.data) == 2 and recv_expiration == expiration + 5
@@ -134,14 +134,14 @@ def test_empty_table():
 
         key, value, expiration = DHTID.generate(), [random.random(), {'ololo': 'pyshpysh'}], get_dht_time() + 1e3
 
-        recv_value_bytes, recv_expiration, nodes_found = loop.run_until_complete(
+        empty_item, nodes_found = loop.run_until_complete(
             protocol.call_find(f'{LOCALHOST}:{peer_port}', [key]))[key]
-        assert recv_value_bytes is None and recv_expiration is None and len(nodes_found) == 0
+        assert empty_item is None and len(nodes_found) == 0
         assert all(loop.run_until_complete(protocol.call_store(
             f'{LOCALHOST}:{peer_port}', [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
         )), "peer rejected store"
 
-        recv_value_bytes, recv_expiration, nodes_found = loop.run_until_complete(
+        (recv_value_bytes, recv_expiration), nodes_found = loop.run_until_complete(
             protocol.call_find(f'{LOCALHOST}:{peer_port}', [key]))[key]
         recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
         assert len(nodes_found) == 0
@@ -266,7 +266,7 @@ def test_dht_node():
             assert val == ["Value", 10], "Wrong value"
             assert expiration_time == true_time, f"Wrong time"
 
-        assert loop.run_until_complete(detached_node.get("mykey")) == (None, None)
+        assert loop.run_until_complete(detached_node.get("mykey")) is None
 
         # test 7: bulk store and bulk get
         keys = 'foo', 'bar', 'baz', 'zzz'
@@ -429,7 +429,7 @@ def test_dhtnode_reuse_get():
 
         assert (await futures1['k1'])[0] == 123
         assert await futures1['k2'] == await futures2['k2'] and (await futures1['k2'])[0] == 567
-        assert await futures2['k3'] == await futures3['k3'] and (await futures3['k3']) == (None, None)
+        assert await futures2['k3'] == await futures3['k3'] and (await futures3['k3']) is None
         test_success.set()
 
     proc = mp.Process(target=lambda: asyncio.run(_tester()))
