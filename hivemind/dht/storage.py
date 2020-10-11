@@ -1,13 +1,24 @@
 from __future__ import annotations
 import heapq
 from contextlib import contextmanager
-from typing import Generic, Optional, Dict, Tuple, List, Iterator, TypeVar, Union, Any
+from typing import Generic, Optional, Dict, Tuple, List, Iterator, TypeVar, Union, NamedTuple
 
 from hivemind.dht.routing import DHTID, DHTExpiration, get_dht_time, BinaryDHTValue, Subkey
 from hivemind.utils.serializer import MSGPackSerializer
 
 KeyType = TypeVar('KeyType')
 ValueType = TypeVar('ValueType')
+ROOT = 0
+
+
+class ValueAndExpiration(NamedTuple, Generic[ValueType]):
+    value: ValueType
+    expiration: DHTExpiration
+
+
+class HeapEntry(NamedTuple, Generic[KeyType]):
+    expiration: DHTExpiration
+    key: KeyType
 
 
 class TimedStorage(Generic[KeyType, ValueType]):
@@ -16,17 +27,16 @@ class TimedStorage(Generic[KeyType, ValueType]):
 
     def __init__(self, maxsize: Optional[int] = None):
         self.maxsize = maxsize or float("inf")
-        self.data: Dict[KeyType, Tuple[ValueType, DHTExpiration]] = dict()
-        self.expiration_heap: List[Tuple[DHTExpiration, KeyType]] = []
-        self.key_to_heap: Dict[KeyType, Tuple[DHTExpiration, KeyType]] = dict()
+        self.data: Dict[KeyType, ValueAndExpiration[ValueType]] = dict()
+        self.expiration_heap: List[HeapEntry[KeyType]] = []
+        self.key_to_heap: Dict[KeyType, HeapEntry[KeyType]] = dict()
 
     def _remove_outdated(self):
-        while not self.frozen and self.expiration_heap and (self.expiration_heap[0][0] < get_dht_time()
+        while not self.frozen and self.expiration_heap and (self.expiration_heap[ROOT].expiration < get_dht_time()
                                                             or len(self.expiration_heap) > self.maxsize):
             heap_entry = heapq.heappop(self.expiration_heap)
-            key = heap_entry[1]
-            if self.key_to_heap.get(key) == heap_entry:
-                del self.data[key], self.key_to_heap[key]
+            if self.key_to_heap.get(heap_entry.key) == heap_entry:
+                del self.data[heap_entry.key], self.key_to_heap[heap_entry.key]
 
     def store(self, key: KeyType, value: ValueType, expiration_time: DHTExpiration) -> bool:
         """
@@ -35,39 +45,38 @@ class TimedStorage(Generic[KeyType, ValueType]):
         """
         if expiration_time < get_dht_time() and not self.frozen:
             return False
-        self.key_to_heap[key] = (expiration_time, key)
-        heapq.heappush(self.expiration_heap, (expiration_time, key))
+        self.key_to_heap[key] = heap_entry = HeapEntry(expiration_time, key)
+        heapq.heappush(self.expiration_heap, heap_entry)
         if key in self.data:
-            if self.data[key][1] < expiration_time:
-                self.data[key] = (value, expiration_time)
+            if self.data[key].expiration < expiration_time:
+                self.data[key] = ValueAndExpiration(value, expiration_time)
                 return True
             return False
-        self.data[key] = (value, expiration_time)
+        self.data[key] = ValueAndExpiration(value, expiration_time)
         self._remove_outdated()
         return True
 
-    def get(self, key: KeyType) -> (Optional[ValueType], Optional[DHTExpiration]):
+    def get(self, key: KeyType) -> Optional[ValueAndExpiration[ValueType]]:
         """ Get a value corresponding to a key if that (key, value) pair was previously stored under this key. """
         self._remove_outdated()
         if key in self.data:
             return self.data[key]
-        return None, None
+        return None
 
-    def items(self) -> Iterator[Tuple[KeyType, ValueType, DHTExpiration]]:
+    def items(self) -> Iterator[Tuple[KeyType, ValueAndExpiration[ValueType]]]:
         """ Iterate over (key, value, expiration_time) tuples stored in this storage """
         self._remove_outdated()
-        return ((key, value, expiration_time) for key, (value, expiration_time) in self.data.items())
+        return ((key, value_and_expiration) for key, value_and_expiration in self.data.items())
 
-    def top(self) -> Optional[Tuple[KeyType, ValueType, DHTExpiration]]:
+    def top(self) -> Optional[Tuple[KeyType, ValueAndExpiration[ValueType]]]:
         """ Return the entry with earliest expiration or None if there isn't any """
         self._remove_outdated()
         if self.data:
-            top_entry, top_key = self.expiration_heap[0], self.expiration_heap[0][1]
-            while self.key_to_heap.get(top_key) != top_entry:
-                heapq.heappop(self.expiration_heap)  # skip leftover "ghost" entries until first real entry
-                top_entry, top_key = self.expiration_heap[0], self.expiration_heap[0][1]
-            value, expiration = self.data[top_key]
-            return top_key, value, expiration
+            # skip leftover "ghost" entries until first real entry
+            while self.key_to_heap.get(self.expiration_heap[ROOT].key) != self.expiration_heap[ROOT]:
+                heapq.heappop(self.expiration_heap)
+            top_key = self.expiration_heap[ROOT].key
+            return top_key, self.data[top_key]
 
     def __contains__(self, key: KeyType):
         self._remove_outdated()
