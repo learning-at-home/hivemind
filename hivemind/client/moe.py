@@ -240,7 +240,7 @@ class _RemoteCallMany(torch.autograd.Function):
                                          zip(inputs, nested_flatten(info['forward_schema']))]))
             return grid_indices, tuple(deserialize_torch_tensor(tensor) for tensor in outputs.tensors)
         except grpc.RpcError as error:
-            logger.warning(f"RemoteExpert {expert} failed forward: {error} (inputs: {inputs})")
+            logger.warning(f"RemoteExpert {expert} failed forward: {type(error)} (inputs: {inputs})")
 
     @staticmethod
     def _backward_one_expert(grid_indices: Tuple[int, ...], expert: RemoteExpert, info: Dict[str, Any],
@@ -254,7 +254,7 @@ class _RemoteCallMany(torch.autograd.Function):
                                          for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)]))
             return grid_indices, tuple(deserialize_torch_tensor(tensor) for tensor in grad_inputs.tensors)
         except grpc.RpcError as error:
-            logger.warning(f"RemoteExpert {expert} failed backward: {error} ({inputs}, {grad_outputs})")
+            logger.warning(f"RemoteExpert {expert} failed backward: {type(error)} ({inputs}, {grad_outputs})")
 
     @staticmethod
     def _collect_responses(
