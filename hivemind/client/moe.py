@@ -33,25 +33,20 @@ class RemoteMixtureOfExperts(nn.Module):
     :param uid_prefix: common prefix for all expert uids
     :note: expert uid follows the pattern {uid_prefix}.{0...grid_size[0]}.{0...grid_size[1]}...{0...grid_size[-1]}
     :param dht: a DHT peer used to search for best experts
-    :param k_best: queries this many experts with highest scores
-    :param k_min: makes sure at least this many experts returned output
-    :param timeout_after_k_min: waits for this many seconds after k_min experts returned results.
+    :param k_best: average this many highest-scoring experts to compute activations
+    :param k_min: make sure at least this many experts returned output (i.e. didn't fail)
+    :param timeout_after_k_min: wait for this many seconds after k_min experts returned results.
      Any expert that didn't manage to return output after that delay is considered unavailable
-    :param allow_broadcasting: if RemoteMixtureOfExperts if fed with input dimension above 2,
-     allow_broadcasting=True will flatten first d-1 input dimensions, apply RemoteMixtureOfExperts and un-flatten again
-     allow_broadcasting=False will raise an error
     """
 
     def __init__(self, *, in_features, grid_size: Tuple[int, ...], dht: hivemind.DHT, k_best: int, k_min: int = 1,
                  forward_timeout: Optional[float] = None, timeout_after_k_min: Optional[float] = None,
-                 backward_k_min: int = 1, backward_timeout: Optional[float] = None, uid_prefix='',
-                 allow_broadcasting=True, **dht_kwargs):
+                 backward_k_min: int = 1, backward_timeout: Optional[float] = None, uid_prefix='', **dht_kwargs):
         super().__init__()
         self.dht, self.grid_size, self.uid_prefix, self.dht_kwargs = dht, grid_size, uid_prefix, dht_kwargs
         self.k_best, self.k_min, self.backward_k_min = k_best, k_min, backward_k_min
         self.forward_timeout, self.backward_timeout = forward_timeout, backward_timeout
         self.timeout_after_k_min = timeout_after_k_min
-        self.allow_broadcasting = allow_broadcasting
 
         self.proj = nn.Linear(in_features, sum(grid_size))  # jointly predict logits for all grid dimensions
         self._expert_info = None  # expert['info'] from one of experts in the grid
