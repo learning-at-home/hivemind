@@ -16,28 +16,44 @@ import asyncio
 import ctypes
 import heapq
 import multiprocessing as mp
+import re
 import warnings
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
-from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, Set
+from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, Set, NamedTuple, Any
 
 import uvloop
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
-from hivemind.dht.routing import get_dht_time
+from hivemind.dht.routing import get_dht_time, DHTValue
+from hivemind.dht.storage import ValueWithExpiration
 from hivemind.utils import MPFuture, Endpoint, get_logger
 
 logger = get_logger(__name__)
+
+ExpertUID, ExpertPrefix, NextCoordinate = str, str, int
+UID_PATTERN = re.compile('^[0-9a-zA-Z_-]+(\.[0-9]+)+')  # e.g. ffn_expert.98.76.54 - prefix and coordinates
+UID_DELIMITER = '.'  # when declaring experts, DHT store all prefixes of that expert's uid, split over this prefix
+#  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
+
+
+def is_valid_uid(maybe_uid: str) -> bool:
+    return bool(UID_PATTERN.search(maybe_uid))
+
+
+def split_uid(uid: ExpertUID) -> Tuple[ExpertUID, NextCoordinate]:
+    pivot = uid.rindex(UID_DELIMITER)
+    return uid[:pivot], int(uid[pivot + 1:])
 
 
 class DHT(mp.Process):
     """
     High-level interface to hivemind.dht that is designed to allow RemoteMixtureOfExperts to select best experts.
 
-    * Hivemind servers periodically announce their experts via DHT.declare_experts
-    * Trainers find most suitable experts via DHT.find_best_experts
+    * hivemind servers periodically announce their experts via DHT.declare_experts
+    * trainers find most suitable experts via DHT.find_best_experts
 
     :param initial_peers: one or multiple endpoints pointing to active DHT peers. Similar format to listen_on.
     :param listen_on: an interface for incoming connections, e.g. "127.0.0.1:*", "0.0.0.0:1234" or "ipv6:[::]:*"
@@ -75,8 +91,6 @@ class DHT(mp.Process):
     This beam search explores one additional dimension per step and finds k best experts from across the DHT
     in O(k * num_dimensions * dimension_size) time depending on the chosen grid dimensions.
     """
-    UID_DELIMITER = '.'  # when declaring experts, DHT store all prefixes of that expert's uid, split over this prefix
-    #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
@@ -135,7 +149,7 @@ class DHT(mp.Process):
     def port(self) -> Optional[int]:
         return self._port.value if self._port.value != 0 else None
 
-    def get_experts(self, uids: List[str], expiration_time: Optional[DHTExpiration] = None,
+    def get_experts(self, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration] = None,
                     return_future=False) -> List[Optional[RemoteExpert]]:
         """
         :param uids: find experts with these ids from across the DHT
@@ -145,19 +159,22 @@ class DHT(mp.Process):
         """
         assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_experts', [], dict(uids=uids, expiration_time=expiration_time, future=_future)))
+        self.pipe.send(('_get_experts', [], dict(uids=list(uids), expiration_time=expiration_time, future=_future)))
         return future if return_future else future.result()
 
-    async def _get_experts(
-            self, node: DHTNode, uids: List[str], expiration_time: Optional[DHTExpiration], future: MPFuture):
+    async def _get_experts(self, node: DHTNode, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration],
+                           future: MPFuture) -> List[Optional[RemoteExpert]]:
         if expiration_time is None:
             expiration_time = get_dht_time()
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
-        response = await node.get_many(uids, expiration_time, num_workers=num_workers)
-        # TODO expert_data['expert'] -> namedtuple with meaningful field names
-        future.set_result([RemoteExpert(*expert_data.value['expert'].value)
-                           if expert_data is not None and 'expert' in expert_data.value else None
-                           for uid, expert_data in response.items()])
+        found: Dict[ExpertUID, DHTValue] = await node.get_many(uids, expiration_time, num_workers=num_workers)
+
+        experts: List[Optional[RemoteExpert]] = [None] * len(uids)
+        for i, uid in enumerate(uids):
+            if found[uid] is not None and isinstance(found[uid].value, Endpoint):
+                experts[i] = RemoteExpert(uid, found[uid].value)
+
+        future.set_result(experts)
 
     def declare_experts(self, uids: List[str], endpoint: Endpoint, wait=True, timeout=None) -> Optional[List[bool]]:
         """
@@ -170,32 +187,29 @@ class DHT(mp.Process):
         :returns: if wait, returns a list of booleans, (True = store succeeded, False = store rejected)
         """
         assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
+        for uid in uids:
+            assert is_valid_uid(uid), f"{uid} is not a valid expert uid. All uids must follow {UID_PATTERN.pattern}"
         future, _future = MPFuture.make_pair() if wait else (None, None)
         self.pipe.send(('_declare_experts', [], dict(uids=list(uids), endpoint=endpoint, future=_future)))
         if wait:
             return future.result(timeout)
 
-    async def _declare_experts(self, node: DHTNode, uids: List[str], endpoint: Endpoint, future: Optional[MPFuture]):
+    async def _declare_experts(
+            self, node: DHTNode, uids: List[ExpertUID], endpoint: Endpoint, future: Optional[MPFuture]):
         num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
         expiration_time = get_dht_time() + self.expiration
-        unique_entries: Set[Tuple[str, str]] = set()
-        #                 prefix---v next_dim     uid  endpoint
-        data_to_store: List[Tuple[str, str, List[str, Endpoint]]] = []
-        for uid in uids:  # first k entries are expert uids themselves
-            data_to_store.append((uid, "expert", [uid, endpoint]))
-        for uid in uids:  # and then, add all prefixes
-            uid_parts = uid.split(self.UID_DELIMITER)
-            for i in range(len(uid_parts) - 1):
-                uid_prefix_i = self.UID_DELIMITER.join(uid_parts[:i + 1])
-                if (uid_prefix_i, uid_parts[i + 1]) in unique_entries:
-                    continue
-                unique_entries.add((uid_prefix_i, uid_parts[i + 1]))
-                data_to_store.append((uid_prefix_i, uid_parts[i + 1], [uid, endpoint]))
+        data_to_store: Dict[Tuple[ExpertPrefix, Optional[NextCoordinate]], Tuple[ExpertUID, Endpoint]] = {}
+        for uid in uids:
+            data_to_store[uid, None] = endpoint
+            prefix = uid
+            for i in range(prefix.count(UID_DELIMITER) - 1):
+                prefix, next_coord = split_uid(prefix)
+                data_to_store[prefix, next_coord] = uid, endpoint
 
-        keys, subkeys, values = map(list, zip(*data_to_store))
-        store_ok = await node.store_many(keys, values, expiration_time, subkeys=subkeys, num_workers=num_workers)
+        keys, maybe_subkeys, values = zip(*((key, subkey, value) for (key, subkey), value in data_to_store.items()))
+        store_ok = await node.store_many(keys, values, expiration_time, subkeys=maybe_subkeys, num_workers=num_workers)
         if future is not None:
-            future.set_result([store_ok[key, subkey] for key, subkey in zip(keys, subkeys)])
+            future.set_result([store_ok[(key, subkey) if subkey else key] for key, subkey in zip(keys, maybe_subkeys)])
 
     def find_best_experts(self, prefix: str, grid_scores: Sequence[Sequence[float]], beam_size: int, *,
                           return_future=False, **kwargs) -> Union[List[RemoteExpert], MPFuture]:

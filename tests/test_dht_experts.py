@@ -15,7 +15,7 @@ def test_store_get_experts():
     you: hivemind.dht.DHT = random.choice(peers)
     theguyshetoldyounottoworryabout: hivemind.dht.DHT = random.choice(peers)
 
-    expert_uids = [str(uuid.uuid4()) for _ in range(110)]
+    expert_uids = [f"my_expert.{i}" for i in range(110)]
     batch_size = 10
     for batch_start in range(0, len(expert_uids), batch_size):
         you.declare_experts(expert_uids[batch_start: batch_start + batch_size], 'localhost', 1234)
@@ -24,7 +24,7 @@ def test_store_get_experts():
     assert all(res is not None for res in found[:-2]), "Could not find some existing experts"
     assert all(res is None for res in found[-2:]), "Found non-existing experts"
 
-    that_guys_expert, that_guys_port = str(uuid.uuid4()), random.randint(1000, 9999)
+    that_guys_expert, that_guys_port = "my_other_expert.1337", random.randint(1000, 9999)
     theguyshetoldyounottoworryabout.declare_experts([that_guys_expert], f'that_host:{that_guys_port}')
     you_notfound, you_found = you.get_experts(['foobar', that_guys_expert])
     assert isinstance(you_found, hivemind.RemoteExpert)
