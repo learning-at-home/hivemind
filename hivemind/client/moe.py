@@ -29,7 +29,7 @@ class RemoteMixtureOfExperts(nn.Module):
      the missing experts
 
     :param in_features: common input size for experts and gating function
-    :param grid_size: hivemind dimensions that form expert uid (see below)
+    :param grid_size: dimensions that form expert uid (see below)
     :param uid_prefix: common prefix for all expert uids
      expert uid follows the pattern {uid_prefix}.{0...grid_size[0]}.{0...grid_size[1]}...{0...grid_size[-1]}
     :param dht: DHT where the experts reside
