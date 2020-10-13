@@ -1,5 +1,3 @@
-import asyncio
-
 import grpc
 import numpy as np
 import pytest
@@ -7,25 +5,32 @@ import torch
 import hivemind
 from hivemind.client.expert import DUMMY
 from hivemind import background_server
+import multiprocessing as mp
 
 
 def test_moe():
-    all_expert_uids = [f'ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
-                       for _ in range(20)]
-    with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn',
-                           num_handlers=1, hidden_dim=16) as (server_endpoint, dht_endpoint):
-        dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+    test_success = mp.Event()
+    def _test():
+        all_expert_uids = [f'ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
+                           for _ in range(20)]
+        with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn',
+                               num_handlers=1, hidden_dim=16) as (server_endpoint, dht_endpoint):
+            dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
 
-        dmoe = hivemind.RemoteMixtureOfExperts(
-            in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn')
+            dmoe = hivemind.RemoteMixtureOfExperts(
+                in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn')
 
-        for i in range(10):
-            out = dmoe(torch.randn(10, 16))
-            out.sum().backward()
+            for i in range(10):
+                out = dmoe(torch.randn(10, 16))
+                out.sum().backward()
+        test_success.set()
 
+    tester = mp.Process(target=_test)
+    tester.start()
+    tester.join()
+    assert test_success.is_set()
 
 def test_call_many():
-    import multiprocessing as mp
     test_success = mp.Event()
 
     def _test():
