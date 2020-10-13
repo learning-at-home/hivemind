@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from queue import Queue, Empty
-from typing import Tuple, List, Optional, Dict, Any, Iterator
+from typing import Tuple, List, Optional, Dict, Any
 
 import grpc
 
