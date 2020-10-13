@@ -274,7 +274,7 @@ class _RemoteCallMany(torch.autograd.Function):
             finished_tasks, pending_tasks = wait(pending_tasks, return_when=FIRST_COMPLETED,
                                                  timeout=time_left if time_left != float('inf') else None)
             for task in finished_tasks:
-                if task.cancelled() or task.exception():
+                if task.result() is None:
                     continue
                 task_indices, task_flat_outputs = task.result()
                 finished_indices.append(task_indices)
