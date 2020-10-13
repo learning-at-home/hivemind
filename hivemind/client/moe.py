@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import time
-from typing import Tuple, List, Optional, Set, Dict, Any
-from concurrent.futures import Future, wait, FIRST_COMPLETED
+from queue import Queue
+from typing import Tuple, List, Optional, Dict, Any, Iterator
 
-import grpc.experimental.aio
+import grpc
+
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
@@ -12,8 +13,7 @@ from torch.autograd.function import once_differentiable
 import hivemind
 from hivemind.client.expert import RemoteExpert, DUMMY, _get_expert_stub
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
-from hivemind.utils import nested_pack, nested_flatten, serialize_torch_tensor, deserialize_torch_tensor, \
-    run_in_background
+from hivemind.utils import nested_pack, nested_flatten, serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -164,10 +164,15 @@ class _RemoteCallMany(torch.autograd.Function):
         assert len(experts_per_sample) == len(flat_inputs_per_sample) == num_samples
 
         # dispatch tasks to all remote experts collect responses
-        pending_tasks = {
-            run_in_background(cls._forward_one_expert, (i, j), expert, info, flat_inputs_per_sample[i])
-            for i in range(num_samples) for j, expert in enumerate(experts_per_sample[i])
-        }
+        pending_tasks: Dict[grpc.Future, Tuple[int, int]] = {}
+        for i in range(num_samples):
+            for j, expert in enumerate(experts_per_sample[i]):
+                input_tensors = [serialize_torch_tensor(tensor, proto.compression) for tensor, proto in zip(
+                                 flat_inputs_per_sample[i], nested_flatten(info['forward_schema']))]
+                stub: runtime_grpc.ConnectionHandlerStub = _get_expert_stub(expert.endpoint)
+                new_task = stub.forward.future(runtime_pb2.ExpertRequest(uid=expert.uid, tensors=input_tensors))
+                pending_tasks[new_task] = (i, j)
+
         alive_grid_indices, alive_flat_outputs = cls._collect_responses(
             pending_tasks, num_samples, k_min, forward_timeout, timeout_after_k_min)
 
@@ -203,13 +208,19 @@ class _RemoteCallMany(torch.autograd.Function):
 
         inputs_per_expert = zip(*(tensor[alive_ii].split(1, dim=0) for tensor in flat_inputs))
         grad_outputs_per_expert = zip(*(tensor[alive_ii, alive_jj].split(1, dim=0) for tensor in flat_grad_outputs))
+        backward_schema = tuple(nested_flatten((info["forward_schema"], info["outputs_schema"])))
 
         # dispatch tasks to all remote experts, collect responses
-        pending_tasks = set()
+        pending_tasks = {}
         for i, j, inputs_ij, grad_outputs_ij in zip(alive_ii.cpu().numpy(), alive_jj.cpu().numpy(),
                                                     inputs_per_expert, grad_outputs_per_expert):
-            pending_tasks.add(run_in_background(cls._backward_one_expert, (i, j), expert_per_sample[i.item()][j.item()],
-                                                info, inputs_ij, grad_outputs_ij))
+            expert = expert_per_sample[i.item()][j.item()]
+            stub: runtime_grpc.ConnectionHandlerStub = _get_expert_stub(expert.endpoint)
+            inputs_and_grad_outputs = tuple(nested_flatten((inputs_ij, grad_outputs_ij)))
+            tensors_serialized = [serialize_torch_tensor(tensor, proto.compression)
+                                  for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)]
+            new_task = stub.backward.future(runtime_pb2.ExpertRequest(uid=expert.uid, tensors=tensors_serialized))
+            pending_tasks[new_task] = (i, j)
 
         backward_survivor_indices, survivor_grad_inputs = cls._collect_responses(
             pending_tasks, num_samples, backward_k_min, backward_timeout, timeout_after_k_min)
@@ -230,37 +241,10 @@ class _RemoteCallMany(torch.autograd.Function):
 
         return (DUMMY, None, None, None, None, None, None, None, *grad_inputs)
 
-    @staticmethod
-    def _forward_one_expert(
-            grid_indices: Tuple[int, ...], expert: RemoteExpert, info: Dict[str, Any], inputs: Tuple[torch.Tensor]):
-        stub: runtime_grpc.ConnectionHandlerStub = _get_expert_stub(expert.endpoint)
-        try:
-            outputs = stub.forward(runtime_pb2.ExpertRequest(
-                uid=expert.uid, tensors=[serialize_torch_tensor(tensor, proto.compression) for tensor, proto in 
-                                         zip(inputs, nested_flatten(info['forward_schema']))]))
-            return grid_indices, tuple(deserialize_torch_tensor(tensor) for tensor in outputs.tensors)
-        except grpc.RpcError as error:
-            logger.warning(f"RemoteExpert {expert} failed forward: {type(error)} (inputs: {inputs})")
-
-    @staticmethod
-    def _backward_one_expert(grid_indices: Tuple[int, ...], expert: RemoteExpert, info: Dict[str, Any],
-                             inputs: Tuple[torch.Tensor], grad_outputs: Tuple[torch.Tensor]):
-        stub: runtime_grpc.ConnectionHandlerStub = _get_expert_stub(expert.endpoint)
-        inputs_and_grad_outputs = tuple(nested_flatten((inputs, grad_outputs)))
-        backward_schema = tuple(nested_flatten((info["forward_schema"], info["outputs_schema"])))
-        try:
-            grad_inputs = stub.backward(runtime_pb2.ExpertRequest(
-                uid=expert.uid, tensors=[serialize_torch_tensor(tensor, proto.compression)
-                                         for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)]))
-            return grid_indices, tuple(deserialize_torch_tensor(tensor) for tensor in grad_inputs.tensors)
-        except grpc.RpcError as error:
-            logger.warning(f"RemoteExpert {expert} failed backward: {type(error)} ({inputs}, {grad_outputs})")
-
-    @staticmethod
-    def _collect_responses(
-            pending_tasks: Set[Future[Tuple[Tuple[int, int], Tuple[torch.Tensor, ...]]]],
-            num_samples: int, k_min: int, timeout_total: Optional[float], timeout_after_k_min: Optional[float]
-    ) -> Tuple[List[Tuple[int, int]], List[Tuple[torch.Tensor, ...]]]:
+    @classmethod
+    def _collect_responses(cls, task_to_indices: Dict[grpc.Future, Tuple[int, int]], num_samples: int, k_min: int,
+                           timeout_total: Optional[float], timeout_after_k_min: Optional[float]
+                           ) -> Tuple[List[Tuple[int, int]], List[Tuple[torch.Tensor, ...]]]:
         """ await up to k_min results and any result submitted within timeout_after_k_min, cancel stragglers """
         timeout_total = float('inf') if timeout_total is None else timeout_total
         timeout_after_k_min = float('inf') if timeout_after_k_min is None else timeout_after_k_min
@@ -268,25 +252,42 @@ class _RemoteCallMany(torch.autograd.Function):
         pending_samples = num_samples  # samples for which we have less than k_min results
         finished_indices, finished_outputs = [], []
         t_finish = time.perf_counter() + timeout_total
+        pending_tasks = set(task_to_indices.keys())
 
-        while pending_tasks and time.perf_counter() <= t_finish:
-            time_left = t_finish - time.perf_counter()
-            finished_tasks, pending_tasks = wait(pending_tasks, return_when=FIRST_COMPLETED,
-                                                 timeout=time_left if time_left != float('inf') else None)
-            for task in finished_tasks:
-                if task.result() is None:
-                    continue
-                task_indices, task_flat_outputs = task.result()
-                finished_indices.append(task_indices)
-                finished_outputs.append(task_flat_outputs)
+        for task in cls._grpc_as_completed(list(task_to_indices.keys())):
+            if time.perf_counter() > t_finish:
+                break
 
-                sample_index = task_indices[0]
-                num_successful_tasks[sample_index] += 1
-                if num_successful_tasks[sample_index] == k_min:
-                    pending_samples -= 1
-                    if pending_samples <= 0:  # all tasks finished, await stragglers for at most timeout_after_k_min
-                        t_finish = min(t_finish, time.perf_counter() + timeout_after_k_min)
+            pending_tasks.discard(task)
+            if task.exception():
+                logger.warning(f"RemoteExpert failed forward: {type(task.exception())}")
+                continue
+
+            finished_indices.append(task_to_indices[task])
+            finished_outputs.append(tuple(deserialize_torch_tensor(tensor) for tensor in task.result().tensors))
+
+            sample_index = task_to_indices[task][0]
+            num_successful_tasks[sample_index] += 1
+            if num_successful_tasks[sample_index] == k_min:
+                pending_samples -= 1
+                if pending_samples <= 0:  # all tasks finished, await stragglers for at most timeout_after_k_min
+                    t_finish = min(t_finish, time.perf_counter() + timeout_after_k_min)
 
         for task in pending_tasks:
             task.cancel()
         return finished_indices, finished_outputs
+
+    @staticmethod
+    def _grpc_as_completed(futures: List[grpc.Future]) -> Iterator[grpc.Future]:
+        """ Like futures.as_completed for grpc.Future. Cancels unfinished futures. Not for general use. """
+        queue = Queue()
+        for future in futures:
+            future.add_done_callback(queue.put)
+
+        try:
+            for _ in range(len(futures)):
+                yield queue.get()
+        finally:
+            for future in futures:
+                if not future.done():
+                    future.cancel()
