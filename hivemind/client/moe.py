@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import time
-from typing import Tuple, List, Optional, Awaitable, Set, Dict, Any
-from concurrent.futures import Future, as_completed, wait, FIRST_COMPLETED
+from typing import Tuple, List, Optional, Set, Dict, Any
+from concurrent.futures import Future, wait, FIRST_COMPLETED
 
 import grpc.experimental.aio
 import torch
