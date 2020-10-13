@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from queue import Queue
+from queue import Queue, Empty
 from typing import Tuple, List, Optional, Dict, Any, Iterator
 
 import grpc
@@ -253,41 +253,36 @@ class _RemoteCallMany(torch.autograd.Function):
         finished_indices, finished_outputs = [], []
         t_finish = time.perf_counter() + timeout_total
         pending_tasks = set(task_to_indices.keys())
-
-        for task in cls._grpc_as_completed(list(task_to_indices.keys())):
-            if time.perf_counter() > t_finish:
-                break
-
-            pending_tasks.discard(task)
-            if task.exception():
-                logger.warning(f"RemoteExpert failed forward: {type(task.exception())}")
-                continue
-
-            finished_indices.append(task_to_indices[task])
-            finished_outputs.append(tuple(deserialize_torch_tensor(tensor) for tensor in task.result().tensors))
-
-            sample_index = task_to_indices[task][0]
-            num_successful_tasks[sample_index] += 1
-            if num_successful_tasks[sample_index] == k_min:
-                pending_samples -= 1
-                if pending_samples <= 0:  # all tasks finished, await stragglers for at most timeout_after_k_min
-                    t_finish = min(t_finish, time.perf_counter() + timeout_after_k_min)
-
-        for task in pending_tasks:
-            task.cancel()
-        return finished_indices, finished_outputs
-
-    @staticmethod
-    def _grpc_as_completed(futures: List[grpc.Future]) -> Iterator[grpc.Future]:
-        """ Like futures.as_completed for grpc.Future. Cancels unfinished futures. Not for general use. """
-        queue = Queue()
-        for future in futures:
-            future.add_done_callback(queue.put)
+        finished_tasks = Queue()
 
         try:
-            for _ in range(len(futures)):
-                yield queue.get()
+            # the algorithm below is essentially futures.as_completed, but for grpc.Future
+            for task in pending_tasks:
+                task.add_done_callback(finished_tasks.put)
+
+            for _ in range(len(task_to_indices)):
+                timeout = t_finish - time.perf_counter() if t_finish != float('inf') else None
+                task = finished_tasks.get(timeout=timeout)
+                pending_tasks.discard(task)
+
+                if task.exception() or task.cancelled():
+                    logger.warning(f"Task {task} failed: {type(task.exception())}")
+                    continue
+
+                finished_indices.append(task_to_indices[task])
+                finished_outputs.append(tuple(deserialize_torch_tensor(tensor) for tensor in task.result().tensors))
+
+                # count how many successes we have for each input sample
+                sample_index = task_to_indices[task][0]
+                num_successful_tasks[sample_index] += 1
+                if num_successful_tasks[sample_index] == k_min:
+                    pending_samples -= 1
+                    if pending_samples <= 0:  # all tasks finished, await stragglers for at most timeout_after_k_min
+                        t_finish = min(t_finish, time.perf_counter() + timeout_after_k_min)
+
+        except Empty:
+            pass  # we reached t_finish, this is normal behavior
         finally:
-            for future in futures:
-                if not future.done():
-                    future.cancel()
+            for task in pending_tasks:
+                task.cancel()
+        return finished_indices, finished_outputs
