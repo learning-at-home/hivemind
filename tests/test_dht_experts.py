@@ -77,23 +77,6 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
         assert all(len(experts) == beam_size for experts in batch_experts)
 
 
-def test_first_k_active():
-    node = hivemind.DHT(start=True)
-    assert all(node.declare_experts(['e.1.2.3', 'e.1.2.4', 'e.3.4.5'], endpoint=f"{hivemind.LOCALHOST}:1337"))
-    assert all(node.declare_experts(['e.2.1.1'], endpoint=f"{hivemind.LOCALHOST}:1338"))
-
-    results = node.first_k_active(['e.0', 'e.1', 'e.2', 'e.3'], k=2)
-    assert len(results) == 2 and next(iter(results.keys())) == 'e.1'
-    assert results['e.1'].uid in ('e.1.2.3', 'e.1.2.4') and results['e.1'].endpoint == f"{hivemind.LOCALHOST}:1337"
-    assert results['e.2'].uid == 'e.2.1.1' and results['e.2'].endpoint == f"{hivemind.LOCALHOST}:1338"
-
-    results = node.first_k_active(['e', 'e.1', 'e.1.2', 'e.1.2.3'], k=10)
-    assert len(results) == 4
-    assert 'e' in results
-    for k in ('e.1', 'e.1.2', 'e.1.2.3'):
-        assert results[k].uid in ('e.1.2.3', 'e.1.2.4') and results[k].endpoint == f"{hivemind.LOCALHOST}:1337"
-
-
 def test_dht_single_node():
     node = hivemind.DHT(start=True)
     assert node.first_k_active(['e.3', 'e.2'], k=3) == {}
