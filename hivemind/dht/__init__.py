@@ -258,14 +258,15 @@ class DHT(mp.Process):
             future.set_result(best_experts)
         return best_experts
 
-    def batch_find_best_experts(self, prefix: str, batch_grid_scores: Sequence[Sequence[Sequence[float]]], beam_size: int, *,
-                                return_future=False, **kwargs) -> Union[List[RemoteExpert], MPFuture]:
+    def batch_find_best_experts(
+            self, prefix: str, batch_grid_scores: Sequence[Sequence[Sequence[float]]], beam_size: int, *,
+            return_future=False, **kwargs) -> Union[List[List[RemoteExpert]], MPFuture]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
 
         :param prefix: common prefix for all expert uids in grid
         :param batch_grid_scores: scores predicted for each batch example and each dimension in the grid,
-        :type batch_grid_scores: model scores for each example and each grid dimension,  list of arrays of shape (batch_size, grid_size[i])
+        :type batch_grid_scores: list of arrays of shape (batch_size, grid_size[i])
         :param beam_size: how many best experts should beam search return
          After time_budget is reached, beam search won't search for more experts and instead fall back on local cache
          Please note that any queries that fall outside the budget will still be performed in background and cached
