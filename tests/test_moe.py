@@ -25,52 +25,62 @@ def test_moe():
 
 
 def test_call_many():
-    k_min = 1
-    timeout_after_k_min = None
-    backward_k_min = 1
-    forward_timeout = None
-    backward_timeout = None
-    rtol = 1e-3
-    atol = 1e-6
+    import multiprocessing as mp
+    test_success = mp.Event()
 
-    with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
-                           optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
-        inputs = torch.randn(4, 64, requires_grad=True)
-        inputs_clone = inputs.clone().detach().requires_grad_(True)
-        e0, e1, e2, e3, e4 = [hivemind.RemoteExpert(f'expert.{i}', server_endpoint) for i in range(5)]
-        e5 = hivemind.RemoteExpert(f'thisshouldnotexist', '127.0.0.1:80')
+    def _test():
+        k_min = 1
+        timeout_after_k_min = None
+        backward_k_min = 1
+        forward_timeout = None
+        backward_timeout = None
+        rtol = 1e-3
+        atol = 1e-6
 
-        mask, expert_outputs = hivemind.client.moe._RemoteCallMany.apply(
-            DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []],
-            k_min, backward_k_min, timeout_after_k_min, forward_timeout, backward_timeout, e1.info, inputs
-        )
-        assert mask.shape == (4, 3)
-        assert expert_outputs.shape == (4, 3, 64)
+        with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
+                               optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
+            inputs = torch.randn(4, 64, requires_grad=True)
+            inputs_clone = inputs.clone().detach().requires_grad_(True)
+            e0, e1, e2, e3, e4 = [hivemind.RemoteExpert(f'expert.{i}', server_endpoint) for i in range(5)]
+            e5 = hivemind.RemoteExpert(f'thisshouldnotexist', '127.0.0.1:80')
 
-        assert np.all(mask.data.numpy() == np.array([[True, True, True],
-                                                     [True, True, False],
-                                                     [True, False, True],
-                                                     [False, False, False]])), f"Incorrect mask, {mask}"
+            mask, expert_outputs = hivemind.client.moe._RemoteCallMany.apply(
+                DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []],
+                k_min, backward_k_min, timeout_after_k_min, forward_timeout, backward_timeout, e1.info, inputs
+            )
+            assert mask.shape == (4, 3)
+            assert expert_outputs.shape == (4, 3, 64)
 
-        reference_outputs = torch.zeros_like(expert_outputs)
-        reference_outputs[0, 0] = e0(inputs_clone[0:1])
-        reference_outputs[0, 1] = e1(inputs_clone[0:1])
-        reference_outputs[0, 2] = e2(inputs_clone[0:1])
-        reference_outputs[1, 0] = e2(inputs_clone[1:2])
-        reference_outputs[1, 1] = e4(inputs_clone[1:2])
-        reference_outputs[2, 0] = e1(inputs_clone[2:3])
-        reference_outputs[2, 2] = e3(inputs_clone[2:3])
+            assert np.all(mask.data.numpy() == np.array([[True, True, True],
+                                                         [True, True, False],
+                                                         [True, False, True],
+                                                         [False, False, False]])), f"Incorrect mask, {mask}"
 
-        assert torch.allclose(expert_outputs, reference_outputs, rtol, atol)
-        proj = torch.randn(4, 64)
-        loss = (expert_outputs[(0, 1, 1, 2), (0, 2, 1, 0)] * proj).sum()
-        loss.backward()
-        our_grad = inputs.grad.data.cpu().clone()
+            reference_outputs = torch.zeros_like(expert_outputs)
+            reference_outputs[0, 0] = e0(inputs_clone[0:1])
+            reference_outputs[0, 1] = e1(inputs_clone[0:1])
+            reference_outputs[0, 2] = e2(inputs_clone[0:1])
+            reference_outputs[1, 0] = e2(inputs_clone[1:2])
+            reference_outputs[1, 1] = e4(inputs_clone[1:2])
+            reference_outputs[2, 0] = e1(inputs_clone[2:3])
+            reference_outputs[2, 2] = e3(inputs_clone[2:3])
 
-        reference_loss = (reference_outputs[(0, 1, 1, 2), (0, 2, 1, 0)] * proj).sum()
-        reference_loss.backward()
-        reference_grad = inputs_clone.grad.data.cpu().clone()
-        assert torch.allclose(our_grad, reference_grad, rtol, atol)
+            assert torch.allclose(expert_outputs, reference_outputs, rtol, atol)
+            proj = torch.randn(4, 64)
+            loss = (expert_outputs[(0, 1, 1, 2), (0, 2, 1, 0)] * proj).sum()
+            loss.backward()
+            our_grad = inputs.grad.data.cpu().clone()
+
+            reference_loss = (reference_outputs[(0, 1, 1, 2), (0, 2, 1, 0)] * proj).sum()
+            reference_loss.backward()
+            reference_grad = inputs_clone.grad.data.cpu().clone()
+            assert torch.allclose(our_grad, reference_grad, rtol, atol)
+            test_success.set()
+
+    tester = mp.Process(target=_test)
+    tester.start()
+    tester.join()
+    assert test_success.is_set()
 
 
 def test_remote_module_call():
