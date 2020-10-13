@@ -96,7 +96,7 @@ def test_remote_module_call():
             fake_expert(dummy_x)
 
 
-def test_moe_beam_search():
+def test_beam_search_correctness():
     all_expert_uids = [f'ffn.{5 + i}.{10 + j}.{15 + k}' for i in range(10) for j in range(10) for k in range(10)]
     dht = hivemind.DHT(start=True, expiration=999)
     assert all(dht.declare_experts(all_expert_uids, endpoint='fake-endpoint'))
@@ -108,15 +108,17 @@ def test_moe_beam_search():
         input = torch.randn(32)
         grid_scores = dmoe.proj(input).split_with_sizes(dmoe.grid_size, dim=-1)
 
-        chosen_experts = dmoe.loop.run_until_complete(dmoe.beam_search(grid_scores, k_best=dmoe.k_best))
-
+        chosen_experts = dht.find_best_experts(dmoe.uid_prefix, [tensor.detach().numpy() for tensor in grid_scores],
+                                               beam_size=dmoe.k_best)
         chosen_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
                                                    [chosen_experts])[0]
+        our_best_scores = list(chosen_scores.cpu().detach().numpy())
 
-        all_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
+        # reference: independently find :beam_size: best experts with exhaustive search
+        all_scores = dmoe.compute_expert_scores([dim_scores.unsqueeze(0) for dim_scores in grid_scores],
                                                 [[hivemind.RemoteExpert(uid, '') for uid in all_expert_uids]])[0]
         true_best_scores = sorted(all_scores.cpu().detach().numpy(), reverse=True)[:len(chosen_experts)]
-        our_best_scores = list(chosen_scores.cpu().detach().numpy())
+
         assert np.allclose(true_best_scores, our_best_scores)
 
 
