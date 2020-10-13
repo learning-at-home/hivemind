@@ -36,6 +36,9 @@ class DHT(mp.Process):
     """
     High-level interface to hivemind.dht that is designed to allow RemoteMixtureOfExperts to select best experts.
 
+    * Hivemind servers periodically announce their experts via DHT.declare_experts
+    * Trainers find most suitable experts via DHT.find_best_experts
+
     :param initial_peers: one or multiple endpoints pointing to active DHT peers. Similar format to listen_on.
     :param listen_on: an interface for incoming connections, e.g. "127.0.0.1:*", "0.0.0.0:1234" or "ipv6:[::]:*"
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
@@ -55,7 +58,10 @@ class DHT(mp.Process):
     A hivemind.Server can ``DHT.declare_experts(expert_uids: List[str])`` to make its experts visible to everyone.
     When declaring experts, DHT will store each expert's uid and all its prefixes until :expiration: (specified at init)
     For instance, declaring "ffn_expert.98.76.54.32.10" will store the following keys in a DHT:
-    ``"ffn_expert", "ffn_expert.98", "ffn_expert.98.76", ..., "ffn_expert.98.76.54.32.10"``
+    ``"ffn_expert.98", "ffn_expert.98.76", "ffn_expert.98.76.54", ..., "ffn_expert.98.76.54.32.10"``
+
+    In order to enable fast beam search, DHT maintains dictionaries of all active suffixes for every prefix
+    (e.g. "ffn_expert.98": {76: ffn_expert.98.76...., 123: ffn_expert.98.123..., 225: ffn_expert.98.225....}))
 
     RemoteMixtureOfExperts can use these prefixes to find top-k most suitable experts with a left-to-right beam search.
     For instance, consider RemoteMixtureOfExperts with prefix "ffn_expert" and grid size [100, 100, 100, 100, 100].
@@ -63,11 +69,11 @@ class DHT(mp.Process):
     However, not every expert in such 100^5 grid can be alive at a given moment of time (the grid size is redundant).
     In order to find k best "alive" experts, MoE first ranks indices along the first dimension with its gating function.
     It can then check which of those indices correspond to "alive" experts by querying keys such as "ffn_expert.98".
-    This is done using DHT.first_k_active function. After selecting k best indices along first dimension, MoE moves
-    to the second dimension. It can find top-k pairs of indices (e.g. "expert.98.76") that start with one of k first
-    indices from the previous step. Finally, MoE will use DHT.get_experts(uids: List[str]) search for specific experts.
+
+    After selecting k best indices along first dimension, MoE moves to the second dimension.
+    It can find top-k index pairs (e.g. "expert.98.76") that use one of k best indices from the previous step.
     This beam search explores one additional dimension per step and finds k best experts from across the DHT
-    in O(k / s * log(N)) average time where s is grid sparsity rate and N is the total number of experts.
+    in O(k * num_dimensions * dimension_size) time depending on the chosen grid dimensions.
     """
     UID_DELIMITER = '.'  # when declaring experts, DHT store all prefixes of that expert's uid, split over this prefix
     #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
