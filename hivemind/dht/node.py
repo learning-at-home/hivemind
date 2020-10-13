@@ -53,6 +53,7 @@ class DHTNode:
       previous expiration under that subkey. See DHTProtocol.call_store for details.
 
     DHTNode also features several (optional) caching policies:
+
     - cache_locally: after GET, store the result in node's own local cache
     - cache_nearest: after GET, send the result to this many nearest nodes that don't have that value yet (see Kademlia)
     - cache_on_store: after STORE, either save or remove that key from node's own cache depending on store status
