@@ -17,10 +17,10 @@ import ctypes
 import heapq
 import multiprocessing as mp
 import warnings
-from collections import deque, OrderedDict
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
-from typing import List, Tuple, Optional, Sequence, OrderedDict as TOrderedDict, Union, Awaitable, Dict, Deque, Set
+from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, Set
 
 import uvloop
 
