@@ -283,8 +283,10 @@ class DHT(mp.Process):
             self, node: DHTNode, prefix: str, batch_grid_scores: Sequence[Sequence[Tuple[float]]], beam_size: int,
             max_workers: Optional[int] = None, future: Optional[MPFuture] = None, **kwargs) -> List[List[RemoteExpert]]:
 
-        batch_grid_scores = [[tuple(grid_score[i]) for grid_score in batch_grid_scores] for i in range(len(batch_grid_scores[0]))]
-        coros = [self._find_best_experts(node, prefix, grid_scores, beam_size, max_workers, **kwargs) for grid_scores in batch_grid_scores]
+        batch_grid_scores = [[tuple(grid_score[i]) for grid_score in batch_grid_scores]
+                             for i in range(len(batch_grid_scores[0]))]
+        coros = [self._find_best_experts(node, prefix, grid_scores, beam_size, max_workers, **kwargs)
+                 for grid_scores in batch_grid_scores]
 
         best_experts_batch = await asyncio.gather(*coros)
         if future is not None:
