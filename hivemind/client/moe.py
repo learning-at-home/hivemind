@@ -80,14 +80,13 @@ class RemoteMixtureOfExperts(nn.Module):
         grid_scores = self.proj(input_for_gating).split_with_sizes(self.grid_size, dim=-1)
 
         chosen_experts: List[List[RemoteExpert]] = self.dht.batch_find_best_experts(
-            self.uid_prefix, grid_scores, self.k_best, **self.kwargs)  # run beam search across DHT
+            self.uid_prefix, [scores.detach().cpu().numpy() for scores in grid_scores], self.k_best, **self.kwargs)
 
         if self._expert_info is None:
             try:
-                self._expert_info = next((expert.info for experts in chosen_experts for expert in experts))
+                self._expert_info = next((expert.info for experts_i in chosen_experts for expert in experts_i))
             except grpc.RpcError as e:
                 logger.warning(f"Failed to get RemoteMixtureOfExperts.output_shape: {e}")
-
 
         expert_mask, *expert_outputs = _RemoteCallMany.apply(
             DUMMY, chosen_experts, self.k_min, self.backward_k_min, self.timeout_after_k_min, self.forward_timeout,
