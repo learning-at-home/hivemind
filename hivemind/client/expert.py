@@ -16,16 +16,12 @@ DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autogra
 
 
 @lru_cache(maxsize=None)
-def _get_expert_stub(endpoint: Endpoint, aio: bool = False, *extra_options: Tuple[str, Any]):
+def _get_expert_stub(endpoint: Endpoint, *extra_options: Tuple[str, Any]):
     """ Create a gRPC stub to access remote expert or use previously created stub from a process-wide cache """
     channel_options = [
         ('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)
     ] + list(extra_options)
-    if aio:
-        channel = grpc.experimental.aio.insecure_channel(endpoint, options=channel_options)
-    else:
-        channel = grpc.insecure_channel(endpoint, options=channel_options)
-    return runtime_grpc.ConnectionHandlerStub(channel)
+    return runtime_grpc.ConnectionHandlerStub(grpc.insecure_channel(endpoint, options=channel_options))
 
 
 class RemoteExpert(nn.Module):
@@ -47,7 +43,7 @@ class RemoteExpert(nn.Module):
 
     @property
     def stub(self):
-        return _get_expert_stub(self.endpoint, aio=False)
+        return _get_expert_stub(self.endpoint)
 
     def forward(self, *args, **kwargs):
         """ Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd. """
