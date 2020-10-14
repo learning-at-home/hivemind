@@ -7,6 +7,8 @@ import torch
 
 from hivemind.server import Server
 from hivemind.utils.threading import increase_file_limit
+from hivemind.proto.runtime_pb2 import CompressionType
+
 
 
 def main():
@@ -39,6 +41,8 @@ def main():
     parser.add_argument('--increase_file_limit', action='store_true',
                         help='On *nix, this will increase the max number of processes '
                              'a server can spawn before hitting "Too many open files"; Use at your own risk.')
+    parser.add_argument('--compression', type=str, default='NONE', required=False, help='Tensor compression '
+                        'parameter for grpc. Can be NONE, MEANSTD or FLOAT16')
     # fmt:on
     args = vars(parser.parse_args())
     args.pop('config', None)
@@ -55,8 +59,17 @@ def main():
     if args.pop('increase_file_limit'):
         increase_file_limit()
 
+    compression_name = args.pop("compression")
+    compression = CompressionType.NONE
+    if compression_name == "MEANSTD":
+        compression = CompressionType.MEANSTD_LAST_AXIS_FLOAT16
+    elif compression_name == "FLOAT16":
+        compression = CompressionType.FLOAT16
+    else:
+        compression = getattr(CompressionType, compression_name)
+
     try:
-        server = Server.create(**args, optim_cls=optim_cls, start=True, verbose=True)
+        server = Server.create(**args, optim_cls=optim_cls, start=True, verbose=True, compression=compression)
         server.join()
     finally:
         server.shutdown()
