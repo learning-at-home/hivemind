@@ -40,8 +40,12 @@ UID_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+$')  # e.g. ffn
 PREFIX_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))*[.]$')  # e.g. expert. or ffn.45. (ends with ".")
 #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
 
-is_valid_uid = lambda maybe_uid: bool(UID_PATTERN.fullmatch(maybe_uid))
-is_valid_prefix = lambda maybe_prefix: bool(PREFIX_PATTERN.fullmatch(maybe_prefix))
+def is_valid_uid(maybe_uid: str) -> bool:
+    return bool(UID_PATTERN.fullmatch(maybe_uid))
+
+
+def is_valid_prefix(maybe_prefix: str) -> bool:
+    return bool(PREFIX_PATTERN.fullmatch(maybe_prefix))
 
 
 def split_uid(uid_or_prefix: Union[ExpertUID, ExpertPrefix]) -> Tuple[ExpertPrefix, Coordinate]:
