@@ -15,7 +15,7 @@ def test_moe():
         dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
 
         dmoe = hivemind.RemoteMixtureOfExperts(
-            in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn')
+            in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn.')
 
         for i in range(10):
             out = dmoe(torch.randn(10, 16))
@@ -99,7 +99,7 @@ def test_beam_search_correctness():
     assert all(dht.declare_experts(all_expert_uids, endpoint='fake-endpoint'))
 
     dmoe = hivemind.RemoteMixtureOfExperts(
-        in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix='ffn')
+        in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix='ffn.')
 
     for i in range(25):
         input = torch.randn(32)
@@ -145,7 +145,7 @@ def test_compute_expert_scores():
         dht = hivemind.DHT(start=True)
         moe = hivemind.client.moe.RemoteMixtureOfExperts(
             dht=dht, in_features=1024, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1,
-            uid_prefix='expert')
+            uid_prefix='expert.')
         gx, gy = torch.randn(4, 5, requires_grad=True), torch.randn(4, 3, requires_grad=True)
         ii = [[4, 0, 2], [3, 1, 1, 1, 3], [0], [3, 2]]
         jj = [[2, 2, 1], [0, 1, 2, 0, 1], [0], [1, 2]]
