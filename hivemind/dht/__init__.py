@@ -35,6 +35,7 @@ logger = get_logger(__name__)
 ExpertUID, ExpertPrefix, Coordinate, Score = str, str, int, float
 UidEndpoint = NamedTuple("UidEndpoint", [('uid', ExpertUID), ('endpoint', Endpoint)])
 UID_DELIMITER = '.'  # when declaring experts, DHT store all prefixes of that expert's uid, split over this prefix
+FLAT_EXPERT = -1     # grid prefix reserved for storing 1d expert uids. Used to speed up find_best_experts in 1d case.
 UID_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+$')  # e.g. ffn_expert.98.76.54 - prefix + some dims
 PREFIX_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))*[.]$')  # e.g. expert. or ffn.45. (ends with ".")
 #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
@@ -96,12 +97,11 @@ class DHT(mp.Process):
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 receiver_threads: int = 1, expiration: float = 300, use_negative_cache: bool = True, **kwargs):
+                 receiver_threads: int = 1, expiration: float = 300, **kwargs):
         super().__init__()
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
-        self.use_negative_cache, self.expiration = use_negative_cache, expiration
-        #self.negative_cache = TODO(); ALso, add test. Also maybe use negative_cache_time instead of use_negative_cache?
+        self.expiration = expiration
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
@@ -178,8 +178,8 @@ class DHT(mp.Process):
         data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
         for uid in uids:
             data_to_store[uid, None] = endpoint
-            prefix = uid
-            for i in range(max(1, prefix.count(UID_DELIMITER) - 1)):
+            prefix = uid if uid.count(UID_DELIMITER) > 1 else f'{uid}{UID_DELIMITER}{FLAT_EXPERT}'
+            for i in range(prefix.count(UID_DELIMITER) - 1):
                 prefix, last_coord = split_uid(prefix)
                 data_to_store[prefix, last_coord] = [uid, endpoint]
 
@@ -228,7 +228,7 @@ class DHT(mp.Process):
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         :returns: a list of up to beam_size tuples of (prefix score, prefix itself, dict{suffix: example expert})
         """
-        assert is_valid_prefix(prefix), f"{prefix} prefix is invalid. Prefixes must follow {PREFIX_PATTERN.pattern}"
+        assert is_valid_prefix(prefix), f"prefix '{prefix}' is invalid, it must follow {PREFIX_PATTERN.pattern}"
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_get_initial_beam', [], dict(prefix=prefix, scores=tuple(scores), beam_size=beam_size,
                                                       num_workers=num_workers, future=_future)))
@@ -238,23 +238,26 @@ class DHT(mp.Process):
                                 num_workers: Optional[int] = None, future: Optional[MPFuture] = None
                                 ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
         num_workers = num_workers or self.max_workers or beam_size
-        beam: List[Tuple[float, ExpertPrefix, Dict[Coordinate, Tuple[ExpertUID, Endpoint]]]] = []
-        unattempted_indices: List[int] = sorted(range(len(scores)), key=scores.__getitem__)  # order: worst to best
-        pending_tasks: Deque[Tuple[int, ExpertPrefix, asyncio.Task]] = deque()  # up to num_workers concurrent get tasks
+        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = []
+        unattempted_indices: List[Coordinate] = sorted(range(len(scores)), key=scores.__getitem__)  # from worst to best
+        pending_tasks: Deque[Tuple[Coordinate, ExpertPrefix, asyncio.Task]] = deque()
 
         while len(beam) < beam_size and (unattempted_indices or pending_tasks):
             # dispatch additional tasks
             while unattempted_indices and len(pending_tasks) < num_workers:
                 next_index = unattempted_indices.pop()  # note: this is best unattempted index because of sort order
-                next_best_prefix = f"{prefix}{UID_DELIMITER}{next_index}"
+                next_best_prefix = f"{prefix}{next_index}{UID_DELIMITER}"
                 pending_tasks.append((next_index, next_best_prefix, asyncio.create_task(node.get(next_best_prefix))))
 
             # await the next best prefix to be fetched
             pending_best_index, pending_best_prefix, pending_task = pending_tasks.popleft()
             try:
                 maybe_prefix_data = await pending_task
-                if maybe_prefix_data is not None and bool(maybe_prefix_data.value):
-                    beam.append((scores[pending_best_index], pending_best_prefix, maybe_prefix_data.value))
+                if maybe_prefix_data is not None and isinstance(maybe_prefix_data.value, dict):
+                    successors = {coord: UidEndpoint(*match.value) for coord, match in maybe_prefix_data.value.items()
+                                  if isinstance(coord, Coordinate) and isinstance(getattr(match, 'value', None), list)
+                                  and len(match.value) == 2}
+                    beam.append((scores[pending_best_index], pending_best_prefix, successors))
             except asyncio.CancelledError:
                 for _, pending_task in pending_tasks:
                     pending_task.cancel()
@@ -276,7 +279,7 @@ class DHT(mp.Process):
         """
         assert not isinstance(prefixes, str), "Please send a list / tuple of expert prefixes."
         for prefix in prefixes:
-            assert is_valid_prefix(prefix), f"{prefix} prefix is invalid. Prefixes must follow {PREFIX_PATTERN.pattern}"
+            assert is_valid_prefix(prefix), f"prefix '{prefix}' is invalid, it must follow {PREFIX_PATTERN.pattern}"
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_get_active_successors', [], dict(
             prefixes=list(prefixes), grid_size=grid_size, num_workers=num_workers, future=_future)))
@@ -300,7 +303,6 @@ class DHT(mp.Process):
             future.set_result(successors)
         return successors
 
-    #TODO add a test for get_initial_beam and get_active_successors, test keys stored from declare_experts
     def find_best_experts(self, prefix: ExpertPrefix, grid_scores: Sequence[Sequence[float]], beam_size: int,
                           num_workers: Optional[int] = None, return_future: bool = False
                           ) -> Union[List[RemoteExpert], MPFuture]:
@@ -318,6 +320,8 @@ class DHT(mp.Process):
         :param kwargs: extra keyword parameters passed to DHTNode.get_many
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
+        assert len(grid_scores) > 0 and beam_size > 0
+        assert is_valid_prefix(prefix), f"prefix '{prefix}' is invalid, it must follow {PREFIX_PATTERN.pattern}"
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_find_best_experts', [], dict(prefix=prefix, grid_scores=list(map(tuple, grid_scores)),
                                                        beam_size=beam_size, num_workers=num_workers, future=_future)))
@@ -370,7 +374,9 @@ class DHT(mp.Process):
         """ iterate over all exemplar experts attached to current beam """
         for score, prefix, suffixes in beam:
             for next_coord, match in suffixes.items():
-                if isinstance(match.uid, ExpertUID) and match.uid.count(UID_DELIMITER) == len(grid_scores) + 1:
+                if len(grid_scores) == 1 and next_coord == FLAT_EXPERT:
+                    yield score, match
+                elif isinstance(match.uid, ExpertUID) and match.uid.count(UID_DELIMITER) == len(grid_scores):
                     expert_coords = match.uid.split(UID_DELIMITER)[1:]
                     if all(coord.isdigit() and 0 <= int(coord) < len(grid_scores[i])
                            for i, coord in enumerate(expert_coords)):

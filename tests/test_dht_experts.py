@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import pytest
 
 import hivemind
 from hivemind import LOCALHOST, UidEndpoint
@@ -53,12 +54,12 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
     you = hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
 
     for i in range(50):
-        topk_experts = you.find_best_experts('expert', [np.random.randn(dim) for dim in grid_dims], beam_size=beam_size)
+        topk_experts = you.find_best_experts('expert.', [np.random.randn(dim) for dim in grid_dims], beam_size=beam_size)
         assert all(isinstance(e, hivemind.RemoteExpert) for e in topk_experts)
         assert len(topk_experts) == beam_size
 
     for i in range(10):
-        batch_experts = you.batch_find_best_experts('expert', [np.random.randn(batch_size, dim) for dim in grid_dims],
+        batch_experts = you.batch_find_best_experts('expert.', [np.random.randn(batch_size, dim) for dim in grid_dims],
                                                     beam_size=beam_size)
         assert isinstance(batch_experts, list) and len(batch_experts) == batch_size
         assert all(isinstance(e, hivemind.RemoteExpert) for experts in batch_experts for e in experts)
@@ -68,17 +69,16 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
 def test_dht_single_node():
     node = hivemind.DHT(start=True, expiration=999)
 
-    assert all(node.declare_experts(['e.1', 'e.2', 'e.3'], f"{hivemind.LOCALHOST}:1337").values())
-    for expert in node.get_experts(['e.3', 'e.2']):
+    assert all(node.declare_experts(['expert.1', 'expert.2', 'expert.3'], f"{hivemind.LOCALHOST}:1337").values())
+    assert len(node.declare_experts(["ffn.1", "ffn.2"], endpoint="that_place")) == 4
+    assert len(node.declare_experts(['e.1.2.3', 'e.1.2.5', 'e.2.0'], f"{hivemind.LOCALHOST}:42")) == 7
+
+    for expert in node.get_experts(['expert.3', 'expert.2']):
         assert expert.endpoint == f"{hivemind.LOCALHOST}:1337"
 
-    assert all(node.declare_experts(['e.1', 'e.2', 'e.3'], f"{hivemind.LOCALHOST}:1337").values())
-    assert node.find_best_experts('e', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=4)
-
-    assert len(node.declare_experts(['e.1.2.3', 'e.1.2.5', 'e.2.0'], f"{hivemind.LOCALHOST}:42")) == 7
-    node.expiration = 1
-    assert len(node.declare_experts(['e.1.2.3', 'e.1.2.5', 'e.2.1', 'e.2.0'], f"{hivemind.LOCALHOST}:42")) == 1
-    assert len(node.declare_experts(["ffn.1", "ffn.2"], endpoint="that_place")) == 3
+    assert all(node.declare_experts(['expert.5', 'expert.2'], f"{hivemind.LOCALHOST}:1337").values())
+    found_experts = node.find_best_experts('expert.', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+    assert len(found_experts) == 2 and [expert.uid for expert in found_experts] == ['expert.5', 'expert.3']
 
     successors = node.get_active_successors(['e.1.2.', 'e.2.', 'e.4.5.'])
     assert len(successors['e.1.2.']) == 2
@@ -86,6 +86,24 @@ def test_dht_single_node():
     assert successors['e.1.2.'][5] == UidEndpoint('e.1.2.5', f'{LOCALHOST}:42')
     assert len(successors['e.2.']) == 1 and successors['e.2.'][0] == UidEndpoint('e.2.0', f'{LOCALHOST}:42')
     assert successors['e.4.5.'] == {}
+
+    initial_beam = node.get_initial_beam('expert.', (3, 2, 1, 0, -1, -2, -3), beam_size=3)
+    assert len(initial_beam) == 3
+    assert initial_beam[0][:2] == (2.0, 'expert.1.')
+    assert initial_beam[1][:2] == (1.0, 'expert.2.')
+    assert initial_beam[2][:2] == (0.0, 'expert.3.')
+
+    with pytest.raises(AssertionError):
+        node.find_best_experts('expert', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+
+    with pytest.raises(AssertionError):
+        node.find_best_experts('expert.1', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+
+    with pytest.raises(AssertionError):
+        node.get_active_successors(['e.1.2.', 'e.2', 'e.4.5.'])
+
+    with pytest.raises(AssertionError):
+        node.get_initial_beam('expert', (3, 2, 1, 0, -1, -2, -3), beam_size=3)
 
 
 def test_uid_patterns():
@@ -105,11 +123,8 @@ def test_uid_patterns():
                "T®@nsf0rmE®.🤗.321", "layer::123", "expert.0.1.2.suffix", "0.1.2.suffix", "expert.1 something",
                "expert.1\n", "expert.1\n2", "expert.1 ", "expert.1\nexpert.2", "'expert.1'", '"expert.1"']
     invalid_experts = invalid + valid_prefixes + ["0", "123456"]
-    invalid_prefixes = invalid + [uid + '.' for uid in invalid] + valid_experts + ["expert", ".🤗", ".expert"]
+    invalid_prefixes = invalid + valid_experts + ["expert", ".🤗", ".expert"]
     for uid in invalid_experts:
         assert not hivemind.is_valid_uid(uid), f"UID {uid} is not valid, but was perceived as valid"
     for pfx in invalid_prefixes:
         assert not hivemind.is_valid_prefix(pfx), f"Prefix {pfx} is not valid, but was perceived as valid"
-
-if __name__ == '__main__':
-    test_dht_single_node()
