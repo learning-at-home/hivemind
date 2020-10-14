@@ -32,7 +32,7 @@ class RemoteMixtureOfExperts(nn.Module):
     :param grid_size: dimensions that form expert uid (see below)
     :param uid_prefix: common prefix for all expert uids (must end with '.')
     :note: expert uid follows the pattern {uid_prefix}.{0...grid_size[0]}.{0...grid_size[1]}...{0...grid_size[-1]}
-    :param dht: a DHT peer used to search for best experts
+    :param dht: a DHT instance used to search for best experts
     :param k_best: average this many highest-scoring experts to compute activations
     :param k_min: make sure at least this many experts returned output (i.e. didn't fail)
     :param timeout_after_k_min: wait for this many seconds after k_min experts returned results.
