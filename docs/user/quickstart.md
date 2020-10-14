@@ -16,6 +16,8 @@ python setup.py install
 
 You can also install it in editable mode with `python setup.py develop`.
 
+__Note:__ for serious experiments, we recommend installing hivemind from github (i.e. not pip) as it can run RemoteMixtureOfExperts faster by an order of magnitude.
+
 * __Dependencies:__ Hivemind requires python 3.7+ (3.8 is recommended), it will install [requirements](https://github.com/learning-at-home/hivemind/blob/master/requirements.txt) automatically; 
 * __OS support:__ Linux and Mac OS should [just work](https://github.com/learning-at-home/hivemind/issues).
 We do not officially support Windows, but you are welcome to try and contribute your windows build :)
