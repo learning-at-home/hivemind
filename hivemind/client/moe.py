@@ -260,7 +260,7 @@ class _RemoteCallMany(torch.autograd.Function):
                 task.add_done_callback(finished_tasks.put)
 
             for _ in range(len(task_to_indices)):
-                timeout = t_finish - time.perf_counter() if t_finish != float('inf') else None
+                timeout = max(0.0, t_finish - time.perf_counter()) if t_finish != float('inf') else None
                 task = finished_tasks.get(timeout=timeout)
                 pending_tasks.discard(task)
 
