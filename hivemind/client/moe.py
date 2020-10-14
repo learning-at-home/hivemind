@@ -114,8 +114,8 @@ class RemoteMixtureOfExperts(nn.Module):
 
         grid_indices = torch.zeros([len(flat_experts), len(grid_scores)], dtype=torch.int64)
         for i, expert in enumerate(flat_experts):
-            expert_indices = expert.uid[len(self.uid_prefix) + len(self.dht.UID_DELIMITER):]
-            expert_indices = list(map(int, expert_indices.split(self.dht.UID_DELIMITER)))
+            expert_indices = expert.uid[len(self.uid_prefix) + len(hivemind.dht.UID_DELIMITER):]
+            expert_indices = list(map(int, expert_indices.split(hivemind.dht.UID_DELIMITER)))
             grid_indices[i] = torch.as_tensor(expert_indices, dtype=grid_indices.dtype)
 
         scores_per_dim = [

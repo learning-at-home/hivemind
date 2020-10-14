@@ -1,5 +1,4 @@
 import random
-import uuid
 import numpy as np
 
 import hivemind
@@ -75,3 +74,32 @@ def test_dht_single_node():
 
     assert all(node.declare_experts(['e.1', 'e.2', 'e.3'], f"{hivemind.LOCALHOST}:1337"))
     assert node.find_best_experts('e', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=4)
+
+    assert len(node.declare_experts(['e.1.2.3', 'e.1.2.5', 'e.2.0'], f"{hivemind.LOCALHOST}:42")) == 6
+
+
+def test_uid_patterns():
+    valid_experts = ["expert.1", "expert.0", "expert.0.0.1", "expert.1337", "ffn.12.34.56.78.90",
+                     "transformer.3.2.1.0", "transformer_encoder.2", "transformer::encoder.2", "T®@nsf0rmE®🤗.321",
+                     "🤗.321", "0.1.2", "00.1.2", "7070.3.2.1.0", "block2.1.23", "LAYER.1.0.1"]
+    valid_prefixes = ["expert.", "e.1.", "e.2.", "e.1.2.3.", "ololo.123.456.789.10."]
+    valid_prefixes.extend([f"{uid}." for uid in valid_experts])
+    valid_prefixes.extend([hivemind.split_uid(uid)[0] for uid in valid_experts])
+    for uid in valid_experts:
+        assert hivemind.is_valid_uid(uid), f"UID {uid} is valid, but was perceived as invalid"
+    for pfx in valid_prefixes:
+        assert hivemind.is_valid_prefix(pfx), f"Prefix {pfx} is valid, but was perceived as invalid"
+
+    invalid = ["", ".", "expert.-1", "xxx.a", "expert.1x", "expert_ffn.1.abc1", "some.123.01", "expert.123.01",
+               "e1", "e..1", "e", "e.1.2.3..4", "ffn.1..1", ".123", ".1.2.3.", ".expert", "transformer.encoder.2",
+               "T®@nsf0rmE®.🤗.321", "layer::123", "expert.0.1.2.suffix", "0.1.2.suffix", "expert.1 something",
+               "expert.1\n", "expert.1\n2", "expert.1 ", "expert.1\nexpert.2", "'expert.1'", '"expert.1"']
+    invalid_experts = invalid + valid_prefixes + ["0", "123456"]
+    invalid_prefixes = invalid + [uid + '.' for uid in invalid] + valid_experts + ["expert", ".🤗", ".expert"]
+    for uid in invalid_experts:
+        assert not hivemind.is_valid_uid(uid), f"UID {uid} is not valid, but was perceived as valid"
+    for pfx in invalid_prefixes:
+        assert not hivemind.is_valid_prefix(pfx), f"Prefix {pfx} is not valid, but was perceived as valid"
+
+if __name__ == '__main__':
+    test_dht_single_node()
