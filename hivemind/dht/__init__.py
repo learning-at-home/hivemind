@@ -20,7 +20,6 @@ import re
 import warnings
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from itertools import chain
 from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator
 
 import uvloop
@@ -102,7 +101,7 @@ class DHT(mp.Process):
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
         self.use_negative_cache, self.expiration = use_negative_cache, expiration
-        # self.negative_cache = TODO(); ALso, add test
+        #self.negative_cache = TODO(); ALso, add test. Also maybe use negative_cache_time instead of use_negative_cache?
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
