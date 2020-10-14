@@ -176,7 +176,7 @@ class _RemoteCallMany(torch.autograd.Function):
             pending_tasks, num_samples, k_min, forward_timeout, timeout_after_k_min)
 
         # assemble responses
-        alive_ii, alive_jj = map(torch.as_tensor, zip(*alive_grid_indices)) or ([], [])
+        alive_ii, alive_jj = map(torch.as_tensor, zip(*alive_grid_indices) or ([], []))
         if len(alive_ii) == 0:
             raise ValueError("Forward pass: no alive experts responded within timeout.")
         mask = torch.zeros([num_samples, max_experts], dtype=torch.bool, device=flat_inputs[0].device)
@@ -227,7 +227,7 @@ class _RemoteCallMany(torch.autograd.Function):
             pending_tasks, num_samples, backward_k_min, backward_timeout, timeout_after_k_min)
 
         # assemble responses
-        backward_survivor_ii, backward_survivor_jj = map(torch.as_tensor, zip(*backward_survivor_indices)) or ([], [])
+        backward_survivor_ii, backward_survivor_jj = map(torch.as_tensor, zip(*backward_survivor_indices) or ([], []))
         if len(alive_ii) == 0:
             raise ValueError("Backward pass: no alive experts responded within timeout.")
         survivor_grad_inputs_stacked = list(map(torch.cat, zip(*survivor_grad_inputs)))
