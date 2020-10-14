@@ -29,7 +29,7 @@ def test_call_many():
     forward_timeout = None
     backward_timeout = None
     rtol = 1e-3
-    atol = 1e-6
+    atol = 1e-4
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
                            optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
@@ -121,7 +121,7 @@ def test_beam_search_correctness():
 
 def test_determinism():
     rtol = 0
-    atol = 1e-6
+    atol = 1e-4
 
     xx = torch.randn(32, 1024, requires_grad=True)
     mask = torch.randint(0, 1, (32, 1024))
