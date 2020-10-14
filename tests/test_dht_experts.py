@@ -2,7 +2,7 @@ import random
 import numpy as np
 
 import hivemind
-from hivemind import LOCALHOST
+from hivemind import LOCALHOST, UidEndpoint
 
 
 def test_store_get_experts():
@@ -66,16 +66,26 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
 
 
 def test_dht_single_node():
-    node = hivemind.DHT(start=True)
+    node = hivemind.DHT(start=True, expiration=999)
 
-    assert all(node.declare_experts(['e.1', 'e.2', 'e.3'], f"{hivemind.LOCALHOST}:1337"))
+    assert all(node.declare_experts(['e.1', 'e.2', 'e.3'], f"{hivemind.LOCALHOST}:1337").values())
     for expert in node.get_experts(['e.3', 'e.2']):
         assert expert.endpoint == f"{hivemind.LOCALHOST}:1337"
 
-    assert all(node.declare_experts(['e.1', 'e.2', 'e.3'], f"{hivemind.LOCALHOST}:1337"))
+    assert all(node.declare_experts(['e.1', 'e.2', 'e.3'], f"{hivemind.LOCALHOST}:1337").values())
     assert node.find_best_experts('e', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=4)
 
-    assert len(node.declare_experts(['e.1.2.3', 'e.1.2.5', 'e.2.0'], f"{hivemind.LOCALHOST}:42")) == 6
+    assert len(node.declare_experts(['e.1.2.3', 'e.1.2.5', 'e.2.0'], f"{hivemind.LOCALHOST}:42")) == 7
+    node.expiration = 1
+    assert len(node.declare_experts(['e.1.2.3', 'e.1.2.5', 'e.2.1', 'e.2.0'], f"{hivemind.LOCALHOST}:42")) == 1
+    assert len(node.declare_experts(["ffn.1", "ffn.2"], endpoint="that_place")) == 3
+
+    successors = node.get_active_successors(['e.1.2.', 'e.2.', 'e.4.5.'])
+    assert len(successors['e.1.2.']) == 2
+    assert successors['e.1.2.'][3] == UidEndpoint('e.1.2.3', f'{LOCALHOST}:42')
+    assert successors['e.1.2.'][5] == UidEndpoint('e.1.2.5', f'{LOCALHOST}:42')
+    assert len(successors['e.2.']) == 1 and successors['e.2.'][0] == UidEndpoint('e.2.0', f'{LOCALHOST}:42')
+    assert successors['e.4.5.'] == {}
 
 
 def test_uid_patterns():

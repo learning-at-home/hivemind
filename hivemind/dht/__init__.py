@@ -235,8 +235,9 @@ class DHT(mp.Process):
         return future if return_future else future.result()
 
     async def _get_initial_beam(self, node, prefix: ExpertPrefix, beam_size: int, scores: Tuple[float, ...],
-                                num_workers: int, future: Optional[MPFuture] = None
+                                num_workers: Optional[int] = None, future: Optional[MPFuture] = None
                                 ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
+        num_workers = num_workers or self.max_workers or beam_size
         beam: List[Tuple[float, ExpertPrefix, Dict[Coordinate, Tuple[ExpertUID, Endpoint]]]] = []
         unattempted_indices: List[int] = sorted(range(len(scores)), key=scores.__getitem__)  # order: worst to best
         pending_tasks: Deque[Tuple[int, ExpertPrefix, asyncio.Task]] = deque()  # up to num_workers concurrent get tasks
@@ -278,21 +279,21 @@ class DHT(mp.Process):
             assert is_valid_prefix(prefix), f"{prefix} prefix is invalid. Prefixes must follow {PREFIX_PATTERN.pattern}"
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_get_active_successors', [], dict(
-            uids=list(prefixes), grid_size=grid_size, num_workers=num_workers, future=_future)))
+            prefixes=list(prefixes), grid_size=grid_size, num_workers=num_workers, future=_future)))
         return future if return_future else future.result()
 
-    def _get_active_successors(self, node: DHTNode, prefixes: List[ExpertPrefix], grid_size: Optional[int] = None,
-                               num_workers: Optional[int] = None, future: Optional[MPFuture] = None
-                               ) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
+    async def _get_active_successors(self, node: DHTNode, prefixes: List[ExpertPrefix], grid_size: Optional[int] = None,
+                                     num_workers: Optional[int] = None, future: Optional[MPFuture] = None
+                                     ) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
         grid_size = grid_size or float('inf')
-        num_workers = min(num_workers or len(prefixes) or self.max_workers, self.max_workers)
+        num_workers = num_workers or min(len(prefixes), self.max_workers or len(prefixes))
         dht_responses = await node.get_many(keys=prefixes, num_workers=num_workers)
         successors: Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]] = {}
         for prefix, found in dht_responses.items():
             if found and isinstance(found.value, dict):
-                successors[prefix] = {coord: UidEndpoint(*match) for coord, match in found.value.items()
+                successors[prefix] = {coord: UidEndpoint(*match.value) for coord, match in found.value.items()
                                       if isinstance(coord, Coordinate) and 0 <= coord < grid_size
-                                      and isinstance(match, list) and len(match) == 2}
+                                      and isinstance(getattr(match, 'value', None), list) and len(match.value) == 2}
             else:
                 successors[prefix] = {}
         if future:
@@ -325,7 +326,7 @@ class DHT(mp.Process):
     async def _find_best_experts(
             self, node: DHTNode, prefix: str, grid_scores: List[Tuple[float]], beam_size: int,
             num_workers: Optional[int] = None, future: Optional[MPFuture] = None, **kwargs) -> List[RemoteExpert]:
-        num_workers = min(num_workers or beam_size or self.max_workers, self.max_workers)
+        num_workers = num_workers or min(beam_size, self.max_workers or beam_size)
 
         # form initial beam from top-k active L1 prefixes, each row is (score, uid prefix, possible suffixes)
         beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = await self._get_initial_beam(
@@ -347,7 +348,7 @@ class DHT(mp.Process):
             _, best_uid_prefixes = zip(*best_active_pairs)
 
             # search DHT for next step suffixes
-            successors = self._get_active_successors(node, best_uid_prefixes, num_workers=num_workers)
+            successors = await self._get_active_successors(node, best_uid_prefixes, num_workers=num_workers)
             beam = [(score, prefix, successors[prefix]) for score, prefix in best_active_pairs if successors[prefix]]
             if not beam:
                 logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim 0)")
@@ -365,8 +366,8 @@ class DHT(mp.Process):
 
     @staticmethod
     def _iterate_matching_experts(beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]],
-                                  grid_scores: Sequence[Sequence[float, ...]]) -> Iterator[Tuple[Score, UidEndpoint]]:
-        """ iterate over all examplar experts attached to current beam """
+                                  grid_scores: Sequence[Sequence[float]]) -> Iterator[Tuple[Score, UidEndpoint]]:
+        """ iterate over all exemplar experts attached to current beam """
         for score, prefix, suffixes in beam:
             for next_coord, match in suffixes.items():
                 if isinstance(match.uid, ExpertUID) and match.uid.count(UID_DELIMITER) == len(grid_scores) + 1:
