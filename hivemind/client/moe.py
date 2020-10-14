@@ -245,7 +245,7 @@ class _RemoteCallMany(torch.autograd.Function):
         return (DUMMY, None, None, None, None, None, None, None, *grad_inputs)
 
     @staticmethod
-    def _collect_responses(cls, task_to_indices: Dict[grpc.Future, Tuple[int, int]], num_samples: int, k_min: int,
+    def _collect_responses(task_to_indices: Dict[grpc.Future, Tuple[int, int]], num_samples: int, k_min: int,
                            timeout_total: Optional[float], timeout_after_k_min: Optional[float]
                            ) -> Tuple[List[Tuple[int, int]], List[Tuple[torch.Tensor, ...]]]:
         """ await up to k_min results and any result submitted within timeout_after_k_min, cancel stragglers """
