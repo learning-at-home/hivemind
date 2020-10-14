@@ -20,7 +20,7 @@ import re
 import warnings
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator
+from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set
 
 import uvloop
 
@@ -316,8 +316,8 @@ class DHT(mp.Process):
          After time_budget is reached, beam search won't search for more experts and instead fall back on local cache
          Please note that any queries that fall outside the budget will still be performed in background and cached
          for subsequent iterations as long as DHTNode.cache_locally is True
+        :param num_workers: use up to this many concurrent workers to search DHT
         :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
-        :param kwargs: extra keyword parameters passed to DHTNode.get_many
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
         assert len(grid_scores) > 0 and beam_size > 0
@@ -336,17 +336,20 @@ class DHT(mp.Process):
         beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = await self._get_initial_beam(
             node, prefix, beam_size, grid_scores[0], min(beam_size, num_workers))
 
-        best_experts_heap: List[Tuple[float, UidEndpoint]] = []  # heap[NEGATIVE score, (expert uid, server endpoint)]
+        best_experts_heap: List[Tuple[Score, UidEndpoint]] = []  # max-heap of expert uids/endpoints ordered by scores
+        unique_experts: Set[ExpertUID] = set()
 
         for dim_index in range(1, len(grid_scores) - 1):
             for score, uid_endpoint in self._iterate_matching_experts(beam, grid_scores):
-                push_and_maybe_pop = heapq.heappush if len(best_experts_heap) < beam_size else heapq.heappushpop
-                push_and_maybe_pop(best_experts_heap, (-score, uid_endpoint))
+                if uid_endpoint.uid not in unique_experts:
+                    push_and_maybe_pop = heapq.heappush if len(best_experts_heap) < beam_size else heapq.heappushpop
+                    push_and_maybe_pop(best_experts_heap, (score, uid_endpoint))
+                    unique_experts.add(uid_endpoint.uid)
 
             # form new beam using successors from the current beam
             dim_scores = grid_scores[dim_index]
             best_active_pairs: List[Tuple[Score, ExpertPrefix]] = heapq.nlargest(beam_size, (
-                (prefix_score + dim_scores[next_coord], f"{prefix}{next_coord}")
+                (prefix_score + dim_scores[next_coord], f"{prefix}{next_coord}{UID_DELIMITER}")
                 for prefix_score, prefix, suffixes in beam for next_coord in suffixes.keys()
                 if isinstance(next_coord, int) and 0 <= next_coord < len(dim_scores)))
             _, best_uid_prefixes = zip(*best_active_pairs)
@@ -360,10 +363,12 @@ class DHT(mp.Process):
 
         # add best experts from the final beam
         for score, uid_endpoint in self._iterate_matching_experts(beam, grid_scores):
-            push_and_maybe_pop = heapq.heappush if len(best_experts_heap) < beam_size else heapq.heappushpop
-            push_and_maybe_pop(best_experts_heap, (-score, uid_endpoint))
+            if uid_endpoint.uid not in unique_experts:
+                push_and_maybe_pop = heapq.heappush if len(best_experts_heap) < beam_size else heapq.heappushpop
+                push_and_maybe_pop(best_experts_heap, (score, uid_endpoint))
+                unique_experts.add(uid_endpoint.uid)
 
-        best_experts = [RemoteExpert(*uid_endpoint) for neg_score, uid_endpoint in sorted(best_experts_heap)]
+        best_experts = [RemoteExpert(*uid_endpoint) for score, uid_endpoint in sorted(best_experts_heap, reverse=True)]
         if future is not None:
             future.set_result(best_experts)
         return best_experts

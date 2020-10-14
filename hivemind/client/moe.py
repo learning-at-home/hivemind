@@ -30,7 +30,7 @@ class RemoteMixtureOfExperts(nn.Module):
 
     :param in_features: common input size for experts and gating function
     :param grid_size: dimensions that form expert uid (see below)
-    :param uid_prefix: common prefix for all expert uids
+    :param uid_prefix: common prefix for all expert uids (must end with '.')
     :note: expert uid follows the pattern {uid_prefix}.{0...grid_size[0]}.{0...grid_size[1]}...{0...grid_size[-1]}
     :param dht: a DHT peer used to search for best experts
     :param k_best: average this many highest-scoring experts to compute activations
@@ -39,10 +39,14 @@ class RemoteMixtureOfExperts(nn.Module):
      Any expert that didn't manage to return output after that delay is considered unavailable
     """
 
-    def __init__(self, *, in_features, grid_size: Tuple[int, ...], dht: hivemind.DHT, k_best: int, k_min: int = 1,
-                 forward_timeout: Optional[float] = None, timeout_after_k_min: Optional[float] = None,
-                 backward_k_min: int = 1, backward_timeout: Optional[float] = None, uid_prefix='', **dht_kwargs):
+    def __init__(self, *, in_features, grid_size: Tuple[int, ...], dht: hivemind.DHT, uid_prefix: str, k_best: int,
+                 k_min: int = 1, forward_timeout: Optional[float] = None, timeout_after_k_min: Optional[float] = None,
+                 backward_k_min: int = 1, backward_timeout: Optional[float] = None, **dht_kwargs):
         super().__init__()
+        if not uid_prefix.endswith(hivemind.dht.UID_DELIMITER):
+            uid_prefix += hivemind.dht.UID_DELIMITER
+            logger.info(f"Prefix must end with '{hivemind.dht.UID_DELIMITER}'. New prefix: '{uid_prefix}' .")
+        assert hivemind.dht.is_valid_prefix(uid_prefix), f"Prefix '{uid_prefix}' is invalid."
         self.dht, self.grid_size, self.uid_prefix, self.dht_kwargs = dht, grid_size, uid_prefix, dht_kwargs
         self.k_best, self.k_min, self.backward_k_min = k_best, k_min, backward_k_min
         self.forward_timeout, self.backward_timeout = forward_timeout, backward_timeout
@@ -114,7 +118,7 @@ class RemoteMixtureOfExperts(nn.Module):
 
         grid_indices = torch.zeros([len(flat_experts), len(grid_scores)], dtype=torch.int64)
         for i, expert in enumerate(flat_experts):
-            expert_indices = expert.uid[len(self.uid_prefix) + len(hivemind.dht.UID_DELIMITER):]
+            expert_indices = expert.uid[len(self.uid_prefix):]
             expert_indices = list(map(int, expert_indices.split(hivemind.dht.UID_DELIMITER)))
             grid_indices[i] = torch.as_tensor(expert_indices, dtype=grid_indices.dtype)
 
