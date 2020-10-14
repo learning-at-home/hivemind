@@ -244,7 +244,7 @@ class _RemoteCallMany(torch.autograd.Function):
 
         return (DUMMY, None, None, None, None, None, None, None, *grad_inputs)
 
-    @classmethod
+    @staticmethod
     def _collect_responses(cls, task_to_indices: Dict[grpc.Future, Tuple[int, int]], num_samples: int, k_min: int,
                            timeout_total: Optional[float], timeout_after_k_min: Optional[float]
                            ) -> Tuple[List[Tuple[int, int]], List[Tuple[torch.Tensor, ...]]]:
