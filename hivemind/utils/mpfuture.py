@@ -6,7 +6,7 @@ import concurrent.futures._base as base
 
 import asyncio
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Tuple
 
 from hivemind.utils.threading import run_in_background
 
@@ -22,7 +22,7 @@ class MPFuture(base.Future):
         self.connection = connection
 
     @classmethod
-    def make_pair(cls):
+    def make_pair(cls) -> Tuple[MPFuture, MPFuture]:
         """ Create a pair of linked futures to be used in two processes """
         connection1, connection2 = mp.Pipe()
         return cls(connection1), cls(connection2)
@@ -105,7 +105,7 @@ class MPFuture(base.Future):
         self._state, self._exception = base.CANCELLED, base.CancelledError()
         return self._send_updates()
 
-    def result(self, timeout=None):
+    def result(self, timeout: Optional[float] = None):
         self._await_terminal_state(timeout)
         if self._exception is not None:
             raise self._exception
@@ -117,7 +117,7 @@ class MPFuture(base.Future):
             raise base.CancelledError()
         return self._exception
 
-    def done(self):
+    def done(self) -> bool:
         self._sync_updates()
         return self._state in self.TERMINAL_STATES
 
