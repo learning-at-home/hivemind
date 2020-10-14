@@ -21,18 +21,18 @@ logger = get_logger(__name__)
 
 class DHTNode:
     """
-    A low-level class that represents a DHT participant. Please see DHTNode.create for parameters
+    Asyncio-based class that represents one DHT participant. Created via await DHTNode.create(...)
     Each DHTNode has an identifier, a local storage and access too other nodes via DHTProtocol.
 
     :note: Hivemind DHT is optimized to store a lot of temporary metadata that is regularly updated.
-     For example, an expert alive timestamp that emitted by the Server responsible for that expert.
-     Such metadata does not require regular maintenance by peers, persistence on shutdown.
+     For example, expert heartbeat emitted by a hivemind.Server responsible for that expert.
+     Such metadata does not require regular maintenance by peers or persistence on shutdown.
      Instead, DHTNode is designed to rapidly send bulk data and resolve conflicts.
 
-    Every (key, value) pair in this DHT has an expiration time - float computed as get_dht_time(), UnixTime by default
+    Every (key, value) pair in this DHT has an expiration time - float computed as get_dht_time() (UnixTime by default)
     DHT nodes always prefer values with higher expiration time and may delete any value past its expiration.
 
-    Compared to Kademlia RPC protocol, hivemind DHT has 3 RPCs:
+    Similar to Kademlia RPC protocol, hivemind DHT has 3 RPCs:
 
     * ping - request peer's identifier and update routing table (same as Kademlia PING RPC)
     * store - send several (key, value, expiration_time) pairs to the same peer (like Kademlia STORE, but in bulk)
@@ -46,9 +46,21 @@ class DHTNode:
       IF that time has not come yet. if expiration time is smaller than current get_dht_time(), node may return None;
     - when requested to store(key: value, expiration_time), a node must store (key => value) at until expiration time
       or until DHTNode gets the same key with greater expiration time. If a node is asked to store a key but it already
-      has the same key with newer expiration, the older key will not be stored. Return True if stored, False if refused;
-    - when requested to store(key: value, expiration_time, in_cache=True), stores (key => value) in a separate "cache".
-      Cache operates same as regular storage, but it has a limited size and evicts least recently used nodes when full;
+      has the same key with newer expiration, store will be rejected. Store returns True if accepted, False if rejected;
+    - when requested to store(key: value, expiration_time, subkey=subkey), adds a sub-key to a dictionary value type.
+      Dictionary values can have multiple sub-keys stored by different peers with individual expiration times. A subkey
+      will be accepted to a dictionary either if there is no such sub-key or if new subkey's expiration is later than
+      previous expiration under that subkey. See DHTProtocol.call_store for details.
+
+    DHTNode also features several (optional) caching policies:
+
+    - cache_locally: after GET, store the result in node's own local cache
+    - cache_nearest: after GET, send the result to this many nearest nodes that don't have that value yet (see Kademlia)
+    - cache_on_store: after STORE, either save or remove that key from node's own cache depending on store status
+    - cache_refresh_before_expiry: if a value in cache was used and is about to expire, try to GET it this many seconds
+      before expiration. The motivation here is that some frequent keys should be always kept in cache to avoid latency.
+    - reuse_get_requests: if there are several concurrent GET requests, when one request finishes, DHTNode will attempt
+      to reuse the result of this GET request for other requests with the same key. Useful for batch-parallel requests.
 
     """
     # fmt:off

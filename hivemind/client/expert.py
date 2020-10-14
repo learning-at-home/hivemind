@@ -9,7 +9,6 @@ import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
-from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils import nested_flatten, nested_pack, nested_compare, Endpoint
 from hivemind.utils.grpc import serialize_torch_tensor, deserialize_torch_tensor
 
@@ -17,16 +16,12 @@ DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autogra
 
 
 @lru_cache(maxsize=None)
-def _get_expert_stub(endpoint: Endpoint, aio: bool, *extra_options: Tuple[str, Any]):
+def _get_expert_stub(endpoint: Endpoint, *extra_options: Tuple[str, Any]):
     """ Create a gRPC stub to access remote expert or use previously created stub from a process-wide cache """
     channel_options = [
         ('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)
     ] + list(extra_options)
-    if aio:
-        channel = grpc.experimental.aio.insecure_channel(endpoint, options=channel_options)
-    else:
-        channel = grpc.insecure_channel(endpoint, options=channel_options)
-    return runtime_grpc.ConnectionHandlerStub(channel)
+    return runtime_grpc.ConnectionHandlerStub(grpc.insecure_channel(endpoint, options=channel_options))
 
 
 class RemoteExpert(nn.Module):
@@ -48,7 +43,7 @@ class RemoteExpert(nn.Module):
 
     @property
     def stub(self):
-        return _get_expert_stub(self.endpoint, aio=False)
+        return _get_expert_stub(self.endpoint)
 
     def forward(self, *args, **kwargs):
         """ Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd. """

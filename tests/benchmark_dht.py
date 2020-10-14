@@ -41,11 +41,11 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     for start in trange(0, num_experts, expert_batch_size):
         store_start = time.perf_counter()
         endpoints.append(random_endpoint())
-        success_list = store_peer.declare_experts(expert_uids[start: start + expert_batch_size], endpoints[-1])
+        successes = store_peer.declare_experts(expert_uids[start: start + expert_batch_size], endpoints[-1]).values()
         total_store_time += time.perf_counter() - store_start
 
-        total_stores += len(success_list)
-        successful_stores += sum(success_list)
+        total_stores += len(successes)
+        successful_stores += sum(successes)
         time.sleep(wait_after_request)
 
     print(f"Store success rate: {successful_stores / total_stores * 100:.1f}% ({successful_stores} / {total_stores})")

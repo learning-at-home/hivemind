@@ -276,10 +276,10 @@ def generate_uids_from_pattern(num_experts: int, expert_pattern: Optional[str], 
 
     def _generate_uid():
         if expert_pattern is None:
-            return f"expert{hivemind.DHT.UID_DELIMITER}{attempts_per_expert * num_experts - remaining_attempts}"
+            return f"expert{hivemind.dht.UID_DELIMITER}{attempts_per_expert * num_experts - remaining_attempts}"
 
         uid = []
-        for block in expert_pattern.split(hivemind.DHT.UID_DELIMITER):
+        for block in expert_pattern.split(hivemind.dht.UID_DELIMITER):
             try:
                 if '[' not in block and ']' not in block:
                     uid.append(block)
@@ -292,7 +292,7 @@ def generate_uids_from_pattern(num_experts: int, expert_pattern: Optional[str], 
                 raise e
             except Exception as e:
                 raise ValueError(f"Expert pattern {expert_pattern} has invalid block {block} , {e}")
-        return hivemind.DHT.UID_DELIMITER.join(uid)
+        return hivemind.dht.UID_DELIMITER.join(uid)
 
     while remaining_attempts > 0 and len(found_uids) < num_experts:
 

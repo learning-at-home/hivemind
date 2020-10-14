@@ -1,5 +1,3 @@
-import asyncio
-
 import grpc
 import numpy as np
 import pytest
@@ -17,7 +15,7 @@ def test_moe():
         dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
 
         dmoe = hivemind.RemoteMixtureOfExperts(
-            in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn')
+            in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn.')
 
         for i in range(10):
             out = dmoe(torch.randn(10, 16))
@@ -31,7 +29,7 @@ def test_call_many():
     forward_timeout = None
     backward_timeout = None
     rtol = 1e-3
-    atol = 1e-6
+    atol = 1e-5
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
                            optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
@@ -42,8 +40,7 @@ def test_call_many():
 
         mask, expert_outputs = hivemind.client.moe._RemoteCallMany.apply(
             DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []],
-            k_min, backward_k_min, timeout_after_k_min, forward_timeout, backward_timeout,
-            asyncio.new_event_loop(), e1.info, inputs
+            k_min, backward_k_min, timeout_after_k_min, forward_timeout, backward_timeout, e1.info, inputs
         )
         assert mask.shape == (4, 3)
         assert expert_outputs.shape == (4, 3, 64)
@@ -96,33 +93,35 @@ def test_remote_module_call():
             fake_expert(dummy_x)
 
 
-def test_moe_beam_search():
+def test_beam_search_correctness():
     all_expert_uids = [f'ffn.{5 + i}.{10 + j}.{15 + k}' for i in range(10) for j in range(10) for k in range(10)]
     dht = hivemind.DHT(start=True, expiration=999)
     assert all(dht.declare_experts(all_expert_uids, endpoint='fake-endpoint'))
 
     dmoe = hivemind.RemoteMixtureOfExperts(
-        in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix='ffn')
+        in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix='ffn.')
 
     for i in range(25):
         input = torch.randn(32)
         grid_scores = dmoe.proj(input).split_with_sizes(dmoe.grid_size, dim=-1)
 
-        chosen_experts = dmoe.loop.run_until_complete(dmoe.beam_search(grid_scores, k_best=dmoe.k_best))
-
+        chosen_experts = dht.find_best_experts(dmoe.uid_prefix, [tensor.detach().numpy() for tensor in grid_scores],
+                                               beam_size=dmoe.k_best)
         chosen_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
                                                    [chosen_experts])[0]
+        our_best_scores = list(chosen_scores.cpu().detach().numpy())
 
-        all_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
+        # reference: independently find :beam_size: best experts with exhaustive search
+        all_scores = dmoe.compute_expert_scores([dim_scores.unsqueeze(0) for dim_scores in grid_scores],
                                                 [[hivemind.RemoteExpert(uid, '') for uid in all_expert_uids]])[0]
         true_best_scores = sorted(all_scores.cpu().detach().numpy(), reverse=True)[:len(chosen_experts)]
-        our_best_scores = list(chosen_scores.cpu().detach().numpy())
+
         assert np.allclose(true_best_scores, our_best_scores)
 
 
 def test_determinism():
     rtol = 0
-    atol = 1e-6
+    atol = 1e-5
 
     xx = torch.randn(32, 1024, requires_grad=True)
     mask = torch.randint(0, 1, (32, 1024))
@@ -146,7 +145,7 @@ def test_compute_expert_scores():
         dht = hivemind.DHT(start=True)
         moe = hivemind.client.moe.RemoteMixtureOfExperts(
             dht=dht, in_features=1024, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1,
-            uid_prefix='expert')
+            uid_prefix='expert.')
         gx, gy = torch.randn(4, 5, requires_grad=True), torch.randn(4, 3, requires_grad=True)
         ii = [[4, 0, 2], [3, 1, 1, 1, 3], [0], [3, 2]]
         jj = [[2, 2, 1], [0, 1, 2, 0, 1], [0], [1, 2]]
