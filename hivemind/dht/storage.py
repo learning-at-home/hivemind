@@ -170,7 +170,3 @@ class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTVal
 class CacheRefreshQueue(TimedStorage[DHTID, DHTExpiration]):
     """ a queue of keys scheduled for refresh in future, used in DHTNode """
     frozen = True
-
-
-class NegativeCache(TimedStorage[DHTID, None]):
-    """ a timed storage that stores keys banned from *something* """

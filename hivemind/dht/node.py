@@ -12,7 +12,7 @@ from sortedcontainers import SortedList
 
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
-from hivemind.dht.storage import CacheRefreshQueue, DictionaryDHTValue, ValueWithExpiration, NegativeCache
+from hivemind.dht.storage import CacheRefreshQueue, DictionaryDHTValue, ValueWithExpiration
 from hivemind.dht.traverse import traverse_dht
 from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase
 
@@ -67,8 +67,7 @@ class DHTNode:
     node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
     cache_on_store: bool; reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_SearchState]]
-    cache_refresh_queue: CacheRefreshQueue; cache_refreshed_recently: NegativeCache
-    cache_refresh_task: Optional[asyncio.Task]; cache_refresh_evt: asyncio.Event
+    cache_refresh_task: Optional[asyncio.Task]; cache_refresh_evt: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
     # fmt:on
 
     @classmethod
@@ -123,7 +122,6 @@ class DHTNode:
         self.cache_locally, self.cache_nearest, self.cache_on_store = cache_locally, cache_nearest, cache_on_store
         self.cache_refresh_before_expiry = cache_refresh_before_expiry
         self.cache_refresh_queue = CacheRefreshQueue()
-        self.cache_refreshed_recently = NegativeCache()  # keys for which cache was recently refreshed
         self.cache_refresh_evt = asyncio.Event()
         self.cache_refresh_task = None
 
@@ -514,25 +512,23 @@ class DHTNode:
 
             except asyncio.TimeoutError:  # caught TimeoutError => it is time to refresh the most recent cached entry
                 # step 2: find all keys that we should already refresh and remove them from queue
-                max_expiration_time = current_time = get_dht_time()
-                keys_to_refresh: Set[DHTID] = set()
+                current_time = get_dht_time()
+                keys_to_refresh = {key_id}
+                max_expiration_time = self.protocol.cache.get(key_id)[1] or current_time
+                del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
                 while self.cache_refresh_queue:
                     key_id, (_, nearest_refresh_time) = self.cache_refresh_queue.top()
                     if nearest_refresh_time > current_time:
                         break
                     del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
-                    if key_id in self.cache_refreshed_recently:
-                        continue
                     keys_to_refresh.add(key_id)
-                    self.cache_refreshed_recently.store(key_id, None, current_time + self.cache_refresh_before_expiry)
                     cached_item = self.protocol.cache.get(key_id)
                     if cached_item is not None and cached_item.expiration_time > max_expiration_time:
                         max_expiration_time = cached_item.expiration_time
 
                 # step 3: search newer versions of these keys, cache them as a side-effect of self.get_many_by_id
-                if keys_to_refresh:
-                    sufficient_expiration_time = max_expiration_time + self.cache_refresh_before_expiry + 1
-                    await self.get_many_by_id(keys_to_refresh, sufficient_expiration_time, _is_refresh=True)
+                sufficient_expiration_time = max_expiration_time + self.cache_refresh_before_expiry + 1
+                await self.get_many_by_id(keys_to_refresh, sufficient_expiration_time, _is_refresh=True)
 
     def _cache_new_result(self, search: _SearchState, nearest_nodes: List[DHTID],
                           node_to_endpoint: Dict[DHTID, Endpoint], _is_refresh: bool = False):
