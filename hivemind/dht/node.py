@@ -56,7 +56,7 @@ class DHTNode:
 
     - cache_locally: after GET, store the result in node's own local cache
     - cache_nearest: after GET, send the result to this many nearest nodes that don't have that value yet (see Kademlia)
-    - cache_on_store: after STORE, either save or remove that key from node's own cache depending on store status
+    - cache_on_store_delay: after STORE, either save or remove that key from node's own cache depending on store status
     - cache_refresh_before_expiry: if a value in cache was used and is about to expire, try to GET it this many seconds
       before expiration. The motivation here is that some frequent keys should be always kept in cache to avoid latency.
     - reuse_get_requests: if there are several concurrent GET requests, when one request finishes, DHTNode will attempt
@@ -66,8 +66,9 @@ class DHTNode:
     # fmt:off
     node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
-    cache_on_store: bool; reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedList[_SearchState]]
     cache_refresh_task: Optional[asyncio.Task]; cache_refresh_evt: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
+    cache_on_store_delay: Optional[float]; reuse_get_requests: bool
+    pending_get_requests: DefaultDict[DHTID, SortedList[_SearchState]]
     # fmt:on
 
     @classmethod
@@ -76,7 +77,7 @@ class DHTNode:
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
-            cache_on_store: bool = True, reuse_get_requests: bool = True, num_workers: int = 1,
+            cache_on_store_delay: Optional[float] = 1, reuse_get_requests: bool = True, num_workers: int = 1,
             listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
@@ -93,7 +94,7 @@ class DHTNode:
           if staleness_timeout is None, DHTNode will not refresh stale buckets (which is usually okay)
         :param bootstrap_timeout: after one of peers responds, await other peers for at most this many seconds
         :param cache_locally: if True, caches all values (stored or found) in a node-local cache
-        :param cache_on_store: if True, update cache entries for a key after storing a new item for that key
+        :param cache_on_store_delay: if not None, update cache for a key :this many seconds: after storing a new item
         :param cache_nearest: whenever DHTNode finds a value, it will also store (cache) this value on this many
           nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet
         :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
@@ -119,8 +120,8 @@ class DHTNode:
 
         # caching policy
         self.refresh_timeout = refresh_timeout
-        self.cache_locally, self.cache_nearest, self.cache_on_store = cache_locally, cache_nearest, cache_on_store
-        self.cache_refresh_before_expiry = cache_refresh_before_expiry
+        self.cache_locally, self.cache_nearest = cache_locally, cache_nearest
+        self.cache_refresh_before_expiry, self.cache_on_store_delay = cache_refresh_before_expiry, cache_on_store_delay
         self.cache_refresh_queue = CacheRefreshQueue()
         self.cache_refresh_evt = asyncio.Event()
         self.cache_refresh_task = None
@@ -312,7 +313,7 @@ class DHTNode:
                                 if not await_all_replicas:
                                     store_finished_events[original_key, subkey].set()
 
-            if self.cache_on_store:
+            if self.cache_on_store_delay is not None:
                 self._update_cache_on_store(key_id, current_subkeys, binary_values, current_expirations,
                                             store_ok=[store_ok[original_key, subkey] for subkey in current_subkeys])
 
@@ -342,11 +343,11 @@ class DHTNode:
             rejected_value, rejected_expiration = max(zip(binary_values, expirations), key=lambda p: p[1])
             self.protocol.cache.store(key_id, rejected_value, rejected_expiration)  # can still be better than cache
             if (self.protocol.cache.get(key_id)[1] or float("inf")) <= rejected_expiration:  # cache would be rejected
-                self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
+                self._schedule_for_refresh(key_id, refresh_time=get_dht_time() + (self.cache_on_store_delay or 0.0))
         else:  # stored a dictionary (or failed to store), either way, there can be other keys and we should update
             for subkey, stored_value_bytes, expiration_time in zip(subkeys, binary_values, expirations):
                 self.protocol.cache.store_subkey(key_id, subkey, stored_value_bytes, expiration_time)
-            self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
+            self._schedule_for_refresh(key_id, refresh_time=get_dht_time() + (self.cache_on_store_delay or 0.0))
 
     async def get(self, key: DHTKey, latest=False, **kwargs) -> Optional[ValueWithExpiration[DHTValue]]:
         """
