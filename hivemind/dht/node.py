@@ -340,13 +340,13 @@ class DHTNode:
             self.protocol.cache.store(key_id, stored_value_bytes, stored_expiration)
         elif not store_succeeded and not is_dictionary:  # store rejected, check if local cache is also obsolete
             rejected_value, rejected_expiration = max(zip(binary_values, expirations), key=lambda p: p[1])
-            self.protocol.cache.store(key_id, rejected_value, rejected_expiration)  # can still be better than cache
+            self.protocol.cache.store(key_id, rejected_value, rejected_expiration + self.cache_refresh_before_expiry)
             if (self.protocol.cache.get(key_id)[1] or float("inf")) <= rejected_expiration:  # cache would be rejected
                 self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
         else:  # stored a dictionary (or failed to store), either way, there can be other keys and we should update
             for subkey, stored_value_bytes, expiration_time in zip(subkeys, binary_values, expirations):
                 self.protocol.cache.store_subkey(key_id, subkey, stored_value_bytes, expiration_time)
-            self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
+            self._schedule_for_refresh(key_id, refresh_time=get_dht_time() + self.cache_refresh_before_expiry)
 
     async def get(self, key: DHTKey, latest=False, **kwargs) -> Optional[ValueWithExpiration[DHTValue]]:
         """
