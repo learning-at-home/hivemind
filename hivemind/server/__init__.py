@@ -90,6 +90,9 @@ class Server(threading.Thread):
         :param dht_port:  DHT node will listen on this port, default = find open port
         You can then use this node as initial peer for subsequent servers.
         :param verbose: whether to print server started / finished / terminated events
+        :param compression: if specified, use this compression to pack all inputs, outputs and gradients by all experts
+            hosted on this server. For a more fine-grained compression, start server in python and specify compression
+            for each BatchTensorProto in ExpertBackend for the respective experts.
         :param start: if True, starts server right away and returns when server is ready for requests
         """
         if verbose and len(kwargs) != 0:
