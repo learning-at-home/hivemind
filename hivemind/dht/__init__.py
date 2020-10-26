@@ -281,9 +281,9 @@ class DHT(mp.Process):
                     if successors:
                         beam.append((scores[pending_best_index], pending_best_prefix, successors))
                 elif maybe_prefix_data is None and self.negative_caching:
-                        logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {pending_best_prefix}")
-                        asyncio.create_task(node.store(pending_best_prefix, subkey=-1, value=None,
-                                                       expiration_time=get_dht_time() + self.expiration))
+                    logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {pending_best_prefix}")
+                    asyncio.create_task(node.store(pending_best_prefix, subkey=-1, value=None,
+                                                   expiration_time=get_dht_time() + self.expiration))
 
             except asyncio.CancelledError:
                 for _, pending_task in pending_tasks:
