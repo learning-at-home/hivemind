@@ -71,6 +71,22 @@ class DHT(mp.Process):
         (but no more than one per key)
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
     :param receiver_threads: uses this many threads to await on input pipe. Default = 1 should be enough in most cases
+    :param negative_caching: if True, whenever DHT is unable to find an expert or prefix, it will cache the "no key"
+      result inside the DHT for :expiration: seconds. Caching only affects beam search and has three main effects:
+
+      1. Faster beam search under node failures: if there are inconsistencies in DHT keys, such as a prefix pointing to
+         a now-defunct expert, these inconsistencies will be overwritten by the first peer that stumbles upon them. As a
+         result, beam search will not have to wait for non-existent experts until the expiration of their DHT entries;
+      2. Delayed expert availability: Without negative cache, new experts are always immediately available for beam
+         search after they are published to the DHT. With negative cache, there are rare cases (e.g. when adding new
+         experts in place of recently defunct ones) when new experts will be initially invisible, but gradually become
+         visible to more peers as those peers refresh their cache. This process takes at most :expiration: seconds;
+      3. Faster beam search in very sparse grids: there is one edge case where negative cache will improve beam search
+         performance; If an expert grid is very sparse, there can be empty indices in the first grid dimension (i.e.
+         indices {i} such that _no_ experts that start with "{prefix}.{i}.*"). If so, the default beam search will
+         be very slow due to the way it forms initial beam. Beam search with negative cache enabled will run normally.
+         Though, this is a pathological case (e.g. only 90 experts in an oversized 100x100 grid) that should be avoided.
+
     :param kwargs: any other params will be forwarded to DHTNode upon creation
 
     Each expert has an identifier in the form of {prefix}.{i}.{j}.{...}, e.g. "ffn_expert.98.76.54.32.10"
@@ -102,11 +118,11 @@ class DHT(mp.Process):
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 receiver_threads: int = 1, expiration: float = 300, **kwargs):
+                 receiver_threads: int = 1, negative_caching: bool = True, expiration: float = 300, **kwargs):
         super().__init__()
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
-        self.expiration = expiration
+        self.expiration, self.negative_caching = expiration, negative_caching
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
@@ -262,7 +278,13 @@ class DHT(mp.Process):
                     successors = {coord: UidEndpoint(*match.value) for coord, match in maybe_prefix_data.value.items()
                                   if isinstance(coord, Coordinate) and isinstance(getattr(match, 'value', None), list)
                                   and len(match.value) == 2}
-                    beam.append((scores[pending_best_index], pending_best_prefix, successors))
+                    if successors:
+                        beam.append((scores[pending_best_index], pending_best_prefix, successors))
+                elif maybe_prefix_data is None and self.negative_caching:
+                    logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {pending_best_prefix}")
+                    asyncio.create_task(node.store(pending_best_prefix, subkey=-1, value=None,
+                                                   expiration_time=get_dht_time() + self.expiration))
+
             except asyncio.CancelledError:
                 for _, pending_task in pending_tasks:
                     pending_task.cancel()
@@ -304,6 +326,10 @@ class DHT(mp.Process):
                                       and isinstance(getattr(match, 'value', None), list) and len(match.value) == 2}
             else:
                 successors[prefix] = {}
+                if found is None and self.negative_caching:
+                    logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {prefix}")
+                    asyncio.create_task(node.store(prefix, subkey=-1, value=None,
+                                                   expiration_time=get_dht_time() + self.expiration))
         if future:
             future.set_result(successors)
         return successors
