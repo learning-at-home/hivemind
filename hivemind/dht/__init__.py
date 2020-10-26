@@ -282,7 +282,7 @@ class DHT(mp.Process):
                         beam.append((scores[pending_best_index], pending_best_prefix, successors))
                 elif maybe_prefix_data is None:
                     if self.negative_caching:
-                        logger.debug(f"DHT negative caching: storing store 'no prefix' entry for {pending_best_prefix}")
+                        logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {pending_best_prefix}")
                         asyncio.create_task(node.store(pending_best_prefix, subkey=-1, value=None,
                                                        expiration_time=get_dht_time() + self.expiration))
 
@@ -328,7 +328,7 @@ class DHT(mp.Process):
             else:
                 successors[prefix] = {}
                 if found is None and self.negative_caching:
-                    logger.debug(f"DHT negative caching: storing store 'no prefix' entry for {prefix}")
+                    logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {prefix}")
                     asyncio.create_task(node.store(prefix, subkey=-1, value=None,
                                                    expiration_time=get_dht_time() + self.expiration))
         if future:
