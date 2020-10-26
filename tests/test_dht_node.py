@@ -436,3 +436,34 @@ def test_dhtnode_reuse_get():
     proc.start()
     proc.join()
     assert test_success.is_set()
+
+
+def test_negative_caching():
+    test_success = mp.Event()
+    peers = []
+    for i in range(10):
+        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
+        peers.append(hivemind.DHT(initial_peers=neighbors_i, negative_caching=False, cache_locally=False, start=True))
+
+    normal_peer, writer_peer = random.sample(peers, 2)
+
+    neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
+    neg_caching_peer = hivemind.DHT(initial_peers=neighbors_i, negative_caching=True, cache_locally=False, start=True)
+
+    assert all(writer_peer.declare_experts(['ffn.1.2.3', 'ffn.3.4.5'], 'myaddr:1234').values())
+    # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
+    assert len(neg_caching_peer.get_initial_beam(prefix='ffn.', scores=[.1, .2, .3, .4, .5, .6], beam_size=3)) == 2
+
+    async def _tester():
+        node = await hivemind.DHTNode.create(initial_peers=neighbors_i)
+        fetched = await asyncio.gather(*(node.get(f'ffn.{i}.') for i in range(10)))
+        for i in range(6):
+            assert fetched[i] is not None, f"node should have cached ffn.{i}."
+        for i in range(6, len(fetched)):
+            assert fetched[i] is None, f"node shouldn't have cached ffn.{i}."
+        test_success.set()
+
+    proc = mp.Process(target=lambda: asyncio.run(_tester()))
+    proc.start()
+    proc.join()
+    assert test_success.is_set()
