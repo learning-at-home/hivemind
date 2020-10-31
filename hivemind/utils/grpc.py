@@ -46,7 +46,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
             size=tensor.shape,
             dtype='clamped_float32',
             requires_grad=tensor.requires_grad)
-    else:
+    elif compression_type == CompressionType.NONE:
         array = tensor.numpy()
         proto = runtime_pb2.Tensor(
             compression=compression_type,
@@ -54,6 +54,8 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
             size=array.shape,
             dtype=array.dtype.name,
             requires_grad=tensor.requires_grad)
+    else:
+        raise ValueError(f"Unknown compression type: {compression_type}")
 
     return proto
 
