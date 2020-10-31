@@ -118,7 +118,6 @@ def test_empty_table():
     peer_port, peer_id, peer_started = hivemind.find_open_port(), DHTID.generate(), mp.Event()
     peer_proc = mp.Process(target=run_protocol_listener, args=(peer_port, peer_id, peer_started), daemon=True)
     peer_proc.start(), peer_started.wait()
-    test_success = mp.Event()
 
     loop = asyncio.get_event_loop()
     protocol = loop.run_until_complete(DHTProtocol.create(
