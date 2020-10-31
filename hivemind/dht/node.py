@@ -6,7 +6,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Optional, Tuple, List, Dict, DefaultDict, Collection, Union, Set, Awaitable, Callable, Any
-from warnings import warn
 
 from sortedcontainers import SortedList
 
@@ -36,7 +35,7 @@ class DHTNode:
 
     * ping - request peer's identifier and update routing table (same as Kademlia PING RPC)
     * store - send several (key, value, expiration_time) pairs to the same peer (like Kademlia STORE, but in bulk)
-    * find - request one or several keys, get values & expiration (if peer finds it locally) and :bucket_size: of
+    * find - request one or several keys, get values and expiration (if peer finds it locally) and :bucket_size: of
         nearest peers from recipient's routing table (ordered nearest-to-farthest, not including recipient itself)
         This RPC is a mixture between Kademlia FIND_NODE and FIND_VALUE with multiple keys per call.
 
@@ -146,7 +145,7 @@ class DHTNode:
                 finished_pings |= finished_in_time
 
             if not finished_pings:
-                warn("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
+                logger.warning("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
 
             # stage 3: traverse dht to find my own nearest neighbors and populate the routing table
             # ... maybe receive some values that we are meant to store (see protocol.update_routing_table)
@@ -189,7 +188,7 @@ class DHTNode:
         num_workers = num_workers if num_workers is not None else self.num_workers
         beam_size = beam_size if beam_size is not None else max(self.protocol.bucket_size, k_nearest)
         if k_nearest > beam_size:
-            warn("Warning: beam_size is too small, beam search is not guaranteed to find enough nodes")
+            logger.warning("Warning: beam_size is too small, beam search is not guaranteed to find enough nodes")
         if node_to_endpoint is None:
             node_to_endpoint: Dict[DHTID, Endpoint] = dict()
             for query in queries:

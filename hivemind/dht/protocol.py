@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 from typing import Optional, List, Tuple, Dict, Any, Sequence, Union, Collection
-from warnings import warn
 
 import grpc
 import grpc.experimental.aio
@@ -64,8 +63,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
             # note: use empty node_info so peers wont add you to their routing tables
             self.node_info, self.server, self.port = dht_pb2.NodeInfo(), None, None
             if listen_on != '0.0.0.0:*' or len(kwargs) != 0:
-                warn(f"DHTProtocol has no server (due to listen=False), listen_on"
-                     f"and kwargs have no effect (unused kwargs: {kwargs})")
+                logger.warning(f"DHTProtocol has no server (due to listen=False), listen_on"
+                               f"and kwargs have no effect (unused kwargs: {kwargs})")
         return self
 
     def __init__(self, *, _initialized_with_create=False):
@@ -78,7 +77,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         if self.server:
             await self.server.stop(timeout)
         else:
-            warn("DHTProtocol has no server (due to listen=False), it doesn't need to be shut down")
+            logger.warning("DHTProtocol has no server (due to listen=False), it doesn't need to be shut down")
 
     def _get(self, peer: Endpoint) -> dht_grpc.DHTStub:
         """ get a DHTStub that sends requests to a given peer """
