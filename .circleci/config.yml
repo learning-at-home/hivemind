@@ -16,7 +16,7 @@ jobs:
       - python/install-deps
       - python/save-cache
       - run:
-          command: pip install -e .
+          command: pip install --force-reinstall -e .
           name: setup
       - run:
           command: pytest ./tests
