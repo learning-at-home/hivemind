@@ -4,7 +4,7 @@ import os
 import pickle
 from typing import Dict
 
-import grpc.experimental.aio
+import grpc
 import torch
 import uvloop
 
@@ -35,9 +35,9 @@ class ConnectionHandler(mp.Process):
         loop = asyncio.new_event_loop()
 
         async def _run():
-            grpc.experimental.aio.init_grpc_aio()
+            grpc.aio.init_grpc_aio()
             logger.debug(f'Starting, pid {os.getpid()}')
-            server = grpc.experimental.aio.server(options=[
+            server = grpc.aio.server(options=[
                 ('grpc.so_reuseport', 1),
                 ('grpc.max_send_message_length', -1),
                 ('grpc.max_receive_message_length', -1)
