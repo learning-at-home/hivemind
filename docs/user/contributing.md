@@ -28,8 +28,9 @@ cd hivemind
 python setup.py develop
 ``` 
 
-To run tests, you will also need to `pip install pytest codecov tqdm scikit-learn`.
+To run tests, you will also need to `pip install pytest pytest-forked pytest-asyncio codecov tqdm scikit-learn`.
 You can run all tests with `pytest ./tests` or choose a specific set, e.g. `pytest ./tests/test_dht.py`.
+
 
 To build docs locally,
 1. `pip install sphinx sphinx_rtd_theme recommonmark`
