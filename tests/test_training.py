@@ -1,6 +1,7 @@
 from functools import partial
 from typing import Optional
 
+import pytest
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,6 +10,7 @@ from sklearn.datasets import load_digits
 from hivemind import RemoteExpert, background_server
 
 
+@pytest.mark.forked
 def test_training(port: Optional[int] = None, max_steps: int = 100, threshold: float = 0.9):
     dataset = load_digits()
     X_train, y_train = torch.tensor(dataset['data'], dtype=torch.float), torch.tensor(dataset['target'])

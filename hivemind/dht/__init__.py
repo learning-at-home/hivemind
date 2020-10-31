@@ -17,7 +17,6 @@ import ctypes
 import heapq
 import multiprocessing as mp
 import re
-import warnings
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set
@@ -163,11 +162,11 @@ class DHT(mp.Process):
             raise TimeoutError("Server didn't notify .ready in {timeout} seconds")
 
     def shutdown(self) -> None:
-        """ Shuts down the dht process """
+        """ Shut down a running dht process """
         if self.is_alive():
             self.terminate()
         else:
-            warnings.warn("DHT shutdown has no effect: dht process is already not alive")
+            logger.warning("DHT shutdown has no effect: dht process is already not alive")
 
     @property
     def port(self) -> Optional[int]:

@@ -3,10 +3,8 @@ from __future__ import annotations
 
 import asyncio
 from typing import Optional, List, Tuple, Dict, Any, Sequence, Union, Collection
-from warnings import warn
 
 import grpc
-import grpc.experimental.aio
 
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue, ValueWithExpiration
@@ -19,7 +17,7 @@ logger = get_logger(__name__)
 class DHTProtocol(dht_grpc.DHTServicer):
     # fmt:off
     node_id: DHTID; port: int; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
-    channel_options: Optional[Sequence[Tuple[str, Any]]]; server: grpc.experimental.aio.Server
+    channel_options: Optional[Sequence[Tuple[str, Any]]]; server: grpc.aio.Server
     storage: DHTLocalStorage; cache: DHTLocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
     # fmt:on
 
@@ -51,8 +49,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         self.rpc_semaphore = asyncio.Semaphore(parallel_rpc if parallel_rpc is not None else float('inf'))
 
         if listen:  # set up server to process incoming rpc requests
-            grpc.experimental.aio.init_grpc_aio()
-            self.server = grpc.experimental.aio.server(**kwargs)
+            grpc.aio.init_grpc_aio()
+            self.server = grpc.aio.server(**kwargs)
             dht_grpc.add_DHTServicer_to_server(self, self.server)
 
             found_port = self.server.add_insecure_port(listen_on)
@@ -64,8 +62,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
             # note: use empty node_info so peers wont add you to their routing tables
             self.node_info, self.server, self.port = dht_pb2.NodeInfo(), None, None
             if listen_on != '0.0.0.0:*' or len(kwargs) != 0:
-                warn(f"DHTProtocol has no server (due to listen=False), listen_on"
-                     f"and kwargs have no effect (unused kwargs: {kwargs})")
+                logger.warning(f"DHTProtocol has no server (due to listen=False), listen_on"
+                               f"and kwargs have no effect (unused kwargs: {kwargs})")
         return self
 
     def __init__(self, *, _initialized_with_create=False):
@@ -78,11 +76,11 @@ class DHTProtocol(dht_grpc.DHTServicer):
         if self.server:
             await self.server.stop(timeout)
         else:
-            warn("DHTProtocol has no server (due to listen=False), it doesn't need to be shut down")
+            logger.warning("DHTProtocol has no server (due to listen=False), it doesn't need to be shut down")
 
     def _get(self, peer: Endpoint) -> dht_grpc.DHTStub:
         """ get a DHTStub that sends requests to a given peer """
-        channel = grpc.experimental.aio.insecure_channel(peer, options=self.channel_options)
+        channel = grpc.aio.insecure_channel(peer, options=self.channel_options)
         return dht_grpc.DHTStub(channel)
 
     async def call_ping(self, peer: Endpoint) -> Optional[DHTID]:
@@ -96,7 +94,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         try:
             async with self.rpc_semaphore:
                 peer_info = await self._get(peer).rpc_ping(self.node_info, timeout=self.wait_timeout)
-        except grpc.experimental.aio.AioRpcError as error:
+        except grpc.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to ping {peer}: {error.code()}")
             peer_info = None
         responded = bool(peer_info and peer_info.node_id)
@@ -162,7 +160,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
             return response.store_ok
-        except grpc.experimental.aio.AioRpcError as error:
+        except grpc.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to store at {peer}: {error.code()}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
             return None
@@ -226,7 +224,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                     logger.error(f"Unknown result type: {result.type}")
 
             return output
-        except grpc.experimental.aio.AioRpcError as error:
+        except grpc.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to find at {peer}: {error.code()}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
 
