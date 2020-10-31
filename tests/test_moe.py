@@ -7,6 +7,7 @@ from hivemind.client.expert import DUMMY
 from hivemind import background_server
 
 
+@pytest.mark.forked
 def test_moe():
     all_expert_uids = [f'ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
                        for _ in range(20)]
@@ -22,6 +23,7 @@ def test_moe():
             out.sum().backward()
 
 
+@pytest.mark.forked
 def test_call_many():
     k_min = 1
     timeout_after_k_min = None
@@ -71,6 +73,7 @@ def test_call_many():
         assert torch.allclose(our_grad, reference_grad, rtol, atol)
 
 
+@pytest.mark.forked
 def test_remote_module_call():
     with background_server(num_experts=1, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=1024,
                            optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
@@ -93,6 +96,7 @@ def test_remote_module_call():
             fake_expert(dummy_x)
 
 
+@pytest.mark.forked
 def test_beam_search_correctness():
     all_expert_uids = [f'ffn.{5 + i}.{10 + j}.{15 + k}' for i in range(10) for j in range(10) for k in range(10)]
     dht = hivemind.DHT(start=True, expiration=999)
@@ -119,6 +123,7 @@ def test_beam_search_correctness():
         assert np.allclose(true_best_scores, our_best_scores)
 
 
+@pytest.mark.forked
 def test_determinism():
     rtol = 0
     atol = 1e-5
@@ -140,6 +145,7 @@ def test_determinism():
     assert torch.allclose(grad, grad_rerun, rtol, atol), "Gradients are non-deterministic."
 
 
+@pytest.mark.forked
 def test_compute_expert_scores():
     try:
         dht = hivemind.DHT(start=True)
