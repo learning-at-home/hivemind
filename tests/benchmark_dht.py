@@ -1,12 +1,13 @@
 import argparse
 import random
 import time
-from warnings import warn
 
 from tqdm import trange
 
 import hivemind
 from hivemind.utils.threading import increase_file_limit
+
+logger = hivemind.get_logger(__file__)
 
 
 def random_endpoint() -> hivemind.Endpoint:
@@ -53,7 +54,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     time.sleep(wait_before_read)
 
     if time.perf_counter() - benchmark_started > expiration:
-        warn("Warning: all keys expired before benchmark started getting them. Consider increasing expiration_time")
+        logger.warning("All keys expired before benchmark started getting them. Consider increasing expiration_time")
 
     successful_gets = total_get_time = 0
 
@@ -68,7 +69,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
                 successful_gets += 1
 
     if time.perf_counter() - benchmark_started > expiration:
-        warn("Warning: keys expired midway during get requests. If that is not desired, increase expiration_time param")
+        logger.warning("keys expired midway during get requests. If that isn't desired, increase expiration_time param")
 
     print(f"Get success rate: {successful_gets / len(expert_uids) * 100:.1f} ({successful_gets} / {len(expert_uids)})")
     print(f"Mean get time: {total_get_time / len(expert_uids):.5f}, Total: {total_get_time:.5f}")

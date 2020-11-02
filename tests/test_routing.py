@@ -66,10 +66,6 @@ def test_routing_table_basic():
         assert bucket_index == found_bucket_index
 
 
-
-
-
-
 def test_routing_table_parameters():
     for (bucket_size, modulo, min_nbuckets, max_nbuckets) in [
         (20,          5,      45,           65),

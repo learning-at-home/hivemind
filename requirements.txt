@@ -5,6 +5,6 @@ prefetch_generator>=1.0.1
 msgpack>=0.5.6
 sortedcontainers
 uvloop>=0.14.0
-grpcio>=1.31
-grpcio-tools>=1.30.0
+grpcio>=1.33.2
+grpcio-tools>=1.33.2
 configargparse>=1.2.3

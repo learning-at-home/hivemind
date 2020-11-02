@@ -78,46 +78,44 @@ def test_mpfuture_status():
         assert future.set_running_or_notify_cancel() is False
 
 
-def test_await_mpfuture():
-    async def _run():
-        # await result
-        f1, f2 = hivemind.MPFuture.make_pair()
+@pytest.mark.asyncio
+async def test_await_mpfuture():
+    # await result
+    f1, f2 = hivemind.MPFuture.make_pair()
 
-        async def wait_and_assign():
-            assert f2.set_running_or_notify_cancel() is True
-            await asyncio.sleep(0.1)
-            f2.set_result((123, 'ololo'))
+    async def wait_and_assign():
+        assert f2.set_running_or_notify_cancel() is True
+        await asyncio.sleep(0.1)
+        f2.set_result((123, 'ololo'))
 
-        asyncio.create_task(wait_and_assign())
-        for future in [f1, f2]:
-            res = await future
-            assert res == (123, 'ololo')
+    asyncio.create_task(wait_and_assign())
+    for future in [f1, f2]:
+        res = await future
+        assert res == (123, 'ololo')
 
-        # await cancel
-        f1, f2 = hivemind.MPFuture.make_pair()
+    # await cancel
+    f1, f2 = hivemind.MPFuture.make_pair()
 
-        async def wait_and_cancel():
-            await asyncio.sleep(0.1)
-            f1.cancel()
+    async def wait_and_cancel():
+        await asyncio.sleep(0.1)
+        f1.cancel()
 
-        asyncio.create_task(wait_and_cancel())
-        for future in [f1, f2]:
-            with pytest.raises(CancelledError):
-                await future
+    asyncio.create_task(wait_and_cancel())
+    for future in [f1, f2]:
+        with pytest.raises(CancelledError):
+            await future
 
-        # await exception
-        f1, f2 = hivemind.MPFuture.make_pair()
+    # await exception
+    f1, f2 = hivemind.MPFuture.make_pair()
 
-        async def wait_and_raise():
-            await asyncio.sleep(0.1)
-            f1.set_exception(SystemError())
+    async def wait_and_raise():
+        await asyncio.sleep(0.1)
+        f1.set_exception(SystemError())
 
-        asyncio.create_task(wait_and_raise())
-        for future in [f1, f2]:
-            with pytest.raises(SystemError):
-                await future
-
-    asyncio.new_event_loop().run_until_complete(_run())
+    asyncio.create_task(wait_and_raise())
+    for future in [f1, f2]:
+        with pytest.raises(SystemError):
+            await future
 
 
 def test_vector_compression(size=(128, 128, 64), alpha=5e-08):

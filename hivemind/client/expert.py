@@ -3,7 +3,6 @@ from functools import lru_cache
 from typing import Tuple, Optional, Any, Dict
 
 import grpc
-import grpc.experimental.aio
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
