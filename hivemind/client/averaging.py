@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import os
-from typing import Sequence, Iterable, Optional, Tuple, Any, Set, List, Collection
+from typing import Sequence, Iterable, Optional, Tuple, Any, Set, AsyncGenerator
 from dataclasses import dataclass, field
 from concurrent.futures.thread import ThreadPoolExecutor
 import multiprocessing as mp
@@ -136,7 +136,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
         self.ready = mp.Event()
 
-        self.averaged_tensors = list(averaged_tensors)
+        self.averaged_tensors = tuple(averaged_tensors)
         for tensor in self.averaged_tensors:
             assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
             tensor.share_memory_()
@@ -210,25 +210,72 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def test_run(self, group_leader: Optional[Endpoint] = None):
         raise NotImplementedError()
 
-    async def attempt_join_group(self, recipient: Endpoint):
+    async def attempt_join_group(self, recipient: Endpoint) -> AllreduceOutcome:
         """
         :param recipient: ask this node to be your group leader. Get acccepted or get directions.
         :returns: a tuple of (outcome,
         """
         assert os.getpid() == self.pid, "this method is only available from inside a running averager process"
-        raise NotImplementedError()
+        assert isinstance(self._state, LookingForGroup), f"you are not looking for group now ({self._state})"
+        async with self._state.one_request_at_a_time:
+            if not isinstance(self._state, LookingForGroup):
+                return AllreduceOutcome(was_accepted_to_group=False, reason="I was accepted to another group first.")
+
+            stream = self._get(recipient).rpc_group_allreduce( #TODO appropriate typing for steam
+                averaging_pb2.MessageToLeader(scheme_hash=b"TODO", leader_endpoint=recipient,
+                                              expiration=self._state.my_expiration))
+            message = await stream.read()
+            if message.code != averaging_pb2.ACCEPTED:
+                raise NotImplementedError("TODO handle errors")
+
+
+            assert message.follower_endpoint == self._state.my_endpoint
+            self._state = FollowerWaitingForLeader(self._state.my_endpoint, self._state.my_expiration,
+                                                   recipient, message.group_id)
+
+        assert isinstance(self._state, FollowerWaitingForLeader)
+        while message.code != averaging_pb2.BEGIN_ALLREDUCE:
+            message = await stream.read()
+            if message.code == averaging_pb2.GROUP_DISMISSED:
+                return AllreduceOutcome(was_accepted_to_group=True, group_dismissed_by_leader=True)
+                # TODO should we close stream explicitly?
+            elif message.code == averaging_pb2.GROUP_HEARTBEAT:
+                continue
+            # TODO account for timeout / non-response!
+
+        assert message.code == averaging_pb2.BEGIN_ALLREDUCE
+        group_endpoints = tuple(message.group_endpoints)
+        my_part_index = group_endpoints.index(self._state.my_endpoint)
+        self._state = RunningAllReduce(self._state.my_endpoint, set(group_endpoints), part_index=my_part_index)
+        raise NotImplementedError("Actually run allreduce")
+
+        #TODO finally: self._state = Idle()
 
     async def rpc_group_allreduce(self, request: averaging_pb2.MessageToLeader, context: grpc.ServicerContext):
         """ A peer wants me to be his leader. I will coordinate his actions with the rest of my group. Maybe. """
-        #TODO account for possible concurrent requests to other peers, e.g. use asyncio lock
-        if self._state in (ProtocolState.LOOKING_FOR_GROUP, ProtocolState.LEADER_WAITING_FOR_PEERS):
-            if self._state == ProtocolState.LOOKING_FOR_GROUP:
-                logger.debug(f"Starting a new group as a leader.")
-                self._state = ProtocolState.LEADER_WAITING_FOR_PEERS
-                self._my_group = set()
+        assert os.getpid() == self.pid, "this method is only available from inside a running averager process"
+        if isinstance(self._state, Idle):
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
+        elif isinstance(self._state, RunningAllReduce):
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.ALREADY_RUNNING)
+        elif isinstance(self._state, FollowerWaitingForLeader):
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER,
+                                                   suggested_leader=self._state.leader_endpoint)
+        elif isinstance(self._state, LookingForGroup):
+            if self._state.my_expiration > (request.expiration or float('-inf')):
+                return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
+            async with self._state.one_request_at_a_time:
+                TODO_make_sure_we_havent_found_something_else
 
-            peer: Endpoint = context.peer()
-            logger.debug(f"Adding {peer} to my group, new size = {len(self._my_group)}")
+                if self._state in (ProtocolState.LOOKING_FOR_GROUP, ProtocolState.LEADER_WAITING_FOR_PEERS):
+                    if self._state == ProtocolState.LOOKING_FOR_GROUP:
+                        logger.debug(f"Starting a new group as a leader.")
+                        self._state = ProtocolState.LEADER_WAITING_FOR_PEERS
+                        self._my_group = set()
+
+                    peer: Endpoint = context.peer()
+                    logger.debug(f"Adding {peer} to my group, new size = {len(self._my_group)}")
+        #TODO if follower closes channel, make sure we exclude him from group immediately!
 
     async def rpc_part_averaging(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
         """ A peer sent me his local tensor part. I'll use it to compute the average and return that average to him """
@@ -281,6 +328,7 @@ class LookingForGroup(ProtocolState):
     """ i am currently looking for group in a dht """
     my_endpoint: Endpoint
     my_expiration: DHTExpiration
+    one_request_at_a_time: asyncio.Lock = field(default=asyncio.Lock(), init=False)
 
 
 @dataclass
@@ -310,7 +358,7 @@ class RunningAllReduce(ProtocolState):
     accumulator: Optional[torch.Tensor] = field(default=None, init=False)  # the sum of incoming vector parts
     average_tensor: Optional[torch.Tensor] = field(default=None, init=False)  # accumulator / group size
     received_from: Set[Endpoint] = field(default_factory=set, init=False)  # peers that have sent me their chunk
-    finished_accumulating: asyncio.Event = field(default_factory=asyncio.Event, init=False)
+    finished_accumulating: asyncio.Event = field(default=asyncio.Event(), init=False)
 
     async def accumulate(self, source: Endpoint, part: torch.Tensor) -> torch.Tensor:
         """ Add your vector to accumulator, wait for all other vectors to be added, return the average """
@@ -334,9 +382,9 @@ class RunningAllReduce(ProtocolState):
 
 
 @dataclass
-class ProtocolOutcome:
+class AllreduceOutcome:
     was_accepted_to_group: bool = False
-    reason: Optional[averaging_pb2.MessageType] = None
+    reason: Any = None
     suggested_leader: Optional[Endpoint] = None
     was_leader: bool = False
     group_dismissed_by_leader: bool = False
