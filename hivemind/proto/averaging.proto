@@ -3,7 +3,7 @@ import "runtime.proto";
 
 
 // Runs alongside each trainer to perform gating function averaging every now and then. Read more: client/averaging.py
-service GatingFunctionAveraging {
+service DecentralizedAveraging {
   rpc rpc_join_group(MessageToLeader) returns (stream MessageFromLeader);  // ask leader to coordinate all_reduce
   rpc rpc_part_averaging(AveragingData) returns (AveragingData);  // my local shard => average shard over all peers
 }
@@ -15,7 +15,7 @@ message MessageToLeader {
   float expiration = 4;      // Follower would like to **begin** all_reduce by this point in time
 }
 
-enum GroupStatus {
+enum MessageType {
   // response to join request
   ACCEPTED = 0;              // "I accept you in my group / as a freeloader."
   NOT_A_LEADER = 1;          // "I am not a group a leader. Go ask my leader instead."
@@ -36,7 +36,7 @@ enum GroupStatus {
 
 
 message MessageFromLeader {
-  GroupStatus status = 1;
+  MessageType status = 1;
   bytes group_id = 2;        // a unique identifier of this group, only valid until allreduce is finished/failed
   string new_leader = 3;     // if peer is already in a group, it will provide you with an endpoint of his group leader
   float new_expiration = 4;  // if accepted to a group, this value denotes leader's expiration time (earliest in group)
