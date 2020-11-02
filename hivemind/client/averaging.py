@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import os
 from enum import Enum, auto
 from typing import Sequence, Iterable, Optional, Tuple, Any, Set, Collection, Iterator
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -21,7 +22,7 @@ from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 logger = get_logger(__file__)
 
 
-class DecentralizedAverager(mp.Process, averaging_pb2_grpc.GatingFunctionAveragingServicer):
+class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragingServicer):
     """
     Gating function averaging service. A trainer can run this service in background to periodically average his gating
     function with other trainers. The averaging pattern is chosen so that (1) you only need to average with a small
@@ -36,8 +37,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.GatingFunctionAveragi
     :param bucket_size: averager will try to form groups of approximately this size
     :param initial_ndim: the averager will initially consider bucket_size ^ initial_ndim buckets
       but it may change this value based on target_group_size and the number of peers in each bucket
-    :param allreduce_timeout:
-    :param max_freeloaders: peer will accept at most this many freeloaders per one averaging run
+    :param timeout: consider allreduce failed if there was no activity for this many **seconds**
     :param listen: if True (default), this averager will accept incoming requests from other peers and perform allreduce
             if False, the averager will register as a freeloader and attempt to fetch vectors from other averagers
     :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
@@ -62,76 +62,76 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.GatingFunctionAveragi
     """
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
-                 bucket_size: int = 16, initial_ndim: int = 2, allreduce_timeout: float = 15,
+                 bucket_size: int = 16, initial_ndim: int = 2, timeout: float = 15,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         super().__init__()
-        self.dht, self.target_group_size, self.allreduce_timeout = dht, target_group_size, allreduce_timeout
-        self.num_buckets_base, self.initial_ndim, self.max_freeloaders = num_buckets_base, initial_ndim, max_freeloaders
+        self.dht = dht
+        self.bucket_size, self.initial_ndim, self.timeout = bucket_size, initial_ndim, timeout
         self.server_opts = listen, listen_on, receiver_threads, kwargs
         self.channel_options = channel_options
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
-        self._port = mp.Value(ctypes.c_int32, 0)  # assigned when averager starts
-        self._found_group = mp.Value(ctypes.c_bool, False)
+        self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
+        self._state = mp.Value(ctypes.c_uint16, self.State.NOT_RUNNING.value)
         self.ready = mp.Event()
 
-        self.averaged_tensors = averaged_tensors
-        self.total_size = sum(tensor.numel() for tensor in averaged_tensors)
+        self.averaged_tensors = list(averaged_tensors)
+        for tensor in self.averaged_tensors:
+            assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
+            tensor.share_memory_()
+
+        self.total_size = sum(tensor.numel() for tensor in self.averaged_tensors)
         logger.debug(f"Total size of averaged tensors: {self.total_size} elements")
 
         # internal protocol state variables, only available from inside a running averager process
-        self._state: DecentralizedAverager.State = self.State.NOT_VISIBLE  # looking for group / averaging / ...
-
-        # FOLLOWER_WAITING_FOR_LEADER
-        self._leader_endpoint: Optional[Endpoint] = None  # group leader's endpoint, None = not in a group
-
-        # LEADER_WAITING_FOR_PEERS
+        # state=LEADER_WAITING_FOR_PEERS
         self._my_endpoint: Optional[Endpoint] = None  # my public endpoint, None = not running accepting requests
         self._my_group_id: Optional[bytes] = None  # a unique identifier of my group, None = not in a group
         self._my_group: Set[Endpoint] = set()  # a set of peer endpoints in my group
         self._my_expiration: Optional[DHTExpiration] = None  # i want to average by this time
 
-        # RUNNING_ALLREDUCE
+        # state=FOLLOWER_WAITING_FOR_LEADER
+        self._leader_endpoint: Optional[Endpoint] = None  # group leader's endpoint, None = i'm not a follower
+
+        # state=RUNNING_ALLREDUCE
         self._my_part_accumulator: Optional[torch.Tensor] = None  # the sum of vectors
         self._received_data_from: Optional[Set[Endpoint]] = None  # peers that have sent me their chunk
         self._my_part_after_averaging: Optional[torch.Tensor] = None  # final average for my part
         self._finished_accumulating = asyncio.Event()  # triggered if we finished averaging our chunk or failed trying
 
-        for tensor in self.averaged_tensors:
-            tensor.share_memory_()
-
         if start:
             self.run_in_background(await_ready=True)
 
     class State(Enum):
-        NOT_VISIBLE = auto()                 # a placeholder: the actual state is visible from inside averager process
-        IDLE = auto()                        # not interested in averaging at this time
-        LOOKING_FOR_GROUP = auto()           # placing requests for group in a DHT
-        LEADER_WAITING_FOR_PEERS = auto()    # i am a leader of a group, waiting for more peers (or timeout)
-        FOLLOWER_WAITING_FOR_LEADER = auto() # i am in a group, but not a leader; waiting for leader to begin allreduce
-        RUNNING_ALLREDUCE = auto()           # i am a leader or member, i currently perform averaging with my group
+        NOT_RUNNING = auto()                  # server not running yet
+        IDLE = auto()                         # server running, not interested in averaging at this time
+        LOOKING_FOR_GROUP = auto()            # placing requests for group in a DHT
+        LEADER_WAITING_FOR_PEERS = auto()     # i am a leader of a group, waiting for more peers (or timeout)
+        FOLLOWER_WAITING_FOR_LEADER = auto()  # i am in a group, but not a leader; waiting for leader to begin allreduce
+        RUNNING_ALLREDUCE = auto()            # i am a leader or member, i currently perform averaging with my group
 
     def run(self):
         """ Serve DecentralizedAverager forever. This function will not return until the averager is shut down """
-        self._state = averaging_pb2.GroupStatus.IDLE
         if asyncio.get_event_loop().is_running():
             asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
+
         uvloop.install()
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        listen, listen_on, receiver_threads, channel_options, server_kwargs = self.server_opts
+        listen, listen_on, receiver_threads, server_kwargs = self.server_opts
         pipe_awaiter = ThreadPoolExecutor(receiver_threads)
 
         async def _run():
             if listen:
-                grpc.experimental.aio.init_grpc_aio()
-                server = grpc.experimental.aio.server(**server_kwargs)
-                averaging_pb2_grpc.add_GatingFunctionAveragingServicer_to_server(self, server)
+                grpc.aio.init_grpc_aio()
+                server = grpc.aio.server(**server_kwargs)
+                averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
                 found_port = server.add_insecure_port(listen_on)
                 assert found_port != 0, f"Failed to listen to {listen_on}"
                 self._port.value = found_port
                 await server.start()
+                self.state = self.State.IDLE
                 self.ready.set()
             else:
                 self.ready.set()
@@ -159,29 +159,30 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.GatingFunctionAveragi
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
-    def _get(self, peer: Endpoint) -> averaging_pb2_grpc.GatingFunctionAveragingStub:
-        """ get a DHTStub that sends requests to a given peer """
-        channel = grpc.experimental.aio.insecure_channel(peer, options=self.channel_options)
-        return averaging_pb2_grpc.GatingFunctionAveragingStub(channel)
-
-
-    # @property
-    # def found_group(self) -> bool:
-    #     raise NotImplementedError()
-    #
-    # @property
-    # def looking_for_group(self) -> bool:
-    #     raise NotImplementedError()
-    #
-    # def look_for_group(self) -> bool:
-    #     raise NotImplementedError()
-    #
-    # def all_reduce(self, inplace: bool) -> bool:
-    #     raise NotImplementedError()
+    @property
+    def port(self) -> Optional[Port]:
+        return self._port.value if self._port.value != 0 else None
 
     @property
-    def port(self) -> Port:
-        return self._port.value if self._port.value != 0 else None
+    def state(self) -> DecentralizedAverager.State:
+        if not self.is_alive():
+            self._state.value = self.State.NOT_RUNNING.value
+        return self.State(self._state.value)
+
+    @state.setter
+    def state(self, new_state: DecentralizedAverager.State):
+        assert os.getpid() == self.pid, "Averager state can only be changed from inside the averager process"
+        self._state.value = new_state.value
+
+    def _get(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
+        """ get a GatingFunctionAveragingStub that sends requests to a given peer """
+        #TODO
+        channel = grpc.aio.insecure_channel(peer, options=self.channel_options)
+        return averaging_pb2_grpc.DecentralizedAveragingStub(channel)
+
+    def step(self) -> bool:
+        """ Run the averaging protocol: look for group, then run allreduce inside that """
+        raise NotImplementedError()
 
     async def call_join_group(self, TODO):
         raise NotImplementedError()
