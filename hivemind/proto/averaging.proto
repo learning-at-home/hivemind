@@ -4,8 +4,8 @@ import "runtime.proto";
 
 // Runs alongside each trainer to perform gating function averaging every now and then. Read more: client/averaging.py
 service DecentralizedAveraging {
-  rpc rpc_join_group(MessageToLeader) returns (stream MessageFromLeader);  // ask leader to coordinate all_reduce
-  rpc rpc_part_averaging(AveragingData) returns (AveragingData);  // my local shard => average shard over all peers
+  rpc rpc_group_allreduce(MessageToLeader) returns (stream MessageFromLeader);  // assemble a group and run all-reduce
+  rpc rpc_aggregate_part(AveragingData) returns (AveragingData);  // send my local shard => get aggregated shard
 }
 
 message MessageToLeader {

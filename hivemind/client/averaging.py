@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import ctypes
 import os
-from enum import Enum, auto
-from typing import Sequence, Iterable, Optional, Tuple, Any, Set, Collection, Iterator
+from typing import Sequence, Iterable, Optional, Tuple, Any, Set, List, Collection
+from dataclasses import dataclass, field
 from concurrent.futures.thread import ThreadPoolExecutor
 import multiprocessing as mp
 import asyncio
@@ -134,7 +134,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.channel_options = channel_options
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
-        self._state = mp.Value(ctypes.c_uint16, ProtocolState.NOT_RUNNING.value)
         self.ready = mp.Event()
 
         self.averaged_tensors = list(averaged_tensors)
@@ -142,22 +141,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
             tensor.share_memory_()
 
-        self.total_size = sum(tensor.numel() for tensor in self.averaged_tensors)
-        logger.debug(f"Total size of averaged tensors: {self.total_size} elements")
-
         # internal protocol state variables, only available from inside a running averager process
-        # when forming a group
-        self._my_endpoint: Optional[Endpoint] = None  # my public endpoint, None = not running accepting requests
-        self._my_group_id: Optional[bytes] = None  # a unique identifier of my group, None = not in a group
-        self._my_group: Set[Endpoint] = set()  # a set of peer endpoints in my group
-        self._leader_endpoint: Optional[Endpoint] = None  # group leader's endpoint, None = i'm not a follower
-        self._my_expiration: Optional[DHTExpiration] = None  # i want to average by this time
-
-        # when running all-reduce
-        self._my_part_accumulator: Optional[torch.Tensor] = None  # the sum of vectors
-        self._received_data_from: Optional[Set[Endpoint]] = None  # peers that have sent me their chunk
-        self._my_part_after_averaging: Optional[torch.Tensor] = None  # final average for my part
-        self._finished_accumulating = asyncio.Event()  # triggered if we finished averaging our chunk or failed trying
+        self._state: ProtocolState = Idle()
 
         if start:
             self.run_in_background(await_ready=True)
@@ -221,9 +206,21 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self._state.value = ProtocolState.NOT_RUNNING.value
         return ProtocolState(self._state.value)
 
-    @state.setter
-    def state(self, new_state: ProtocolState):
-        assert os.getpid() == self.pid, "Averager state can only be changed from inside the averager process"
+    def switch_to_state(self, new_state: ProtocolState, **kwargs):
+        """ set new state and update protocol variables. Note: not using property setter to emphasize side effects """
+        assert os.getpid() == self.pid and self.is_alive(), "State can only be changed from inside the averager process"
+
+        if new_state == ProtocolState.IDLE:
+            self._my_endpoint = self._leader_endpoint = TODO
+        elif new_state == ProtocolState.LOOKING_FOR_GROUP:
+            assert self._my_expiration
+            assert kwargs.get('expiration') is not None
+            self._my_expiration = kwargs['expiration']
+        elif new_state == ProtocolState.LEADER_WAITING_FOR_PEERS:
+            assert self._my_group is None
+            assert initial_group is not None
+            self._my_group = initial_group
+
         self._state.value = new_state.value
 
     def _get(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
@@ -238,16 +235,15 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def test_run(self, group_leader: Optional[Endpoint] = None):
         raise NotImplementedError()
 
-    async def call_join_group(self, recipient: Endpoint):
+    async def attempt_join_group(self, recipient: Endpoint):
         """
         :param recipient: ask this node to be your group leader. Get acccepted or get directions.
-        :returns: a tuple of (status,
+        :returns: a tuple of (outcome,
         """
         assert os.getpid() == self.pid, "this method is only available from inside a running averager process"
-
         raise NotImplementedError()
 
-    async def rpc_join_group(self, request: averaging_pb2.MessageToLeader, context: grpc.ServicerContext):
+    async def rpc_group_allreduce(self, request: averaging_pb2.MessageToLeader, context: grpc.ServicerContext):
         """ A peer wants me to be his leader. I will coordinate his actions with the rest of my group. Maybe. """
         #TODO account for possible concurrent requests to other peers, e.g. use asyncio lock
         if self._state in (ProtocolState.LOOKING_FOR_GROUP, ProtocolState.LEADER_WAITING_FOR_PEERS):
@@ -294,11 +290,100 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             return averaging_pb2.AveragingData(error=repr(e))
 
 
-class ProtocolState(Enum):
-    """ State of an averaging protocol """
-    NOT_RUNNING = auto()                  # server not running yet
-    IDLE = auto()                         # server running, not interested in averaging at this time
-    LOOKING_FOR_GROUP = auto()            # placing requests for group in a DHT
-    LEADER_WAITING_FOR_PEERS = auto()     # i am a leader of a group, waiting for more peers (or timeout)
-    FOLLOWER_WAITING_FOR_LEADER = auto()  # i am in a group, but not a leader; waiting for leader to begin allreduce
-    RUNNING_ALLREDUCE = auto()            # i am a leader or member, i currently perform averaging with my group
+class ProtocolState:
+    """ The current state of the averaging protocol with auxiliary variables """
+    def __init__(self):  # note: we could use ABC, but it would be too verbose
+        raise ValueError("Please use one of the subclasses")
+
+
+@dataclass
+class Idle(ProtocolState):
+    """ the averager is not interested in averaging at this time """
+
+
+@dataclass
+class LookingForGroup(ProtocolState):
+    """ i am currently looking for group in a dht """
+    my_endpoint: Endpoint
+    my_expiration: DHTExpiration
+
+
+@dataclass
+class LeaderWaitingForPeers(ProtocolState):
+    """ i am a leader of a group, waiting for more peers (or timeout) """
+    my_endpoint: Endpoint
+    group_expiration: DHTExpiration
+    group_endpoints: Set[Endpoint]
+    group_id: bytes
+
+
+@dataclass
+class FollowerWaitingForLeader(ProtocolState):
+    """ i am in a group, but not a leader; waiting for leader to begin all-reduce """
+    my_endpoint: Endpoint
+    my_expiration: DHTExpiration
+    leader_endpoint: Endpoint
+    group_id: bytes
+
+
+@dataclass
+class RunningAllReduce(ProtocolState):
+    my_endpoint: Endpoint
+    group_endpoints: Set[Endpoint]
+    part_index: int
+
+    accumulator: Optional[torch.Tensor] = field(default=None, init=False)  # the sum of incoming vector parts
+    average_tensor: Optional[torch.Tensor] = field(default=None, init=False)  # accumulator / group size
+    received_from: Set[Endpoint] = field(default_factory=set, init=False)  # peers that have sent me their chunk
+    finished_accumulating: asyncio.Event = field(default_factory=asyncio.Event, init=False)
+
+    async def accumulate(self, source: Endpoint, part: torch.Tensor) -> torch.Tensor:
+        """ Add your vector to accumulator, wait for all other vectors to be added, return the average """
+        assert not self.finished_accumulating.is_set(), "averaging is already finished"
+        assert source in self.group_endpoints and source not in self.received_from, "unexpected source endpoint"
+        if self.accumulator is None:
+            self.accumulator = part.clone()
+        else:
+            assert part.shape == self.accumulator.shape
+            self.accumulator.add_(part)
+
+        self.received_from.add(source)
+        if len(self.received_from) == len(self.group_endpoints):
+            self.average_tensor = self.accumulator.div_(len(self.received_from))
+            self.finished_accumulating.set()
+        else:
+            await self.finished_accumulating.wait()  # wait for other peers to send their part
+
+        assert self.average_tensor is not None
+        return self.average_tensor
+
+
+@dataclass
+class ProtocolOutcome:
+    was_accepted_to_group: bool = False
+    reason: Optional[averaging_pb2.MessageType] = None
+    suggested_leader: Optional[Endpoint] = None
+    was_leader: bool = False
+    group_dismissed_by_leader: bool = False
+    started_allreduce: bool = False
+    succeeded_allreduce: bool = False
+
+
+def split_into_chunks(tensors: Sequence[torch.Tensor], group_size: int) -> Tuple[torch.Tensor]:
+    """ combines averaged_tensors into one tensor and splits them into equal chunks of size group_size """
+    flat_tensor = torch.cat(tuple(map(torch.Tensor.flatten, tensors)))
+    chunk_slices = torch.linspace(start=0, end=len(flat_tensor), steps=group_size + 1, dtype=torch.int64).numpy()
+    chunk_slices[-1] = len(flat_tensor)
+    return tuple(torch.as_tensor(flat_tensor[chunk_slices[i]: chunk_slices[i + 1]]) for i in range(group_size))
+
+
+def restore_from_chunks(chunks: Sequence[torch.Tensor], shapes: Sequence[torch.Size]) -> Tuple[torch.Tensor, ...]:
+    """ restores the original tensor shapes from chunks obtained by split_into_chunks """
+    flat_tensor = torch.cat(list(chunks))
+    result_sizes = tuple(map(torch.Size.numel, shapes))
+    flat_original_tensors = torch.split_with_sizes(flat_tensor, result_sizes)
+    return tuple(map(torch.Tensor.reshape, flat_original_tensors, shapes))
+
+
+
+
