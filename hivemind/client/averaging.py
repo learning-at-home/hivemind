@@ -168,10 +168,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 assert found_port != 0, f"Failed to listen to {listen_on}"
                 self._port.value = found_port
                 await server.start()
-                self.state = ProtocolState.IDLE
                 self.ready.set()
             else:
-                self.ready.set()
                 raise NotImplementedError("Client-only averaging is not implemented yet.")
 
             while True:
@@ -199,29 +197,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     @property
     def port(self) -> Optional[Port]:
         return self._port.value if self._port.value != 0 else None
-
-    @property
-    def state(self) -> ProtocolState:
-        if not self.is_alive():
-            self._state.value = ProtocolState.NOT_RUNNING.value
-        return ProtocolState(self._state.value)
-
-    def switch_to_state(self, new_state: ProtocolState, **kwargs):
-        """ set new state and update protocol variables. Note: not using property setter to emphasize side effects """
-        assert os.getpid() == self.pid and self.is_alive(), "State can only be changed from inside the averager process"
-
-        if new_state == ProtocolState.IDLE:
-            self._my_endpoint = self._leader_endpoint = TODO
-        elif new_state == ProtocolState.LOOKING_FOR_GROUP:
-            assert self._my_expiration
-            assert kwargs.get('expiration') is not None
-            self._my_expiration = kwargs['expiration']
-        elif new_state == ProtocolState.LEADER_WAITING_FOR_PEERS:
-            assert self._my_group is None
-            assert initial_group is not None
-            self._my_group = initial_group
-
-        self._state.value = new_state.value
 
     def _get(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
         """ get a GatingFunctionAveragingStub that sends requests to a given peer """
