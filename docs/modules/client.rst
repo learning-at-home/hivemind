@@ -20,6 +20,8 @@
 
 .. autoclass:: DecentralizedOptimizer
    :members:
+   :member-order: bysource
 
 .. autoclass:: DecentralizedAverager
    :members:
+   :member-order: bysource
