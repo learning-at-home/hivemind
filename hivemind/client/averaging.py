@@ -1,9 +1,4 @@
 """ Utilities for averaging common layers in decentralized training """
-# TODO implement some test to verify that averaged params are the same as latest model params, warn if not
-# TODO check for unused statuses! and hopefully remove them.
-# TODO on shutdown: gracefully send notifications to current group, remove keys from DHT, etc.
-# TODO allow specifying target allreduce frequency in DecentralizedOptimizer
-
 
 from __future__ import annotations
 
@@ -38,10 +33,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.GatingFunctionAveragi
     :param averaged_tensors: a sequence of pytorch tensors that will be averaged in each all-reduce
     :param dht: a DHT node that will be used to find groups
     :param start: if True, starts the background process immediately
-    :param target_group_size: averager will try to form groups of approximately this size
-    :param num_buckets_base: the total number will be num_buckets_base ^ D for some D \in 1, 2, ...
-    :param initial_ndim: the averager will initially consider num_buckets_base ^ initial_ndim buckets ,
+    :param bucket_size: averager will try to form groups of approximately this size
+    :param initial_ndim: the averager will initially consider bucket_size ^ initial_ndim buckets
       but it may change this value based on target_group_size and the number of peers in each bucket
+    :param allreduce_timeout:
     :param max_freeloaders: peer will accept at most this many freeloaders per one averaging run
     :param listen: if True (default), this averager will accept incoming requests from other peers and perform allreduce
             if False, the averager will register as a freeloader and attempt to fetch vectors from other averagers
@@ -51,7 +46,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.GatingFunctionAveragi
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
     :param kwargs: extra parameters forwarded to in grpc.aio.server
 
-    You can perform averaging using DecentralizedOptimizer (see above) or by manually running each step as such:
+    You can perform averaging using DecentralizedOptimizer (see below) or by manually running each step as such:
 
     >>> model = create_my_model()
     >>> averaging = DecentralizedAverager(model.parameters(), dht, start=True)
@@ -67,10 +62,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.GatingFunctionAveragi
     """
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
-                 target_group_size: int, num_buckets_base: int = 4, initial_ndim: int = 2, max_freeloaders: int = 0,
+                 bucket_size: int = 16, initial_ndim: int = 2, allreduce_timeout: float = 15,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
-                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None, allreduce_timeout: float = 5, **kwargs):
-        # TODO check that all params are actually used. Main suspect: max_freeloaders
+                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         super().__init__()
         self.dht, self.target_group_size, self.allreduce_timeout = dht, target_group_size, allreduce_timeout
         self.num_buckets_base, self.initial_ndim, self.max_freeloaders = num_buckets_base, initial_ndim, max_freeloaders
