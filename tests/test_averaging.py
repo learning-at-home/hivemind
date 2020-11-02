@@ -8,7 +8,7 @@ import torch
 
 
 def test_chunks():
-    for i in range(100_000):
+    for i in range(100):
         tensors = []
         for i in range(random.randint(1, 5)):
             ndim = random.randint(0, 4)
