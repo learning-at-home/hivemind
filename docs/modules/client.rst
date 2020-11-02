@@ -17,3 +17,9 @@
 .. autoclass:: RemoteMixtureOfExperts
    :members:
    :member-order: bysource
+
+.. autoclass:: DecentralizedOptimizer
+   :members:
+
+.. autoclass:: DecentralizedAverager
+   :members:

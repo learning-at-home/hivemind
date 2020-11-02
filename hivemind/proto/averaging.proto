@@ -1,0 +1,51 @@
+syntax = "proto3";
+import "runtime.proto";
+
+
+// Runs alongside each trainer to perform gating function averaging every now and then. Read more: client/averaging.py
+service GatingFunctionAveraging {
+  rpc rpc_join_group(MessageToLeader) returns (stream MessageFromLeader);  // ask leader to coordinate all_reduce
+  rpc rpc_part_averaging(AveragingData) returns (AveragingData);  // my local shard => average shard over all peers
+}
+
+message MessageToLeader {
+  string key = 1;            // I would like to average this kind of data (used as a sanity check)
+  int32 total_size = 2;      // Follower's tensors have this many elements in total (used as a sanity check)
+  string endpoint = 3;       // This is how a (potential) follower perceives the leader
+  float expiration = 4;      // Follower would like to **begin** all_reduce by this point in time
+}
+
+enum GroupStatus {
+  // response to join request
+  ACCEPTED = 0;              // "I accept you in my group / as a freeloader."
+  NOT_A_LEADER = 1;          // "I am not a group a leader. Go ask my leader instead."
+  ALREADY_RUNNING = 2;       // "My group has already began merging. Here's the group leader."
+  NOT_LOOKING_FOR_GROUP = 3; // "I'm not available at the moment. Please, get lost."
+  EXPIRATION_TOO_EARLY = 4;  // "I will not accept you. I cannot guarantee that we begin before you expire."
+  EXPIRATION_TOO_LATE = 5;   // "I will not accept you. You should go to a leader with later expiration time."
+
+  // message from leader when finding peers
+  GROUP_HEARTBEAT = 6;       // "We're still in gathering. Please, stay with us."
+  GROUP_ASSEMBLED = 7;       // "We can begin allreduce now. These are your peers."
+  GROUP_DISMISSED = 8;       // "The group is closed. Go find another group."
+
+  // when averaging
+  ALLREDUCE_FINISHED = 9;   // "We finished allreduce successfully, you can use the results."
+  ALLREDUCE_FAILED = 10;     // "Something went wrong during allreduce. Your results may be wrong."
+}
+
+
+message MessageFromLeader {
+  GroupStatus status = 1;
+  bytes group_id = 2;        // a unique identifier of this group, only valid until allreduce is finished/failed
+  string new_leader = 3;     // if peer is already in a group, it will provide you with an endpoint of his group leader
+  float new_expiration = 4;  // if accepted to a group, this value denotes leader's expiration time (earliest in group)
+  repeated string final_group = 5;  // a sequence of peers, each responsible for one shard during averaging
+  Tensor results = 6;        // full tensor after averaging, only used when sending it to freeloaders
+}
+
+message AveragingData {
+  bytes group_id = 1;        // a unique group identifier, same as in MessageFromLeader
+  Tensor tensor = 2;         // either peer's local tensor part (rpc input) or group average of this part (rpc output)
+  string error = 3;          // in case of protocol violation, this will be the error message
+}
