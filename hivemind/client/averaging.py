@@ -176,7 +176,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     def _get(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
         """ get a GatingFunctionAveragingStub that sends requests to a given peer """
-        #TODO
         channel = grpc.aio.insecure_channel(peer, options=self.channel_options)
         return averaging_pb2_grpc.DecentralizedAveragingStub(channel)
 
