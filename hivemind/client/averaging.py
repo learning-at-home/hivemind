@@ -26,7 +26,6 @@ from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 logger = get_logger(__file__)
 
 
-
 class DecentralizedAverager(mp.Process, averaging_pb2_grpc.GatingFunctionAveragingServicer):
     """
     Gating function averaging service. A trainer can run this service in background to periodically average his gating
