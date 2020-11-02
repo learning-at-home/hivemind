@@ -328,7 +328,7 @@ class LookingForGroup(ProtocolState):
     """ i am currently looking for group in a dht """
     my_endpoint: Endpoint
     my_expiration: DHTExpiration
-    one_request_at_a_time: asyncio.Lock = field(default=asyncio.Lock(), init=False)
+    one_request_at_a_time: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
 
 
 @dataclass
@@ -358,7 +358,7 @@ class RunningAllReduce(ProtocolState):
     accumulator: Optional[torch.Tensor] = field(default=None, init=False)  # the sum of incoming vector parts
     average_tensor: Optional[torch.Tensor] = field(default=None, init=False)  # accumulator / group size
     received_from: Set[Endpoint] = field(default_factory=set, init=False)  # peers that have sent me their chunk
-    finished_accumulating: asyncio.Event = field(default=asyncio.Event(), init=False)
+    finished_accumulating: asyncio.Event = field(default_factory=asyncio.Event, init=False)
 
     async def accumulate(self, source: Endpoint, part: torch.Tensor) -> torch.Tensor:
         """ Add your vector to accumulator, wait for all other vectors to be added, return the average """
