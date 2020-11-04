@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import ctypes
 import os
-from typing import Sequence, Iterable, Optional, Tuple, Any, Set, AsyncGenerator
+import random
+from typing import Sequence, Iterable, Optional, Tuple, Any, Set, AsyncGenerator, Union, List
 from dataclasses import dataclass, field
 from concurrent.futures.thread import ThreadPoolExecutor
 import multiprocessing as mp
@@ -15,7 +16,7 @@ import uvloop
 import grpc
 
 import hivemind
-from hivemind.dht import get_dht_time, DHTExpiration
+from hivemind.dht import get_dht_time, DHTExpiration, DHTID
 from hivemind.utils import nested_flatten, get_logger, Endpoint, deserialize_torch_tensor, serialize_torch_tensor, Port
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 
@@ -124,12 +125,14 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     """
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
-                 bucket_size: int = 16, initial_ndim: int = 2, timeout: float = 15,
+                 initial_ndim: int = 2, bucket_size: int = 16, max_size: Union[int, str] = 'squared', timeout: float = 15,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         super().__init__()
         self.dht = dht
-        self.bucket_size, self.initial_ndim, self.timeout = bucket_size, initial_ndim, timeout
+        max_size = bucket_size ** 2 if max_size == 'squared' else max_size
+        assert isinstance(max_size, int) and max_size >= bucket_size, "max_size must be an integer >= bucket_size"
+        self.initial_ndim, self.bucket_size, self.max_size, self.timeout = initial_ndim, bucket_size, max_size, timeout
         self.server_opts = listen, listen_on, receiver_threads, kwargs
         self.channel_options = channel_options
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
@@ -189,6 +192,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     def shutdown(self) -> None:
         """ Shut down the averager process """
+        #TODO send message to pipe:
+        # if self._state is LeaderWaitingForPeers, cancel it and wait for termination
+        # if waiting for leader, cancel the call to leader
+        # if looking for group, remove entries from DHT
         if self.is_alive():
             self.terminate()
         else:
@@ -210,6 +217,104 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def test_run(self, group_leader: Optional[Endpoint] = None):
         raise NotImplementedError()
 
+    async def rpc_group_allreduce(self, request: averaging_pb2.MessageToLeader, context: grpc.ServicerContext):
+        """ A peer wants me to be his leader. I will coordinate his actions with the rest of my group. Maybe. """
+        assert os.getpid() == self.pid, "this method is only available from inside a running averager process"
+        peer: Endpoint = context.peer()
+
+        # stage 1: run basic checks and reject the participant if something isn't in order
+        if isinstance(self._state, Idle):
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
+            return
+        elif isinstance(self._state, RunningAllReduce):
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ALREADY_RUNNING)
+            return
+        elif isinstance(self._state, FollowerWaitingForLeader):
+            yield averaging_pb2.MessageFromLeader(
+                code=averaging_pb2.NOT_A_LEADER, suggested_leader=self._state.leader_endpoint)
+            return
+        elif isinstance(self._state, (LookingForGroup, LeaderWaitingForPeers)) \
+                and self._state.my_expiration > (request.expiration or float('-inf')):
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
+            return
+        elif isinstance(self._state, LeaderWaitingForPeers) and len(self._state.group_endpoints) >= self.max_size:
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_IS_FULL)
+            return
+        elif isinstance(self._state, LeaderWaitingForPeers) and peer in self._state.group_endpoints:
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
+            return
+        elif isinstance(self._state, LookingForGroup) and peer == self._state.my_endpoint:
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
+            return
+
+        # stage 2: peer passed all our checks, accept him to an existing group or form a new group for him
+        if isinstance(self._state, LookingForGroup):
+            # we were looking for group, but a peer asked us to lead them. We become a leader and let him into our group
+            async with self._state.one_request_at_a_time:
+                if not isinstance(self._state, (LookingForGroup, LeaderWaitingForPeers)):
+                    if isinstance(self._state, LookingForGroup):
+                        logger.debug(f"Starting a new group as a leader. Group id: {self._state.group_id}")
+                        self._state = LeaderWaitingForPeers(
+                            leader_endpoint=self._state.my_endpoint, leader_expiration=self._state.my_expiration,
+                            group_id=DHTID.generate().to_bytes(), group_endpoints={self._state.my_endpoint})
+                        # note: we generate group_id as DHTID for convenience only. There is no relation to dht keys.
+
+        group_state = self._state
+        assert isinstance(group_state, LeaderWaitingForPeers), "Internal error: i should be a leader at this point"
+        assert peer not in group_state.group_endpoints
+
+
+        try:
+            logger.debug(f"Adding {peer} to my group, new size = {len(self._state.followers) + 1}")
+            self._state.group_endpoints.add(peer)
+            if len(self._state.group_endpoints) >= self.bucket_size:
+                self._state.finished.set()
+
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED, group_id=self._state.group_id)
+
+            # ... wait for enough peers to assemble
+            time_before_expiration = self._state.leader_expiration - get_dht_time()
+            try:
+                await asyncio.wait_for(self._state.finished.wait(), timeout=time_before_expiration)
+            except asyncio.TimeoutError:
+                pass
+
+            if group_state.cancelled:
+                yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISMISSED)
+                return
+
+            if self._state.ordered_group_endpoints is None:
+                group_state.ordered_group_endpoints = list(group_state.group_endpoints)
+                random.shuffle(group_state.ordered_group_endpoints)
+                group_state.started_allreduce = True
+                logger.debug(f"Starting AllReduce for shards: {group_state.ordered_group_endpoints}")
+
+                self._state = RunningAllReduce(group_state.leader_endpoint, group_state.ordered_group_endpoints)
+                asyncio.create_task(self.run_allreduce_part(self._state))
+
+            logger.debug(f"Sending allreduce data to peer {peer}")
+            assert peer in group_state.ordered_group_endpoints
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.BEGIN_ALLREDUCE,
+                                                  group_endpoints=group_state.ordered_group_endpoints,
+                                                  follower_endpoint=peer)
+
+        finally:
+            if not group_state.started_allreduce and not group_state.cancelled:
+                # we get here if the current peer decided to cancel his request before we finished
+                group_state.group_endpoints.remove(peer)
+                logger.info(f"Peer {peer} left the group prematurely. New size = f{len(self._state.group_endpoints)}")
+
+                if len(self._state.group_endpoints) <= 1:
+                    logger.info(f"Disbanding group (reason = empty). New state: {self._state}")
+                    group_state.cancelled = True
+                    group_state.finished.set()
+                    self._state = LookingForGroup(my_endpoint=self._state.leader_endpoint,
+                                                  my_expiration=self._state.leader_expiration)
+
+
+    ### TODO everything below is a work in progress
+
+
     async def attempt_join_group(self, recipient: Endpoint) -> AllreduceOutcome:
         """
         :param recipient: ask this node to be your group leader. Get acccepted or get directions.
@@ -219,7 +324,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         assert isinstance(self._state, LookingForGroup), f"you are not looking for group now ({self._state})"
         async with self._state.one_request_at_a_time:
             if not isinstance(self._state, LookingForGroup):
-                return AllreduceOutcome(was_accepted_to_group=False, reason="I was accepted to another group first.")
+                return AllreduceOutcome(was_accepted_to_group=False, reason="I got into another group first.")
 
             stream = self._get(recipient).rpc_group_allreduce( #TODO appropriate typing for steam
                 averaging_pb2.MessageToLeader(scheme_hash=b"TODO", leader_endpoint=recipient,
@@ -227,7 +332,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             message = await stream.read()
             if message.code != averaging_pb2.ACCEPTED:
                 raise NotImplementedError("TODO handle errors")
-
 
             assert message.follower_endpoint == self._state.my_endpoint
             self._state = FollowerWaitingForLeader(self._state.my_endpoint, self._state.my_expiration,
@@ -244,38 +348,20 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             # TODO account for timeout / non-response!
 
         assert message.code == averaging_pb2.BEGIN_ALLREDUCE
-        group_endpoints = tuple(message.group_endpoints)
+        group_endpoints = tuple(message.group)
         my_part_index = group_endpoints.index(self._state.my_endpoint)
         self._state = RunningAllReduce(self._state.my_endpoint, set(group_endpoints), part_index=my_part_index)
         raise NotImplementedError("Actually run allreduce")
 
         #TODO finally: self._state = Idle()
 
-    async def rpc_group_allreduce(self, request: averaging_pb2.MessageToLeader, context: grpc.ServicerContext):
-        """ A peer wants me to be his leader. I will coordinate his actions with the rest of my group. Maybe. """
+    async def run_allreduce_part(self, allreduce: RunningAllReduce) -> Sequence[torch.Tensor]:
+        """ Send data around following the butterfly all-reduce protocol, return averaged tensors or error """
         assert os.getpid() == self.pid, "this method is only available from inside a running averager process"
-        if isinstance(self._state, Idle):
-            return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
-        elif isinstance(self._state, RunningAllReduce):
-            return averaging_pb2.MessageFromLeader(code=averaging_pb2.ALREADY_RUNNING)
-        elif isinstance(self._state, FollowerWaitingForLeader):
-            return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER,
-                                                   suggested_leader=self._state.leader_endpoint)
-        elif isinstance(self._state, LookingForGroup):
-            if self._state.my_expiration > (request.expiration or float('-inf')):
-                return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
-            async with self._state.one_request_at_a_time:
-                TODO_make_sure_we_havent_found_something_else
+        logger.debug(f"Running all_reduce task {allreduce}")
+        # TODO save the results somewhere, trigger some event - make sure averager can get the results
+        raise NotImplementedError()
 
-                if self._state in (ProtocolState.LOOKING_FOR_GROUP, ProtocolState.LEADER_WAITING_FOR_PEERS):
-                    if self._state == ProtocolState.LOOKING_FOR_GROUP:
-                        logger.debug(f"Starting a new group as a leader.")
-                        self._state = ProtocolState.LEADER_WAITING_FOR_PEERS
-                        self._my_group = set()
-
-                    peer: Endpoint = context.peer()
-                    logger.debug(f"Adding {peer} to my group, new size = {len(self._my_group)}")
-        #TODO if follower closes channel, make sure we exclude him from group immediately!
 
     async def rpc_part_averaging(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
         """ A peer sent me his local tensor part. I'll use it to compute the average and return that average to him """
@@ -334,10 +420,14 @@ class LookingForGroup(ProtocolState):
 @dataclass
 class LeaderWaitingForPeers(ProtocolState):
     """ i am a leader of a group, waiting for more peers (or timeout) """
-    my_endpoint: Endpoint
-    group_expiration: DHTExpiration
+    leader_endpoint: Endpoint
+    leader_expiration: DHTExpiration
     group_endpoints: Set[Endpoint]
     group_id: bytes
+    finished: asyncio.Event = field(default_factory=asyncio.Event, init=False)
+    ordered_group_endpoints: Optional[List[Endpoint]] = field(default=None, init=False)
+    cancelled: bool = field(default=False, init=False)
+    started_allreduce: bool = field(default=None, init=False)
 
 
 @dataclass
@@ -352,8 +442,7 @@ class FollowerWaitingForLeader(ProtocolState):
 @dataclass
 class RunningAllReduce(ProtocolState):
     my_endpoint: Endpoint
-    group_endpoints: Set[Endpoint]
-    part_index: int
+    group_endpoints: List[Endpoint]
 
     accumulator: Optional[torch.Tensor] = field(default=None, init=False)  # the sum of incoming vector parts
     average_tensor: Optional[torch.Tensor] = field(default=None, init=False)  # accumulator / group size
@@ -406,7 +495,3 @@ def restore_from_chunks(chunks: Sequence[torch.Tensor], shapes: Sequence[torch.S
     result_sizes = tuple(map(torch.Size.numel, shapes))
     flat_original_tensors = torch.split_with_sizes(flat_tensor, result_sizes)
     return tuple(map(torch.Tensor.reshape, flat_original_tensors, shapes))
-
-
-
-

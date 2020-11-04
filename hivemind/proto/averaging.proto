@@ -22,15 +22,10 @@ enum MessageCode {
   NOT_LOOKING_FOR_GROUP = 3; // "I'm not available at the moment. Please, get lost."
   BAD_EXPIRATION_TIME = 4;   // "I will not accept you. I cannot guarantee that we begin before you expire."
   BAD_SCHEME_HASH = 5;       // "I will not accept you. I am not averaging the samy type of tensors as you."
-
-  // message from leader when finding peers
-  GROUP_HEARTBEAT = 6;       // "We're still in gathering. Please, stay with us."
-  BEGIN_ALLREDUCE = 7;       // "We can begin allreduce now. These are your peers."
-  GROUP_DISMISSED = 8;       // "The group is closed. Go find another group."
-
-  // when averaging
-  ALLREDUCE_FINISHED = 9;   // "We finished allreduce successfully, you can use the results."
-  ALLREDUCE_FAILED = 10;     // "Something went wrong during allreduce. Your results may be wrong."
+  DUPLICATE_ENDPOINT = 6;    // "I will not accept you, i already have exactly the same endpoint in my current group"
+  GROUP_IS_FULL = 7;         // "I will not accept you, my group already contains too many peers"
+  BEGIN_ALLREDUCE = 8;       // "We can begin allreduce now. These are your peers."
+  GROUP_DISMISSED = 9;       // "The group is closed. Go find another group."
 }
 
 
@@ -38,8 +33,8 @@ message MessageFromLeader {
   MessageCode code = 1;
   bytes group_id = 2;        // a unique identifier of this group, only valid until allreduce is finished/failed
   string suggested_leader = 3;  // if peer is already in a group, it'll provide us with an endpoint of its leader
-  string follower_endpoint = 4;  // This is how a group leader sees its follower (used for sanity check)
   repeated string group_endpoints = 5;  // a sequence of peers, each responsible for one shard during averaging
+  string follower_endpoint = 4;  // This is how a group leader sees its follower (used for sanity check)
 }
 
 message AveragingData {
