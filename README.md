@@ -26,9 +26,8 @@ If you want to contribute to hivemind, take a look at the issues or join [our ch
 The [Developer's guide](https://learning-at-home.readthedocs.io/en/latest/user/contributing.html) page contains best practices, as well as description of tests and performance benchmarks.
 
 ### References
-The repository that contains the prototype implementation of hivemind is available here: [mryab/learning-at-home](https://github.com/mryab/learning-at-home).
+You can read the paper that inspired hivemind here:
 
-You can also read the paper that inspired hivemind here:
 [Towards Crowdsourced Training of Large Neural Networks using Decentralized Mixture-of-Experts](https://arxiv.org/abs/2002.04013) (Max Ryabinin and Anton Gusev, NeurIPS 2020).
 ```
 @misc{ryabinin2020crowdsourced,
@@ -40,5 +39,7 @@ You can also read the paper that inspired hivemind here:
       primaryClass={cs.DC}
 }
 ```
+The initial implementation of hivemind used to conduct experiments for the paper is available here: [mryab/learning-at-home](https://github.com/mryab/learning-at-home).
+
 In the docs, we list several [related](https://learning-at-home.readthedocs.io/en/latest/user/acknowledgements.html) projects and acknowledgements.
 
