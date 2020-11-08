@@ -10,7 +10,8 @@ service DecentralizedAveraging {
 
 message MessageToLeader {
   bytes scheme_hash = 1;        // I would like to average this kind of data (used for sanity check)
-  string leader_endpoint = 3;  // This is how a (potential) follower perceives the leader (used for sanity check)
+  string my_endpoint = 2;       // sender's endpoint - to be used for allreduce op
+  string leader_endpoint = 3;   // This is how a (potential) follower perceives the leader (used for sanity check)
   float expiration = 4;         // Follower would like to **begin** all_reduce by this point in time
 }
 
@@ -25,7 +26,7 @@ enum MessageCode {
   DUPLICATE_ENDPOINT = 6;    // "I will not accept you, i already have exactly the same endpoint in my current group"
   GROUP_IS_FULL = 7;         // "I will not accept you, my group already contains too many peers"
   BEGIN_ALLREDUCE = 8;       // "We can begin allreduce now. These are your peers."
-  GROUP_DISMISSED = 9;       // "The group is closed. Go find another group."
+  GROUP_DISBANDED = 9;       // "The group is closed. Go find another group."
 }
 
 
@@ -33,8 +34,7 @@ message MessageFromLeader {
   MessageCode code = 1;
   bytes group_id = 2;        // a unique identifier of this group, only valid until allreduce is finished/failed
   string suggested_leader = 3;  // if peer is already in a group, it'll provide us with an endpoint of its leader
-  repeated string group_endpoints = 5;  // a sequence of peers, each responsible for one shard during averaging
-  string follower_endpoint = 4;  // This is how a group leader sees its follower (used for sanity check)
+  repeated string group_endpoints = 4;  // a sequence of peers, each responsible for one shard during averaging
 }
 
 message AveragingData {

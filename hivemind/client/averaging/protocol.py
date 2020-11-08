@@ -2,13 +2,16 @@
 from __future__ import annotations
 import asyncio
 import random
-from typing import List, Set, Optional, Sequence, Tuple, Any
+from typing import Set, Optional, Sequence, Tuple, Any, Union
 from dataclasses import dataclass, field
 
 import torch
 
-from hivemind.utils import Endpoint
+from hivemind.utils import Endpoint, get_logger
 from hivemind.dht import DHTID, DHTExpiration
+from hivemind.proto import averaging_pb2
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -16,6 +19,7 @@ class AveragingOutcome:
     """ A data structure that encodes the outcome of a single attempt at group all-reduce """
     message: Any = None
     was_accepted_to_group: bool = False
+    leader_endpoint: Optional[Endpoint] = None
     was_leader: bool = False
     suggested_leader: Optional[Endpoint] = None
     canceled_looking_for_group: bool = False
@@ -51,6 +55,11 @@ class ProtocolState:
             return new_state
         return transition_method
 
+    def on_follower_request(self, request: averaging_pb2.MessageToLeader
+                            ) -> Tuple[ProtocolState, averaging_pb2.MessageFromLeader]:
+        """ Accept or reject new follower, return new state (possibly the same) and reply header """
+        raise NotImplementedError(f"{self} must implement on_follower_request")
+
 
 @dataclass
 class Idle(ProtocolState):
@@ -60,8 +69,14 @@ class Idle(ProtocolState):
     # the outcome field is created here and transferred to all subsequent states until finished or failed
 
     @ProtocolState.transition
-    def look_for_group(self, my_endpoint: Endpoint, my_expiration: DHTExpiration) -> LookingForGroup:
-        return LookingForGroup(my_endpoint, my_expiration, outcome=self.outcome)
+    def look_for_group(self, my_endpoint: Endpoint, my_expiration: DHTExpiration, max_size: int) -> LookingForGroup:
+        logger.debug(f"{my_endpoint} began looking for group, expiration = {my_expiration}")
+        return LookingForGroup(my_endpoint, my_expiration, max_size=max_size, outcome=self.outcome)
+
+    def on_follower_request(self, request: averaging_pb2.MessageToLeader
+                            ) -> Tuple[ProtocolState, averaging_pb2.MessageFromLeader]:
+        logger.debug(f"State {self} denied follower request (not looking for group)")
+        return self, averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
 
 
 @dataclass
@@ -70,30 +85,45 @@ class LookingForGroup(ProtocolState):
     my_endpoint: Endpoint
     my_expiration: DHTExpiration
     outcome: AveragingOutcome
-    one_request_at_a_time: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
+    max_size: int
 
     @ProtocolState.transition
     def become_follower(self, leader_endpoint: Endpoint, group_id: bytes) -> FollowerWaitingForLeader:
         self.outcome.was_accepted_to_group = True
+        self.outcome.leader_endpoint = leader_endpoint
+        logger.debug(f"Accepted by leader {leader_endpoint}. Group id: {group_id}. Awaiting allreduce.")
         return FollowerWaitingForLeader(my_endpoint=self.my_endpoint, my_expiration=self.my_expiration,
                                         leader_endpoint=leader_endpoint, group_id=group_id, outcome=self.outcome)
 
     @ProtocolState.transition
-    def become_leader(self, group_id: Optional[bytes] = None, max_size: Optional[int] = None) -> LeaderWaitingForFollowers:
-        if group_id is None:
-            # note: we generate group_id as DHTID for convenience. Do not assume that it is a DHTID-like sequence
-            group_id = DHTID.generate().to_bytes()
+    def become_leader(self) -> LeaderWaitingForFollowers:
+        group_id = DHTID.generate().to_bytes()
+        # note: we generate group_id as DHTID for convenience. Do not assume that it has DHTID-like properties
+        logger.debug(f"Starting a new group as a leader. Group id: {group_id}")
         self.outcome.was_leader = True
+        self.outcome.leader_endpoint = self.my_endpoint
         return LeaderWaitingForFollowers(
             leader_endpoint=self.my_endpoint, leader_expiration=self.my_expiration, group_endpoints={self.my_endpoint},
-            group_id=group_id, outcome=self.outcome, max_size=max_size)
+            group_id=group_id, max_size=self.max_size, outcome=self.outcome)
 
     @ProtocolState.transition
     def cancel_looking_for_group(self, message: Any) -> Idle:
+        logger.debug(f"Cancelled looking for group ({message})")
         self.outcome.canceled_looking_for_group = True
         self.outcome.message = message
         self.outcome.finished.set()
         return Idle()
+
+    def on_follower_request(self, request: averaging_pb2.MessageToLeader
+                            ) -> Tuple[ProtocolState, averaging_pb2.MessageFromLeader]:
+        if self.my_expiration > (request.expiration or float('inf')):
+            return self, averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
+        elif self.my_endpoint == request.my_endpoint:
+            return self, averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
+        else:
+            new_state = self.become_leader()
+            new_state.add_follower(request.my_endpoint)
+            return new_state, averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
 
 @dataclass
@@ -109,7 +139,7 @@ class FollowerWaitingForLeader(ProtocolState):
     def begin_allreduce(self, group_endpoints: Tuple[Endpoint, ...]) -> RunningAllReduce:
         assert isinstance(group_endpoints, tuple) and self.my_endpoint in group_endpoints and len(group_endpoints) > 1
         self.outcome.started_allreduce = True
-        return RunningAllReduce(my_endpoint=self.my_endpoint, group_endpoints=group_endpoints, outcome=self.outcome)
+        return RunningAllReduce(self.my_endpoint, group_endpoints, self.group_id, self.outcome)
 
     @ProtocolState.transition
     def cancel_waiting_for_group(self, message: Any) -> Idle:
@@ -117,6 +147,11 @@ class FollowerWaitingForLeader(ProtocolState):
         self.outcome.message = message
         self.outcome.finished.set()
         return Idle()
+
+    def on_follower_request(self, request: averaging_pb2.MessageToLeader
+                            ) -> Tuple[ProtocolState, averaging_pb2.MessageFromLeader]:
+        return self, averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER,
+                                                     suggested_leader=self.leader_endpoint)
 
 
 @dataclass
@@ -126,38 +161,67 @@ class LeaderWaitingForFollowers(ProtocolState):
     leader_expiration: DHTExpiration
     group_endpoints: Set[Endpoint]
     group_id: bytes
+    max_size: int
     outcome: AveragingOutcome
-    max_size: Optional[int]
     group_assembled: asyncio.Event = field(default_factory=asyncio.Event, init=False)
     ordered_group_endpoints: Optional[Tuple[Endpoint, ...]] = field(default=None, init=False)
-
-    def add_follower(self, follower: Endpoint):
-        assert follower not in self.group_endpoints
-        assert self.group_size < (self.max_size or float('inf'))
-        self.group_endpoints.add(follower)
-        if len(self.group_endpoints) >= self.max_size:
-            self.group_assembled.set()
 
     @property
     def group_size(self) -> int:
         return len(self.group_endpoints)
 
+    def add_follower(self, follower: Endpoint):
+        assert follower not in self.group_endpoints, f"duplicate endpoint {follower}"
+        assert self.group_size < self.max_size + 1, f"group is full"
+        assert not self.group_assembled.is_set()
+        self.group_endpoints.add(follower)
+        logger.debug(f"Adding {follower} to my group, new size = {self.group_size}")
+        if self.group_size >= self.max_size:
+            logger.debug(f"Group assembled, size={self.group_size}")
+            self.group_assembled.set()
+
+    def remove_follower(self, follower: Endpoint):
+        logger.info(f"Peer {follower} left the group prematurely. New size = f{self.group_size}")
+        self.group_endpoints.remove(follower)
+
     @ProtocolState.transition
     def begin_allreduce(self) -> RunningAllReduce:
+        assert self.group_assembled.is_set(), "You must set group_assembled before beginning allreduce"
         assert len(self.group_endpoints) > 1 and self.leader_expiration in self.group_endpoints, self.group_endpoints
-        self.group_assembled.set()
         self.outcome.started_allreduce = True
         if self.ordered_group_endpoints is None:
             ordered_group_endpoints = list(self.group_endpoints)
             random.shuffle(ordered_group_endpoints)
             self.ordered_group_endpoints = tuple(ordered_group_endpoints)
-        return RunningAllReduce(self.leader_endpoint, tuple(self.ordered_group_endpoints), outcome=self.outcome)
+        return RunningAllReduce(self.leader_endpoint, tuple(self.ordered_group_endpoints), self.group_id, self.outcome)
+
+    @ProtocolState.transition
+    def disband_group(self, message: Any) -> Idle:
+        logger.info(f"Disbanding group ({message}")
+        self.outcome.group_dismissed_by_leader = True
+        self.outcome.message = message
+        self.outcome.finished.set()
+        self.group_assembled.set()
+        return Idle()
+
+    def on_follower_request(self, request: averaging_pb2.MessageToLeader
+                            ) -> Tuple[ProtocolState, averaging_pb2.MessageFromLeader]:
+        if self.leader_expiration > (request.expiration or float('inf')):
+            return self, averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
+        elif request.my_endpoint in self.group_endpoints:
+            return self, averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
+        elif self.group_assembled.is_set():
+            return self, averaging_pb2.MessageFromLeader(code=averaging_pb2.ALREADY_RUNNING)
+        else:
+            self.add_follower(request.my_endpoint)
+            return self, averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
 
 @dataclass
 class RunningAllReduce(ProtocolState):
     my_endpoint: Endpoint
     group_endpoints: Tuple[Endpoint, ...]
+    group_id: bytes
     outcome: AveragingOutcome
 
     accumulator: Optional[torch.Tensor] = field(default=None, init=False)  # the sum of incoming vector parts
@@ -184,6 +248,18 @@ class RunningAllReduce(ProtocolState):
 
         assert self.average_tensor is not None
         return self.average_tensor
+
+    @ProtocolState.transition
+    def finish_allreduce(self) -> Idle:
+        assert self.finished_accumulating.is_set()
+        return Idle()
+
+    def on_follower_request(self, request: averaging_pb2.MessageToLeader
+                            ) -> Tuple[ProtocolState, averaging_pb2.MessageFromLeader]:
+        return self, averaging_pb2.MessageFromLeader(code=averaging_pb2.ALREADY_RUNNING)
+
+
+AnyProtocolState = Union[Idle, LookingForGroup, LeaderWaitingForFollowers, FollowerWaitingForLeader, RunningAllReduce]
 
 
 def split_into_chunks(tensors: Sequence[torch.Tensor], group_size: int) -> Tuple[torch.Tensor]:
