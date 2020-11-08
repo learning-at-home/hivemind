@@ -253,19 +253,18 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             async with self._state.one_request_at_a_time:
                 if not isinstance(self._state, (LookingForGroup, LeaderWaitingForPeers)):
                     if isinstance(self._state, LookingForGroup):
-                        logger.debug(f"Starting a new group as a leader. Group id: {self._state.group_id}")
                         self._state = LeaderWaitingForPeers(
                             leader_endpoint=self._state.my_endpoint, leader_expiration=self._state.my_expiration,
                             group_id=DHTID.generate().to_bytes(), group_endpoints={self._state.my_endpoint})
                         # note: we generate group_id as DHTID for convenience only. There is no relation to dht keys.
+                        logger.debug(f"Starting a new group as a leader. Group id: {self._state.group_id}")
 
         group_state = self._state
         assert isinstance(group_state, LeaderWaitingForPeers), "Internal error: i should be a leader at this point"
         assert peer not in group_state.group_endpoints
 
-
         try:
-            logger.debug(f"Adding {peer} to my group, new size = {len(self._state.followers) + 1}")
+            logger.debug(f"Adding {peer} to my group, new size = {len(self._state.group_endpoints)}")
             self._state.group_endpoints.add(peer)
             if len(self._state.group_endpoints) >= self.bucket_size:
                 self._state.finished.set()
@@ -315,7 +314,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     ### TODO everything below is a work in progress
 
 
-    async def attempt_join_group(self, recipient: Endpoint) -> AllreduceOutcome:
+    async def attempt_to_join_group(self, recipient: Endpoint) -> AllreduceOutcome:
         """
         :param recipient: ask this node to be your group leader. Get acccepted or get directions.
         :returns: a tuple of (outcome,
