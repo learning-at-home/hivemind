@@ -3,7 +3,8 @@ import random
 
 import pytest
 import hivemind
-from hivemind.client.averaging import RunningAllReduce, split_into_chunks, restore_from_chunks
+from hivemind.client.averaging.protocol import RunningAllReduce, split_into_chunks, restore_from_chunks, \
+    AveragingOutcome
 import torch
 
 
@@ -31,7 +32,8 @@ def test_chunks():
 
 @pytest.mark.asyncio
 async def test_allreduce_state():
-    allreduce_state = RunningAllReduce(my_endpoint='alice', group_endpoints={'alice', 'bob', 'carol'}, part_index=3)
+    allreduce_state = RunningAllReduce(my_endpoint='alice', group_endpoints=('alice', 'bob', 'carol'),
+                                       outcome=AveragingOutcome())
 
     x, y, z = torch.randn(3, 128)
 
@@ -51,13 +53,14 @@ async def test_allreduce_state():
     for tensor in results:
         assert torch.allclose(tensor, ref)
 
-    allreduce_state = RunningAllReduce(my_endpoint='alice', group_endpoints={'alice'}, part_index=1337)
+    allreduce_state = RunningAllReduce(my_endpoint='alice', group_endpoints=('alice',), outcome=AveragingOutcome())
     assert torch.allclose(x, await allreduce_state.accumulate('alice', x))
 
     with pytest.raises(AssertionError):
-        allreduce_state = RunningAllReduce(my_endpoint='alice', group_endpoints={'bob', 'carol'}, part_index=1337)
+        allreduce_state = RunningAllReduce(my_endpoint='alice', group_endpoints=('bob', 'carol'),
+                                           outcome=AveragingOutcome())
         assert torch.allclose(x, await allreduce_state.accumulate('alice', x))
 
     with pytest.raises(AssertionError):
-        allreduce_state = RunningAllReduce(my_endpoint='alice', group_endpoints=set(), part_index=1337)
+        allreduce_state = RunningAllReduce(my_endpoint='alice', group_endpoints=tuple(), outcome=AveragingOutcome())
         assert torch.allclose(x, await allreduce_state.accumulate('alice', x))
