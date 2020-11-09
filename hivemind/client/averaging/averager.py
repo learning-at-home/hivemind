@@ -89,21 +89,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if start:
             self.run_in_background(await_ready=True)
 
-    @property
-    def state(self) -> AnyProtocolState:
-        assert os.getpid() == self.pid, "Protocol state can only be accessed from inside a running averager process"
-        self._state = self._state if self._state is not None else Idle()
-        return self._state
-
-    @state.setter
-    def state(self, state: AnyProtocolState):
-        self._state = state
-
-    @cached_property
-    def lock_concurrent_requests(self):
-        assert os.getpid() == self.pid, "This lock is only available from inside the averager process"
-        return asyncio.Lock()
-
     def run(self):
         """ Serve DecentralizedAverager forever. This function will not return until the averager is shut down """
         if asyncio.get_event_loop().is_running():
@@ -159,6 +144,21 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def port(self) -> Optional[Port]:
         return self._port.value if self._port.value != 0 else None
 
+    @property
+    def state(self) -> AnyProtocolState:
+        assert os.getpid() == self.pid, "Protocol state can only be accessed from inside a running averager process"
+        self._state = self._state if self._state is not None else Idle()
+        return self._state
+
+    @state.setter
+    def state(self, state: AnyProtocolState):
+        self._state = state
+
+    @cached_property
+    def lock_concurrent_requests(self):
+        assert os.getpid() == self.pid, "This lock is only available from inside the averager process"
+        return asyncio.Lock()
+
     def _get(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
         """ get a GatingFunctionAveragingStub that sends requests to a given peer """
         channel = grpc.aio.insecure_channel(peer, options=self.channel_options)
@@ -169,13 +169,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         raise NotImplementedError()
 
     def group_allreduce(self, public_endpoint: Optional[Endpoint] = None, expiration: Optional[DHTExpiration] = None,
-                        connect_to: Optional[Endpoint] = None, return_future: bool = False,
+                        leader_endpoint: Optional[Endpoint] = None, return_future: bool = False,
                         ) -> Union[AveragingOutcome, Awaitable[AveragingOutcome]]:
         """
         Set up the averager to look for a group and run all-reduce once, optionally await and return outcome
         :param public_endpoint: public endpoint that other peers can use to access this averager TODO remove in favor of dht.get_my_endpoint!
         :param expiration: optionally specify time by which the node should finish looking for group
-        :param connect_to: if specified, try to connect directly to the specified leader node
+        :param leader_endpoint: if specified, try to connect directly to the specified leader node
             otherwise, look for a suitable leader in DHT
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         :returns: if wait is True, returns all-reduce outcome
@@ -186,11 +186,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_group_allreduce', [], dict(public_endpoint=public_endpoint, expiration=expiration,
-                                                     connect_to=connect_to, future=_future)))
+                                                     leader_endpoint=leader_endpoint, future=_future)))
         return future if return_future else future.result()
 
     async def _group_allreduce(self, *, public_endpoint: Endpoint, expiration: DHTExpiration,
-                               connect_to: Optional[Endpoint], future: MPFuture):
+                               leader_endpoint: Optional[Endpoint], future: MPFuture):
         if not isinstance(self.state, Idle):
             outcome = AveragingOutcome(was_accepted_to_group=False, message=f"Averager is busy, state: {self._state}")
             await self._set_allreduce_outcome(outcome)
@@ -198,16 +198,17 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         assert isinstance(self.state, Idle)
         self.state = self.state.look_for_group(public_endpoint, expiration)
-        if connect_to:
-            outcome = await self.try_join_group(recipient=connect_to)
+        if leader_endpoint:
+            outcome = await self.request_join_group(recipient=leader_endpoint)
             await self._set_allreduce_outcome(outcome)
             future.set_result(outcome)
         else:
             logger.debug("waiting for peers to join my group")
-            await self._allreduce_finished()
+            outcome = await self._allreduce_finished()
+            future.set_result(outcome)
 
     async def _allreduce_finished(self) -> AveragingOutcome:
-        """ waits for some background task to finish allreduce """
+        """ a coroutine that waits for some background task to finish allreduce """
         if self._allreduce_finished_cond is None:
             self._allreduce_finished_cond = asyncio.Condition()
         async with self._allreduce_finished_cond:
@@ -224,9 +225,52 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         async with self._allreduce_finished_cond:
             self._allreduce_finished_cond.notify_all()
 
+    async def request_join_group(self, recipient: Endpoint) -> AveragingOutcome:
+        """
+        :param recipient: ask this node to be your group leader. Get accepted or get directions.
+        :returns: outcome - whether you got accepted, whether allreduce succeeded, etc.
+        """
+        assert os.getpid() == self.pid, "this method is only available from inside a running averager process"
+        assert isinstance(self.state, LookingForGroup), f"you are not looking for group now ({self.state})"
+        logger.debug(f"Attempting to join the group of {recipient} (state={self.state})")
+
+        async with self.lock_concurrent_requests:
+            if not isinstance(self.state, LookingForGroup):
+                return AveragingOutcome(was_accepted_to_group=False, message=f"Switched state to {self.state} before.")
+
+            stream = self._get(recipient).rpc_group_allreduce( #TODO appropriate typing for steam
+                averaging_pb2.MessageToLeader(scheme_hash=b"TODO", leader_endpoint=recipient,
+                                              expiration=self._state.my_expiration))
+            message = await stream.read()
+            if message.code != averaging_pb2.ACCEPTED:
+                logger.error(message)
+                raise NotImplementedError("TODO handle errors")
+
+            assert message.follower_endpoint == self._state.my_endpoint
+            self._state = FollowerWaitingForLeader(self._state.my_endpoint, self._state.my_expiration,
+                                                   recipient, message.group_id)
+
+        assert isinstance(self._state, FollowerWaitingForLeader)
+        while message.code != averaging_pb2.BEGIN_ALLREDUCE:
+            message = await stream.read()
+            if message.code == averaging_pb2.GROUP_DISBANDED:
+                return AveragingOutcome(was_accepted_to_group=True, group_dismissed_by_leader=True)
+                # TODO should we close stream explicitly?
+            # TODO account for timeout / non-response!
+
+        assert message.code == averaging_pb2.BEGIN_ALLREDUCE
+        group_endpoints = tuple(message.group)
+        my_part_index = group_endpoints.index(self._state.my_endpoint)
+        self._state = RunningAllReduce(self._state.my_endpoint, set(group_endpoints), part_index=my_part_index)
+        raise NotImplementedError("Actually run allreduce")
+
+        #TODO finally: self._state = Idle()
+
+
     async def rpc_group_allreduce(self, request: averaging_pb2.MessageToLeader, context: grpc.ServicerContext):
         """ A peer wants me to be his leader. I will coordinate his actions with the rest of my group. Maybe. """
         assert os.getpid() == self.pid, "this method is only available from inside a running averager process"
+        logger.debug(f"Incoming join request from {request.my_endpoint} (state={self.state})")
 
         # stage 1: run basic checks and accept or reject the participant
         async with self.lock_concurrent_requests:
@@ -273,47 +317,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 group_state.remove_follower(request.my_endpoint)
                 if group_state.group_size <= 1:
                     self.state = group_state.disband_group()
-
-    ### TODO everything below is a work in progress
-    async def try_join_group(self, recipient: Endpoint) -> AveragingOutcome:
-        """
-        :param recipient: ask this node to be your group leader. Get acccepted or get directions.
-        :returns: outcome - whether you got accepted, whether allreduce succeeded, etc.
-        """
-        assert os.getpid() == self.pid, "this method is only available from inside a running averager process"
-        assert isinstance(self._state, LookingForGroup), f"you are not looking for group now ({self._state})"
-        logger.debug(f"Attempting to join the group of {recipient} (state={self._state})")
-        async with self.lock_concurrent_requests:
-            if not isinstance(self._state, LookingForGroup):
-                return AveragingOutcome(was_accepted_to_group=False, reason="I got into another group first.")
-
-            stream = self._get(recipient).rpc_group_allreduce( #TODO appropriate typing for steam
-                averaging_pb2.MessageToLeader(scheme_hash=b"TODO", leader_endpoint=recipient,
-                                              expiration=self._state.my_expiration))
-            message = await stream.read()
-            if message.code != averaging_pb2.ACCEPTED:
-                logger.error(message)
-                raise NotImplementedError("TODO handle errors")
-
-            assert message.follower_endpoint == self._state.my_endpoint
-            self._state = FollowerWaitingForLeader(self._state.my_endpoint, self._state.my_expiration,
-                                                   recipient, message.group_id)
-
-        assert isinstance(self._state, FollowerWaitingForLeader)
-        while message.code != averaging_pb2.BEGIN_ALLREDUCE:
-            message = await stream.read()
-            if message.code == averaging_pb2.GROUP_DISBANDED:
-                return AllReduceOutcome(was_accepted_to_group=True, group_dismissed_by_leader=True)
-                # TODO should we close stream explicitly?
-            # TODO account for timeout / non-response!
-
-        assert message.code == averaging_pb2.BEGIN_ALLREDUCE
-        group_endpoints = tuple(message.group)
-        my_part_index = group_endpoints.index(self._state.my_endpoint)
-        self._state = RunningAllReduce(self._state.my_endpoint, set(group_endpoints), part_index=my_part_index)
-        raise NotImplementedError("Actually run allreduce")
-
-        #TODO finally: self._state = Idle()
 
     async def run_allreduce_part(self, allreduce: RunningAllReduce) -> Sequence[torch.Tensor]:
         """ Send data around following the butterfly all-reduce protocol, return averaged tensors or error """
