@@ -19,7 +19,7 @@ jobs:
           command: pip install -e .
           name: setup
       - run:
-          command: pytest -n auto ./tests
+          command: pytest ./tests
           name: tests
       - run:
           command: python tests/benchmark_throughput.py --preset minimalistic
