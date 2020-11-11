@@ -33,7 +33,7 @@ You can run all tests with `pytest ./tests` or choose a specific set, e.g. `pyte
 
 
 To build docs locally,
-1. `pip install .[docs]`
+1. `pip install -e .[docs]`
 2. make sure you ran setup.py (see above)
 3. `cd ./docs && make html`
 
