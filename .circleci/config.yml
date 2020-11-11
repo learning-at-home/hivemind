@@ -13,7 +13,7 @@ jobs:
       - python/load-cache
       - run: pip uninstall -y pytest codecov
       # note: uninstall is required because otherwise circleci cache will lose track of pytest/codecov executables
-      - run: pip install pytest pytest-forked pytest-asyncio codecov tqdm scikit-learn
+      - run: pip install -r requirements-dev.txt
       - python/install-deps
       - python/save-cache
       - run:
