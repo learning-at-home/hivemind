@@ -42,20 +42,30 @@ class ProtoCompileDevelop(develop):
 here = os.path.abspath(os.path.dirname(__file__))
 
 with open('requirements.txt') as requirements_file:
-    install_requires = [str(requirement) for requirement in parse_requirements(requirements_file)]
+    install_requires = list(map(str, parse_requirements(requirements_file)))
 
 # loading version from setup.py
 with codecs.open(os.path.join(here, 'hivemind/__init__.py'), encoding='utf-8') as init_file:
     version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.M)
     version_string = version_match.group(1)
 
+extras = {}
+
+with open('requirements-dev.txt') as dev_requirements_file:
+    extras['dev'] = list(map(str, parse_requirements(dev_requirements_file)))
+
+with open('requirements-docs.txt') as docs_requirements_file:
+    extras['docs'] = list(map(str, parse_requirements(docs_requirements_file)))
+
+extras['all'] = extras['dev'] + extras['docs']
+
 setup(
     name='hivemind',
     version=version_string,
     cmdclass={'install': ProtoCompileInstall, 'develop': ProtoCompileDevelop},
-    description='Decentralized deep learning framework in pytorch.',
-    long_description='Decentralized deep learning framework in pytorch. Built to train giant models on '
-                     'thousands on volunteers across the world. ',
+    description='Decentralized deep learning in PyTorch',
+    long_description='Decentralized deep learning in PyTorch. Built to train giant models on '
+                     'thousands of volunteers across the world.',
     author='Learning@home & contributors',
     author_email='mryabinin@hse.ru',
     url="https://github.com/learning-at-home/hivemind",
@@ -64,6 +74,7 @@ setup(
     include_package_data=True,
     license='MIT',
     install_requires=install_requires,
+    extras_require=extras,
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

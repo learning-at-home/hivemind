@@ -25,15 +25,15 @@ First, install hivemind in the development mode, preferably with python 3.8 on l
 ```
 git clone https://github.com/learning-at-home/hivemind
 cd hivemind
-python setup.py develop
+pip install -e .
 ``` 
 
-To run tests, you will also need to `pip install pytest pytest-forked pytest-asyncio codecov tqdm scikit-learn`.
+To run tests, you will also need to `pip install -e .[dev]`.
 You can run all tests with `pytest ./tests` or choose a specific set, e.g. `pytest ./tests/test_dht.py`.
 
 
 To build docs locally,
-1. `pip install sphinx sphinx_rtd_theme recommonmark`
+1. `pip install -e .[docs]`
 2. make sure you ran setup.py (see above)
 3. `cd ./docs && make html`
 

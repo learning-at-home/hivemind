@@ -1,0 +1,6 @@
+pytest
+pytest-forked
+pytest-asyncio
+codecov
+tqdm
+scikit-learn
