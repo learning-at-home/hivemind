@@ -11,6 +11,16 @@ from hivemind.utils import Endpoint, get_logger
 from hivemind.dht import DHTID, DHTExpiration
 from hivemind.proto import averaging_pb2
 
+# PR notes:
+# * implement dispatch_chunks_to_peers
+# * port old protocol tests here
+# * port averager.py with only the bare minimum parameters
+# * test averager.py with fixed groups (but support multiple concurrent groups)
+# * and only then: errors, cancellation, protocol violations, content hash
+#
+# thoughts on group ids: we can estimate the total number of peers using d previous allreduce rounds
+# ... and adjust the grid dimension to match that number (used only for assigning new indices)
+
 logger = get_logger(__name__)
 
 # flavour types
