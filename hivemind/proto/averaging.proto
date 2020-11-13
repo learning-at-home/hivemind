@@ -1,0 +1,45 @@
+syntax = "proto3";
+import "runtime.proto";
+
+
+// Runs alongside each trainer to perform gating function averaging every now and then. Read more: client/averaging.py
+service DecentralizedAveraging {
+  rpc rpc_group_allreduce(MessageToLeader) returns (stream MessageFromLeader);  // assemble a group and run all-reduce
+  rpc rpc_aggregate_part(AveragingData) returns (AveragingData);  // send my local shard => get aggregated shard
+}
+
+message MessageToLeader {
+  bytes scheme_hash = 1;        // I would like to average this kind of data (used for sanity check)
+  string my_endpoint = 2;       // sender's endpoint - to be used for allreduce op
+  string leader_endpoint = 3;   // This is how a (potential) follower perceives the leader (used for sanity check)
+  float expiration = 4;         // Follower would like to **begin** all_reduce by this point in time
+}
+
+enum MessageCode {
+  // response to join request
+  ACCEPTED = 0;              // "I accept you in my group, you will not commit to responding to me."
+  NOT_A_LEADER = 1;          // "I am not a group a leader. Go ask my leader instead."
+  ALREADY_RUNNING = 2;       // "My group has already began merging. Here's the group leader."
+  NOT_LOOKING_FOR_GROUP = 3; // "I'm not available at the moment. Please, get lost."
+  BAD_EXPIRATION_TIME = 4;   // "I will not accept you. I cannot guarantee that we begin before you expire."
+  BAD_SCHEME_HASH = 5;       // "I will not accept you. I am not averaging the samy type of tensors as you."
+  DUPLICATE_ENDPOINT = 6;    // "I will not accept you, i already have exactly the same endpoint in my current group"
+  GROUP_IS_FULL = 7;         // "I will not accept you, my group already contains too many peers"
+  BEGIN_ALLREDUCE = 8;       // "We can begin allreduce now. These are your peers."
+  GROUP_DISBANDED = 9;       // "The group is closed. Go find another group."
+}
+
+
+message MessageFromLeader {
+  MessageCode code = 1;
+  bytes group_id = 2;        // a unique identifier of this group, only valid until allreduce is finished/failed
+  string suggested_leader = 3;  // if peer is already in a group, it'll provide us with an endpoint of its leader
+  repeated string group_endpoints = 4;  // a sequence of peers, each responsible for one shard during averaging
+}
+
+message AveragingData {
+  bytes group_id = 1;        // a unique group identifier, same as in MessageFromLeader
+  bytes scheme_hash = 2;     // a hash of your key, tensor shape, and part index (used for sanity check)
+  Tensor tensor = 3;         // either peer's local tensor part (rpc input) or group average of this part (rpc output)
+  string error = 4;          // in case of protocol violation, this will be the error message
+}
