@@ -11,7 +11,7 @@ service DecentralizedAveraging {
 message MessageToLeader {
   string my_endpoint = 1;       // sender's endpoint - to be used for allreduce op
   string leader_endpoint = 2;   // This is how a (potential) follower perceives the leader (used for sanity check)
-  float expiration = 3;         // Follower would like to **begin** all_reduce by this point in time
+  double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time
 }
 
 enum MessageCode {
