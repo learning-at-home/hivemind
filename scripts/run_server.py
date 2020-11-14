@@ -1,14 +1,11 @@
 from functools import partial
 
 import configargparse
-import resource
-
 import torch
 
+from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.server import Server
 from hivemind.utils.threading import increase_file_limit
-from hivemind.proto.runtime_pb2 import CompressionType
-
 
 
 def main():
@@ -16,7 +13,7 @@ def main():
     parser = configargparse.ArgParser(default_config_files=["config.yml"])
     parser.add('-c', '--config', required=False, is_config_file=True, help='config file path')
     parser.add_argument('--listen_on', type=str, default='0.0.0.0:*', required=False,
-                        help="'localhost' for local connections only, '0.0.0.0' for ipv4 '::' for ipv6")
+                        help="'localhost' for local connections only, '0.0.0.0' for ipv4 '[::]' for ipv6")
     parser.add_argument('--num_experts', type=int, default=None, required=False, help="The number of experts to serve")
     parser.add_argument('--expert_pattern', type=str, default=None, required=False,
                         help='all expert uids will follow this pattern, e.g. "myexpert.[0:256].[0:1024]" will sample random expert uids'
@@ -60,13 +57,12 @@ def main():
         increase_file_limit()
 
     compression_name = args.pop("compression")
-    compression = CompressionType.NONE
     if compression_name == "MEANSTD":
         compression = CompressionType.MEANSTD_LAST_AXIS_FLOAT16
     elif compression_name == "FLOAT16":
         compression = CompressionType.FLOAT16
     else:
-        compression = getattr(CompressionType, compression_name)
+        compression = getattr(CompressionType, 'NONE')
 
     try:
         server = Server.create(**args, optim_cls=optim_cls, start=True, verbose=True, compression=compression)

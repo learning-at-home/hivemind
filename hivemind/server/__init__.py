@@ -106,8 +106,8 @@ class Server(threading.Thread):
         dht = None
         if not no_dht:
             logger.info(f"Bootstrapping DHT node, initial peers = {initial_peers}")
-            dht = hivemind.DHT(initial_peers=initial_peers, start=True,
-                               listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}")
+            dht_endpoint = replace_port(listen_on, dht_port or hivemind.find_open_port())
+            dht = hivemind.DHT(initial_peers=initial_peers, start=True, listen_on=dht_endpoint)
             if verbose:
                 logger.info(f"Running dht node on port {dht.port}")
 
