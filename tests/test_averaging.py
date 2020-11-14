@@ -1,6 +1,5 @@
 import asyncio
 import random
-from typing import Dict
 from itertools import product
 
 import torch
