@@ -31,7 +31,7 @@ def test_chunks():
 
 
 @pytest.mark.asyncio
-def test_allreduce_protocol():
+async def test_allreduce_protocol():
     peers = "alice", "bob", "carol"
     expiration_offsets = 4, 0, 1
 
