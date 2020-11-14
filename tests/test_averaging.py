@@ -51,7 +51,7 @@ async def test_allreduce_protocol():
     carol.join_group(bob, response.group_id)
 
     bob.leader_begin_allreduce()
-    ordered_group_endpoints = await bob.group_assembled_future
+    ordered_group_endpoints = await bob.group_assembled
     assert len(ordered_group_endpoints) == len(peers)
 
     carol.follower_begin_allreduce(ordered_group_endpoints)
@@ -67,7 +67,7 @@ async def test_allreduce_protocol():
         peer_allreduce.accumulate(source_peer, chunks_by_peer[source_peer][peer_allreduce.info.endpoint])
         for peer_allreduce, source_peer in all_pairs))
 
-    averaged_parts = await asyncio.gather(*(protocol.averaged_part_future for protocol in allreduce_protocols))
+    averaged_parts = await asyncio.gather(*(protocol.averaged_part for protocol in allreduce_protocols))
     tensor_shapes = [tensor.shape for tensor in alice.local_tensors]
     averaged_tensors = restore_from_parts(averaged_parts, tensor_shapes)
 

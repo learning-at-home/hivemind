@@ -26,9 +26,10 @@ enum MessageCode {
   GROUP_IS_FULL = 7;         // "I will not accept you, my group already contains too many peers"
   BEGIN_ALLREDUCE = 8;       // "We can begin allreduce now. These are your peers."
   GROUP_DISBANDED = 9;       // "The group is closed. Go find another group."
-  PROTOCOL_VIOLATION = 10;   // "One of peers did something in violation of the allreduce protocol"
-  INTERNAL_ERROR = 11;       // "We encountered an unexpected error on our side"
-  CANCELLED = 12;            // "A peer cancelled allreduce while averaging"
+  UNKNOWN_GROUP_ID = 10;     // "Your request uses a group id that doesn't match with any group i know"
+  PROTOCOL_VIOLATION = 11;   // "One of peers did something in violation of the allreduce protocol"
+  INTERNAL_ERROR = 12;       // "We encountered an unexpected error on our side"
+  CANCELLED = 13;            // "A peer cancelled allreduce while averaging"
 }
 
 message MessageFromLeader {
