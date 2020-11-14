@@ -154,6 +154,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def _group_allreduce(self, *, my_endpoint: Endpoint, expiration: DHTExpiration,
                                leader_endpoint: Optional[Endpoint], future: MPFuture):
         allreduce = GroupAllReduce(my_endpoint, expiration, self.averaged_tensors)
+        self._current_group = allreduce
 
         try:
             if leader_endpoint is None:
@@ -171,6 +172,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     future.set_exception(ValueError(f"Rejected by {leader_endpoint}"))
         except Exception as e:
             future.set_exception(e)
+        finally:
+            self._current_group = None
 
     async def rpc_group_allreduce(self, request: averaging_pb2.PeerInfo, context: grpc.ServicerContext):
         """ A peer wants me to be his leader. I will coordinate his actions with the rest of my group. Maybe. """
