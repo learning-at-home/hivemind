@@ -4,13 +4,13 @@ import "runtime.proto";
 
 // Runs alongside each trainer to perform gating function averaging every now and then. Read more: client/averaging.py
 service DecentralizedAveraging {
-  rpc rpc_group_allreduce(MessageToLeader) returns (stream MessageFromLeader);  // assemble a group and run all-reduce
+  rpc rpc_group_allreduce(PeerInfo) returns (stream MessageFromLeader);  // assemble a group and run all-reduce
   rpc rpc_aggregate_part(AveragingData) returns (AveragingData);  // send my local shard => get aggregated shard
 }
 
-message MessageToLeader {
-  string my_endpoint = 1;       // sender's endpoint - to be used for allreduce op
-  string leader_endpoint = 2;   // This is how a (potential) follower perceives the leader (used for sanity check)
+message PeerInfo {
+  string endpoint = 1;          // A follower accepts incoming allreduce requests at this address
+  bytes schema_hash = 2;        // A hash that describes follower's tensors (shapes, num tensors, etc)
   double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time
 }
 
@@ -21,13 +21,15 @@ enum MessageCode {
   ALREADY_RUNNING = 2;       // "My group has already began merging. Here's the group leader."
   NOT_LOOKING_FOR_GROUP = 3; // "I'm not available at the moment. Please, get lost."
   BAD_EXPIRATION_TIME = 4;   // "I will not accept you. I cannot guarantee that we begin before you expire."
-  BAD_SCHEME_HASH = 5;       // "I will not accept you. I am not averaging the samy type of tensors as you."
+  BAD_SCHEMA_HASH = 5;       // "I will not accept you. I am not averaging the samy type of tensors as you."
   DUPLICATE_ENDPOINT = 6;    // "I will not accept you, i already have exactly the same endpoint in my current group"
   GROUP_IS_FULL = 7;         // "I will not accept you, my group already contains too many peers"
   BEGIN_ALLREDUCE = 8;       // "We can begin allreduce now. These are your peers."
   GROUP_DISBANDED = 9;       // "The group is closed. Go find another group."
+  PROTOCOL_VIOLATION = 10;   // "One of peers did something in violation of the allreduce protocol"
+  INTERNAL_ERROR = 11;       // "We encountered an unexpected error on our side"
+  CANCELLED = 12;            // "A peer cancelled allreduce while averaging"
 }
-
 
 message MessageFromLeader {
   MessageCode code = 1;
@@ -37,7 +39,8 @@ message MessageFromLeader {
 }
 
 message AveragingData {
-  bytes group_id = 1;        // a unique group identifier, same as in MessageFromLeader
-  Tensor tensor = 2;         // either peer's local tensor part (rpc input) or group average of this part (rpc output)
-  string error = 3;          // in case of a protocol violation, this will be the error message
+  MessageCode code = 1;     // in case of a protocol violation, this will be the error message
+  bytes group_id = 2;        // a unique group identifier, same as in MessageFromLeader
+  string endpoint = 3;      // sender's rpc endpoint, used for coordination
+  Tensor tensor_part = 4;    // either peer's local tensor part (rpc input) or group average of this part (rpc output)
 }
