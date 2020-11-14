@@ -9,10 +9,9 @@ service DecentralizedAveraging {
 }
 
 message MessageToLeader {
-  bytes scheme_hash = 1;        // I would like to average this kind of data (used for sanity check)
-  string my_endpoint = 2;       // sender's endpoint - to be used for allreduce op
-  string leader_endpoint = 3;   // This is how a (potential) follower perceives the leader (used for sanity check)
-  float expiration = 4;         // Follower would like to **begin** all_reduce by this point in time
+  string my_endpoint = 1;       // sender's endpoint - to be used for allreduce op
+  string leader_endpoint = 2;   // This is how a (potential) follower perceives the leader (used for sanity check)
+  float expiration = 3;         // Follower would like to **begin** all_reduce by this point in time
 }
 
 enum MessageCode {
@@ -34,12 +33,11 @@ message MessageFromLeader {
   MessageCode code = 1;
   bytes group_id = 2;        // a unique identifier of this group, only valid until allreduce is finished/failed
   string suggested_leader = 3;  // if peer is already in a group, it'll provide us with an endpoint of its leader
-  repeated string group_endpoints = 4;  // a sequence of peers, each responsible for one shard during averaging
+  repeated string ordered_group_endpoints = 4;  // a sequence of peers, each responsible for one shard during averaging
 }
 
 message AveragingData {
   bytes group_id = 1;        // a unique group identifier, same as in MessageFromLeader
-  bytes scheme_hash = 2;     // a hash of your key, tensor shape, and part index (used for sanity check)
-  Tensor tensor = 3;         // either peer's local tensor part (rpc input) or group average of this part (rpc output)
-  string error = 4;          // in case of protocol violation, this will be the error message
+  Tensor tensor = 2;         // either peer's local tensor part (rpc input) or group average of this part (rpc output)
+  string error = 3;          // in case of a protocol violation, this will be the error message
 }
