@@ -28,6 +28,7 @@ class ProtocolState(Enum):
     FINISHED_NORMALLY = auto()   # we ran allreduce and finished without errors
     GROUP_DISBANDED = auto()     # leader disbanded the group before we began allreduce
     ERROR = auto()               # someone (maybe i) messed up and we can't recover
+    CANCELLED = auto()           # i have unilaterally cancelled GroupAllreduce
 
 
 class GroupAllReduce:
@@ -153,34 +154,6 @@ class GroupAllReduce:
         channel = grpc.aio.insecure_channel(peer)
         return averaging_pb2_grpc.DecentralizedAveragingStub(channel)
 
-    async def request_join_group(self, leader: Endpoint) -> bool:
-        """ request a given peer to be your leader for allreduce, wait until it either begins allreduce or disbands """
-        assert self.state == ProtocolState.LOOKING_FOR_GROUP
-        try:
-            async with self.lock_concurrent_requests:
-                stream = self._get(leader).rpc_group_allreduce(self.info)
-                message = await stream.read()
-                logger.debug(f"{self} - requested {leader} to be my leader, received "
-                             f"{averaging_pb2.MessageCode.Name(message.code)}")
-                if message.code != averaging_pb2.ACCEPTED:
-                    return False
-
-                self.join_group(leader, message.group_id)
-                message = await stream.read()
-                if message.code == averaging_pb2.BEGIN_ALLREDUCE:
-                    logger.debug(f"{self} - leader triggered allreduce")
-                    assert all(isinstance(p, Endpoint) for p in message.ordered_group_endpoints)
-                    self.follower_begin_allreduce(message.ordered_group_endpoints)
-                    return True
-                else:
-                    logger.debug(f"{self} - leader sent {averaging_pb2.MessageCode.Name(message.code)}, leaving group")
-                    self.state = ProtocolState.GROUP_DISBANDED
-                    return False
-        except Exception as e:
-            self.set_exception(e)
-            self.state = ProtocolState.ERROR
-            return False
-
     async def handle_join_request(self, request: averaging_pb2.PeerInfo
                                   ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """ accept or reject a join request; if accepted, run him through allreduce steps """
@@ -241,6 +214,40 @@ class GroupAllReduce:
                 if self.group_size <= 1:
                     self.set_exception(ValueError("All peers have left"))
 
+    async def request_join_group(self, leader: Endpoint
+                                 ) -> Optional[grpc.aio.UnaryStreamCall[averaging_pb2.MessageFromLeader]]:
+        """ request a given peer to be your leader for allreduce. if accepted, return a grpc stream """
+        assert self.state == ProtocolState.LOOKING_FOR_GROUP
+        try:
+            async with self.lock_concurrent_requests:
+                stream = self._get(leader).rpc_group_allreduce(self.info)
+                message = await stream.read()
+                logger.debug(f"{self} - requested {leader} to be my leader, received "
+                             f"{averaging_pb2.MessageCode.Name(message.code)}")
+                if message.code == averaging_pb2.ACCEPTED:
+                    self.join_group(leader, message.group_id)
+                    return stream
+
+        except Exception as e:
+            self.set_exception(e)
+
+    async def wait_for_allreduce(self, stream: grpc.aio.UnaryStreamCall[averaging_pb2.MessageFromLeader]) -> bool:
+        """ the second part of request_join_group, return True if started allreduce, False if failed or disbanded """
+        try:
+            message = await stream.read()
+            if message.code == averaging_pb2.BEGIN_ALLREDUCE:
+                logger.debug(f"{self} - leader triggered allreduce")
+                assert all(isinstance(p, Endpoint) for p in message.ordered_group_endpoints)
+                self.follower_begin_allreduce(message.ordered_group_endpoints)
+                return True
+            else:
+                logger.debug(f"{self} - leader sent {averaging_pb2.MessageCode.Name(message.code)}, leaving group")
+                self.state = ProtocolState.GROUP_DISBANDED
+                return False
+        except Exception as e:
+            self.set_exception(e)
+            return False
+
     async def run_allreduce(self) -> Sequence[torch.Tensor]:
         """ send allreduce requests to all peers and collect results, return the averaged tensor """
         assert self.state == ProtocolState.RUNNING_ALLREDUCE
@@ -258,7 +265,7 @@ class GroupAllReduce:
                 if response.code == averaging_pb2.ACCEPTED:
                     self.average_tensor_parts[peer_endpoint] = deserialize_torch_tensor(response.tensor_part)
                 else:
-                    raise ValueError(f"peer {peer_endpoint} sent {averaging_pb2.MessageCode.Name(response.code)}")
+                    raise ValueError(f"peer {peer_endpoint} replied {averaging_pb2.MessageCode.Name(response.code)}")
 
             if len(self.average_tensor_parts) >= len(self.group_endpoints_set):
                 ordered_parts = [self.average_tensor_parts[peer] for peer in ordered_group_endpoints]
@@ -292,7 +299,7 @@ class GroupAllReduce:
             return averaging_pb2.AveragingData(code=averaging_pb2.DUPLICATE_ENDPOINT)
 
         if request.code in (averaging_pb2.INTERNAL_ERROR, averaging_pb2.CANCELLED):
-            self.set_exception(ValueError(f"Internal error at {request.endpoint}"))
+            self.set_exception(ValueError(f"{request.endpoint} sent {averaging_pb2.MessageCode.Name(request.code)}"))
             return averaging_pb2.AveragingData(code=averaging_pb2.PROTOCOL_VIOLATION)
 
         try:
@@ -308,10 +315,14 @@ class GroupAllReduce:
             return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
     def cancel(self):
+        logger.debug(f"{self} - cancelled")
+        self.state = ProtocolState.CANCELLED
         for future in self.group_assembled, self.averaged_part, self.averaged_tensors:
             future.cancel()
 
     def set_exception(self, exception: Exception):
+        logger.debug(f"{self} - {exception}")
+        self.state = ProtocolState.ERROR
         for future in self.group_assembled, self.averaged_part, self.averaged_tensors:
             future.set_exception(exception)
 

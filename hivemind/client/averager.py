@@ -159,16 +159,17 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 future.set_result(await group_allreduce.run_allreduce())
             else:
                 async with self.lock_forming_a_group:
+                    stream = await group_allreduce.request_join_group(leader_endpoint)
                     self._forming_group = self._pending_groups[group_allreduce.group_id] = group_allreduce
-                    accepted = await group_allreduce.request_join_group(leader_endpoint)
 
-                if not accepted:
-                    future.set_exception(ValueError(f"Rejected by {leader_endpoint}"))
-                else:
+                started_allreduce = await group_allreduce.wait_for_allreduce(stream)
+                if started_allreduce:
                     future.set_result(await group_allreduce.run_allreduce())
+                else:
+                    future.set_exception(ValueError(f"Rejected by {leader_endpoint}"))
 
-        except Exception as e:
-            future.set_exception(e)
+        # except Exception as e:
+        #     future.set_exception(e)
         finally:
             _ = self._pending_groups.pop(group_allreduce.group_id, None)
             if group_allreduce is self._forming_group:
