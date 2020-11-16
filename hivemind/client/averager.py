@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import ctypes
-import os
 from typing import Sequence, Optional, Tuple, Any, Union, Awaitable, Dict
 from concurrent.futures.thread import ThreadPoolExecutor
-from functools import cached_property
 import multiprocessing as mp
 import asyncio
 
@@ -61,6 +59,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
         self._pending_groups: Dict[GroupID, GroupAllReduce] = {}
+        self._lock_forming_a_group: Optional[asyncio.Lock] = None
         self.ready = mp.Event()
 
         self.averaged_tensors = tuple(averaged_tensors)
@@ -75,11 +74,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def port(self) -> Optional[Port]:
         return self._port.value if self._port.value != 0 else None
 
-    @cached_property
-    def lock_forming_a_group(self):
-        assert self.pid == os.getpid()
-        return asyncio.Lock()
-
     def run(self):
         """ Serve DecentralizedAverager forever. This function will not return until the averager is shut down """
         if asyncio.get_event_loop().is_running():
@@ -91,6 +85,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         listen, listen_on, receiver_threads, server_kwargs = self.server_opts
         pipe_awaiter = ThreadPoolExecutor(receiver_threads)
+        self._lock_forming_a_group = asyncio.Lock()
 
         async def _run():
             if listen:
@@ -151,14 +146,14 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         group_allreduce = GroupAllReduce(my_endpoint, expiration, self.averaged_tensors)
         try:
             if leader_endpoint is None:
-                async with self.lock_forming_a_group:
+                async with self._lock_forming_a_group:
                     group_allreduce.start_new_group(max_size=self.max_size)
                     self._forming_group = self._pending_groups[group_allreduce.group_id] = group_allreduce
                     await asyncio.wait_for(group_allreduce.group_assembled, expiration - get_dht_time())
 
                 future.set_result(await group_allreduce.run_allreduce())
             else:
-                async with self.lock_forming_a_group:
+                async with self._lock_forming_a_group:
                     stream = await group_allreduce.request_join_group(leader_endpoint)
                     self._forming_group = self._pending_groups[group_allreduce.group_id] = group_allreduce
 
@@ -168,8 +163,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 else:
                     future.set_exception(ValueError(f"Rejected by {leader_endpoint}"))
 
-        # except Exception as e:
-        #     future.set_exception(e)
+        except Exception as e:
+            future.set_exception(e)
         finally:
             _ = self._pending_groups.pop(group_allreduce.group_id, None)
             if group_allreduce is self._forming_group:
