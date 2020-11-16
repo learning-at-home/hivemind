@@ -7,12 +7,14 @@ import torch
 import pytest
 import hivemind
 from hivemind.client.allreduce import GroupAllReduce, split_into_parts, restore_from_parts
-from hivemind.utils.networking import LOCALHOST
+from hivemind.utils import LOCALHOST
 
 
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_allreduce_direct():
+    # WARNING! this test uses an early interface that will change by the time DecentralizedAverager is finished
+
     dht = hivemind.DHT(start=True)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
