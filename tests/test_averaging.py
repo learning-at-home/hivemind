@@ -44,6 +44,7 @@ async def test_allreduce_direct():
             assert torch.allclose(ref, our)
 
 
+@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_allreduce_protocol():
     """ Run group allreduce protocol manually without grpc, see if the internal logic is working as intended """
@@ -93,6 +94,7 @@ async def test_allreduce_protocol():
     assert all(map(torch.allclose, averaged_tensors, reference_tensors))
 
 
+@pytest.mark.forked
 def test_chunks():
     for i in range(100):
         tensors = []
