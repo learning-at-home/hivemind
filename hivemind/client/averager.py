@@ -16,8 +16,8 @@ import grpc
 
 import hivemind
 from hivemind.dht import get_dht_time, DHTExpiration
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, deserialize_torch_tensor
-from hivemind.client.allreduce import GroupAllReduce, GroupID, ProtocolState
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture
+from hivemind.client.allreduce import GroupAllReduce, GroupID
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 
 logger = get_logger(__file__)
@@ -59,8 +59,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.channel_options = channel_options
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
-        self._current_group: Optional[GroupAllReduce] = None
-        self._groups: Dict[GroupID, GroupAllReduce] = {}
+        self._pending_groups: Dict[GroupID, GroupAllReduce] = {}
         self.ready = mp.Event()
 
         self.averaged_tensors = tuple(averaged_tensors)
@@ -76,8 +75,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return self._port.value if self._port.value != 0 else None
 
     @cached_property
-    def lock_concurrent_requests(self):
-        assert os.getpid() == self.pid, "This property is only available from inside the averager process"
+    def lock_forming_a_group(self):
+        assert self.pid == os.getpid()
         return asyncio.Lock()
 
     def run(self):
@@ -128,11 +127,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
-    def _get(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
-        # TODO remove this in favor of global cache, add channel options
-        channel = grpc.aio.insecure_channel(peer)
-        return averaging_pb2_grpc.DecentralizedAveragingStub(channel)
-
     def group_allreduce(self, my_endpoint: Endpoint, leader_endpoint: Optional[Endpoint] = None,
                         return_future=False) -> Union[Sequence[torch.Tensor], Awaitable[Sequence[torch.Tensor]]]:
         """
@@ -153,55 +147,42 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     async def _group_allreduce(self, *, my_endpoint: Endpoint, expiration: DHTExpiration,
                                leader_endpoint: Optional[Endpoint], future: MPFuture):
-        allreduce = GroupAllReduce(my_endpoint, expiration, self.averaged_tensors)
-        self._current_group = allreduce
-
+        group_allreduce = GroupAllReduce(my_endpoint, expiration, self.averaged_tensors)
         try:
             if leader_endpoint is None:
-                allreduce.start_new_group()
-                self._current_group = self._groups[allreduce.group_id] = allreduce
-                await asyncio.wait_for(allreduce.group_assembled, expiration - get_dht_time())
-                future.set_result(await allreduce.run_allreduce())
+                async with self.lock_forming_a_group:
+                    group_allreduce.start_new_group()
+                    self._forming_group = self._pending_groups[group_allreduce.group_id] = group_allreduce
+
+                    await asyncio.wait_for(group_allreduce.group_assembled, expiration - get_dht_time())
+
+                future.set_result(await group_allreduce.run_allreduce())
             else:
-                group_endpoints = await allreduce.request_join_group(leader_endpoint)
-                if group_endpoints is not None:
-                    self._groups[allreduce.group_id] = allreduce
-                    await allreduce.run_allreduce(group_endpoints)
-                    future.set_result(await allreduce)
-                else:
+                async with self.lock_forming_a_group:
+                    self._forming_group = self._pending_groups[group_allreduce.group_id] = group_allreduce
+                    accepted = await group_allreduce.request_join_group(leader_endpoint)
+
+                if not accepted:
                     future.set_exception(ValueError(f"Rejected by {leader_endpoint}"))
+                else:
+                    future.set_result(await group_allreduce.run_allreduce())
+
         except Exception as e:
             future.set_exception(e)
         finally:
-            self._current_group = None
+            _ = self._pending_groups.pop(group_allreduce.group_id, None)
+            if group_allreduce is self._forming_group:
+                self._forming_group = None
 
     async def rpc_group_allreduce(self, request: averaging_pb2.PeerInfo, context: grpc.ServicerContext):
         """ A peer wants me to be his leader. I will coordinate his actions with the rest of my group. Maybe. """
-        if self._current_group is None:
+        if self._forming_group is None:
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
             return
-        group: GroupAllReduce = self._current_group
-        response = group.handle_join_request(request)
-        if response.code != averaging_pb2.ACCEPTED:
-            yield response
-            return
+        async for message in self._forming_group.handle_join_request(request):
+            yield message
 
-        finished_allreduce = False
-        try:
-            ordered_group_endpoints = await group.group_assembled #TODO implement max group size
-            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.BEGIN_ALLREDUCE,
-                                                  ordered_group_endpoints=ordered_group_endpoints)
-            finished_allreduce = True
-        finally:
-            if not finished_allreduce:  # peer left group prematurely
-                group.remove_peer_from_group(request.endpoint)
-        #TODO currently the allreduce logic is split between averager.py and allreduce.py,
-        # should we move it to the latter? maybe yeild from group.handle_join_request?
     async def rpc_aggregate_part(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
-        if request.group_id not in self._groups:
+        if request.group_id not in self._pending_groups:
             return averaging_pb2.AveragingData(code=averaging_pb2.PROTOCOL_VIOLATION)
-        try:
-            return await self._groups[request.group_id].handle_accumulate_request(request)
-        except Exception as e:
-            logger.exception(e)
-            return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
+        return await self._pending_groups[request.group_id].handle_accumulate_request(request)
