@@ -5,11 +5,12 @@ from itertools import product
 import torch
 import pytest
 import hivemind
-from hivemind.client.allreduce import GroupAllReduce, split_into_parts, restore_from_parts, Endpoint, averaging_pb2
+from hivemind.client.allreduce import GroupAllReduce, split_into_parts, restore_from_parts
 
 
 @pytest.mark.asyncio
 async def test_allreduce_protocol():
+    """ Run group allreduce protocol manually without grpc, see if the internal logic is working as intended """
     peers = "alice", "bob", "carol"
     expiration_offsets = 4, 0, 1
 

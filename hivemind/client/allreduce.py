@@ -79,7 +79,7 @@ class GroupAllReduce:
     def __await__(self):
         return self.averaged_tensors.__await__()
 
-    def start_new_group(self):
+    def start_new_group(self, max_size: Optional[int] = None):
         """ Create new group with a random id, become its leader and the only participant """
         assert self.state == ProtocolState.LOOKING_FOR_GROUP
         self.group_id = DHTID.generate().to_bytes()
@@ -88,6 +88,8 @@ class GroupAllReduce:
         self.state = ProtocolState.LEADER_WAITING_FOR_PEERS
         self.leader_endpoint = self.info.endpoint
         self.group_endpoints_set = {self.info.endpoint}
+        if max_size is not None:
+            self.max_size = max_size
 
     @property
     def group_size(self):
