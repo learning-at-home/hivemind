@@ -14,14 +14,6 @@ from hivemind.utils import Endpoint, get_logger, MSGPackSerializer
 from hivemind.utils import TensorDescriptor, deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
-# PR notes:
-# * port averager.py with only the bare minimum parameters
-# * test averager.py with fixed groups (but support multiple concurrent groups)
-# * and only then: errors, cancellation, protocol violations, content hash
-#
-# thoughts on group ids: we can estimate the total number of peers using d previous allreduce rounds
-# ... and adjust the grid dimension to match that number (used only for assigning new indices)
-
 logger = get_logger(__name__)
 
 # flavour types
@@ -98,8 +90,8 @@ class GroupAllReduce:
 
     def join_group(self, leader_endpoint: Endpoint, group_id: GroupID):
         """ After you were accepted by a leader, create your local instance using the metadata he sent """
-        logger.debug(f"{self} - joining the group of {leader_endpoint}. Group id: {self.group_id}")
         self.group_id, self.leader_endpoint = group_id, leader_endpoint
+        logger.debug(f"{self} - joining the group of {leader_endpoint}. Group id: {self.group_id}")
         self.state = ProtocolState.FOLLOWER_WAITING_FOR_LEADER
 
     def add_peer_to_group(self, follower: Endpoint):
@@ -115,8 +107,8 @@ class GroupAllReduce:
         """ Remove a disconnected peer from current group """
         assert self.state == ProtocolState.LEADER_WAITING_FOR_PEERS
         assert follower in self.group_endpoints_set and follower != self.leader_endpoint
-        logger.info(f"{self} - removed {follower} from the group. New size = f{self.group_endpoints_set}")
         self.group_endpoints_set.remove(follower)
+        logger.info(f"{self} - removed {follower} from the group. New size = {self.group_size}")
 
     def disband_group(self):
         assert self.state == ProtocolState.LEADER_WAITING_FOR_PEERS and self.group_size == 1
@@ -144,6 +136,7 @@ class GroupAllReduce:
         """ Add vector part to accumulator, wait for all other vectors to be added, return the average """
         assert source not in self.accumulated_from, "duplicate endpoint, already received that part"
         assert self.accumulator is None or self.accumulator.shape == part.shape
+        logger.debug(f"{self} - accumulated part from {source}")
 
         self.accumulator = part if self.accumulator is None else self.accumulator.add_(part)
         self.accumulated_from.add(source)
@@ -167,20 +160,20 @@ class GroupAllReduce:
             async with self.lock_concurrent_requests:
                 stream = self._get(leader).rpc_group_allreduce(self.info)
                 message = await stream.read()
-                logger.debug(f"{self} - requested {leader} to be my leader, received {message.code}")
+                logger.debug(f"{self} - requested {leader} to be my leader, received "
+                             f"{averaging_pb2.MessageCode.Name(message.code)}")
                 if message.code != averaging_pb2.ACCEPTED:
                     return False
 
-                self.state = ProtocolState.FOLLOWER_WAITING_FOR_LEADER
+                self.join_group(leader, message.group_id)
                 message = await stream.read()
                 if message.code == averaging_pb2.BEGIN_ALLREDUCE:
-                    logger.debug(f"{self} - leader {leader} sent {message.code}, beginning allreduce")
-                    assert isinstance(message.ordered_group_endpoints, list)
+                    logger.debug(f"{self} - leader triggered allreduce")
                     assert all(isinstance(p, Endpoint) for p in message.ordered_group_endpoints)
-                    self.group_assembled.set_result(message.ordered_group_endpoints)
+                    self.follower_begin_allreduce(message.ordered_group_endpoints)
                     return True
                 else:
-                    logger.debug(f"{self} - leader {leader} sent {message.code}, leaving group")
+                    logger.debug(f"{self} - leader sent {averaging_pb2.MessageCode.Name(message.code)}, leaving group")
                     self.state = ProtocolState.GROUP_DISBANDED
                     return False
         except Exception as e:
@@ -265,7 +258,7 @@ class GroupAllReduce:
                 if response.code == averaging_pb2.ACCEPTED:
                     self.average_tensor_parts[peer_endpoint] = deserialize_torch_tensor(response.tensor_part)
                 else:
-                    raise ValueError(f"peer {peer_endpoint} responded with {response.code} during allreduce")
+                    raise ValueError(f"peer {peer_endpoint} sent {averaging_pb2.MessageCode.Name(response.code)}")
 
             if len(self.average_tensor_parts) >= len(self.group_endpoints_set):
                 ordered_parts = [self.average_tensor_parts[peer] for peer in ordered_group_endpoints]
@@ -277,9 +270,12 @@ class GroupAllReduce:
             return await self.averaged_tensors
         except Exception as e:
             code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
+
+            async def send_error_to_peer(peer_endpoint):
+                await self._get(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
+                    group_id=self.group_id, endpoint=self.info.endpoint, code=code))
             for peer_endpoint in ordered_group_endpoints:
-                asyncio.create_task(self._get(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
-                    group_id=self.group_id, endpoint=self.info.endpoint, code=code)))
+                asyncio.create_task(send_error_to_peer(peer_endpoint))
             if code == averaging_pb2.CANCELLED:
                 self.cancel()
             else:

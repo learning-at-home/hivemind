@@ -50,11 +50,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     """
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
-                 timeout: float = 15, listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
-                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
+                 max_size: int = None, timeout: float = 15, listen: bool = True, listen_on: Endpoint = '0.0.0.0:*',
+                 receiver_threads: int = 1, channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         super().__init__()
         self.dht = dht
         self.server_opts = listen, listen_on, receiver_threads, kwargs
+        self.max_size = max_size if max_size is not None else float('inf')
         self.timeout = timeout
         self.channel_options = channel_options
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
@@ -151,9 +152,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         try:
             if leader_endpoint is None:
                 async with self.lock_forming_a_group:
-                    group_allreduce.start_new_group()
+                    group_allreduce.start_new_group(max_size=self.max_size)
                     self._forming_group = self._pending_groups[group_allreduce.group_id] = group_allreduce
-
                     await asyncio.wait_for(group_allreduce.group_assembled, expiration - get_dht_time())
 
                 future.set_result(await group_allreduce.run_allreduce())
