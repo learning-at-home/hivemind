@@ -18,10 +18,6 @@ from hivemind.utils.logging import get_logger
 
 logger = get_logger(__file__)
 
-MAXIMUM_CHANNELS = os.environ.get("GRPC_PYTHON_MANAGED_CHANNEL_MAXIMUM", 4096)
-EVICTION_PERIOD_SECONDS = os.environ.get("GRPC_PYTHON_MANAGED_CHANNEL_EVICTION_SECONDS", 10 * 60)
-logger.debug(f"Eviction period = {EVICTION_PERIOD_SECONDS}s, max channels = {MAXIMUM_CHANNELS}")
-
 Stub = TypeVar("Stub")
 
 
@@ -40,6 +36,9 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     Unlike TimedStorage, ChannelCache actively evicts stale channels even if the cache is not accessed
     Unlike grpc._simple_stubs.ChannelCache, this implementation supports aio and does not forcibly close active channels
     """
+    MAXIMUM_CHANNELS = os.environ.get("GRPC_PYTHON_MANAGED_CHANNEL_MAXIMUM", 4096)
+    EVICTION_PERIOD_SECONDS = os.environ.get("GRPC_PYTHON_MANAGED_CHANNEL_EVICTION_SECONDS", 10 * 60)
+    logger.debug(f"Eviction period = {EVICTION_PERIOD_SECONDS}s, max channels = {MAXIMUM_CHANNELS}")
 
     _singleton: Optional[ChannelCache] = None
     _singleton_pid: int = os.getpid()
@@ -48,7 +47,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
 
     def __init__(self, _created_as_singleton=False):
         assert _created_as_singleton, f"Please use {self.__class__.__name__}.get_singleton()"
-        super().__init__(maxsize=MAXIMUM_CHANNELS)
+        super().__init__(maxsize=self.MAXIMUM_CHANNELS)
         self._is_active = True
         self._nearest_expiration_time = float('inf')
         self._eviction_thread = threading.Thread(target=self._evict_stale_channels_in_background, daemon=True)
@@ -87,7 +86,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
                 stubs[stub_type] = stub_type(channel)
 
             # either cache channel or update expiration of an existing channel
-            expiration_time = get_dht_time() + EVICTION_PERIOD_SECONDS
+            expiration_time = get_dht_time() + cls.EVICTION_PERIOD_SECONDS
             super(cls, cache).store(key, (channel, stubs), expiration_time)
 
             if expiration_time < cache._nearest_expiration_time:
