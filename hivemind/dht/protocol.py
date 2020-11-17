@@ -78,7 +78,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         else:
             logger.warning("DHTProtocol has no server (due to listen=False), it doesn't need to be shut down")
 
-    def _get(self, peer: Endpoint) -> dht_grpc.DHTStub:
+    def _get_dht_stub(self, peer: Endpoint) -> dht_grpc.DHTStub:
         """ get a DHTStub that sends requests to a given peer """
         return ChannelCache.get_stub(peer, dht_grpc.DHTStub, aio=True, options=self.channel_options)
 
@@ -92,7 +92,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         """
         try:
             async with self.rpc_semaphore:
-                peer_info = await self._get(peer).rpc_ping(self.node_info, timeout=self.wait_timeout)
+                peer_info = await self._get_dht_stub(peer).rpc_ping(self.node_info, timeout=self.wait_timeout)
         except grpc.aio.AioRpcError as error:
             logger.warning(f"DHTProtocol failed to ping {peer}: {error.code()}")
             peer_info = None
@@ -154,7 +154,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                                              expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info)
         try:
             async with self.rpc_semaphore:
-                response = await self._get(peer).rpc_store(store_request, timeout=self.wait_timeout)
+                response = await self._get_dht_stub(peer).rpc_store(store_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
@@ -202,7 +202,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         find_request = dht_pb2.FindRequest(keys=list(map(DHTID.to_bytes, keys)), peer=self.node_info)
         try:
             async with self.rpc_semaphore:
-                response = await self._get(peer).rpc_find(find_request, timeout=self.wait_timeout)
+                response = await self._get_dht_stub(peer).rpc_find(find_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
