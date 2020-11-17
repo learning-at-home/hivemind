@@ -110,10 +110,9 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
             cache = cls.get_singleton()
             now = get_dht_time()
             time_to_wait = max(0.0, cache._nearest_expiration_time - now)
-
-            reached_nearest_expiration = cls._new_top_evt.wait(time_to_wait if time_to_wait != float('inf') else None)
-            if not reached_nearest_expiration:
-                cls._new_top_evt.clear()
+            interrupted_early = cls._new_top_evt.wait(time_to_wait if time_to_wait != float('inf') else None)
+            cls._new_top_evt.clear()
+            if interrupted_early:
                 continue
 
             with cls._lock:
