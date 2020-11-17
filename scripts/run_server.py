@@ -59,10 +59,8 @@ def main():
     compression_name = args.pop("compression")
     if compression_name == "MEANSTD":
         compression = CompressionType.MEANSTD_LAST_AXIS_FLOAT16
-    elif compression_name == "FLOAT16":
-        compression = CompressionType.FLOAT16
     else:
-        compression = getattr(CompressionType, CompressionType.NONE)
+        compression = getattr(CompressionType, compression_name)
 
     try:
         server = Server.create(**args, optim_cls=optim_cls, start=True, verbose=True, compression=compression)
