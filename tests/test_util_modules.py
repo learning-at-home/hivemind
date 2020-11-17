@@ -3,7 +3,8 @@ import torch
 
 import pytest
 import hivemind
-
+from hivemind.proto.dht_pb2_grpc import DHTStub
+from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 from concurrent.futures import CancelledError
 
 
@@ -129,3 +130,38 @@ def test_vector_compression(size=(128, 128, 64), alpha=5e-08):
     error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.FLOAT16)) - X
     assert error.square().mean() < alpha
 
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_channel_cache():
+    hivemind.ChannelCache.MAXIMUM_CHANNELS = 3
+    hivemind.ChannelCache.EVICTION_PERIOD_SECONDS = 0.1
+    c1 = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=False)
+    c2 = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=True)
+    c3 = hivemind.ChannelCache.get_stub('localhost:1338', DHTStub, aio=False)
+    c3_again = hivemind.ChannelCache.get_stub('localhost:1338', DHTStub, aio=False)
+    c1_again = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=False)
+    c4 = hivemind.ChannelCache.get_stub('localhost:1339', DHTStub, aio=True)
+    c2_anew = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=True)
+    c1_yetagain = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=False)
+
+    await asyncio.sleep(0.2)
+    c1_anew = hivemind.ChannelCache.get_stub(target='localhost:1337', aio=False, stub_type=DHTStub)
+    c1_anew_again = hivemind.ChannelCache.get_stub(target='localhost:1337', aio=False, stub_type=DHTStub)
+    c1_otherstub = hivemind.ChannelCache.get_stub(target='localhost:1337', aio=False, stub_type=ConnectionHandlerStub)
+    await asyncio.sleep(0.05)
+    c1_otherstub_again = hivemind.ChannelCache.get_stub(target='localhost:1337', aio=False,
+                                                        stub_type=ConnectionHandlerStub)
+    all_channels = [c1, c2, c3, c4, c3_again, c1_again, c2_anew, c1_yetagain, c1_anew, c1_anew_again, c1_otherstub]
+
+    assert all(isinstance(c, DHTStub) for c in all_channels[:-1])
+    assert isinstance(all_channels[-1], ConnectionHandlerStub)
+    assert 'aio' in repr(c2.rpc_find)
+    assert 'aio' not in repr(c1.rpc_find)
+
+    duplicates = {(c1, c1_again), (c1, c1_yetagain), (c1_again, c1_yetagain), (c3, c3_again),
+                  (c1_anew, c1_anew_again), (c1_otherstub, c1_otherstub_again)}
+    for i in range(len(all_channels)):
+        for j in range(i + 1, len(all_channels)):
+            ci, cj = all_channels[i], all_channels[j]
+            assert (ci is cj) == ((ci, cj) in duplicates), (i, j)
