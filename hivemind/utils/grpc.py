@@ -12,7 +12,7 @@ import torch
 
 from hivemind.proto import runtime_pb2
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils.timed_storage import TimedStorage, get_dht_time
+from hivemind.utils.timed_storage import TimedStorage, get_dht_time, DHTExpiration
 from hivemind.utils.networking import Endpoint
 from hivemind.utils.logging import get_logger
 
@@ -43,10 +43,12 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
     _lock: threading.RLock = threading.RLock()
     _new_top_evt: threading.Event = threading.Event()
     _eviction_thread: threading.Thread
+    _nearest_expiration: DHTExpiration
 
     def __init__(self):
         super().__init__(maxsize=self.MAXIMUM_CHANNELS)
-        self._eviction_thread = threading.Thread(target=self._close_stale_channels_in_background, daemon=True)
+        self._nearest_expiration = float('inf')
+        self._eviction_thread = threading.Thread(target=self._evict_stale_channels_in_background, daemon=True)
         self._eviction_thread.start()
 
     @classmethod
@@ -77,10 +79,11 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
                 channel = cls._create_channel(*key)
 
             # either cache channel or update expiration of an existing channel
-            super(cls, cache).store(key, channel, get_dht_time() + cls.EVICTION_PERIOD_SECONDS)
+            expiration_time = get_dht_time() + cls.EVICTION_PERIOD_SECONDS
+            super(cls, cache).store(key, channel, expiration_time)
 
-            new_top_key, _ = super(cls, cache).top()
-            if key is new_top_key:
+            if expiration_time < cache._nearest_expiration:
+                cache._nearest_expiration = expiration_time
                 cls._new_top_evt.set()
 
             return channel
@@ -101,25 +104,22 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
                                             options=options, compression=compression)
 
     @classmethod
-    def _close_stale_channels_in_background(cls):
+    def _evict_stale_channels_in_background(cls):
+
         while True:
-            try:
-                cache = cls.get_singleton()
-                now = get_dht_time()
+            cache = cls.get_singleton()
+            now = get_dht_time()
+            time_to_wait = max(0.0, cache._nearest_expiration - now)
 
-                with cls._lock:
-                    cache._remove_outdated()
-                    with cache.freeze():
-                        if len(cache) > 0:
-                            _, (_, nearest_exiration) = super(cls, cache).top()
-                        else:
-                            nearest_exiration = float('inf')
-
-                time_to_wait = max(0.0, nearest_exiration - now)
-                cls._new_top_evt.wait(time_to_wait if time_to_wait != float('inf') else None)
+            reached_nearest_expiration = cls._new_top_evt.wait(time_to_wait if time_to_wait != float('inf') else None)
+            if not reached_nearest_expiration:
                 cls._new_top_evt.clear()
-            except Exception as e:
-                logger.exception(e)
+                continue
+
+            with cls._lock:
+                cache._remove_outdated()
+                _, entry = super(cls, cache).top()
+                cache._nearest_expiration = entry.expiration if entry is not None else float('inf')
 
     def store(self, *args, **kwargs) -> ValueError:
         raise ValueError(f"Please use {self.__class__.__name__}.get_channel to get/create channels")
