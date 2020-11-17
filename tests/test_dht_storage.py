@@ -37,11 +37,14 @@ def test_change_expiration_time():
 
 
 def test_maxsize_cache():
-    d = DHTLocalStorage(maxsize=1)
-    d.store(DHTID.generate("key1"), b"val1", get_dht_time() + 1)
+    d = DHTLocalStorage(maxsize=2)
+    d.store(DHTID.generate("key1a"), b"val1a", get_dht_time() + 1)
+    d.store(DHTID.generate("key1b"), b"val1b", get_dht_time() + 1)
+    d.store(DHTID.generate("key1a"), b"val1a2", get_dht_time() + 2)
     d.store(DHTID.generate("key2"), b"val2", get_dht_time() + 200)
     assert d.get(DHTID.generate("key2"))[0] == b"val2", "Value with bigger exp. time must be kept"
-    assert d.get(DHTID.generate("key1")) is None, "Value with less exp time, must be deleted"
+    assert d.get(DHTID.generate("key1a"))[0] == b"val1a2", "Value with bigger exp. time must be kept"
+    assert d.get(DHTID.generate("key1b")) is None, "Value with less exp time, must be deleted"
 
 
 def test_localstorage_top():
