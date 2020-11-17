@@ -104,12 +104,12 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
                         compression: Optional[grpc.Compression]) -> Union[grpc.Channel, grpc.aio.Channel]:
         namespace = grpc.aio if aio else grpc
         if channel_credentials is None:
-            logger.debug(f"Creating insecure {namespace} channel with options '{options}' " +
+            logger.debug(f"Creating insecure {namespace} channel with options '{options}' "
                          f"and compression '{compression}'")
             return namespace.insecure_channel(target, options=options, compression=compression)
         else:
             logger.debug(f"Creating secure {namespace} channel with credentials '{channel_credentials}', "
-                         + f"options '{options}' and compression '{compression}'")
+                         f"options '{options}' and compression '{compression}'")
             return namespace.secure_channel(target, credentials=channel_credentials,
                                             options=options, compression=compression)
 
