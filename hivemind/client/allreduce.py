@@ -11,7 +11,7 @@ import torch
 
 from hivemind.dht import DHTID, DHTExpiration
 from hivemind.utils import Endpoint, get_logger, MSGPackSerializer
-from hivemind.utils import TensorDescriptor, deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.utils import TensorDescriptor, deserialize_torch_tensor, serialize_torch_tensor, ChannelCache
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 logger = get_logger(__name__)
@@ -149,10 +149,8 @@ class GroupAllReduce:
 
         return await self.averaged_part
 
-    def _get(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
-        """ TODO this function is deprecated and will be replaced by a shared channel cache """
-        channel = grpc.aio.insecure_channel(peer)
-        return averaging_pb2_grpc.DecentralizedAveragingStub(channel)
+    def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
+        return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
 
     async def handle_join_request(self, request: averaging_pb2.PeerInfo
                                   ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
@@ -220,7 +218,7 @@ class GroupAllReduce:
         assert self.state == ProtocolState.LOOKING_FOR_GROUP
         try:
             async with self.concurrent_requests_lock:
-                stream = self._get(leader).rpc_group_allreduce(self.info)
+                stream = self._get_peer_stub(leader).rpc_group_allreduce(self.info)
                 message = await stream.read()
                 logger.debug(f"{self} - requested {leader} to be my leader, received "
                              f"{averaging_pb2.MessageCode.Name(message.code)}")
@@ -259,7 +257,7 @@ class GroupAllReduce:
                 self.average_tensor_parts[peer_endpoint] = await self.accumulate(peer_endpoint, local_part)
             else:
                 serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
-                response = await self._get(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
+                response = await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
                     group_id=self.group_id, endpoint=self.info.endpoint, tensor_part=serialized_tensor_part))
 
                 if response.code == averaging_pb2.ACCEPTED:
@@ -279,7 +277,7 @@ class GroupAllReduce:
             code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
 
             async def send_error_to_peer(peer_endpoint):
-                await self._get(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
+                await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
                     group_id=self.group_id, endpoint=self.info.endpoint, code=code))
             for peer_endpoint in ordered_group_endpoints:
                 asyncio.create_task(send_error_to_peer(peer_endpoint))

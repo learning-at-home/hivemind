@@ -91,7 +91,8 @@ async def test_allreduce_protocol():
     ]
 
     assert len(averaged_tensors) == len(reference_tensors)
-    assert all(map(torch.allclose, averaged_tensors, reference_tensors))
+    assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
+               for our, ref in zip(averaged_tensors, reference_tensors))
 
 
 @pytest.mark.forked

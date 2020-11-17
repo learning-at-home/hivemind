@@ -30,7 +30,6 @@ def test_call_many():
     backward_k_min = 1
     forward_timeout = None
     backward_timeout = None
-    rtol = 1e-3
     atol = 1e-5
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
@@ -61,7 +60,7 @@ def test_call_many():
         reference_outputs[2, 0] = e1(inputs_clone[2:3])
         reference_outputs[2, 2] = e3(inputs_clone[2:3])
 
-        assert torch.allclose(expert_outputs, reference_outputs, rtol, atol)
+        assert torch.allclose(expert_outputs, reference_outputs, atol=atol, rtol=0)
         proj = torch.randn(4, 64)
         loss = (expert_outputs[(0, 1, 1, 2), (0, 2, 1, 0)] * proj).sum()
         loss.backward()
@@ -70,7 +69,7 @@ def test_call_many():
         reference_loss = (reference_outputs[(0, 1, 1, 2), (0, 2, 1, 0)] * proj).sum()
         reference_loss.backward()
         reference_grad = inputs_clone.grad.data.cpu().clone()
-        assert torch.allclose(our_grad, reference_grad, rtol, atol)
+        assert torch.allclose(our_grad, reference_grad, atol=atol, rtol=0)
 
 
 @pytest.mark.forked
@@ -125,7 +124,6 @@ def test_beam_search_correctness():
 
 @pytest.mark.forked
 def test_determinism():
-    rtol = 0
     atol = 1e-5
 
     xx = torch.randn(32, 1024, requires_grad=True)
@@ -141,8 +139,8 @@ def test_determinism():
         grad, = torch.autograd.grad(out.sum(), xx, retain_graph=True)
         grad_rerun, = torch.autograd.grad(out_rerun.sum(), xx, retain_graph=True)
 
-    assert torch.allclose(out, out_rerun, rtol, atol), "Dropout layer outputs are non-deterministic."
-    assert torch.allclose(grad, grad_rerun, rtol, atol), "Gradients are non-deterministic."
+    assert torch.allclose(out, out_rerun, atol=atol, rtol=0), "Dropout layer outputs are non-deterministic."
+    assert torch.allclose(grad, grad_rerun, atol=atol, rtol=0), "Gradients are non-deterministic."
 
 
 @pytest.mark.forked
