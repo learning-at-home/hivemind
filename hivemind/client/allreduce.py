@@ -56,7 +56,7 @@ class GroupAllReduce:
         # populated when assembling a group
         self.group_endpoints_set: Optional[Set[Endpoint]] = None
         self.assembled_group: asyncio.Future[Sequence[Endpoint]] = asyncio.Future()  # final ordered endpoints
-        self.concurrent_request_lock = asyncio.Lock()  # lock inbound/outbound requests to join group
+        self.concurrent_requests_lock = asyncio.Lock()  # lock inbound/outbound requests to join group
 
         # populated when running allreduce
         self.accumulator: Optional[torch.Tensor] = None   # the sum of averaged tensors so far, init with zeros
@@ -183,7 +183,7 @@ class GroupAllReduce:
                 return
 
             # stage 2: add peer to group, optionally start a new one
-            async with self.lock_concurrent_requests:
+            async with self.concurrent_requests_lock:
                 if self.state == ProtocolState.LOOKING_FOR_GROUP:
                     self.start_new_group()
 
@@ -219,7 +219,7 @@ class GroupAllReduce:
         """ request a given peer to be your leader for allreduce. if accepted, return a grpc stream """
         assert self.state == ProtocolState.LOOKING_FOR_GROUP
         try:
-            async with self.lock_concurrent_requests:
+            async with self.concurrent_requests_lock:
                 stream = self._get(leader).rpc_group_allreduce(self.info)
                 message = await stream.read()
                 logger.debug(f"{self} - requested {leader} to be my leader, received "
