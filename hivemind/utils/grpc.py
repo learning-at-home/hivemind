@@ -43,11 +43,11 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
     _lock: threading.RLock = threading.RLock()
     _new_top_evt: threading.Event = threading.Event()
     _eviction_thread: threading.Thread
-    _nearest_expiration: DHTExpiration
+    _nearest_expiration_time: DHTExpiration
 
     def __init__(self):
         super().__init__(maxsize=self.MAXIMUM_CHANNELS)
-        self._nearest_expiration = float('inf')
+        self._nearest_expiration_time = float('inf')
         self._eviction_thread = threading.Thread(target=self._evict_stale_channels_in_background, daemon=True)
         self._eviction_thread.start()
 
@@ -82,8 +82,8 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
             expiration_time = get_dht_time() + cls.EVICTION_PERIOD_SECONDS
             super(cls, cache).store(key, channel, expiration_time)
 
-            if expiration_time < cache._nearest_expiration:
-                cache._nearest_expiration = expiration_time
+            if expiration_time < cache._nearest_expiration_time:
+                cache._nearest_expiration_time = expiration_time
                 cls._new_top_evt.set()
 
             return channel
@@ -109,7 +109,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
         while True:
             cache = cls.get_singleton()
             now = get_dht_time()
-            time_to_wait = max(0.0, cache._nearest_expiration - now)
+            time_to_wait = max(0.0, cache._nearest_expiration_time - now)
 
             reached_nearest_expiration = cls._new_top_evt.wait(time_to_wait if time_to_wait != float('inf') else None)
             if not reached_nearest_expiration:
@@ -119,7 +119,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
             with cls._lock:
                 cache._remove_outdated()
                 _, entry = super(cls, cache).top()
-                cache._nearest_expiration = entry.expiration if entry is not None else float('inf')
+                cache._nearest_expiration_time = entry.expiration_time if entry is not None else float('inf')
 
     def store(self, *args, **kwargs) -> ValueError:
         raise ValueError(f"Please use {self.__class__.__name__}.get_channel to get/create channels")
