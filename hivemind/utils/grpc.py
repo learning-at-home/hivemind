@@ -45,9 +45,6 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     _singleton_pid: int = os.getpid()
     _lock: threading.RLock = threading.RLock()
     _update_eviction_evt: threading.Event = threading.Event()
-    _eviction_thread: threading.Thread
-    _nearest_expiration_time: DHTExpiration
-    _is_active: bool
 
     def __init__(self, _created_as_singleton=False):
         assert _created_as_singleton, f"Please use {self.__class__.__name__}.get_singleton()"
