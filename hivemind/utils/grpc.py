@@ -124,7 +124,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
 
             with self._lock:
                 self._remove_outdated()
-                _, entry = super(self).top()
+                _, entry = super().top()
                 self._nearest_expiration_time = entry.expiration_time if entry is not None else float('inf')
 
     def _stop_background_thread(self):
