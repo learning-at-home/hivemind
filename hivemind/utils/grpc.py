@@ -43,12 +43,14 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     _singleton: Optional[ChannelCache] = None
     _singleton_pid: int = os.getpid()
     _lock: threading.RLock = threading.RLock()
-    _new_top_evt: threading.Event = threading.Event()
+    _update_eviction_evt: threading.Event = threading.Event()
     _eviction_thread: threading.Thread
     _nearest_expiration_time: DHTExpiration
+    _is_active: bool
 
     def __init__(self):
         super().__init__(maxsize=self.MAXIMUM_CHANNELS)
+        self._is_active = True
         self._nearest_expiration_time = float('inf')
         self._eviction_thread = threading.Thread(target=self._evict_stale_channels_in_background, daemon=True)
         self._eviction_thread.start()
@@ -57,6 +59,8 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     def get_singleton(cls):
         with cls._lock:
             if cls._singleton is None or cls._singleton_pid != os.getpid():
+                if cls._singleton is not None:
+                    cls._singleton.terminate()
                 cls._singleton, cls._singleton_pid = cls(), os.getpid()
             return cls._singleton
 
@@ -88,7 +92,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
 
             if expiration_time < cache._nearest_expiration_time:
                 cache._nearest_expiration_time = expiration_time
-                cls._new_top_evt.set()
+                cls._update_eviction_evt.set()
 
             return stubs[stub_type]
 
@@ -107,22 +111,24 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
             return namespace.secure_channel(target, credentials=channel_credentials,
                                             options=options, compression=compression)
 
-    @classmethod
-    def _evict_stale_channels_in_background(cls):
-
-        while True:
-            cache = cls.get_singleton()
+    def _evict_stale_channels_in_background(self):
+        while self._is_active:
             now = get_dht_time()
-            time_to_wait = max(0.0, cache._nearest_expiration_time - now)
-            interrupted_early = cls._new_top_evt.wait(time_to_wait if time_to_wait != float('inf') else None)
+            time_to_wait = max(0.0, self._nearest_expiration_time - now)
+            interrupted_early = self._update_eviction_evt.wait(time_to_wait if time_to_wait != float('inf') else None)
             if interrupted_early:
-                cls._new_top_evt.clear()
+                self._update_eviction_evt.clear()
                 continue
 
-            with cls._lock:
-                cache._remove_outdated()
-                _, entry = super(cls, cache).top()
-                cache._nearest_expiration_time = entry.expiration_time if entry is not None else float('inf')
+            with self._lock:
+                self._remove_outdated()
+                _, entry = super(self).top()
+                self._nearest_expiration_time = entry.expiration_time if entry is not None else float('inf')
+
+    def terminate(self):
+        with self._lock:
+            self._is_active = False
+            self._update_eviction_evt.set()
 
     def store(self, *args, **kwargs) -> ValueError:
         raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
