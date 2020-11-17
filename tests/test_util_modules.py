@@ -136,6 +136,7 @@ def test_vector_compression(size=(128, 128, 64), alpha=5e-08):
 async def test_channel_cache():
     hivemind.ChannelCache.MAXIMUM_CHANNELS = 3
     hivemind.ChannelCache.EVICTION_PERIOD_SECONDS = 0.1
+
     c1 = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=False)
     c2 = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=True)
     c3 = hivemind.ChannelCache.get_stub('localhost:1338', DHTStub, aio=False)
