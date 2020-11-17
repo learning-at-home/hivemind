@@ -55,7 +55,7 @@ class GroupAllReduce:
 
         # populated when assembling a group
         self.group_endpoints_set: Optional[Set[Endpoint]] = None
-        self.group_assembled: asyncio.Future[Sequence[Endpoint]] = asyncio.Future()  # final ordered endpoints
+        self.assembled_group: asyncio.Future[Sequence[Endpoint]] = asyncio.Future()  # final ordered endpoints
         self.lock_concurrent_requests = asyncio.Lock()  # lock inbound/outbound requests to join group
 
         # populated when running allreduce
