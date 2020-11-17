@@ -106,13 +106,13 @@ class Server(threading.Thread):
         dht = None
         if not no_dht:
             logger.info(f"Bootstrapping DHT node, initial peers = {initial_peers}")
-            dht = hivemind.DHT(initial_peers=initial_peers, start=True,
-                               listen_on=f"{hivemind.LOCALHOST}:{dht_port or hivemind.find_open_port()}")
+            dht_endpoint = replace_port(listen_on, dht_port or hivemind.find_open_port())
+            dht = hivemind.DHT(initial_peers=initial_peers, start=True, listen_on=dht_endpoint)
             if verbose:
                 logger.info(f"Running dht node on port {dht.port}")
 
         # get expert uids
-        assert (expert_pattern is None and num_experts is None) or (expert_uids is None), \
+        assert (expert_pattern is None and num_experts is None) or (expert_uids is None) or (num_experts == 0), \
             "Please provide either expert_uids *or* num_experts and expert_pattern, but not both"
         if expert_uids is None:
             assert num_experts is not None, "Please specify either expert_uids or num_experts [and expert_pattern]"
@@ -162,9 +162,10 @@ class Server(threading.Thread):
             if not self.dht.is_alive():
                 self.dht.run_in_background(await_ready=True)
 
-            dht_handler_thread = DHTHandlerThread(
-                experts=self.experts, dht=self.dht, endpoint=self.listen_on, update_period=self.update_period)
-            dht_handler_thread.start()
+            if self.experts:
+                dht_handler_thread = DHTHandlerThread(
+                    experts=self.experts, dht=self.dht, endpoint=self.listen_on, update_period=self.update_period)
+                dht_handler_thread.start()
         if self.checkpoint_saver is not None:
             self.checkpoint_saver.start()
 
