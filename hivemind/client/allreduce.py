@@ -56,7 +56,7 @@ class GroupAllReduce:
         # populated when assembling a group
         self.group_endpoints_set: Optional[Set[Endpoint]] = None
         self.assembled_group: asyncio.Future[Sequence[Endpoint]] = asyncio.Future()  # final ordered endpoints
-        self.lock_concurrent_requests = asyncio.Lock()  # lock inbound/outbound requests to join group
+        self.concurrent_request_lock = asyncio.Lock()  # lock inbound/outbound requests to join group
 
         # populated when running allreduce
         self.accumulator: Optional[torch.Tensor] = None   # the sum of averaged tensors so far, init with zeros
