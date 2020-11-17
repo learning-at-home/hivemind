@@ -7,7 +7,6 @@ import threading
 from typing import NamedTuple, Sequence, Tuple, Optional, Union, Any
 
 import grpc
-import grpc.experimental
 import numpy as np
 import torch
 
@@ -72,7 +71,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
         """
         cache = cls.get_singleton()
         with cls._lock:
-            key = ChannelInfo(target, aio, tuple(options), channel_credentials, compression)
+            key = ChannelInfo(target, aio, tuple(options or ()), channel_credentials, compression)
             channel, _ = super(cls, cache).get(key) or (None, None)
             if channel is None:
                 channel = cls._create_channel(*key)
@@ -91,10 +90,10 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
                         channel_credentials: Optional[grpc.ChannelCredentials],
                         compression: Optional[grpc.Compression]) -> Union[grpc.Channel, grpc.aio.Channel]:
         namespace = grpc.aio if aio else grpc
-        if channel_credentials is grpc.experimental.insecure_channel_credentials():
+        if channel_credentials is None:
             logger.debug(f"Creating insecure {namespace} channel with options '{options}' " +
                          f"and compression '{compression}'")
-            return grpc.insecure_channel(target, options=options, compression=compression)
+            return namespace.insecure_channel(target, options=options, compression=compression)
         else:
             logger.debug(f"Creating secure {namespace} channel with credentials '{channel_credentials}', "
                          + f"options '{options}' and compression '{compression}'")
@@ -129,8 +128,6 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
 
     def top(self) -> ValueError:
         raise ValueError(f"Please use {self.__class__.__name__}.get_channel to get/create channels")
-
-
 
 
 FP16_MAX = 65_504
