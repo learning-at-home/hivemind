@@ -30,7 +30,6 @@ def test_call_many():
     backward_k_min = 1
     forward_timeout = None
     backward_timeout = None
-    rtol = 1e-3
     atol = 1e-5
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
@@ -61,7 +60,7 @@ def test_call_many():
         reference_outputs[2, 0] = e1(inputs_clone[2:3])
         reference_outputs[2, 2] = e3(inputs_clone[2:3])
 
-        assert torch.allclose(expert_outputs, reference_outputs, rtol, atol)
+        assert torch.allclose(expert_outputs, reference_outputs, atol=atol, rtol=0)
         proj = torch.randn(4, 64)
         loss = (expert_outputs[(0, 1, 1, 2), (0, 2, 1, 0)] * proj).sum()
         loss.backward()
