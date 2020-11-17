@@ -11,7 +11,7 @@ import torch
 
 from hivemind.dht import DHTID, DHTExpiration
 from hivemind.utils import Endpoint, get_logger, MSGPackSerializer
-from hivemind.utils import TensorDescriptor, deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.utils import TensorDescriptor, deserialize_torch_tensor, serialize_torch_tensor, ChannelCache
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 logger = get_logger(__name__)
@@ -150,9 +150,7 @@ class GroupAllReduce:
         return await self.averaged_part
 
     def _get(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
-        """ TODO this function is deprecated and will be replaced by a shared channel cache """
-        channel = grpc.aio.insecure_channel(peer)
-        return averaging_pb2_grpc.DecentralizedAveragingStub(channel)
+        return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
 
     async def handle_join_request(self, request: averaging_pb2.PeerInfo
                                   ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
