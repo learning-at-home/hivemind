@@ -34,7 +34,7 @@ class TimedStorage(Generic[KeyType, ValueType]):
 
     def _remove_outdated(self):
         while not self.frozen and self.expiration_heap and (self.expiration_heap[ROOT].expiration_time < get_dht_time()
-                                                            or len(self.expiration_heap) > self.maxsize):
+                                                            or len(self.data) > self.maxsize):
             heap_entry = heapq.heappop(self.expiration_heap)
             if self.key_to_heap.get(heap_entry.key) == heap_entry:
                 del self.data[heap_entry.key], self.key_to_heap[heap_entry.key]
