@@ -55,7 +55,7 @@ async def test_allreduce_protocol():
                        for i, peer in enumerate(peers)}
 
     alice, bob, carol = allreduce_protocols = [
-        GroupAllReduce(my_endpoint=peer, expiration=hivemind.get_dht_time() + offset, my_tensors=tensors_by_peer[peer])
+        GroupAllReduce(endpoint=peer, expiration=hivemind.get_dht_time() + offset, tensors=tensors_by_peer[peer])
         for peer, offset in zip(peers, expiration_offsets)]
 
     bob.start_new_group()
@@ -65,7 +65,7 @@ async def test_allreduce_protocol():
     carol.join_group(carol, bob.group_id)
 
     bob.leader_begin_allreduce()
-    ordered_group_endpoints = await bob.group_assembled
+    ordered_group_endpoints = await bob.assembled_group
     assert len(ordered_group_endpoints) == len(peers)
 
     carol.follower_begin_allreduce(ordered_group_endpoints)

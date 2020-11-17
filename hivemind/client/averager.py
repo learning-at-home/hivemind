@@ -149,7 +149,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 async with self._lock_forming_a_group:
                     group_allreduce.start_new_group(max_size=self.max_size)
                     self._forming_group = self._pending_groups[group_allreduce.group_id] = group_allreduce
-                    await asyncio.wait_for(group_allreduce.group_assembled, expiration - get_dht_time())
+                    await asyncio.wait_for(group_allreduce.assembled_group, expiration - get_dht_time())
 
                 future.set_result(await group_allreduce.run_allreduce())
             else:

@@ -36,18 +36,18 @@ class GroupAllReduce:
     An internal class that keeps track of one group allreduce for DecentralizedAverager.
     GroupAllReduce is meant to be modified with methods, no direct variable assignments is allowed outside of debugging.
 
-    :param my_endpoint: my endpoint, as seen by the group leader
+    :param endpoint: my endpoint, as seen by the group leader
     :param expiration: the time after which the group should begin allreduce or be disbanded
-    :param my_tensors: a sequence of torch tensors that i intend to average with peers
+    :param tensors: a sequence of torch tensors that i intend to average with peers
     """
     compression_type = runtime_pb2.NONE
 
-    def __init__(self, my_endpoint: Endpoint, expiration: DHTExpiration, my_tensors: Sequence[torch.Tensor]):
-        assert all(tensor.dtype == torch.float32 and tensor.device == torch.device('cpu') for tensor in my_tensors)
-        self.local_tensors = my_tensors
+    def __init__(self, endpoint: Endpoint, expiration: DHTExpiration, tensors: Sequence[torch.Tensor]):
+        assert all(tensor.dtype == torch.float32 and tensor.device == torch.device('cpu') for tensor in tensors)
+        self.local_tensors = tensors
         self.state = ProtocolState.LOOKING_FOR_GROUP
-        self.info = averaging_pb2.PeerInfo(endpoint=my_endpoint, expiration=expiration,
-                                           schema_hash=compute_schema_hash(my_tensors))
+        self.info = averaging_pb2.PeerInfo(endpoint=endpoint, expiration=expiration,
+                                           schema_hash=compute_schema_hash(tensors))
 
         self.leader_endpoint: Optional[Endpoint] = None
         self.group_id: Optional[GroupID] = None  # a unique identifier of this one group all-reduce
@@ -122,7 +122,7 @@ class GroupAllReduce:
         logger.debug(f"{self} - initiating allreduce for {self.group_endpoints_set} peers.")
         ordered_group_endpoints = list(self.group_endpoints_set)
         random.shuffle(ordered_group_endpoints)
-        self.group_assembled.set_result(ordered_group_endpoints)
+        self.assembled_group.set_result(ordered_group_endpoints)
         self.state = ProtocolState.RUNNING_ALLREDUCE
 
     def follower_begin_allreduce(self, ordered_group_endpoints: Sequence[Endpoint]):
@@ -130,7 +130,7 @@ class GroupAllReduce:
         assert self.state == ProtocolState.FOLLOWER_WAITING_FOR_LEADER and self.info.endpoint in ordered_group_endpoints
         logger.debug(f"{self} - received peer order from the leader, beginning allreduce.")
         self.group_endpoints_set = set(ordered_group_endpoints)
-        self.group_assembled.set_result(ordered_group_endpoints)
+        self.assembled_group.set_result(ordered_group_endpoints)
         self.state = ProtocolState.RUNNING_ALLREDUCE
 
     async def accumulate(self, source: Endpoint, part: torch.Tensor) -> torch.Tensor:
@@ -142,7 +142,7 @@ class GroupAllReduce:
         self.accumulator = part if self.accumulator is None else self.accumulator.add_(part)
         self.accumulated_from.add(source)
 
-        ordered_group_endpoints = await self.group_assembled
+        ordered_group_endpoints = await self.assembled_group
         assert len(self.accumulated_from) <= len(ordered_group_endpoints)
         if len(self.accumulated_from) == len(ordered_group_endpoints):
             self.averaged_part.set_result(self.accumulator.div_(len(self.accumulated_from)))
@@ -197,7 +197,7 @@ class GroupAllReduce:
                 self.leader_begin_allreduce()
 
             # stage 3: wait for the group to be assembled and return
-            ordered_group_endpoints = await self.group_assembled
+            ordered_group_endpoints = await self.assembled_group
             if ordered_group_endpoints is not None:
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.BEGIN_ALLREDUCE,
                                                       ordered_group_endpoints=ordered_group_endpoints)
@@ -251,7 +251,7 @@ class GroupAllReduce:
     async def run_allreduce(self) -> Sequence[torch.Tensor]:
         """ send allreduce requests to all peers and collect results, return the averaged tensor """
         assert self.state == ProtocolState.RUNNING_ALLREDUCE
-        ordered_group_endpoints = await self.group_assembled
+        ordered_group_endpoints = await self.assembled_group
         ordered_local_parts = split_into_parts(self.local_tensors, group_size=self.group_size)
 
         async def send_part(peer_endpoint: Endpoint, local_part: torch.Tensor):
@@ -317,13 +317,13 @@ class GroupAllReduce:
     def cancel(self):
         logger.debug(f"{self} - cancelled")
         self.state = ProtocolState.CANCELLED
-        for future in self.group_assembled, self.averaged_part, self.averaged_tensors:
+        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
             future.cancel()
 
     def set_exception(self, exception: Exception):
         logger.debug(f"{self} - {exception}")
         self.state = ProtocolState.ERROR
-        for future in self.group_assembled, self.averaged_part, self.averaged_tensors:
+        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
             future.set_exception(exception)
 
 
