@@ -62,7 +62,7 @@ def main():
     elif compression_name == "FLOAT16":
         compression = CompressionType.FLOAT16
     else:
-        compression = getattr(CompressionType, 'NONE')
+        compression = getattr(CompressionType, CompressionType.NONE)
 
     try:
         server = Server.create(**args, optim_cls=optim_cls, start=True, verbose=True, compression=compression)
