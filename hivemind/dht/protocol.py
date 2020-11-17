@@ -7,10 +7,9 @@ from typing import Optional, List, Tuple, Dict, Any, Sequence, Union, Collection
 import grpc
 
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, Subkey
-from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue, ValueWithExpiration
+from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
-from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer
-from hivemind.utils.channel import ChannelCache
+from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer, ChannelCache, ValueWithExpiration
 
 logger = get_logger(__name__)
 
@@ -81,8 +80,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
     def _get(self, peer: Endpoint) -> dht_grpc.DHTStub:
         """ get a DHTStub that sends requests to a given peer """
-        channel: grpc.aio.Channel = ChannelCache.get_channel(peer, aio=True, options=self.channel_options)
-        return dht_grpc.DHTStub(channel)
+        return dht_grpc.DHTStub(ChannelCache.get_channel(peer, aio=True, options=self.channel_options))
 
     async def call_ping(self, peer: Endpoint) -> Optional[DHTID]:
         """

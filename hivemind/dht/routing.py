@@ -5,15 +5,12 @@ import hashlib
 import heapq
 import os
 import random
-import time
 from collections.abc import Iterable
 from itertools import chain
 from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
+from hivemind.utils import Endpoint, PickleSerializer, get_dht_time, DHTExpiration
 
-from hivemind.utils import Endpoint, PickleSerializer
-
-DHTKey, Subkey, DHTValue, DHTExpiration, BinaryDHTID, BinaryDHTValue, = Any, Any, Any, float, bytes, bytes
-get_dht_time = time.time  # time used by all dht functionality. You can replace this with any infrastructure-wide time
+DHTKey, Subkey, DHTValue, BinaryDHTID, BinaryDHTValue, = Any, Any, Any, bytes, bytes
 
 
 class RoutingTable:

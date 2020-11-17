@@ -26,7 +26,7 @@ import uvloop
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import get_dht_time, DHTValue
-from hivemind.dht.storage import ValueWithExpiration
+from hivemind.utils.timed_storage import ValueWithExpiration
 from hivemind.utils import MPFuture, Endpoint, get_logger
 
 logger = get_logger(__name__)

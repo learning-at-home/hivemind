@@ -1,26 +1,21 @@
 import pickle
-from functools import lru_cache
 from typing import Tuple, Optional, Any, Dict
 
-import grpc
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
 from hivemind.utils import nested_flatten, nested_pack, nested_compare, Endpoint
-from hivemind.utils.grpc import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils.grpc import serialize_torch_tensor, deserialize_torch_tensor, ChannelCache
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 
 
-@lru_cache(maxsize=None)
 def _get_expert_stub(endpoint: Endpoint, *extra_options: Tuple[str, Any]):
     """ Create a gRPC stub to access remote expert or use previously created stub from a process-wide cache """
-    channel_options = [
-        ('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)
-    ] + list(extra_options)
-    return runtime_grpc.ConnectionHandlerStub(grpc.insecure_channel(endpoint, options=channel_options))
+    channel_options = (('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)) + extra_options
+    return runtime_grpc.ConnectionHandlerStub(ChannelCache.get_channel(endpoint, aio=False, options=channel_options))
 
 
 class RemoteExpert(nn.Module):
