@@ -15,7 +15,7 @@ DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autogra
 def _get_expert_stub(endpoint: Endpoint, *extra_options: Tuple[str, Any]):
     """ Create a gRPC stub to access remote expert or use previously created stub from a process-wide cache """
     channel_options = (('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)) + extra_options
-    return runtime_grpc.ConnectionHandlerStub(ChannelCache.get_channel(endpoint, aio=False, options=channel_options))
+    return ChannelCache.get_stub(endpoint, runtime_grpc.ConnectionHandlerStub, aio=False, options=channel_options)
 
 
 class RemoteExpert(nn.Module):

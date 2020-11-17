@@ -80,7 +80,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
     def _get(self, peer: Endpoint) -> dht_grpc.DHTStub:
         """ get a DHTStub that sends requests to a given peer """
-        return dht_grpc.DHTStub(ChannelCache.get_channel(peer, aio=True, options=self.channel_options))
+        return ChannelCache.get_stub(peer, dht_grpc.DHTStub, aio=True, options=self.channel_options)
 
     async def call_ping(self, peer: Endpoint) -> Optional[DHTID]:
         """

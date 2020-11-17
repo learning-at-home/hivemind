@@ -4,7 +4,7 @@ Utilities for running GRPC services: compile protobuf, patch legacy versions, et
 from __future__ import annotations
 import os
 import threading
-from typing import NamedTuple, Sequence, Tuple, Optional, Union, Any
+from typing import NamedTuple, Sequence, Tuple, Optional, Union, Any, Dict, TypeVar, Type
 
 import grpc
 import numpy as np
@@ -12,11 +12,13 @@ import torch
 
 from hivemind.proto import runtime_pb2
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils.timed_storage import TimedStorage, get_dht_time, DHTExpiration
+from hivemind.utils.timed_storage import TimedStorage, get_dht_time, DHTExpiration, ValueWithExpiration
 from hivemind.utils.networking import Endpoint
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__file__)
+
+Stub = TypeVar("Stub")
 
 
 class ChannelInfo(NamedTuple):
@@ -27,7 +29,7 @@ class ChannelInfo(NamedTuple):
     compression: Optional[grpc.Compression]
 
 
-class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channel]]):
+class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.Channel], Dict]]):
     """
     A process-wide cache of gRPC channels, supports both normal and aio channels, secure/insecure channels, etc
     Based on grpcio internal channel cache by Richard Belleville and Lidi Zheng (thanks!)
@@ -59,13 +61,14 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
             return cls._singleton
 
     @classmethod
-    def get_channel(cls, target: Endpoint, *, aio: bool, options: Sequence[Tuple[str, Any], ...] = (),
-                    channel_credentials: Optional[grpc.ChannelCredentials] = None,
-                    compression: Optional[grpc.Compression] = None) -> Union[grpc.Channel, grpc.aio.Channel]:
+    def get_stub(cls, target: Endpoint, stub_type: Type[Stub], *, aio: bool, options: Sequence[Tuple[str, Any]] = (),
+                 channel_credentials: Optional[grpc.ChannelCredentials] = None,
+                 compression: Optional[grpc.Compression] = None) -> Stub:
         """
         Create a grpc channel with given options or reuse pre-existing one
 
         :param target: the recipient's address and port
+        :param stub_type: a gRPC stub (client) to be instantiated
         :param aio: if True, returns grpc.Channel, otherwise returns grpc.aio.Channel
         :param options: see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html
         :param channel_credentials: if specified, create a secure channel usin these credentials (default = insecure)
@@ -74,19 +77,20 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
         cache = cls.get_singleton()
         with cls._lock:
             key = ChannelInfo(target, aio, tuple(options or ()), channel_credentials, compression)
-            channel, _ = super(cls, cache).get(key) or (None, None)
-            if channel is None:
-                channel = cls._create_channel(*key)
+            entry: ValueWithExpiration = super(cls, cache).get(key)
+            channel, stubs = entry.value if entry is not None else (cls._create_channel(*key), {})
+            if stub_type not in stubs:
+                stubs[stub_type] = stub_type(channel)
 
             # either cache channel or update expiration of an existing channel
             expiration_time = get_dht_time() + cls.EVICTION_PERIOD_SECONDS
-            super(cls, cache).store(key, channel, expiration_time)
+            super(cls, cache).store(key, (channel, stubs), expiration_time)
 
             if expiration_time < cache._nearest_expiration_time:
                 cache._nearest_expiration_time = expiration_time
                 cls._new_top_evt.set()
 
-            return channel
+            return stubs[stub_type]
 
     @classmethod
     def _create_channel(cls, target: Endpoint, aio: bool, options: Sequence[Tuple[str, Any], ...],
@@ -121,13 +125,13 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
                 cache._nearest_expiration_time = entry.expiration_time if entry is not None else float('inf')
 
     def store(self, *args, **kwargs) -> ValueError:
-        raise ValueError(f"Please use {self.__class__.__name__}.get_channel to get/create channels")
+        raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
     def get(self, *args, **kwargs) -> ValueError:
-        raise ValueError(f"Please use {self.__class__.__name__}.get_channel to get/create channels")
+        raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
     def top(self) -> ValueError:
-        raise ValueError(f"Please use {self.__class__.__name__}.get_channel to get/create channels")
+        raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
 
 FP16_MAX = 65_504
