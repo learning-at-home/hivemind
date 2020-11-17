@@ -62,7 +62,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
         with cls._lock:
             if cls._singleton is None or cls._singleton_pid != os.getpid():
                 if cls._singleton is not None:
-                    cls._singleton.terminate()
+                    cls._singleton._stop_background_thread()
                 cls._singleton, cls._singleton_pid = cls(_created_as_singleton=True), os.getpid()
             return cls._singleton
 
@@ -127,7 +127,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
                 _, entry = super(self).top()
                 self._nearest_expiration_time = entry.expiration_time if entry is not None else float('inf')
 
-    def terminate(self):
+    def _stop_background_thread(self):
         with self._lock:
             self._is_active = False
             self._update_eviction_evt.set()
