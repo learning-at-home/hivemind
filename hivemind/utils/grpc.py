@@ -48,7 +48,8 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     _nearest_expiration_time: DHTExpiration
     _is_active: bool
 
-    def __init__(self):
+    def __init__(self, _created_as_singleton=False):
+        assert _created_as_singleton, f"Please use {self.__class__.__name__}.get_singleton()"
         super().__init__(maxsize=self.MAXIMUM_CHANNELS)
         self._is_active = True
         self._nearest_expiration_time = float('inf')
@@ -57,11 +58,12 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
 
     @classmethod
     def get_singleton(cls):
+        """ Get or create the channel cache for the current process """
         with cls._lock:
             if cls._singleton is None or cls._singleton_pid != os.getpid():
                 if cls._singleton is not None:
                     cls._singleton.terminate()
-                cls._singleton, cls._singleton_pid = cls(), os.getpid()
+                cls._singleton, cls._singleton_pid = cls(_created_as_singleton=True), os.getpid()
             return cls._singleton
 
     @classmethod
