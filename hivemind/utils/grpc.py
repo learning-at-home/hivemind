@@ -47,7 +47,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Union[grpc.Channel, grpc.aio.Channe
     def __init__(self):
         super().__init__(maxsize=self.MAXIMUM_CHANNELS)
         self._eviction_thread = threading.Thread(target=self._close_stale_channels_in_background, daemon=True)
-        self._eviction_thread.start()
+        # self._eviction_thread.start()
 
     @classmethod
     def get_singleton(cls):
