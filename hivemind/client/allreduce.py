@@ -54,7 +54,7 @@ class GroupAllReduce:
         self.max_size = float('inf')  # maximum group size, only enforced for group leader
 
         # populated when assembling a group
-        self.group_endpoints_set: Optional[Set[Endpoint]] = None
+        self.group_endpoints_set: Set[Endpoint] = set()
         self.assembled_group: asyncio.Future[Sequence[Endpoint]] = asyncio.Future()  # final ordered endpoints
         self.concurrent_requests_lock = asyncio.Lock()  # lock inbound/outbound requests to join group
 
