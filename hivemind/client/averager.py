@@ -15,7 +15,7 @@ import grpc
 import hivemind
 from hivemind.dht import get_dht_time, DHTExpiration
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture
-from hivemind.client.allreduce import GroupAllReduce, GroupID
+from hivemind.client.allreduce import GroupAllReduce, GroupID, AllreduceException
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 
 logger = get_logger(__file__)
@@ -58,6 +58,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.channel_options = channel_options
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
+        self._forming_group: Optional[GroupAllReduce] = None
         self._pending_groups: Dict[GroupID, GroupAllReduce] = {}
         self._lock_forming_a_group: Optional[asyncio.Lock] = None
         self.ready = mp.Event()
@@ -154,17 +155,22 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 future.set_result(await group_allreduce.run_allreduce())
             else:
                 async with self._lock_forming_a_group:
-                    stream = await group_allreduce.request_join_group(leader_endpoint)
-                    self._forming_group = self._pending_groups[group_allreduce.group_id] = group_allreduce
+                    accepted = await group_allreduce.request_join_group(leader_endpoint)
+                    if not accepted:
+                        group_allreduce.set_exception(AllreduceException(f"Rejected by {leader_endpoint}"))
+                        raise group_allreduce.exception()
 
-                started_allreduce = await group_allreduce.wait_for_allreduce(stream)
-                if started_allreduce:
-                    future.set_result(await group_allreduce.run_allreduce())
-                else:
-                    future.set_exception(ValueError(f"Rejected by {leader_endpoint}"))
+                    self._forming_group = self._pending_groups[group_allreduce.group_id] = group_allreduce
+                    started_allreduce = await group_allreduce.wait_for_allreduce()
+
+                    if started_allreduce:
+                        future.set_result(await group_allreduce.run_allreduce())
+                    else:
+                        future.set_exception(group_allreduce.exception())
 
         except Exception as e:
             future.set_exception(e)
+            raise
         finally:
             _ = self._pending_groups.pop(group_allreduce.group_id, None)
             if group_allreduce is self._forming_group:

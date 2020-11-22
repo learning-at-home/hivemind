@@ -9,7 +9,7 @@ from enum import Enum, auto
 import grpc
 import torch
 
-from hivemind.dht import DHTID, DHTExpiration
+from hivemind.dht import DHTID, DHTExpiration, get_dht_time
 from hivemind.utils import Endpoint, get_logger, MSGPackSerializer
 from hivemind.utils import TensorDescriptor, deserialize_torch_tensor, serialize_torch_tensor, ChannelCache
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 
 # flavour types
 GroupID = bytes
+StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.PeerInfo, averaging_pb2.MessageFromLeader]
 
 
 class ProtocolState(Enum):
@@ -29,6 +30,10 @@ class ProtocolState(Enum):
     GROUP_DISBANDED = auto()     # leader disbanded the group before we began allreduce
     ERROR = auto()               # someone (maybe i) messed up and we can't recover
     CANCELLED = auto()           # i have unilaterally cancelled GroupAllreduce
+
+
+class AllreduceException(Exception):
+    """ A special exception that is raised when allreduce can't continue normally (e.g. disbanded/bad request/ etc) """
 
 
 class GroupAllReduce:
@@ -50,6 +55,7 @@ class GroupAllReduce:
                                            schema_hash=compute_schema_hash(tensors))
 
         self.leader_endpoint: Optional[Endpoint] = None
+        self.stream_call_to_leader: Optional[StreamCallToLeader] = None
         self.group_id: Optional[GroupID] = None  # a unique identifier of this one group all-reduce
         self.max_size = float('inf')  # maximum group size, only enforced for group leader
 
@@ -89,9 +95,9 @@ class GroupAllReduce:
         assert self.state in (ProtocolState.LEADER_WAITING_FOR_PEERS, ProtocolState.RUNNING_ALLREDUCE)
         return len(self.group_endpoints_set)
 
-    def join_group(self, leader_endpoint: Endpoint, group_id: GroupID):
+    def join_group(self, leader_endpoint: Endpoint, group_id: GroupID, stream: Optional[StreamCallToLeader] = None):
         """ After you were accepted by a leader, create your local instance using the metadata he sent """
-        self.group_id, self.leader_endpoint = group_id, leader_endpoint
+        self.group_id, self.leader_endpoint, self.stream_call_to_leader = group_id, leader_endpoint, stream
         logger.debug(f"{self} - joining the group of {leader_endpoint}. Group id: {self.group_id}")
         self.state = ProtocolState.FOLLOWER_WAITING_FOR_LEADER
 
@@ -149,13 +155,34 @@ class GroupAllReduce:
 
         return await self.averaged_part
 
+    def cancel(self):
+        logger.debug(f"{self} - cancelled")
+        self.state = ProtocolState.CANCELLED
+        if self.stream_call_to_leader:
+            self.stream_call_to_leader.cancel()
+        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
+            future.cancel()
+
+    def set_exception(self, exception: Exception):
+        logger.debug(f"{self} - {exception}")
+        self.state = ProtocolState.ERROR
+        if self.stream_call_to_leader:
+            self.stream_call_to_leader.cancel()
+        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
+            future.set_exception(exception)
+
+    def exception(self) -> Optional[BaseException]:
+        return self.assembled_group.exception()
+
+    # Note: the code above describes pure protocol, code below is the implementation of GroupAllReduce for gRPC
+
     def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
         return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
 
     async def handle_join_request(self, request: averaging_pb2.PeerInfo
                                   ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """ accept or reject a join request; if accepted, run him through allreduce steps """
-        should_remove_peer = False
+        remove_peer_on_failure = False
         try:
             # stage 1: check if there is a reason to reject a peer outright
             if not is_valid_join_request(request):
@@ -188,13 +215,19 @@ class GroupAllReduce:
                 assert self.state == ProtocolState.LEADER_WAITING_FOR_PEERS
 
                 self.add_peer_to_group(request.endpoint)
-                should_remove_peer = True
+                remove_peer_on_failure = True
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED, group_id=self.group_id)
 
             if self.group_size >= self.max_size:
                 self.leader_begin_allreduce()
 
-            # stage 3: wait for the group to be assembled and return
+            # stage 3: wait for the group to be assembled (or for the follower to leave, whichever comes first)
+            await asyncio.wait({self.assembled_group}, return_when=asyncio.FIRST_COMPLETED,
+                               timeout=self.info.expiration - get_dht_time())
+            if not self.assembled_group.done() and get_dht_time() > self.info.expiration:
+                self.leader_begin_allreduce()  # start allreduce with incomplete group
+
+            # if everything went well, the group can now begin allreduce
             ordered_group_endpoints = await self.assembled_group
             if ordered_group_endpoints is not None:
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.BEGIN_ALLREDUCE,
@@ -207,41 +240,45 @@ class GroupAllReduce:
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
 
         finally:  # this code is guaranteed to run if the iterator is destroyed prematurely
-            if should_remove_peer:
+            if remove_peer_on_failure:
                 self.remove_peer_from_group(request.endpoint)
                 if self.group_size <= 1:
-                    self.set_exception(ValueError("All peers have left"))
+                    self.set_exception(AllreduceException("All peers have left the group"))
 
-    async def request_join_group(self, leader: Endpoint
-                                 ) -> Optional[grpc.aio.UnaryStreamCall[averaging_pb2.MessageFromLeader]]:
-        """ request a given peer to be your leader for allreduce. if accepted, return a grpc stream """
+    async def request_join_group(self, leader: Endpoint) -> bool:
+        """ request a given peer to be your leader for allreduce. if True if accepted, False if rejected """
         assert self.state == ProtocolState.LOOKING_FOR_GROUP
         try:
             async with self.concurrent_requests_lock:
-                stream = self._get_peer_stub(leader).rpc_group_allreduce(self.info)
-                message = await stream.read()
+                stream_call = self._get_peer_stub(leader).rpc_group_allreduce(self.info)
+                message = await stream_call.read()
                 logger.debug(f"{self} - requested {leader} to be my leader, received "
                              f"{averaging_pb2.MessageCode.Name(message.code)}")
                 if message.code == averaging_pb2.ACCEPTED:
-                    self.join_group(leader, message.group_id)
-                    return stream
-
+                    self.join_group(leader, message.group_id, stream_call)
+                    return True
+                else:
+                    return False
         except Exception as e:
             self.set_exception(e)
 
-    async def wait_for_allreduce(self, stream: grpc.aio.UnaryStreamCall[averaging_pb2.MessageFromLeader]) -> bool:
+    async def wait_for_allreduce(self) -> bool:
         """ the second part of request_join_group, return True if started allreduce, False if failed or disbanded """
+        assert self.state == ProtocolState.FOLLOWER_WAITING_FOR_LEADER
         try:
-            message = await stream.read()
+            message = await self.stream_call_to_leader.read()
+            logger.debug(f"{self} - leader sent {averaging_pb2.MessageCode.Name(message.code)}")
+
             if message.code == averaging_pb2.BEGIN_ALLREDUCE:
-                logger.debug(f"{self} - leader triggered allreduce")
                 assert all(isinstance(p, Endpoint) for p in message.ordered_group_endpoints)
                 self.follower_begin_allreduce(message.ordered_group_endpoints)
                 return True
             else:
-                logger.debug(f"{self} - leader sent {averaging_pb2.MessageCode.Name(message.code)}, leaving group")
-                self.state = ProtocolState.GROUP_DISBANDED
+                self.set_exception(AllreduceException(f"Leader sent {averaging_pb2.MessageCode.Name(message.code)}"))
                 return False
+        except asyncio.CancelledError:
+            self.cancel()
+            return False
         except Exception as e:
             self.set_exception(e)
             return False
@@ -257,13 +294,17 @@ class GroupAllReduce:
                 self.average_tensor_parts[peer_endpoint] = await self.accumulate(peer_endpoint, local_part)
             else:
                 serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
-                response = await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
-                    group_id=self.group_id, endpoint=self.info.endpoint, tensor_part=serialized_tensor_part))
+                response = await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(
+                    averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING, group_id=self.group_id,
+                                                endpoint=self.info.endpoint, tensor_part=serialized_tensor_part))
 
-                if response.code == averaging_pb2.ACCEPTED:
+                if response.code == averaging_pb2.AVERAGED_PART:
                     self.average_tensor_parts[peer_endpoint] = deserialize_torch_tensor(response.tensor_part)
                 else:
-                    raise ValueError(f"peer {peer_endpoint} replied {averaging_pb2.MessageCode.Name(response.code)}")
+                    message_code = averaging_pb2.MessageCode.Name(response.code)
+                    reference_code = averaging_pb2.MessageCode.Name(response.code)
+                    raise AllreduceException(f"peer {peer_endpoint} replied with {message_code} instead of"
+                                             f" {reference_code}, allreduce failed")
 
             if len(self.average_tensor_parts) >= len(self.group_endpoints_set):
                 ordered_parts = [self.average_tensor_parts[peer] for peer in ordered_group_endpoints]
@@ -275,12 +316,15 @@ class GroupAllReduce:
             return await self.averaged_tensors
         except Exception as e:
             code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
+            logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
 
-            async def send_error_to_peer(peer_endpoint):
+            async def send_error_to_peer(peer_endpoint: Endpoint):
                 await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
                     group_id=self.group_id, endpoint=self.info.endpoint, code=code))
+
             for peer_endpoint in ordered_group_endpoints:
                 asyncio.create_task(send_error_to_peer(peer_endpoint))
+
             if code == averaging_pb2.CANCELLED:
                 self.cancel()
             else:
@@ -296,7 +340,7 @@ class GroupAllReduce:
         elif request.endpoint in self.accumulated_from:
             return averaging_pb2.AveragingData(code=averaging_pb2.DUPLICATE_ENDPOINT)
 
-        if request.code in (averaging_pb2.INTERNAL_ERROR, averaging_pb2.CANCELLED):
+        if request.code != averaging_pb2.PART_FOR_AVERAGING:
             self.set_exception(ValueError(f"{request.endpoint} sent {averaging_pb2.MessageCode.Name(request.code)}"))
             return averaging_pb2.AveragingData(code=averaging_pb2.PROTOCOL_VIOLATION)
 
@@ -304,25 +348,13 @@ class GroupAllReduce:
             received_part = deserialize_torch_tensor(request.tensor_part)
             averaged_part = await self.accumulate(request.endpoint, received_part)
             serialized = serialize_torch_tensor(averaged_part, request.tensor_part.compression, allow_inplace=False)
-            return averaging_pb2.AveragingData(code=averaging_pb2.ACCEPTED, tensor_part=serialized)
+            return averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized)
         except asyncio.CancelledError:
             self.cancel()
             return averaging_pb2.AveragingData(code=averaging_pb2.CANCELLED)
         except Exception as e:
             self.set_exception(e)
             return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
-
-    def cancel(self):
-        logger.debug(f"{self} - cancelled")
-        self.state = ProtocolState.CANCELLED
-        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
-            future.cancel()
-
-    def set_exception(self, exception: Exception):
-        logger.debug(f"{self} - {exception}")
-        self.state = ProtocolState.ERROR
-        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
-            future.set_exception(exception)
 
 
 def split_into_parts(tensors: Sequence[torch.Tensor], group_size: int) -> Tuple[torch.Tensor]:
