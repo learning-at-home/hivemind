@@ -158,18 +158,20 @@ class GroupAllReduce:
     def cancel(self):
         logger.debug(f"{self} - cancelled")
         self.state = ProtocolState.CANCELLED
+        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
+            if not future.done():
+                future.cancel()
         if self.stream_call_to_leader:
             self.stream_call_to_leader.cancel()
-        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
-            future.cancel()
 
     def set_exception(self, exception: Exception):
         logger.debug(f"{self} - {exception}")
         self.state = ProtocolState.ERROR
+        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
+            if not future.done():
+                future.set_exception(exception)
         if self.stream_call_to_leader:
             self.stream_call_to_leader.cancel()
-        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
-            future.set_exception(exception)
 
     def exception(self) -> Optional[BaseException]:
         return self.assembled_group.exception()
