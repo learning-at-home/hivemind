@@ -119,6 +119,7 @@ class DHT(mp.Process):
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
                  receiver_threads: int = 1, negative_caching: bool = True, expiration: float = 300, **kwargs):
         super().__init__()
+        assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
         self.expiration, self.negative_caching = expiration, negative_caching
