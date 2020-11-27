@@ -38,19 +38,22 @@ FLAT_EXPERT = -1     # grid prefix reserved for storing 1d expert uids. Used to 
 UID_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+$')  # e.g. ffn_expert.98.76.54 - prefix + some dims
 PREFIX_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))*[.]$')  # e.g. expert. or ffn.45. (ends with ".")
 #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
+GROUP_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+@.*$')  # e.g. logits.12.33?maxsize=50
 
 
 def is_valid_uid(maybe_uid: str) -> bool:
+    """ An uid must contain a string expert type, followed by one or more .-separated numeric indices """
     return bool(UID_PATTERN.fullmatch(maybe_uid))
 
 
 def is_valid_prefix(maybe_prefix: str) -> bool:
+    """ An uid prefix must contain a string expert type, followed by optional numeric indices and a trailing period """
     return bool(PREFIX_PATTERN.fullmatch(maybe_prefix))
 
 
-def is_valid_bucket(maybe_bucket_name) -> bool:
-    #TODO use suffix @maxsize or somehow make sure buckets do not intersect with uids/prefixes
-    return not is_valid_uid(maybe_bucket_name) and not is_valid_prefix(maybe_bucket_name)
+def is_valid_group(maybe_group) -> bool:
+    """ A group identifier must contain group type, followed by one or more .-separated indices, and any ?metadata"""
+    return bool(GROUP_PATTERN.fullmatch(maybe_group))
 
 
 def split_uid(uid_or_prefix: Union[ExpertUID, ExpertPrefix]) -> Tuple[ExpertPrefix, Coordinate]:
@@ -465,61 +468,66 @@ class DHT(mp.Process):
             future.set_result(best_experts_batch)
         return best_experts_batch
 
-    def declare_averager(self, bucket_name: str, endpoint: Endpoint, expiration_time: float,
-                         is_active: bool = True, return_future: bool = False) -> Union[bool, MPFuture]:
+    def declare_averager(self, endpoint: Endpoint, allreduce_group: str, expiration_time: float, *,
+                         looking_for_group: bool = True, return_future: bool = False) -> Union[bool, MPFuture]:
         """
-        Add or remove an averager from a given bucket
+        Add (or remove) the averager to a given allreduce bucket
 
-        :param bucket_name: bucket identifier, e.g. TODOexample
-        :param endpoint: averager public endpoint
+        :param endpoint: averager public endpoint for incoming requests
+        :param allreduce_group: allreduce_group identifier, e.g. bert_trainer.12.34?maxsize=100&hash=FIa2411sGG
         :param expiration_time: intent to run allreduce before this timestamp
-        :param is_active: by default, declare averager as "looking for group" in a given bucket;
-          If False, this will instead mark that averager as no longer looking for group, e.g. if it has already left
+        :param looking_for_group: by default (True), declare the averager as "looking for group" in a given group;
+          If False, this will instead mark that the averager as no longer looking for group, (e.g. it already finished)
         :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
         :return: True if declared, False if declaration was rejected by DHT peers
         :note: when leaving (i.e. is_active=False), please specify the same expiration_time as when entering the group
         :note: setting is_active=False does *not* guarantee that others will immediately stop to query you.
         """
-        assert is_valid_bucket(bucket_name), f"Bucket name {bucket_name} is invalid, see TODO"
+        assert is_valid_group(allreduce_group), f"Group name {allreduce_group} is invalid, must follow {GROUP_PATTERN}"
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_enter_bucket', [], dict(bucket_name=bucket_name, endpoint=endpoint, is_active=is_active,
-                                                  expiration_time=expiration_time, future=_future)))
+        self.pipe.send(('_declare_averager', [],
+                        dict(endpoint=endpoint, allreduce_group=allreduce_group, expiration_time=expiration_time,
+                             looking_for_group=looking_for_group, future=_future)))
         return future if return_future else future.result()
 
-    async def _enter_bucket(self, node: DHTNode, *, bucket_name: str, endpoint: Endpoint, is_active: bool,
-                            expiration_time: DHTExpiration, future: MPFuture):
+    async def _declare_averager(self, node: DHTNode, *, endpoint: Endpoint, allreduce_group: str,
+                                expiration_time: DHTExpiration, looking_for_group: bool, future: MPFuture):
         try:
-            expiration_time = expiration_time if is_active else nextafter(expiration_time, float('inf'))
+            expiration_time = expiration_time if looking_for_group else nextafter(expiration_time, float('inf'))
             # ^-- when declaring averager inactive, we increment expiration time to overwrite the pre-existing entry
-            store_ok = await node.store(bucket_name, subkey=endpoint, value=is_active, expiration_time=expiration_time)
+            store_ok = await node.store(
+                key=allreduce_group, subkey=endpoint, value=looking_for_group, expiration_time=expiration_time)
             future.set_result(store_ok)
         except Exception as e:
             future.set_exception(e)
 
-    def get_averagers(self, bucket_name: str, *, active_only: bool, return_future: bool = False
+    def get_averagers(self, allreduce_group: str, *, only_active: bool = True, return_future: bool = False
                       ) -> Union[List[Tuple[Endpoint, DHTExpiration]], MPFuture]:
         """
         Find and return averagers in a specified all-reduce bucket
 
-        :param bucket_name: bucket identifier, e.g. TODOexample
-        :param active_only: return only active averagers (i.e. with value = True), otherwise return all
+        :param allreduce_group: allreduce_group identifier, e.g. bert_trainer.12.34?maxsize=100&hash=FIa2411sGG
+        :param only_active: if True, return only active averagers that are looking for group (i.e. with value = True)
+            if False, return all averagers in a given allreduce_group regardless of value
         :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
         :return: endpoints and expirations of every matching averager
         """
-        assert is_valid_bucket(bucket_name), f"Bucket name {bucket_name} is invalid, see TODO"
+        assert is_valid_group(allreduce_group), f"Group name {allreduce_group} is invalid, must follow {GROUP_PATTERN}"
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_averagers', [], dict(bucket_name=bucket_name, active_only=active_only, future=_future)))
+        self.pipe.send(('_get_averagers', [], dict(
+            allreduce_group=allreduce_group, only_active=only_active, future=_future)))
         return future if return_future else future.result()
 
-    async def _get_averagers(self, node: DHTNode, *, bucket_name: str, active_only: bool, future: MPFuture):
+    async def _get_averagers(self, node: DHTNode, *, allreduce_group: str, only_active: bool, future: MPFuture):
         try:
-            result = await node.get(bucket_name, latest=True)
+            result = await node.get(allreduce_group, latest=True)
             if result is None:
-                logger.warning(f"Bucket not found: {bucket_name}")
+                logger.warning(f"Allreduce group not found: {allreduce_group}")
                 future.set_result([])
-            assert isinstance(result.value, dict), f"expected {bucket_name} to be a Dict[Endpoint, bool, expiration]"
-            bucket_peers = [(endpoint, entry.expiration_time) for endpoint, entry in result.value.items()
-                            if not active_only or entry.value is True]
-            future.set_result(bucket_peers)
+            assert isinstance(result.value, dict), f"expected {allreduce_group} to be a Dict[Endpoint, is_active], " \
+                                                   f"but got {result.value} of type {type(result.value)}."
+            averagers = [(endpoint, entry.expiration_time) for endpoint, entry in result.value.items()
+                         if not only_active or entry.value is True]
+            future.set_result(averagers)
         except Exception as e:
             future.set_exception(e)
