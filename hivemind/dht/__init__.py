@@ -19,7 +19,7 @@ import multiprocessing as mp
 import re
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set, Any
+from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set
 
 import uvloop
 from numpy import nextafter
