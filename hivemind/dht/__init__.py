@@ -19,14 +19,14 @@ import multiprocessing as mp
 import re
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set
+from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set, Any
 
 import uvloop
+from numpy import nextafter
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import get_dht_time, DHTValue
-from hivemind.utils.timed_storage import ValueWithExpiration
 from hivemind.utils import MPFuture, Endpoint, get_logger
 
 logger = get_logger(__name__)
@@ -46,6 +46,11 @@ def is_valid_uid(maybe_uid: str) -> bool:
 
 def is_valid_prefix(maybe_prefix: str) -> bool:
     return bool(PREFIX_PATTERN.fullmatch(maybe_prefix))
+
+
+def is_valid_bucket(maybe_bucket_name) -> bool:
+    #TODO use suffix @maxsize or somehow make sure buckets do not intersect with uids/prefixes
+    return not is_valid_uid(maybe_bucket_name) and not is_valid_prefix(maybe_bucket_name)
 
 
 def split_uid(uid_or_prefix: Union[ExpertUID, ExpertPrefix]) -> Tuple[ExpertPrefix, Coordinate]:
@@ -459,3 +464,62 @@ class DHT(mp.Process):
         if future is not None:
             future.set_result(best_experts_batch)
         return best_experts_batch
+
+    def declare_averager(self, bucket_name: str, endpoint: Endpoint, expiration_time: float,
+                         is_active: bool = True, return_future: bool = False) -> Union[bool, MPFuture]:
+        """
+        Add or remove an averager from a given bucket
+
+        :param bucket_name: bucket identifier, e.g. TODOexample
+        :param endpoint: averager public endpoint
+        :param expiration_time: intent to run allreduce before this timestamp
+        :param is_active: by default, declare averager as "looking for group" in a given bucket;
+          If False, this will instead mark that averager as no longer looking for group, e.g. if it has already left
+        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
+        :return: True if declared, False if declaration was rejected by DHT peers
+        :note: when leaving (i.e. is_active=False), please specify the same expiration_time as when entering the group
+        :note: setting is_active=False does *not* guarantee that others will immediately stop to query you.
+        """
+        assert is_valid_bucket(bucket_name), f"Bucket name {bucket_name} is invalid, see TODO"
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_enter_bucket', [], dict(bucket_name=bucket_name, endpoint=endpoint, is_active=is_active,
+                                                  expiration_time=expiration_time, future=_future)))
+        return future if return_future else future.result()
+
+    async def _enter_bucket(self, node: DHTNode, *, bucket_name: str, endpoint: Endpoint, is_active: bool,
+                            expiration_time: DHTExpiration, future: MPFuture):
+        try:
+            expiration_time = expiration_time if is_active else nextafter(expiration_time, float('inf'))
+            # ^-- when declaring averager inactive, we increment expiration time to overwrite the pre-existing entry
+            store_ok = await node.store(bucket_name, subkey=endpoint, value=is_active, expiration_time=expiration_time)
+            future.set_result(store_ok)
+        except Exception as e:
+            future.set_exception(e)
+
+    def get_averagers(self, bucket_name: str, *, active_only: bool, return_future: bool = False
+                      ) -> Union[List[Tuple[Endpoint, DHTExpiration]], MPFuture]:
+        """
+        Find and return averagers in a specified all-reduce bucket
+
+        :param bucket_name: bucket identifier, e.g. TODOexample
+        :param active_only: return only active averagers (i.e. with value = True), otherwise return all
+        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
+        :return: endpoints and expirations of every matching averager
+        """
+        assert is_valid_bucket(bucket_name), f"Bucket name {bucket_name} is invalid, see TODO"
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_get_averagers', [], dict(bucket_name=bucket_name, active_only=active_only, future=_future)))
+        return future if return_future else future.result()
+
+    async def _get_averagers(self, node: DHTNode, *, bucket_name: str, active_only: bool, future: MPFuture):
+        try:
+            result = await node.get(bucket_name, latest=True)
+            if result is None:
+                logger.warning(f"Bucket not found: {bucket_name}")
+                future.set_result([])
+            assert isinstance(result.value, dict), f"expected {bucket_name} to be a Dict[Endpoint, bool, expiration]"
+            bucket_peers = [(endpoint, entry.expiration) for endpoint, entry in result.value.items()
+                            if not active_only or entry.value is True]
+            future.set_result(bucket_peers)
+        except Exception as e:
+            future.set_exception(e)
