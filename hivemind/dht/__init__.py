@@ -518,7 +518,7 @@ class DHT(mp.Process):
                 logger.warning(f"Bucket not found: {bucket_name}")
                 future.set_result([])
             assert isinstance(result.value, dict), f"expected {bucket_name} to be a Dict[Endpoint, bool, expiration]"
-            bucket_peers = [(endpoint, entry.expiration) for endpoint, entry in result.value.items()
+            bucket_peers = [(endpoint, entry.expiration_time) for endpoint, entry in result.value.items()
                             if not active_only or entry.value is True]
             future.set_result(bucket_peers)
         except Exception as e:
