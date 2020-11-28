@@ -48,20 +48,22 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     """
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
-                 max_size: int = None, timeout: float = 15, listen: bool = True, listen_on: Endpoint = '0.0.0.0:*',
+                 max_size: int = None, timeout: float = 15, listen_on: Endpoint = '0.0.0.0:*',
                  receiver_threads: int = 1, channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         super().__init__()
         self.dht = dht
-        self.server_opts = listen, listen_on, receiver_threads, kwargs
+        self.listen_on, self.receiver_threads, self.kwargs = listen_on, receiver_threads, kwargs
         self.max_size = max_size if max_size is not None else float('inf')
         self.timeout = timeout
         self.channel_options = channel_options
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
-        self._forming_group: Optional[GroupAllReduce] = None
-        self._pending_groups: Dict[GroupID, GroupAllReduce] = {}
-        self._lock_forming_a_group: Optional[asyncio.Lock] = None
+        self._averager_endpoint: Optional[Endpoint] = None
         self.ready = mp.Event()
+
+        self._lock_looking_for_group: Optional[asyncio.Lock] = None
+        self._forming_group: Optional[GroupAllReduce] = None  # a group currently in the making (None = not looking)
+        self._running_groups: Dict[GroupID, GroupAllReduce] = {}  # one or more groups running all-reduce in background
 
         self.averaged_tensors = tuple(averaged_tensors)
         for tensor in self.averaged_tensors:
@@ -75,6 +77,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def port(self) -> Optional[Port]:
         return self._port.value if self._port.value != 0 else None
 
+    @property
+    def endpoint(self) -> Endpoint:
+        if not hasattr(self, '_averager_endpoint'):
+            logger.info(f"Assuming averager endpoint to be {self._averager_endpoint}")
+            self._averager_endpoint = f"{self.listen_on}:{self.port}"
+        return self._averager_endpoint
+
     def run(self):
         """ Serve DecentralizedAverager forever. This function will not return until the averager is shut down """
         if asyncio.get_event_loop().is_running():
@@ -84,22 +93,19 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        listen, listen_on, receiver_threads, server_kwargs = self.server_opts
+        listen_on, receiver_threads, server_kwargs = self.listen_on, self.receiver_threads, self.kwargs
         pipe_awaiter = ThreadPoolExecutor(receiver_threads)
-        self._lock_forming_a_group = asyncio.Lock()
+        self._lock_looking_for_group = asyncio.Lock()
 
         async def _run():
-            if listen:
-                grpc.aio.init_grpc_aio()
-                server = grpc.aio.server(**server_kwargs)
-                averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
-                found_port = server.add_insecure_port(listen_on)
-                assert found_port != 0, f"Failed to listen to {listen_on}"
-                self._port.value = found_port
-                await server.start()
-                self.ready.set()
-            else:
-                raise NotImplementedError("Client-only averaging is not implemented yet.")
+            grpc.aio.init_grpc_aio()
+            server = grpc.aio.server(**server_kwargs)
+            averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
+            found_port = server.add_insecure_port(listen_on)
+            assert found_port != 0, f"Failed to listen to {listen_on}"
+            self._port.value = found_port
+            await server.start()
+            self.ready.set()
 
             while True:
                 method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
@@ -124,27 +130,29 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
-    def group_allreduce(self, my_endpoint: Endpoint, leader_endpoint: Optional[Endpoint] = None,
-                        return_future=False) -> Union[Sequence[torch.Tensor], Awaitable[Sequence[torch.Tensor]]]:
+    def run_group_allreduce(self, return_future=False) -> Union[Sequence[torch.Tensor], Awaitable[Sequence[torch.Tensor]]]:
         """
-        Set up the averager to look for a group and run all-reduce once, optionally await and return outcome
+        Set up the averager to look for a group and run all-reduce once, then return the averaged tensors
 
         :note: this function implemented for debugging and will be removed in future versions
         :param my_endpoint: public endpoint of this averager
         :param leader_endpoint: if specified, attempts to join this peer's group
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         """
+        TODO
         expiration = get_dht_time() + self.timeout
         assert isinstance(expiration, DHTExpiration)
 
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_group_allreduce', [], dict(my_endpoint=my_endpoint, expiration=expiration,
-                                                     leader_endpoint=leader_endpoint, future=_future)))
+        self.pipe.send(('_run_group_allreduce', [], dict(my_endpoint=my_endpoint, expiration=expiration,
+                                                         leader_endpoint=leader_endpoint, future=_future)))
         return future if return_future else future.result()
 
     async def _group_allreduce(self, *, my_endpoint: Endpoint, expiration: DHTExpiration,
                                leader_endpoint: Optional[Endpoint], future: MPFuture):
         group_allreduce = GroupAllReduce(my_endpoint, expiration, self.averaged_tensors)
+
+
         try:
             if leader_endpoint is None:
                 async with self._lock_forming_a_group:
