@@ -40,14 +40,12 @@ class TransformerEncoderLayer(nn.Module):
         self.activation = torch.nn.GELU()
 
     def forward(self, src):
-        src.transpose_(0, 1)
         src2 = self.self_attn(src, src, src)[0]
         src = src + self.dropout1(src2)
         src = self.norm1(src)
         src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
         src = src + self.dropout2(src2)
         src = self.norm2(src)
-        src.transpose_(0, 1)
         return src
 
 
