@@ -513,7 +513,7 @@ class DHTNode:
                 # step 2: find all keys that we should already refresh and remove them from queue
                 current_time = get_dht_time()
                 keys_to_refresh = {key_id}
-                max_expiration_time = self.protocol.cache.get(key_id)[1] or current_time
+                max_expiration_time = nearest_refresh_time
                 del self.cache_refresh_queue[key_id]  # we pledge to refresh this key_id in the nearest batch
                 while self.cache_refresh_queue and len(keys_to_refresh) < self.chunk_size:
                     key_id, (_, nearest_refresh_time) = self.cache_refresh_queue.top()

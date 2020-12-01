@@ -59,7 +59,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             self.port = found_port
             await self.server.start()
         else:  # not listening to incoming requests, client-only mode
-            # note: use empty node_info so peers wont add you to their routing tables
+            # note: use empty node_info so peers won't add you to their routing tables
             self.node_info, self.server, self.port = dht_pb2.NodeInfo(), None, None
             if listen_on != '0.0.0.0:*' or len(kwargs) != 0:
                 logger.warning(f"DHTProtocol has no server (due to listen=False), listen_on"
@@ -186,8 +186,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 response.store_ok.append(storage.store_subkey(key_id, subkey, value_bytes, expiration_time))
         return response
 
-    async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> Optional[
-            Dict[DHTID, Tuple[Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]], Dict[DHTID, Endpoint]]]]:
+    async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> Optional[Dict[
+        DHTID, Tuple[Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]], Dict[DHTID, Endpoint]]]]:
         """
         Request keys from a peer. For each key, look for its (value, expiration time) locally and
          k additional peers that are most likely to have this key (ranked by XOR distance)
@@ -238,7 +238,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         for i, key_id in enumerate(map(DHTID.from_bytes, request.keys)):
             maybe_item = self.storage.get(key_id)
             cached_item = self.cache.get(key_id)
-            if cached_item is not None and (maybe_item is None or cached_item.expiration_time > maybe_item.expiration_time):
+            if cached_item is not None and (maybe_item is None
+                                            or cached_item.expiration_time > maybe_item.expiration_time):
                 maybe_item = cached_item
 
             if maybe_item is None:  # value not found
