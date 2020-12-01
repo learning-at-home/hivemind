@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import random
 import ctypes
 from typing import Sequence, Optional, Tuple, Any, Union, Awaitable, Dict
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -35,6 +37,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param dht: a DHT node that will be used to find groups
     :param start: if True, starts the background process immediately
     :param timeout: consider allreduce failed if there was no activity for this many **seconds**
+    :param initial_group_bits: TODO
+    :param target_group_size:
     :param listen: if True (default), this averager will accept incoming requests from other peers and perform allreduce
             if False, the averager will register as a freeloader and attempt to fetch vectors from other averagers
     :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
@@ -48,12 +52,20 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     """
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
-                 max_size: int = None, timeout: float = 15, listen_on: Endpoint = '0.0.0.0:*',
+                 target_group_size: int, initial_group_bits: Optional[str] = None,
+                 timeout: float = 15, listen_on: Endpoint = '0.0.0.0:*',
                  receiver_threads: int = 1, channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
+        if target_group_size != 2 ** target_group_size.bit_length():
+            logger.warning("It is recommended to set target_group_size to a power of 2.")
+        if initial_group_bits is None:
+            nbits = max(4, int(math.ceil(math.log2(target_group_size))) * 2)
+            initial_group_bits = ''.join(random.choices('01', k=nbits))
+            logger.debug(f"Initializing with random {nbits}-bit group index: {initial_group_bits}")
+
         super().__init__()
         self.dht = dht
         self.listen_on, self.receiver_threads, self.kwargs = listen_on, receiver_threads, kwargs
-        self.max_size = max_size if max_size is not None else float('inf')
+        self.max_size = target_group_size if target_group_size is not None else float('inf')
         self.timeout = timeout
         self.channel_options = channel_options
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
@@ -139,13 +151,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :param leader_endpoint: if specified, attempts to join this peer's group
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         """
-        TODO
         expiration = get_dht_time() + self.timeout
         assert isinstance(expiration, DHTExpiration)
 
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_run_group_allreduce', [], dict(my_endpoint=my_endpoint, expiration=expiration,
-                                                         leader_endpoint=leader_endpoint, future=_future)))
+        # self.pipe.send(('_run_group_allreduce', [], dict(my_endpoint=my_endpoint, expiration=expiration,
+        #                                                  leader_endpoint=leader_endpoint, future=_future)))
         return future if return_future else future.result()
 
     async def _group_allreduce(self, *, my_endpoint: Endpoint, expiration: DHTExpiration,

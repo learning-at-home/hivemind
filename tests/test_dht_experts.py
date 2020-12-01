@@ -158,28 +158,3 @@ async def test_negative_caching():
         assert fetched[i] is not None, f"node should have cached ffn.{i}."
     for i in range(6, len(fetched)):
         assert fetched[i] is None, f"node shouldn't have cached ffn.{i}."
-
-
-@pytest.mark.forked
-def test_getset_averagers():
-    import hivemind
-    dht = hivemind.DHT(start=True)
-
-    t = hivemind.get_dht_time()
-    dht.declare_averager(endpoint='localhvost', allreduce_group='bucket.1@maxsize=2', expiration_time=t + 60)
-    dht.declare_averager(endpoint='localhvost2', allreduce_group='bucket.1@maxsize=2', expiration_time=t + 61)
-
-    q1 = dht.get_averagers('bucket.1@maxsize=2', only_active=True)
-
-    dht.declare_averager(endpoint='localhvost', allreduce_group='bucket.1@maxsize=2', expiration_time=t + 66)
-    q2 = dht.get_averagers('bucket.1@maxsize=2', only_active=True)
-
-    dht.declare_averager(endpoint='localhvost2', allreduce_group='bucket.1@maxsize=2', looking_for_group=False,
-                         expiration_time=t + 61)
-    q3 = dht.get_averagers('bucket.1@maxsize=2', only_active=True)
-    q4 = dht.get_averagers('bucket.1@maxsize=2', only_active=False)
-
-    assert len(q1) == 2 and ('localhvost', t + 60) in q1 and ('localhvost2', t + 61) in q1
-    assert len(q2) == 2 and ('localhvost', t + 66) in q2 and ('localhvost2', t + 61) in q2
-    assert len(q3) == 1 and ('localhvost', t + 66) in q3
-    assert len(q4) == 2 and ('localhvost', t + 66) in q4 and ('localhvost2', t + 61) in q2

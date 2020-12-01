@@ -23,9 +23,9 @@ async def test_allreduce_direct():
 
     reference = [(tensors1[i] + tensors2[i] + tensors3[i]) / 3 for i in range(len(tensors1))]
 
-    averager1 = hivemind.DecentralizedAverager(tensors1, dht=dht, start=True, max_size=3, timeout=5)
-    averager2 = hivemind.DecentralizedAverager(tensors2, dht=dht, start=True, max_size=3, timeout=5)
-    averager3 = hivemind.DecentralizedAverager(tensors3, dht=dht, start=True, max_size=3, timeout=5)
+    averager1 = hivemind.DecentralizedAverager(tensors1, dht=dht, start=True, target_group_size=3, timeout=5)
+    averager2 = hivemind.DecentralizedAverager(tensors2, dht=dht, start=True, target_group_size=3, timeout=5)
+    averager3 = hivemind.DecentralizedAverager(tensors3, dht=dht, start=True, target_group_size=3, timeout=5)
 
     future1 = averager1.group_allreduce(my_endpoint=f"{LOCALHOST}:{averager1.port}",
                                         leader_endpoint=None, return_future=True)
@@ -116,3 +116,29 @@ def test_chunks():
         assert len(restored) == len(tensors)
         assert all(new.shape == old.shape for new, old in zip(restored, tensors))
         assert all(torch.allclose(new, old) for new, old in zip(restored, tensors))
+
+
+@pytest.mark.forked
+def test_getset_averagers():
+    import hivemind
+    dht = hivemind.DHT(start=True)
+
+    t = hivemind.get_dht_time()
+    dht.declare_averager(endpoint='localhvost', allreduce_group='bucket.0b10110', expiration_time=t + 60)
+    dht.declare_averager(endpoint='localhvost2', allreduce_group='bucket.0b10110', expiration_time=t + 61)
+
+    q1 = dht.get_averagers('bucket.0b10110', only_active=True)
+
+    dht.declare_averager(endpoint='localhvost', allreduce_group='bucket.0b10110', expiration_time=t + 66)
+    q2 = dht.get_averagers('bucket.0b10110', only_active=True)
+
+    dht.declare_averager(endpoint='localhvost2', allreduce_group='bucket.0b10110', looking_for_group=False,
+                         expiration_time=t + 61)
+    q3 = dht.get_averagers('bucket.0b10110', only_active=True)
+    q4 = dht.get_averagers('bucket.0b10110', only_active=False)
+
+    assert len(q1) == 2 and ('localhvost', t + 60) in q1 and ('localhvost2', t + 61) in q1
+    assert len(q2) == 2 and ('localhvost', t + 66) in q2 and ('localhvost2', t + 61) in q2
+    assert len(q3) == 1 and ('localhvost', t + 66) in q3
+    assert len(q4) == 2 and ('localhvost', t + 66) in q4 and ('localhvost2', t + 61) in q2
+

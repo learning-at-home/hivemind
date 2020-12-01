@@ -38,7 +38,7 @@ FLAT_EXPERT = -1     # grid prefix reserved for storing 1d expert uids. Used to 
 UID_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+$')  # e.g. ffn_expert.98.76.54 - prefix + some dims
 PREFIX_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))*[.]$')  # e.g. expert. or ffn.45. (ends with ".")
 #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
-GROUP_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+@.*$')  # e.g. logits.12.33?maxsize=50
+GROUP_PATTERN = re.compile('^(([^.])+)[.]0b[01]+$')  # e.g. bert_exp4_averaging.0b01001101
 
 
 def is_valid_uid(maybe_uid: str) -> bool:
@@ -474,7 +474,7 @@ class DHT(mp.Process):
         Add (or remove) the averager to a given allreduce bucket
 
         :param endpoint: averager public endpoint for incoming requests
-        :param allreduce_group: allreduce_group identifier, e.g. bert_trainer.12.34?maxsize=100&hash=FIa2411sGG
+        :param allreduce_group: allreduce_group identifier, e.g. my_averager.0b011011101
         :param expiration_time: intent to run allreduce before this timestamp
         :param looking_for_group: by default (True), declare the averager as "looking for group" in a given group;
           If False, this will instead mark that the averager as no longer looking for group, (e.g. it already finished)
@@ -506,7 +506,7 @@ class DHT(mp.Process):
         """
         Find and return averagers in a specified all-reduce bucket
 
-        :param allreduce_group: allreduce_group identifier, e.g. bert_trainer.12.34?maxsize=100&hash=FIa2411sGG
+        :param allreduce_group: allreduce_group identifier, e.g. my_averager.0b011011101
         :param only_active: if True, return only active averagers that are looking for group (i.e. with value = True)
             if False, return all averagers in a given allreduce_group regardless of value
         :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
