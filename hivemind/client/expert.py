@@ -73,7 +73,8 @@ class _RemoteModuleCall(torch.autograd.Function):
     def forward(ctx, dummy: torch.Tensor, uid: str, stub: runtime_grpc.ConnectionHandlerStub,
                 info: Dict[str, Any], *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         # Note: *inputs are flattened input tensors that follow the expert's info['input_schema']
-        inputs = tuple(map(torch.Tensor.detach, inputs))  # detach to avoid pickling the computation graph
+        # detach to avoid pickling the computation graph
+        inputs = tuple(tensor.cpu().detach() for tensor in inputs)
         ctx.uid, ctx.stub, ctx.info = uid, stub, info
         ctx.save_for_backward(*inputs)
 
@@ -90,7 +91,8 @@ class _RemoteModuleCall(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, *grad_outputs) -> Tuple[Optional[torch.Tensor], ...]:
-        inputs_and_grad_outputs = tuple(nested_flatten((ctx.saved_tensors, grad_outputs)))
+        grad_outputs_cpu = tuple(tensor.cpu() for tensor in grad_outputs)
+        inputs_and_grad_outputs = tuple(nested_flatten((ctx.saved_tensors, grad_outputs_cpu)))
         backward_schema = tuple(nested_flatten((ctx.info["forward_schema"], ctx.info["outputs_schema"])))
         serialized_tensors = [serialize_torch_tensor(tensor, proto.compression)
                               for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)]

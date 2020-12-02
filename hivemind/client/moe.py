@@ -184,17 +184,16 @@ class _RemoteCallMany(torch.autograd.Function):
         mask = torch.zeros([num_samples, max_experts], dtype=torch.bool, device=flat_inputs[0].device)
         mask[alive_ii, alive_jj] = True
 
-        alive_flat_outputs_stacked = (torch.cat(outputs).to(flat_inputs[0].device)
-                                      for outputs in zip(*alive_flat_outputs))
+        alive_flat_outputs_stacked = (torch.cat(outputs) for outputs in zip(*alive_flat_outputs))
         # torch tensors, i-th tensor is of shape [num_responded, *expert_outputs[i].shape]
 
         outputs = []
         for response_stacked in alive_flat_outputs_stacked:
             output = torch.zeros(
-                [num_samples, max_experts, *response_stacked.shape[1:]], device=flat_inputs[0].device,
+                [num_samples, max_experts, *response_stacked.shape[1:]], device=response_stacked.device,
                 dtype=response_stacked.dtype, requires_grad=response_stacked.requires_grad)
             output[alive_ii, alive_jj] = response_stacked
-            outputs.append(output)
+            outputs.append(output.to(flat_inputs[0].device))
 
         # save individual outputs for backward pass
         ctx.save_for_backward(alive_ii, alive_jj, *flat_inputs_cpu)
@@ -237,18 +236,18 @@ class _RemoteCallMany(torch.autograd.Function):
         # assemble responses
         backward_survivor_ii, backward_survivor_jj = map(torch.as_tensor, zip(*backward_survivor_indices) or ([], []))
 
-        survivor_grad_inputs_stacked = (torch.cat(grad_inputs).to(flat_grad_outputs[0].device)
-                                        for grad_inputs in zip(*survivor_grad_inputs))
+        survivor_grad_inputs_stacked = (torch.cat(grad_inputs) for grad_inputs in zip(*survivor_grad_inputs))
         # torch tensors, i-th tensor is of shape [num_backward_survivors, *flat_inputs_cpu[i].shape]
 
         grad_inputs = []
         for i, survivor_grad_stacked in enumerate(survivor_grad_inputs_stacked):
             grad_input_per_expert = torch.zeros(  # gradient tensor with individual contributions from each expert
                 (num_samples, max_experts, *flat_inputs_cpu[i].shape[1:]),
-                device=flat_grad_outputs[0].device, dtype=survivor_grad_stacked.dtype)
+                device=survivor_grad_stacked.device, dtype=survivor_grad_stacked.dtype)
             grad_input_per_expert[backward_survivor_ii, backward_survivor_jj] = survivor_grad_stacked
 
-            grad_inputs.append(grad_input_per_expert.sum(dim=1))  # add up gradients from each expert
+            # sum gradients from each expert
+            grad_inputs.append(grad_input_per_expert.to(flat_grad_outputs[0].device).sum(dim=1))
 
         return (DUMMY, None, None, None, None, None, None, None, *grad_inputs)
 
