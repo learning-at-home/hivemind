@@ -4,11 +4,11 @@ import asyncio
 import random
 from dataclasses import asdict
 from typing import Set, Optional, Sequence, Tuple, Dict, AsyncIterator
-from enum import Enum, auto
 
 import grpc
 import torch
 
+from hivemind.client.averager import ProtocolState
 from hivemind.dht import DHTID, DHTExpiration, get_dht_time
 from hivemind.utils import Endpoint, get_logger, MSGPackSerializer
 from hivemind.utils import TensorDescriptor, deserialize_torch_tensor, serialize_torch_tensor, ChannelCache
@@ -16,24 +16,6 @@ from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 logger = get_logger(__name__)
 
-# flavour types
-GroupID = bytes
-StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.PeerInfo, averaging_pb2.MessageFromLeader]
-
-
-class ProtocolState(Enum):
-    LOOKING_FOR_GROUP = auto()   # i want to run averaging, but haven't found any peers yet
-    LEADER_WAITING_FOR_PEERS = auto()     # i am a leader, waiting for more peers to join
-    FOLLOWER_WAITING_FOR_LEADER = auto()  # i am a follower, my leader is assembling the group
-    RUNNING_ALLREDUCE = auto()   # we are currently exchanging tensors in a group
-    FINISHED_NORMALLY = auto()   # we ran allreduce and finished without errors
-    GROUP_DISBANDED = auto()     # leader disbanded the group before we began allreduce
-    ERROR = auto()               # someone (maybe i) messed up and we can't recover
-    CANCELLED = auto()           # i have unilaterally cancelled GroupAllreduce
-
-
-class AllreduceException(Exception):
-    """ A special exception that is raised when allreduce can't continue normally (e.g. disbanded/bad request/ etc) """
 
 
 class GroupAllReduce:
@@ -51,8 +33,6 @@ class GroupAllReduce:
         assert all(tensor.dtype == torch.float32 and tensor.device == torch.device('cpu') for tensor in tensors)
         self.local_tensors = tensors
         self.state = ProtocolState.LOOKING_FOR_GROUP
-        self.info = averaging_pb2.PeerInfo(endpoint=endpoint, expiration=expiration,
-                                           schema_hash=compute_schema_hash(tensors))
 
         self.leader_endpoint: Optional[Endpoint] = None
         self.stream_call_to_leader: Optional[StreamCallToLeader] = None
@@ -177,9 +157,6 @@ class GroupAllReduce:
         return self.assembled_group.exception()
 
     # Note: the code above describes pure protocol, code below is the implementation of GroupAllReduce for gRPC
-
-    def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
-        return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
 
     async def handle_join_request(self, request: averaging_pb2.PeerInfo
                                   ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:

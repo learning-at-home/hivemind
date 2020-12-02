@@ -4,7 +4,7 @@ import "runtime.proto";
 
 // Runs alongside each trainer to perform gating function averaging every now and then. Read more: client/averaging.py
 service DecentralizedAveraging {
-  rpc rpc_group_allreduce(PeerInfo) returns (stream MessageFromLeader);  // assemble a group for allreduce
+  rpc rpc_join_group(JoinRequest) returns (stream MessageFromLeader);  // assemble a group for allreduce
   rpc rpc_aggregate_part(AveragingData) returns (AveragingData);  // send my local shard => get aggregated shard
 }
 
@@ -30,7 +30,7 @@ enum MessageCode {
   GROUP_DISBANDED = 17;      // "[from leader] The group is closed. Go find another group."
 }
 
-message PeerInfo {
+message JoinRequest {
   string endpoint = 1;          // A follower accepts incoming allreduce requests at this address
   bytes schema_hash = 2;        // A hash that describes follower's tensors (shapes, num tensors, etc)
   double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time

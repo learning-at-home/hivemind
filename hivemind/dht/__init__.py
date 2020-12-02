@@ -468,13 +468,13 @@ class DHT(mp.Process):
             future.set_result(best_experts_batch)
         return best_experts_batch
 
-    def declare_averager(self, endpoint: Endpoint, allreduce_group: str, expiration_time: float, *,
+    def declare_averager(self, allreduce_group: str, endpoint: Endpoint, expiration_time: float, *,
                          looking_for_group: bool = True, return_future: bool = False) -> Union[bool, MPFuture]:
         """
         Add (or remove) the averager to a given allreduce bucket
 
-        :param endpoint: averager public endpoint for incoming requests
         :param allreduce_group: allreduce_group identifier, e.g. my_averager.0b011011101
+        :param endpoint: averager public endpoint for incoming requests
         :param expiration_time: intent to run allreduce before this timestamp
         :param looking_for_group: by default (True), declare the averager as "looking for group" in a given group;
           If False, this will instead mark that the averager as no longer looking for group, (e.g. it already finished)
@@ -486,11 +486,11 @@ class DHT(mp.Process):
         assert is_valid_group(allreduce_group), f"Group name {allreduce_group} is invalid, must follow {GROUP_PATTERN}"
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_declare_averager', [],
-                        dict(endpoint=endpoint, allreduce_group=allreduce_group, expiration_time=expiration_time,
+                        dict(allreduce_group=allreduce_group, endpoint=endpoint, expiration_time=expiration_time,
                              looking_for_group=looking_for_group, future=_future)))
         return future if return_future else future.result()
 
-    async def _declare_averager(self, node: DHTNode, *, endpoint: Endpoint, allreduce_group: str,
+    async def _declare_averager(self, node: DHTNode, *, allreduce_group: str, endpoint: Endpoint,
                                 expiration_time: DHTExpiration, looking_for_group: bool, future: MPFuture):
         try:
             expiration_time = expiration_time if looking_for_group else nextafter(expiration_time, float('inf'))
