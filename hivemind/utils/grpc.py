@@ -144,6 +144,7 @@ FP16_MAX = 65_504
 
 def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionType.NONE,
                            allow_inplace=False) -> runtime_pb2.Tensor:
+    assert tensor.device == torch.device('cpu')
     if compression_type == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
         assert tensor.dtype == torch.float32
 
