@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from hivemind.server.task_pool import TaskPool
-from hivemind.utils import nested_flatten, nested_pack, nested_compare, nested_map,\
+from hivemind.utils import nested_flatten, nested_pack, nested_compare, nested_map, \
     BatchTensorDescriptor, DUMMY_BATCH_SIZE
 
 
@@ -106,8 +106,7 @@ class ExpertBackend(nn.Module):
             args = [tensor.detach().requires_grad_(True) if tensor.dtype in (torch.half, torch.float, torch.double)
                     else tensor.detach() for tensor in args]
             kwargs = {input_key: (tensor.detach().requires_grad_(True)
-                                  if tensor.dtype in (torch.half, torch.float, torch.double)
-                                  else tensor.detach())
+                                  if tensor.is_floating_point() else tensor.detach())
                       for input_key, tensor in kwargs.items()}
 
             outputs = self.expert(*args, **kwargs)
