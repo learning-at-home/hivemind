@@ -15,9 +15,8 @@ enum MessageCode {
   BEGIN_ALLREDUCE = 3;       // "We can begin allreduce now. These are your peers."
   PART_FOR_AVERAGING = 4;    // "I am running allreduce with you, here's a part of my tensor that you should aggregate"
   AVERAGED_PART = 5;         // "I aggregated your part with others and here's the average for that part"
-
-  NOT_A_LEADER = 6;          // "I am not a group a leader. Go ask my leader instead."
-  ALREADY_RUNNING = 7;       // "My group has already began merging. Here's the group leader."
+  NOT_DECLARED = 6;          // "I have not declared my group id yet, how the heck did you even find me? Go away."
+  NOT_A_LEADER = 7;          // "I am not a group a leader. Go ask my leader instead."
   BAD_EXPIRATION_TIME = 8;   // "I will not accept you. I cannot guarantee that we begin before you expire."
   BAD_SCHEMA_HASH = 9;       // "I will not accept you. I am not averaging the samy type of tensors as you."
   BAD_GROUP_ID = 10;         // "I will not accept your request, your group id does not match with any groups i'm in."

@@ -8,7 +8,6 @@ from typing import Set, Optional, Sequence, Tuple, Dict, AsyncIterator
 import grpc
 import torch
 
-from hivemind.client.averager import ProtocolState
 from hivemind.dht import DHTID, DHTExpiration, get_dht_time
 from hivemind.utils import Endpoint, get_logger, MSGPackSerializer
 from hivemind.utils import TensorDescriptor, deserialize_torch_tensor, serialize_torch_tensor, ChannelCache
@@ -19,15 +18,7 @@ logger = get_logger(__name__)
 
 
 class GroupAllReduce:
-    """
-    An internal class that keeps track of one group allreduce for DecentralizedAverager.
-    GroupAllReduce is meant to be modified with methods, no direct variable assignments is allowed outside of debugging.
-
-    :param endpoint: my endpoint, as seen by the group leader
-    :param expiration: the time after which the group should begin allreduce or be disbanded
-    :param tensors: a sequence of torch tensors that i intend to average with peers
-    """
-    compression_type = runtime_pb2.NONE
+    compression_type = runtime_pb2.NONE #TODO port to averager.py
 
     def __init__(self, endpoint: Endpoint, expiration: DHTExpiration, tensors: Sequence[torch.Tensor]):
         assert all(tensor.dtype == torch.float32 and tensor.device == torch.device('cpu') for tensor in tensors)
@@ -46,7 +37,7 @@ class GroupAllReduce:
 
         # populated when running allreduce
         self.accumulator: Optional[torch.Tensor] = None   # the sum of averaged tensors so far, init with zeros
-        self.accumulated_from: Set[Endpoint] = set()      # peers that we have accumulated our part from
+        self.accumulated_from: Set[Endpoint] = set()
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()
 
         self.average_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers
@@ -119,42 +110,6 @@ class GroupAllReduce:
         self.assembled_group.set_result(ordered_group_endpoints)
         self.state = ProtocolState.RUNNING_ALLREDUCE
 
-    async def accumulate(self, source: Endpoint, part: torch.Tensor) -> torch.Tensor:
-        """ Add vector part to accumulator, wait for all other vectors to be added, return the average """
-        assert source not in self.accumulated_from, "duplicate endpoint, already received that part"
-        assert self.accumulator is None or self.accumulator.shape == part.shape
-        logger.debug(f"{self} - accumulated part from {source}")
-
-        self.accumulator = part if self.accumulator is None else self.accumulator.add_(part)
-        self.accumulated_from.add(source)
-
-        ordered_group_endpoints = await self.assembled_group
-        assert len(self.accumulated_from) <= len(ordered_group_endpoints)
-        if len(self.accumulated_from) == len(ordered_group_endpoints):
-            self.averaged_part.set_result(self.accumulator.div_(len(self.accumulated_from)))
-
-        return await self.averaged_part
-
-    def cancel(self):
-        logger.debug(f"{self} - cancelled")
-        self.state = ProtocolState.CANCELLED
-        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
-            if not future.done():
-                future.cancel()
-        if self.stream_call_to_leader:
-            self.stream_call_to_leader.cancel()
-
-    def set_exception(self, exception: Exception):
-        logger.debug(f"{self} - {exception}")
-        self.state = ProtocolState.ERROR
-        for future in self.assembled_group, self.averaged_part, self.averaged_tensors:
-            if not future.done():
-                future.set_exception(exception)
-        if self.stream_call_to_leader:
-            self.stream_call_to_leader.cancel()
-
-    def exception(self) -> Optional[BaseException]:
-        return self.assembled_group.exception()
 
     # Note: the code above describes pure protocol, code below is the implementation of GroupAllReduce for gRPC
 
