@@ -515,7 +515,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if request.group_id not in self._running_groups:
             return averaging_pb2.AveragingData(code=averaging_pb2.PROTOCOL_VIOLATION)
 
-
         return await self._pending_groups[request.group_id].handle_accumulate_request(request)
 
 
