@@ -20,7 +20,7 @@ import hivemind
 from hivemind.dht import DHTID, DHTExpiration, get_dht_time, is_valid_group, GROUP_PATTERN
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, TensorDescriptor, MSGPackSerializer
 from hivemind.utils.grpc import ChannelCache, serialize_torch_tensor, deserialize_torch_tensor
-from hivemind.proto import averaging_pb2, averaging_pb2_grpc
+from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 
 # flavour types
@@ -82,6 +82,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
                  prefix: str, target_group_size: int, min_group_size: int = 1, initial_group_bits: Optional[str] = None,
                  averaging_expiration: float = 15, allreduce_timeout: float = float('inf'),
+                 compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
                  listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without ."
@@ -100,6 +101,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.prefix, self.group_bits = prefix, initial_group_bits
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.allreduce_timeout = averaging_expiration, allreduce_timeout
+        self.compression_type = compression_type
 
         self.averaged_tensors = tuple(averaged_tensors)
         # TODO use mp.Lock to prevent someone from modifying tensors before we copy them! maybe.
@@ -326,7 +328,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                         # the time is up, we have a *good enough* group. run allreduce as is.
                         return await self._leader_begin_allreduce()
                     else:
-                        await self._leader_disband_group(suggested_leader=None)
+                        await self._leader_disband_group()
                         # TODO maybe adjust grid size
                         continue  # re-declare averager with new expiration time
                 finally:
@@ -367,7 +369,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 logger.debug(f"{self.endpoint} - joining the group of {leader}; waiting for peers")
                 self._accepted_to_group_as_follower.set()
                 self._current_leader = leader
-                await self._leader_disband_group(suggested_leader=leader)
+                await self._leader_disband_group()
 
             message = await stream_call.read()
             #TODO handle the possibility that leader does not respond a second time - use timeout!
@@ -433,6 +435,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 await asyncio.wait({self._assembled_group, self._accepted_to_group_as_follower.wait(),
                                     self._group_disbanded_cond.wait()},
                                    timeout=max(0.0, self._declared_expiration_time - get_dht_time()))
+                # TODO handle group disbanded without suggested leader - check if group_disbanded.wait is finished!
 
             if self._accepted_to_group_as_follower.is_set():
                 # outcome 2: we were accepted to another averager's group => send all followers to our new leader
@@ -440,6 +443,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED,
                                                       suggested_leader=self._current_leader)
                 return
+
 
             if not self._assembled_group.done():
                 if len(self._current_followers) + 1 < self.min_group_size \
@@ -490,28 +494,76 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._looking_for_group = False
         return group_allreduce
 
-    async def _leader_disband_group(self, suggested_leader: Optional[Endpoint] = None):
+    async def _leader_disband_group(self):
         assert not self._assembled_group.done(), "too late to disband: the group is already fully assembled"
         async with self._lock_request_join_group:
             for follower in list(self._current_followers):
                 self._current_followers.discard(follower)  # this will cause rpc_foin_group to kick the follower out
             async with self._group_disbanded_cond:
                 self._group_disbanded_cond.notify_all()
-        raise NotImplementedError("Notify all current followers that the group is disbanded")
 
-    async def _run_allreduce(self, group_allreduce: GroupAllReduce, timeout: Optional[float] = None):
+    async def _run_allreduce(self, group_id: GroupID, timeout: Optional[float] = None):
         """ send allreduce requests to all peers and collect results, return the averaged tensor """
-        raise NotImplementedError("port from allreduce.py")
+        assert group_id in self._running_groups, f"unknown group id {group_id}, current groups: {self._running_groups}"
+        group_allreduce = self._running_groups[group_id]
+
+        async def _average_one_part(peer_endpoint: Endpoint, local_part: torch.Tensor):
+            serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
+            response = await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(
+                averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING, group_id=group_allreduce.group_id,
+                                            endpoint=group_allreduce.endpoint, tensor_part=serialized_tensor_part))
+            if response.code == averaging_pb2.AVERAGED_PART:
+                group_allreduce.register_averaged_part(peer_endpoint, deserialize_torch_tensor(response.tensor_part))
+            else:
+                message_code = averaging_pb2.MessageCode.Name(response.code)
+                reference_code = averaging_pb2.MessageCode.Name(response.code)
+                group_allreduce.set_exception(AllreduceException(f"peer {peer_endpoint} replied with {message_code}"
+                                                                 f" instead of {reference_code}, allreduce failed"))
+
+        try:
+            await asyncio.gather(*(_average_one_part(peer_endpoint, tensor_part)
+                                   for peer_endpoint, tensor_part in group_allreduce.local_tensor_parts.items()
+                                   if peer_endpoint != self.endpoint))
+            return await group_allreduce.averaged_tensors
+        except Exception as e:
+            code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
+            logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
+            group_allreduce.set_exception(e)
+
+            async def send_error_to_peer(peer_endpoint: Endpoint):
+                await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
+                    group_id=group_id, endpoint=group_allreduce.endpoint, code=code))
+
+            for peer_endpoint in group_allreduce.ordered_group_endpoints:
+                asyncio.create_task(send_error_to_peer(peer_endpoint))
+
+        finally:
+            del self._running_groups[group_id]
 
     async def rpc_aggregate_part(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
+        """ a groupmate sends us a part of his tensor; we should average it with other peers and return the result """
         if request.group_id not in self._running_groups and not self._received_latest_group_id.is_set():
             await self._received_latest_group_id.wait()  # this handles a special case when leader accepted us to group
             # AND began allreduce right away, but his response with group_id was delayed and other peers got to us first
-
         if request.group_id not in self._running_groups:
-            return averaging_pb2.AveragingData(code=averaging_pb2.PROTOCOL_VIOLATION)
+            return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
+        group_allreduce = self._running_groups[request.group_id]
 
-        return await self._pending_groups[request.group_id].handle_accumulate_request(request)
+        if request.code == averaging_pb2.PART_FOR_AVERAGING:
+            try:
+                tensor_part = deserialize_torch_tensor(request.tensor_part)
+                averaged_part = await group_allreduce.accumulate_part(request.endpoint, tensor_part)
+                serialized = serialize_torch_tensor(averaged_part, request.tensor_part.compression, allow_inplace=False)
+                return averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized)
+            except Exception as e:
+                group_allreduce.set_exception(e)
+                logger.error(f"{self} - encountered {e} when aggregating part from {request.endpoint}")
+                return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
+        else:
+            error_code = averaging_pb2.MessageCode.Name(request.code)
+            logger.debug(f"{self} - peer {request.endpoint} sent {error_code}, allreduce cannot continue")
+            group_allreduce.set_exception(AllreduceException(f"peer {request.endpoint} sent {error_code}."))
+            return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
 
 class GroupAllReduce:
