@@ -109,15 +109,15 @@ def test_getset_averagers():
     dht = hivemind.DHT(start=True)
 
     t = hivemind.get_dht_time()
-    dht.declare_averager(allreduce_group='bucket.0b10110', endpoint='localhvost', expiration_time=t + 60)
-    dht.declare_averager(allreduce_group='bucket.0b10110', endpoint='localhvost2', expiration_time=t + 61)
+    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost', expiration_time=t + 60)
+    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost2', expiration_time=t + 61)
 
     q1 = dht.get_averagers('bucket.0b10110', only_active=True)
 
-    dht.declare_averager(allreduce_group='bucket.0b10110', endpoint='localhvost', expiration_time=t + 66)
+    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost', expiration_time=t + 66)
     q2 = dht.get_averagers('bucket.0b10110', only_active=True)
 
-    dht.declare_averager(allreduce_group='bucket.0b10110', endpoint='localhvost2', looking_for_group=False,
+    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost2', looking_for_group=False,
                          expiration_time=t + 61)
     q3 = dht.get_averagers('bucket.0b10110', only_active=True)
     q4 = dht.get_averagers('bucket.0b10110', only_active=False)
