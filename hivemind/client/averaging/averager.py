@@ -18,6 +18,7 @@ import grpc
 
 import hivemind
 from hivemind.client.averaging.allreduce import GroupAllReduce
+from hivemind.client.averaging.matchmaking import Matchmaking
 from hivemind.dht import DHTID, DHTExpiration, get_dht_time
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, TensorDescriptor, MSGPackSerializer
 from hivemind.utils.grpc import ChannelCache, serialize_torch_tensor, deserialize_torch_tensor
@@ -72,13 +73,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     Alternative: add such keys to every smaller dimension group down to {GROUP_NBITS_INTERVAL}, check for such keys in your current highest dimension.
         If found, jump to the specified dimension.
     """
-
-    _lock_looking_for_group: asyncio.Lock(); _lock_request_join_group: asyncio.Lock()
-    _accepted_to_group_as_follower: asyncio.Event(); _group_disbanded_cond: asyncio.Event()
-    _assembled_group: asyncio.Future[GroupAllReduce]; _received_latest_group_id: asyncio.Event()
-    # the purpose of _assembled_group is as follows: if a leader accepted us, but his response (group_id) has been
-    # delayed by network, our groupmates may get to us BEFORE we know they are indeed our groupmates. If this case,
-    # we delay incoming rpc_average_part requests until leader responds and we can actually process those requests.
+    _lock_looking_for_group: asyncio.Lock()
+    _matchmaking: Matchmaking
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
                  prefix: str, target_group_size: int, min_group_size: int = 1, initial_group_bits: Optional[str] = None,
@@ -98,19 +94,16 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.dht = dht
         self.listen_on, self.receiver_threads, self.kwargs = listen_on, receiver_threads, kwargs
         self.channel_options = channel_options
-
-        self.prefix, self.group_bits = prefix, initial_group_bits
-        self.target_group_size, self.min_group_size = target_group_size, min_group_size
-        self.averaging_expiration, self.allreduce_timeout = averaging_expiration, allreduce_timeout
-        self.compression_type = compression_type
+        self.matchmaking_kwargs = dict(prefix=prefix, initial_group_bits=initial_group_bits,
+                                       target_group_size=target_group_size, min_group_size=min_group_size,
+                                       averaging_expiration=averaging_expiration, allreduce_timeout=allreduce_timeout,
+                                       compression_type=compression_type)
 
         self.averaged_tensors = tuple(averaged_tensors)
         # TODO use mp.Lock to prevent someone from modifying tensors before we copy them! maybe.
         for tensor in self.averaged_tensors:
             assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
             tensor.share_memory_()
-
-        self.schema_hash = compute_schema_hash(self.averaged_tensors)
 
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port

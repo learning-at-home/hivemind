@@ -27,28 +27,21 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     An internal class that is used to form groups of averages for running allreduce
     TODO docstring
     """
-    def __init__(self, *, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, averager_endpoint: Endpoint,
+    def __init__(self, averager_endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
                  prefix: str, target_group_size: int, min_group_size: int = 1, initial_group_bits: Optional[str] = None,
                  averaging_expiration: float = 15, allreduce_timeout: float = float('inf'),
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,):
         assert '.' not in prefix, "group prefix must be a string without ."
 
         super().__init__()
-        self.dht = dht
-        self.endpoint = averager_endpoint
-        self.averaged_tensors = tuple(averaged_tensors)
-        # TODO use mp.Lock to prevent someone from modifying tensors before we copy them! maybe.
-        for tensor in self.averaged_tensors:
-            assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
-            tensor.share_memory_()
-
+        self.dht, self.endpoint, self.averaged_tensors = dht, averager_endpoint, tuple(averaged_tensors)
         self.prefix, self.group_bits = prefix, initial_group_bits
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.allreduce_timeout = averaging_expiration, allreduce_timeout
         self.compression_type = compression_type
         self.schema_hash = compute_schema_hash(self.averaged_tensors)
 
-        self.looking_for_group = False
+        self.lock_looking_for_group = asyncio.Lock()
         self.lock_request_join_group = asyncio.Lock()
         self.assembled_group = asyncio.Future()
         self.cond_notify_followers = asyncio.Condition()
@@ -63,8 +56,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.max_assured_time = float('-inf')  # all averagers below this expiration_time are in leader_queue
 
     def __repr__(self):
-        lfg_status = "looking for group," if self.looking_for_group else "not looking for group,"
-        if self.looking_for_group:
+        lfg_status = "looking for group," if self.lock_looking_for_group.locked() else "not looking for group,"
+        if self.lock_looking_for_group.locked():
             if self.current_leader:
                 lfg_status += f" following {self.current_leader},"
             if len(self.current_followers):
@@ -79,47 +72,45 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
         Iterate over the averagers from a given group_identifier that have higher leadership priority than yourself.
         """
-        assert not self.looking_for_group, "already looking for group; can only run one look_for_group at a time"
-        end_time = get_dht_time() + (timeout or float('inf'))
+        async with self.lock_looking_for_group:
+            end_time = get_dht_time() + (timeout or float('inf'))
 
-        group_key = f"{self.prefix}.{self.group_bits}"
-        # TODO update group_bits on success! reduce number of bits on not enough peers.
-        # TODO after allreduce finishes, we may need to ask leader to notify lower keys about this
-        # (so as to fix possible network partitioning if some peers operate on a much smaller nbits)
+            group_key = f"{self.prefix}.{self.group_bits}"
+            # TODO update group_bits on success! reduce number of bits on not enough peers.
+            # TODO after allreduce finishes, we may need to ask leader to notify lower keys about this
+            # (so as to fix possible network partitioning if some peers operate on a much smaller nbits)
 
-        try:
-            self.looking_for_group = True
-            while True:
-                # step 1: declare the averager to DHT, make it visible for other averagers
-                await self.publish_averager(group_key)
+            try:
+                while True:
+                    # step 1: declare the averager to DHT, make it visible for other averagers
+                    await self.publish_averager(group_key)
 
-                # step 2: request potential leaders until first accept OR until we are chosen as a leader
-                request_candidates_task = asyncio.create_task(self.request_join_potential_leaders(group_key, ))
+                    # step 2: request potential leaders until first accept OR until we are chosen as a leader
+                    request_candidates_task = asyncio.create_task(self.request_join_potential_leaders(group_key, ))
 
-                try:  # wait until we are ready to run allreduce (as either follower or leader) or reach expiration
-                    timeout = min(end_time, self.declared_expiration_time) - get_dht_time()
-                    return await asyncio.wait_for(self.assembled_group, timeout if timeout != float('inf') else None)
+                    try:  # wait until we are ready to run allreduce (as either follower or leader) or reach expiration
+                        timeout = min(end_time, self.declared_expiration_time) - get_dht_time()
+                        return await asyncio.wait_for(self.assembled_group, timeout if isfinite(timeout) else None)
 
-                except asyncio.TimeoutError:
-                    if len(self.current_followers) >= self.min_group_size:
-                        # the time is up, we have a *good enough* group. run allreduce as is.
-                        return await self.leader_assemble_group()
-                    else:
-                        await self.leader_disband_group()
-                        # TODO maybe adjust grid size
-                        continue  # re-declare averager with new expiration time
-                finally:
-                    request_candidates_task.cancel()
+                    except asyncio.TimeoutError:
+                        if len(self.current_followers) >= self.min_group_size:
+                            # the time is up, we have a *good enough* group. run allreduce as is.
+                            return await self.leader_assemble_group()
+                        else:
+                            await self.leader_disband_group()
+                            # TODO maybe adjust grid size
+                            continue  # re-declare averager with new expiration time
+                    finally:
+                        request_candidates_task.cancel()
 
-        except Exception as e:
-            if len(self.current_followers) > 0:
-                await self.leader_disband_group()
-            self.assembled_group.set_exception(e)
-        finally:
-            self.looking_for_group = False
-            asyncio.create_task(self.unpublish_averager())
-            if self.assembled_group.done():
-                self.assembled_group = asyncio.Future()
+            except Exception as e:
+                if len(self.current_followers) > 0:
+                    await self.leader_disband_group()
+                self.assembled_group.set_exception(e)
+            finally:
+                asyncio.create_task(self.unpublish_averager())
+                if self.assembled_group.done():
+                    self.assembled_group = asyncio.Future()
 
     async def publish_averager(self, group_key: GroupKey) -> Optional[DHTExpiration]:
         """ Subscribe thyself to a given group key and become visible to other averagers """
@@ -187,7 +178,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         :param expiration_time: inform leader that we intend to begin averaging before this expiration_time
         :returns: if leader leader accepted us and started AllReduce, return that AllReduce. Otherwise, return None
         """
-        assert self.looking_for_group and self.current_leader is None
+        assert self.lock_looking_for_group.locked() and self.current_leader is None
         call: Optional[grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]] = None
         try:
             async with self.lock_request_join_group:
@@ -227,7 +218,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
             # stage 1: check if there is a reason to reject a peer outright
-            if not self.looking_for_group:
+            if not self.lock_looking_for_group.locked():
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
                 return
             if not is_valid_join_request(request):
@@ -328,7 +319,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     async def leader_disband_group(self):
         """ Cancel all followers """
-        assert self.looking_for_group, "can not disband: no longer looking for group"
+        assert self.lock_looking_for_group.locked(), "can not disband: no longer looking for group"
         async with self.lock_request_join_group:
             for follower in list(self.current_followers):
                 self.current_followers.discard(follower)  # this will cause rpc_foin_group to kick the follower out
