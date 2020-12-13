@@ -29,16 +29,15 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     """
     def __init__(self, averager_endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
                  prefix: str, target_group_size: int, min_group_size: int = 1, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, allreduce_timeout: float = float('inf'),
-                 compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,):
+                 averaging_expiration: float = 15):
         assert '.' not in prefix, "group prefix must be a string without ."
 
         super().__init__()
         self.dht, self.endpoint, self.averaged_tensors = dht, averager_endpoint, tuple(averaged_tensors)
         self.prefix, self.group_bits = prefix, initial_group_bits
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
-        self.averaging_expiration, self.allreduce_timeout = averaging_expiration, allreduce_timeout
-        self.compression_type = compression_type
+        self.averaging_expiration = averaging_expiration
+
         self.schema_hash = compute_schema_hash(self.averaged_tensors)
 
         self.lock_looking_for_group = asyncio.Lock()

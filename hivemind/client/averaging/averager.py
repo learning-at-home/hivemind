@@ -101,8 +101,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         self.matchmaking_kwargs = dict(prefix=prefix, initial_group_bits=initial_group_bits,
                                        target_group_size=target_group_size, min_group_size=min_group_size,
-                                       averaging_expiration=averaging_expiration, allreduce_timeout=allreduce_timeout,
-                                       compression_type=compression_type)
+                                       averaging_expiration=averaging_expiration)
+        self.allreduce_timeout, self.compression_type = allreduce_timeout, compression_type
         self._running_groups: Dict[GroupID, GroupAllReduce] = {}  # one or more assembled groups that run all-reduce
 
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
@@ -190,287 +190,26 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return future if return_future else future.result()
 
     async def _group_allreduce(self, *, future: MPFuture, timeout: Optional[float]):
+        group_id = None
         try:
             group_allreduce = await self._matchmaking.look_for_group(timeout=timeout)
+            group_id = group_allreduce.group_id
             if group_allreduce is None:
                 future.set_exception(AllreduceException(f"{self} - group_allreduce failed, unable to find group"))
             else:
-                #TODO rewrite so that group_allreduce runs the actual allreduce
-                future.set_result(await self._run_allreduce(group_allreduce, timeout=self.allreduce_timeout))
+                assert group_allreduce.group_id not in self._running_groups, (
+                    "the new group id matches with one of the pre-existing groups. This is either an error or you "
+                    "are fabulously unlucky (160-bit hash collision).")
+                #TODO rewrite so that group_allreduce runs the actual allreduce (and implements rpc_aggregate_part)
+                self._running_groups[group_id] = group_allreduce
+                future.set_result(await self._run_allreduce(group_allreduce.group_id, timeout=self.allreduce_timeout))
 
         except Exception as e:
             future.set_exception(e)
             raise
         finally:
-            _ = self._running_groups.pop(group_allreduce.group_id, None)
-
-    async def _look_for_group(self, *, timeout: Optional[float] = None) -> Optional[GroupAllReduce]:
-        """
-        :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
-        Iterate over the averagers from a given group_identifier that have higher leadership priority than yourself.
-        """
-        assert self.pid == os.getpid(), f"this method can only be called from inside {self.__class__.__name__}"
-        assert not self._looking_for_group, "already looking for group"
-        assert not self._assembled_group.done(), f"already assembled group: {self._assembled_group.result()}"
-        assert not self._accepted_to_group_as_follower.is_set(), f"already a accepted by some leader"
-        assert len(self._current_followers) == 0, f"averager already has {len(self._current_followers)} followers"
-        # ^-- TODO remove this check. This may happen normally under concurrency if we disbanded group but have not kicked out previous followers yet
-        assert self._declared_expiration_time == -float('inf'), "should have cleared _declared_expiration_time"
-        assert self._declared_allreduce_group is None, "should have cleared _declared_allreduce_group"
-
-        allreduce_group = f"{self.prefix}.{self.group_bits}"  # TODO use interval?
-        # TODO update group_bits on success! reduce number of bits on not enough peers.
-        # TODO after allreduce finishes, we may need to ask leader to notify lower keys about this
-        # (so as to fix possible network partitioning if some peers operate on a much smaller nbits)
-
-        allowed_discrepancy = hivemind.utils.timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
-        end_time = get_dht_time() + (timeout or float('inf'))
-
-        known_averagers: Set[Tuple[Endpoint, DHTExpiration]] = set()
-        heap: List[Tuple[DHTExpiration, Endpoint]] = []  # queue of all averagers, from earliest to latest expiration
-        max_assured_time = -float('inf')
-        # ^-- max_assured_time is such a time that all averagers below this expiration_time are in known_averagers
-
-        async def _declare_averager():
-            new_expiration_time = get_dht_time() + self.averaging_expiration
-            stored_ok = await self.dht.declare_averager(self.endpoint, allreduce_group, new_expiration_time,
-                                                        looking_for_group=True, return_future=True)
-            if not stored_ok:
-                logger.warning(f"failed to subscribe to group {allreduce_group} : store rejected by DHT peers")
-            else:
-                self._declared_expiration_time = new_expiration_time
-                self._declared_allreduce_group = allreduce_group
-            return new_expiration_time
-
-        async def _fetch_more_peers():
-            nonlocal max_assured_time, known_averagers, heap
-            request_time = get_dht_time()
-            new_peers = await self.dht.get_averagers(allreduce_group, only_active=True, return_future=True)
-            max_assured_time = max(max_assured_time, request_time - allowed_discrepancy)
-
-            for peer, peer_expiration_time in new_peers:
-                if (peer, peer_expiration_time) not in known_averagers:
-                    heapq.heappush(heap, (peer_expiration_time, peer))
-                    known_averagers.add((peer, peer_expiration_time))
-                    max_assured_time = max(max_assured_time, peer_expiration_time - allowed_discrepancy)
-
-        async def _request_potential_leaders():
-            """
-            Iterate over active averagers before us and attempt to join their group until first success
-            :returns: return GroupAllReduce if one of the averagers accepts and initiates allreduce, else return None
-            """
-            while True:
-                next_best_expiration = heap[0][0] if heap else self._declared_expiration_time
-                if next_best_expiration > max_assured_time:
-                    # if there's a chance that DHT contains averagers newer than the earliest one from our local heap,
-                    # ... then fetch more candidates from the DHT until we are confident we know the next-earliest peer
-                    timeout = min(end_time, self._declared_expiration_time) - get_dht_time()
-                    await asyncio.wait_for(_fetch_more_peers(), timeout=timeout if timeout != float('inf') else None)
-                    continue
-
-                if len(heap) == 0 or heap[0][0] >= self._declared_expiration_time:
-                    break  # no extra averagers are available until our expiration AND we can't fetch more
-
-                next_best_expiration, next_best_leader = heapq.heappop(heap)
-                if next_best_expiration < get_dht_time():
-                    continue  # this leader expired before we could request to join his group
-                if next_best_leader == self.endpoint:
-                    continue  # do not count myself as a potential leader for me (even at a later expiration time)
-
-                maybe_group_allreduce = await self._request_join_group(next_best_leader, self._declared_expiration_time)
-                if maybe_group_allreduce is not None:
-                    self._assembled_group.set_result(maybe_group_allreduce)
-
-        try:
-            self._looking_for_group = True
-            while True:
-                # step 1: declare the averager to DHT, make it visible for other averagers
-                await _declare_averager()
-
-                # step 2: request potential leaders until first accept OR until we are chosen as a leader
-                request_candidates_task = asyncio.create_task(_request_potential_leaders())
-
-                try:  # wait until we are ready to run allreduce (as either follower or leader) or reach expiration
-                    timeout = min(end_time, self._declared_expiration_time) - get_dht_time()
-                    return await asyncio.wait_for(self._assembled_group, timeout if timeout != float('inf') else None)
-                except asyncio.TimeoutError:
-                    if len(self._current_followers) >= self.min_group_size:
-                        # the time is up, we have a *good enough* group. run allreduce as is.
-                        return await self._leader_assemble_group()
-                    else:
-                        await self._leader_disband_group()
-                        # TODO maybe adjust grid size
-                        continue  # re-declare averager with new expiration time
-                finally:
-                    request_candidates_task.cancel()
-        finally:
-            self._looking_for_group = False
-            self._declared_expiration_time = float('-inf')
-            self._declared_allreduce_group = None
-            self._accepted_to_group_as_follower.clear()
-            if self._assembled_group.done():
-                self._assembled_group = asyncio.Future()
-            asyncio.create_task(self.dht.declare_averager(
-                self.endpoint, allreduce_group, expiration_time=self._declared_expiration_time,
-                looking_for_group=False, return_future=True))
-
-    async def _request_join_group(self, leader: Endpoint, expiration_time: DHTExpiration) -> Optional[GroupAllReduce]:
-        """
-        :param leader: request this peer to be your leader for allreduce
-        :param expiration_time: inform leader that we intend to begin averaging before this expiration_time
-        :returns: if leader leader accepted us and started AllReduce, return that AllReduce. Otherwise, return None
-        """
-        assert self.pid == os.getpid(), f"this method can only be called from inside {self.__class__.__name__}"
-        assert not self._accepted_to_group_as_follower.is_set(), "already accepted to another group as a follower"
-        call: Optional[grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]] = None
-        try:
-            async with self._lock_request_join_group:
-                self._received_latest_group_id.clear()
-                call = self._get_peer_stub(leader).rpc_join_group(averaging_pb2.JoinRequest(
-                    endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
-
-                message = await call.read()  # TODO use timeout?
-                if message.code != averaging_pb2.ACCEPTED:
-                    code = averaging_pb2.MessageCode.Name(message.code)
-                    logger.debug(f"{self.endpoint} - requested {leader} to be my leader, but got rejected with {code}")
-                    return None
-
-                # else: we were accepted
-                logger.debug(f"{self.endpoint} - joining the group of {leader}; waiting for peers")
-                self._accepted_to_group_as_follower.set()
-                self._current_leader = leader
-                await self._leader_disband_group()
-
-            message = await call.read()
-            if message.code == averaging_pb2.BEGIN_ALLREDUCE:
-                return await self._follower_assemble_group(leader, message.group_id, message.ordered_group_endpoints)
-            elif message.code == averaging_pb2.GROUP_DISBANDED and bool(message.suggested_leader):
-                logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
-                return await self._request_join_group(message.suggested_leader, expiration_time)
-
-            else:
-                logger.debug(f"{self} - leader sent {averaging_pb2.MessageCode.Name(message.code)}, leaving group")
-                return None
-
-        finally:
-            self._current_leader = None
-            self._received_latest_group_id.set()
-            if call is not None:
-                call.cancel()
-
-    async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
-                             ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
-        """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
-        try:
-            # stage 1: check if there is a reason to reject a peer outright
-            async with self._lock_request_join_group:
-                if not self._looking_for_group:
-                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
-                    return
-                if not is_valid_join_request(request):
-                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.PROTOCOL_VIOLATION)
-                    return
-                if request.schema_hash != self.schema_hash:
-                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_SCHEMA_HASH)
-                    return
-                if self._declared_expiration_time == float('-inf'):
-                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_DECLARED)
-                    return
-                if self._declared_expiration_time > (request.expiration or float('inf')):
-                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
-                    return
-                if self._accepted_to_group_as_follower.is_set():
-                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER,
-                                                          suggested_leader=self._current_leader)
-                    return
-                if request.endpoint == self.endpoint or request.endpoint in self._current_followers:
-                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
-                    return
-                if len(self._current_followers) + 1 >= self.target_group_size:
-                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_IS_FULL)
-                    return
-
-                # stage 2: if found no red flags, accept peer as your follower
-                self._current_followers.add(request.endpoint)
-                yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
-
-                if len(self._current_followers) + 1 >= self.target_group_size:
-                    # outcome 1: if everything went well, we have assembled a full group and are ready for allreduce
-                    await self._leader_assemble_group()  # note: this will trigger self._assembled_group
-
-            # stage 3: wait for the group to be assembled (or for the follower to leave, whichever comes first)
-            async with self._group_disbanded_cond:
-                await asyncio.wait({self._assembled_group, self._accepted_to_group_as_follower.wait(),
-                                    self._group_disbanded_cond.wait()},
-                                   return_when=asyncio.FIRST_COMPLETED,
-                                   timeout=max(0.0, self._declared_expiration_time - get_dht_time()))
-                # TODO handle group disbanded without suggested leader - check if group_disbanded.wait is finished!
-
-            if self._accepted_to_group_as_follower.is_set():
-                # outcome 2: we were accepted to another averager's group => send all followers to our new leader
-                assert self._current_leader is not None, "internal error: accepted to group but did not fill leader"
-                yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED,
-                                                      suggested_leader=self._current_leader)
-                return
-
-            if not self._assembled_group.done():
-                if len(self._current_followers) + 1 < self.min_group_size \
-                      or request.endpoint not in self._current_followers:
-                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED)
-                    return
-                # outcome 3: the time is up, we have *some* followers => run allreduce with what we have
-                await self._leader_assemble_group()
-
-            group_allreduce = self._assembled_group.result()
-            yield averaging_pb2.MessageFromLeader(
-                code=averaging_pb2.BEGIN_ALLREDUCE, group_id=group_allreduce.group_id,
-                ordered_group_endpoints=group_allreduce.ordered_group_endpoints)
-
-        except Exception as e:
-            logger.exception(e)
-            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
-
-        finally:  # note: this code is guaranteed to run even if the coroutine is destroyed prematurely
-            self._current_followers.discard(request.endpoint)
-
-    async def _leader_assemble_group(self) -> GroupAllReduce:
-        """ Form up all current followers into a group and prepare to _run_allreduce  """
-        group_id = DHTID.generate().to_bytes()
-        assert group_id not in self._running_groups, "Randomly generated a group_id that already exists, " \
-                                                     "this should normally happen once in >10^4 years."
-        ordered_group_endpoints = list(self._current_followers)
-        ordered_group_endpoints.append(self.endpoint)
-        logger.debug(f"{self.endpoint} - leader started allreduce with {len(ordered_group_endpoints)} followers.")
-        self._running_groups[group_id] = group_allreduce = GroupAllReduce(
-            group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-            ordered_group_endpoints=ordered_group_endpoints)
-        self._assembled_group.set_result(group_allreduce)
-        self._looking_for_group = False
-        return group_allreduce
-
-    async def _follower_assemble_group(self, leader: Endpoint, group_id: GroupID,
-                                       ordered_group_endpoints: Sequence[Endpoint]) -> GroupAllReduce:
-        """ Prepare to run allreduce using a list of peers provided by our leader """
-        logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
-        assert self._accepted_to_group_as_follower.is_set(), "averager is not currently following any leader"
-        assert self._current_leader == leader, f"averager does not follow this {leader} (real: {self._current_leader})"
-        assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
-        assert group_id not in self._running_groups, "Duplicate group id, already running this _GroupAllReduce"
-        self._running_groups[group_id] = group_allreduce = GroupAllReduce(
-            group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-            ordered_group_endpoints=ordered_group_endpoints)
-        self._assembled_group.set_result(group_allreduce)
-        self._looking_for_group = False
-        return group_allreduce
-
-    async def _leader_disband_group(self):
-        """ Cancel all followers """
-        assert self._looking_for_group, "too late to disband: no longer looking for group"
-        async with self._lock_request_join_group:
-            for follower in list(self._current_followers):
-                self._current_followers.discard(follower)  # this will cause rpc_foin_group to kick the follower out
-            async with self._group_disbanded_cond:
-                self._group_disbanded_cond.notify_all()
+            if group_id is not None:
+                _ = self._running_groups.pop(group_id, None)
 
     async def _run_allreduce(self, group_id: GroupID, timeout: Optional[float] = None):
         """ send allreduce requests to all peers and collect results, return the averaged tensor """
