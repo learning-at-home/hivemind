@@ -73,7 +73,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     Alternative: add such keys to every smaller dimension group down to {GROUP_NBITS_INTERVAL}, check for such keys in your current highest dimension.
         If found, jump to the specified dimension.
     """
-    _lock_looking_for_group: asyncio.Lock()
     _matchmaking: Matchmaking
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
@@ -94,28 +93,22 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.dht = dht
         self.listen_on, self.receiver_threads, self.kwargs = listen_on, receiver_threads, kwargs
         self.channel_options = channel_options
-        self.matchmaking_kwargs = dict(prefix=prefix, initial_group_bits=initial_group_bits,
-                                       target_group_size=target_group_size, min_group_size=min_group_size,
-                                       averaging_expiration=averaging_expiration, allreduce_timeout=allreduce_timeout,
-                                       compression_type=compression_type)
-
         self.averaged_tensors = tuple(averaged_tensors)
         # TODO use mp.Lock to prevent someone from modifying tensors before we copy them! maybe.
         for tensor in self.averaged_tensors:
             assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
             tensor.share_memory_()
 
+        self.matchmaking_kwargs = dict(prefix=prefix, initial_group_bits=initial_group_bits,
+                                       target_group_size=target_group_size, min_group_size=min_group_size,
+                                       averaging_expiration=averaging_expiration, allreduce_timeout=allreduce_timeout,
+                                       compression_type=compression_type)
+        self._running_groups: Dict[GroupID, GroupAllReduce] = {}  # one or more assembled groups that run all-reduce
+
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
         self._averager_endpoint: Optional[Endpoint] = None
-
         self.ready = mp.Event()  # whether the averager process has started (and ready for incoming requests)
-
-        self._looking_for_group = False  # whether i am currently willing to allreduce with someone
-        self._current_leader: Optional[Endpoint] = None  # iff i am a follower, this is a link to my current leader
-        self._current_followers: Set[Endpoint] = set()  # iff i am a leader, this contains my followers excluding myself
-        self._declared_expiration_time = -float('inf')  # iff i am looking for group, this is my latest expiration time
-        self._running_groups: Dict[GroupID, GroupAllReduce] = {}  # one or more assembled groups that run all-reduce
 
         if start:
             self.run_in_background(await_ready=True)
@@ -135,15 +128,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
 
     def __repr__(self):
-        if len(self._running_groups) > 0:
-            lfg_description = 'RUNNING_ALLREDUCE'
-        elif not self._looking_for_group:
-            lfg_description = 'NOT_LOOKING_FOR_GROUP'
-        elif self._accepted_to_group_as_follower.is_set():
-            lfg_description = 'WAITING_FOR_LEADER'
-        else:
-            lfg_description = f'LOOKING_FOR_GROUP; current followers = {len(self._current_followers)}'
-        return f"{self.__class__.__name__}({self.endpoint}, {lfg_description})"
+        return f"{self.__class__.__name__}({self.endpoint}, matchmaking={repr(self._matchmaking)})"
 
     def run(self):
         """ Serve DecentralizedAverager forever. This function will not return until the averager is shut down """
@@ -155,12 +140,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         asyncio.set_event_loop(loop)
 
         # initialize asyncio synchronization primitives in this event loop
-        self._lock_looking_for_group, self._lock_request_join_group = asyncio.Lock(), asyncio.Lock()
-        self._accepted_to_group_as_follower, self._group_disbanded_cond = asyncio.Event(), asyncio.Condition()
-        self._assembled_group = asyncio.Future()  # if _looking_for_group, this future will return that group or error
-        self._received_latest_group_id = asyncio.Event()  # this event is set to False iff we requested someone to be
-        self._received_latest_group_id.set()  # ... our leader but he has neither began allreduce nor rejected us YET.
-
         pipe_awaiter = ThreadPoolExecutor(self.receiver_threads)
 
         async def _run():
@@ -170,6 +149,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             found_port = server.add_insecure_port(self.listen_on)
             assert found_port != 0, f"Failed to listen to {self.listen_on}"
             self._port.value = found_port
+            self._matchmaking = Matchmaking(self.endpoint, self.averaged_tensors, self.dht, **self.matchmaking_kwargs)
             await server.start()
             self.ready.set()
 
@@ -211,15 +191,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     async def _group_allreduce(self, *, future: MPFuture, timeout: Optional[float]):
         try:
-            if self._lock_looking_for_group.locked():
-                logger.debug("Another run_group_allreduce already in progress. The current run will be scheduled after"
-                             " the existing group is assembled.")
-            async with self._lock_looking_for_group:
-
-                group_allreduce = await self._look_for_group(timeout=timeout)
+            group_allreduce = await self._matchmaking.look_for_group(timeout=timeout)
             if group_allreduce is None:
                 future.set_exception(AllreduceException(f"{self} - group_allreduce failed, unable to find group"))
             else:
+                #TODO rewrite so that group_allreduce runs the actual allreduce
                 future.set_result(await self._run_allreduce(group_allreduce, timeout=self.allreduce_timeout))
 
         except Exception as e:

@@ -72,6 +72,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
         Iterate over the averagers from a given group_identifier that have higher leadership priority than yourself.
         """
+        if self.lock_looking_for_group.locked():
+            logger.debug("Another look_for_group is already in progress. The current run will be scheduled after"
+                         " the existing group is either assembled or botched.")
         async with self.lock_looking_for_group:
             end_time = get_dht_time() + (timeout or float('inf'))
 
