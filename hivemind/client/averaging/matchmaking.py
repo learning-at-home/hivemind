@@ -29,14 +29,14 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     """
     def __init__(self, averager_endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
                  prefix: str, target_group_size: int, min_group_size: int = 1, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15):
+                 averaging_expiration: float = 15, compression_type: runtime_pb2.CompressionType = runtime_pb2.NONE):
         assert '.' not in prefix, "group prefix must be a string without ."
 
         super().__init__()
         self.dht, self.endpoint, self.averaged_tensors = dht, averager_endpoint, tuple(averaged_tensors)
         self.prefix, self.group_bits = prefix, initial_group_bits
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
-        self.averaging_expiration = averaging_expiration
+        self.averaging_expiration, self.compression_type = averaging_expiration, compression_type
 
         self.schema_hash = compute_schema_hash(self.averaged_tensors)
 
@@ -54,9 +54,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.leader_queue = LeaderQueue()
         self.max_assured_time = float('-inf')  # all averagers below this expiration_time are in leader_queue
 
+    @property
+    def looking_for_group(self):
+        return self.lock_looking_for_group.locked()
+
     def __repr__(self):
-        lfg_status = "looking for group," if self.lock_looking_for_group.locked() else "not looking for group,"
-        if self.lock_looking_for_group.locked():
+        lfg_status = "looking for group," if self.looking_for_group else "not looking for group,"
+        if self.looking_for_group:
             if self.current_leader:
                 lfg_status += f" following {self.current_leader},"
             if len(self.current_followers):
@@ -71,7 +75,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
         Iterate over the averagers from a given group_identifier that have higher leadership priority than yourself.
         """
-        if self.lock_looking_for_group.locked():
+        if self.looking_for_group:
             logger.debug("Another look_for_group is already in progress. The current run will be scheduled after"
                          " the existing group is either assembled or botched.")
         async with self.lock_looking_for_group:
@@ -95,19 +99,21 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         return await asyncio.wait_for(self.assembled_group, timeout if isfinite(timeout) else None)
 
                     except asyncio.TimeoutError:
-                        if len(self.current_followers) >= self.min_group_size:
-                            # the time is up, we have a *good enough* group. run allreduce as is.
-                            return await self.leader_assemble_group()
-                        else:
-                            await self.leader_disband_group()
-                            # TODO maybe adjust grid size
-                            continue  # re-declare averager with new expiration time
+                        async with self.lock_request_join_group:
+                            if len(self.current_followers) >= self.min_group_size:
+                                # the time is up, we have a *good enough* group. run allreduce as is.
+                                return await self.leader_assemble_group()
+                            else:
+                                await self.leader_disband_group()
+                                # TODO maybe adjust grid size
+                                continue  # re-declare averager with new expiration time
                     finally:
                         request_candidates_task.cancel()
 
             except Exception as e:
                 if len(self.current_followers) > 0:
-                    await self.leader_disband_group()
+                    async with self.lock_request_join_group:
+                        await self.leader_disband_group()
                 self.assembled_group.set_exception(e)
             finally:
                 asyncio.create_task(self.unpublish_averager())
@@ -180,7 +186,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         :param expiration_time: inform leader that we intend to begin averaging before this expiration_time
         :returns: if leader leader accepted us and started AllReduce, return that AllReduce. Otherwise, return None
         """
-        assert self.lock_looking_for_group.locked() and self.current_leader is None
+        assert self.looking_for_group and self.current_leader is None
         call: Optional[grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]] = None
         try:
             async with self.lock_request_join_group:
@@ -201,7 +207,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
             message = await call.read()
             if message.code == averaging_pb2.BEGIN_ALLREDUCE:
-                return await self.follower_assemble_group(leader, message.group_id, message.ordered_group_endpoints)
+                async with self.lock_request_join_group:
+                    return await self.follower_assemble_group(leader, message.group_id, message.ordered_group_endpoints)
             elif message.code == averaging_pb2.GROUP_DISBANDED and bool(message.suggested_leader):
                 logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
                 return await self.request_join_group(message.suggested_leader, expiration_time)
@@ -220,7 +227,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
             # stage 1: check if there is a reason to reject a peer outright
-            if not self.lock_looking_for_group.locked():
+            if not self.looking_for_group:
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
                 return
             if not is_valid_join_request(request):
@@ -268,11 +275,12 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 return
 
             if not current_group.done():
-                # outcome 3: the time is up, we have *enough* followers => run allreduce
-                if len(self.current_followers) + 1 >= self.min_group_size:
-                    await self.leader_assemble_group()
-                else:  # ... or disband if not enough followers
-                    await self.leader_disband_group()
+                async with self.lock_request_join_group:
+                    # outcome 3: the time is up, we have *enough* followers => run allreduce
+                    if len(self.current_followers) + 1 >= self.min_group_size:
+                        await self.leader_assemble_group()
+                    else:  # ... or disband if not enough followers
+                        await self.leader_disband_group()
 
             if request.endpoint not in self.current_followers or self.assembled_group is not current_group:
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED)
@@ -292,41 +300,42 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             self.current_followers.discard(request.endpoint)
 
     async def leader_assemble_group(self) -> GroupAllReduce:
-        """ Form up all current followers into a group and prepare to _run_allreduce  """
+        """ Form up all current followers into a group and prepare to _run_allreduce """
+        assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
         group_id = DHTID.generate().to_bytes()
         ordered_group_endpoints = list(self.current_followers)
         ordered_group_endpoints.append(self.endpoint)
         logger.debug(f"{self.endpoint} - leader started allreduce with {len(ordered_group_endpoints)} followers.")
-        async with self.lock_request_join_group:
-            group_allreduce = GroupAllReduce(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-                                             ordered_group_endpoints=ordered_group_endpoints)
-            self.assembled_group.set_result(group_allreduce)
-            async with self.cond_notify_followers:
-                self.cond_notify_followers.notify_all()
-            return group_allreduce
+        group_allreduce = GroupAllReduce(
+            group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
+            ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
+        self.assembled_group.set_result(group_allreduce)
+        async with self.cond_notify_followers:
+            self.cond_notify_followers.notify_all()
+        return group_allreduce
 
     async def follower_assemble_group(self, leader: Endpoint, group_id: GroupID,
                                       ordered_group_endpoints: Sequence[Endpoint]) -> GroupAllReduce:
         """ Prepare to run allreduce using a list of peers provided by our leader """
+        assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
         logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
-        async with self.lock_request_join_group:
-            group_allreduce = GroupAllReduce(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-                                             ordered_group_endpoints=ordered_group_endpoints)
-            self.assembled_group.set_result(group_allreduce)
-            async with self.cond_notify_followers:
-                self.cond_notify_followers.notify_all()
-            return group_allreduce
+        group_allreduce = GroupAllReduce(
+            group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
+            ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
+        self.assembled_group.set_result(group_allreduce)
+        async with self.cond_notify_followers:
+            self.cond_notify_followers.notify_all()
+        return group_allreduce
 
     async def leader_disband_group(self):
-        """ Cancel all followers """
-        assert self.lock_looking_for_group.locked(), "can not disband: no longer looking for group"
-        async with self.lock_request_join_group:
-            for follower in list(self.current_followers):
-                self.current_followers.discard(follower)  # this will cause rpc_foin_group to kick the follower out
-            async with self.cond_notify_followers:
-                self.cond_notify_followers.notify_all()
+        """ Kick out all followers immediately, optionally direct them to our new leader (if we found one) """
+        assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
+        for follower in list(self.current_followers):
+            self.current_followers.discard(follower)  # this will cause rpc_foin_group to kick the follower out
+        async with self.cond_notify_followers:
+            self.cond_notify_followers.notify_all()
 
 
 class LeaderQueue(TimedStorage[Endpoint, DHTExpiration]):

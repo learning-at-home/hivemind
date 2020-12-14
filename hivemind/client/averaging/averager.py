@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import heapq
-import os
 import random
 import ctypes
-from dataclasses import asdict
-from typing import Sequence, Optional, Tuple, Any, Union, Awaitable, Dict, AsyncIterator, List, Set
+from typing import Sequence, Optional, Tuple, Any, Union, Awaitable, Dict
 from concurrent.futures.thread import ThreadPoolExecutor
 import multiprocessing as mp
 import asyncio
@@ -19,9 +16,7 @@ import grpc
 import hivemind
 from hivemind.client.averaging.allreduce import GroupAllReduce
 from hivemind.client.averaging.matchmaking import Matchmaking
-from hivemind.dht import DHTID, DHTExpiration, get_dht_time
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, TensorDescriptor, MSGPackSerializer
-from hivemind.utils.grpc import ChannelCache, serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 
@@ -124,9 +119,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self._averager_endpoint = f"{self.listen_on}:{self.port}"
         return self._averager_endpoint
 
-    def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
-        return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
-
     def __repr__(self):
         return f"{self.__class__.__name__}({self.endpoint}, matchmaking={repr(self._matchmaking)})"
 
@@ -194,15 +186,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         try:
             group_allreduce = await self._matchmaking.look_for_group(timeout=timeout)
             group_id = group_allreduce.group_id
-            if group_allreduce is None:
-                future.set_exception(AllreduceException(f"{self} - group_allreduce failed, unable to find group"))
-            else:
-                assert group_allreduce.group_id not in self._running_groups, (
-                    "the new group id matches with one of the pre-existing groups. This is either an error or you "
-                    "are fabulously unlucky (160-bit hash collision).")
-                #TODO rewrite so that group_allreduce runs the actual allreduce (and implements rpc_aggregate_part)
+            if group_allreduce is not None:
                 self._running_groups[group_id] = group_allreduce
-                future.set_result(await self._run_allreduce(group_allreduce.group_id, timeout=self.allreduce_timeout))
+                future.set_result(await group_allreduce.run())
+            else:
+                future.set_exception(AllreduceException(f"{self} - group_allreduce failed, unable to find group"))
 
         except Exception as e:
             future.set_exception(e)
@@ -211,77 +199,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             if group_id is not None:
                 _ = self._running_groups.pop(group_id, None)
 
-    async def _run_allreduce(self, group_id: GroupID, timeout: Optional[float] = None):
-        """ send allreduce requests to all peers and collect results, return the averaged tensor """
-        assert group_id in self._running_groups, f"unknown group id {group_id}, current groups: {self._running_groups}"
-        group_allreduce = self._running_groups[group_id]
-
-        async def _average_one_part(peer_endpoint: Endpoint, local_part: torch.Tensor):
-            serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
-            response = await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(
-                averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING, group_id=group_allreduce.group_id,
-                                            endpoint=group_allreduce.endpoint, tensor_part=serialized_tensor_part))
-            if response.code == averaging_pb2.AVERAGED_PART:
-                group_allreduce.register_averaged_part(peer_endpoint, deserialize_torch_tensor(response.tensor_part))
-            else:
-                message_code = averaging_pb2.MessageCode.Name(response.code)
-                reference_code = averaging_pb2.MessageCode.Name(response.code)
-                group_allreduce.set_exception(AllreduceException(f"peer {peer_endpoint} replied with {message_code}"
-                                                                 f" instead of {reference_code}, allreduce failed"))
-
-        try:
-            for peer_endpoint, tensor_part in group_allreduce.local_tensor_parts.items():
-                if peer_endpoint != self.endpoint:
-                    asyncio.create_task(_average_one_part(peer_endpoint, tensor_part))
-            return await asyncio.wait_for(group_allreduce.averaged_tensors, timeout=timeout)
-        except Exception as e:
-            code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
-            logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
-            group_allreduce.set_exception(e)
-
-            async def send_error_to_peer(peer_endpoint: Endpoint):
-                await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
-                    group_id=group_id, endpoint=group_allreduce.endpoint, code=code))
-
-            for peer_endpoint in group_allreduce.ordered_group_endpoints:
-                asyncio.create_task(send_error_to_peer(peer_endpoint))
-
     async def rpc_aggregate_part(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
         """ a groupmate sends us a part of his tensor; we should average it with other peers and return the result """
-        if request.group_id not in self._running_groups and not self._received_latest_group_id.is_set():
-            await self._received_latest_group_id.wait()  # this handles a special case when leader accepted us to group
+        if request.group_id not in self._running_groups and self._matchmaking.looking_for_group:
+            await self._matchmaking.assembled_group  # this handles a special case when leader accepted us to group
             # AND began allreduce right away, but his response with group_id was delayed and other peers got to us first
         if request.group_id not in self._running_groups:
             return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
-        group_allreduce = self._running_groups[request.group_id]
-
-        if request.code == averaging_pb2.PART_FOR_AVERAGING:
-            try:
-                tensor_part = deserialize_torch_tensor(request.tensor_part)
-                averaged_part = await group_allreduce.accumulate_part(request.endpoint, tensor_part)
-                serialized = serialize_torch_tensor(averaged_part, request.tensor_part.compression, allow_inplace=False)
-                return averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized)
-            except Exception as e:
-                group_allreduce.set_exception(e)
-                logger.error(f"{self} - encountered {e} when aggregating part from {request.endpoint}")
-                return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
         else:
-            error_code = averaging_pb2.MessageCode.Name(request.code)
-            logger.debug(f"{self} - peer {request.endpoint} sent {error_code}, allreduce cannot continue")
-            group_allreduce.set_exception(AllreduceException(f"peer {request.endpoint} sent {error_code}."))
-            return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
-
-
-def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
-    """ A hash that describes follower's tensor shapes, dtypes, devices, but not the actual values """
-    schema_dicts = [{field_name: str(field_value)
-                    for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
-                    for tensor in tensors]
-    return DHTID.generate(source=MSGPackSerializer.dumps(schema_dicts)).to_bytes()
-
-
-def is_valid_join_request(request: averaging_pb2.JoinRequest) -> bool:
-    assert len(request.ListFields()) == 3, "this function assumes JoinRequest has three fields, it should be updated"
-    return (isinstance(request.schema_hash, bytes) and len(request.schema_hash) > 0 and
-            isinstance(request.expiration, DHTExpiration) and request.expiration != float('inf') and
-            isinstance(request.endpoint, Endpoint) and len(request.endpoint) > 0)
+            return await self._running_groups[request.group_id].rpc_aggregate_part(request, context)
