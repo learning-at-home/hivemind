@@ -23,17 +23,18 @@ logger = get_logger(__file__)
 
 
 class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
-    """
+    f"""
     An internal class that is used to form groups of averages for running allreduce
-    TODO docstring
+    See DecentralizedAverager docstring for the detailed description of all parameters 
+
     """
-    def __init__(self, averager_endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
-                 prefix: str, target_group_size: int, min_group_size: int = 1, initial_group_bits: Optional[str] = None,
+    def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
+                 prefix: str, target_group_size: int, min_group_size: int, initial_group_bits: Optional[str] = None,
                  averaging_expiration: float = 15, compression_type: runtime_pb2.CompressionType = runtime_pb2.NONE):
         assert '.' not in prefix, "group prefix must be a string without ."
 
         super().__init__()
-        self.dht, self.endpoint, self.averaged_tensors = dht, averager_endpoint, tuple(averaged_tensors)
+        self.dht, self.endpoint, self.averaged_tensors = dht, endpoint, tuple(averaged_tensors)
         self.prefix, self.group_bits = prefix, initial_group_bits
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.compression_type = averaging_expiration, compression_type
