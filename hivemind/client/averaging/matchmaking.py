@@ -26,8 +26,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     f"""
     An internal class that is used to form groups of averages for running allreduce
     See DecentralizedAverager docstring for the detailed description of all parameters 
-
     """
+
     def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
                  prefix: str, target_group_size: int, min_group_size: int, initial_group_bits: Optional[str] = None,
                  averaging_expiration: float = 15, compression_type: runtime_pb2.CompressionType = runtime_pb2.NONE):
@@ -69,7 +69,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         declared_status = f"declared to DHT: {self.declared_expiration_time >= get_dht_time()}"
         schema_hash_repr = f"{self.schema_hash[0]}...{self.schema_hash[-8:]}"
         return f"{self.__class__.__name__}(endpoint={self.endpoint}, schema={schema_hash_repr}, {lfg_status}" \
-               f" current key = {self.prefix}.{self.group_bits}, {declared_status})"
+               f" current key = {self.prefix}.0b{self.group_bits}, {declared_status})"
 
     async def look_for_group(self, *, timeout: Optional[float] = None) -> GroupAllReduce:
         """
@@ -82,7 +82,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         async with self.lock_looking_for_group:
             end_time = get_dht_time() + (timeout or float('inf'))
 
-            group_key = f"{self.prefix}.{self.group_bits}"
+            group_key = f"{self.prefix}.0b{self.group_bits}"
             # TODO update group_bits on success! reduce number of bits on not enough peers.
             # TODO after allreduce finishes, we may need to ask leader to notify lower keys about this
             # (so as to fix possible network partitioning if some peers operate on a much smaller nbits)
@@ -107,7 +107,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             else:
                                 await self.leader_disband_group()
                                 # TODO maybe adjust grid size
-                                continue  # re-declare averager with new expiration time
+                                if get_dht_time() <= end_time:
+                                    continue  # re-declare averager with new expiration time
+                                else:
+                                    raise  # fail with timeout error
                     finally:
                         request_candidates_task.cancel()
 
@@ -158,12 +161,14 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         assert isfinite(end_time)
 
         while True:
-            maybe_next_leader, maybe_next_expiration = self.leader_queue.top()[1] or (None, None)
+            maybe_next_leader, entry = self.leader_queue.top()
+            maybe_next_expiration = entry.expiration_time if entry is not None else None
             if (maybe_next_expiration or get_dht_time()) > self.max_assured_time:
                 # if there's a chance that DHT contains averagers newer than the earliest one from our local heap,
                 # ... then fetch more candidates from the DHT until we are confident we know the next-earliest peer
                 new_peers = await self.dht.get_averagers(group_key, only_active=True, return_future=True)
-                self.max_assured_time = max(self.max_assured_time, get_dht_time() - allowed_discrepancy)
+                self.max_assured_time = max(self.max_assured_time,
+                                            get_dht_time() + self.averaging_expiration - allowed_discrepancy)
                 for peer, peer_expiration_time in new_peers:
                     self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
                     self.max_assured_time = max(self.max_assured_time, peer_expiration_time - allowed_discrepancy)
@@ -171,6 +176,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
             if maybe_next_expiration is None or maybe_next_expiration >= self.declared_expiration_time:
                 break  # no potential leaders are available until our expiration AND we can't fetch more
+
+            del self.leader_queue[maybe_next_leader]
 
             if maybe_next_expiration < get_dht_time():
                 continue  # this leader expired before we could request to join his group
@@ -204,7 +211,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 # else: we were accepted
                 logger.debug(f"{self.endpoint} - joining the group of {leader}; waiting for peers")
                 self.current_leader = leader
-                await self.leader_disband_group()
+                if len(self.current_followers) > 0:
+                    await self.leader_disband_group()
 
             message = await call.read()
             if message.code == averaging_pb2.BEGIN_ALLREDUCE:
@@ -217,7 +225,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             else:
                 logger.debug(f"{self} - leader sent {averaging_pb2.MessageCode.Name(message.code)}, leaving group")
                 return None
-
         finally:
             self.current_leader = None
             if call is not None:
@@ -254,6 +261,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_IS_FULL)
                 return
 
+            current_group = self.assembled_group  # copy current assembled_group to avoid overwriting
             async with self.lock_request_join_group:
                 # stage 2: if there are no red flags, accept peer as your follower
                 self.current_followers.add(request.endpoint)
@@ -264,26 +272,26 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     await self.leader_assemble_group()  # note: this will trigger self._assembled_group
 
             # stage 3: wait for the group to be assembled (or for the follower to leave, whichever comes first)
-            current_group = self.assembled_group  # copy current assembled_group to avoid overwriting
-            async with self.cond_notify_followers:
-                await asyncio.wait_for(self.cond_notify_followers.wait(),
-                                       timeout=max(0.0, self.declared_expiration_time - get_dht_time()))
+            if not current_group.done():
+                async with self.cond_notify_followers:
+                    try:
+                        await asyncio.wait_for(self.cond_notify_followers.wait(),
+                                               timeout=max(0.0, self.declared_expiration_time - get_dht_time()))
+                    except asyncio.TimeoutError:
+                        async with self.lock_request_join_group:
+                            # outcome 2: the time is up, we have *enough* followers => run allreduce
+                            if len(self.current_followers) + 1 >= self.min_group_size and self.looking_for_group:
+                                await self.leader_assemble_group()
+                            else:  # ... or disband if not enough followers
+                                await self.leader_disband_group()
 
             if self.current_leader is not None:
-                # outcome 2: we were accepted to another averager's group => send all followers to our new leader
+                # outcome 3: we were accepted to another averager's group => send all followers to our new leader
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED,
                                                       suggested_leader=self.current_leader)
                 return
 
-            if not current_group.done():
-                async with self.lock_request_join_group:
-                    # outcome 3: the time is up, we have *enough* followers => run allreduce
-                    if len(self.current_followers) + 1 >= self.min_group_size:
-                        await self.leader_assemble_group()
-                    else:  # ... or disband if not enough followers
-                        await self.leader_disband_group()
-
-            if request.endpoint not in self.current_followers or self.assembled_group is not current_group:
+            if request.endpoint not in self.current_followers:
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED)
                 return
 
@@ -332,7 +340,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     async def leader_disband_group(self):
         """ Kick out all followers immediately, optionally direct them to our new leader (if we found one) """
-        assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
+        assert self.lock_request_join_group.locked()
         for follower in list(self.current_followers):
             self.current_followers.discard(follower)  # this will cause rpc_foin_group to kick the follower out
         async with self.cond_notify_followers:

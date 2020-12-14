@@ -8,7 +8,7 @@ from typing import TypeVar, NamedTuple, Generic, Optional, Dict, List, Iterator,
 KeyType = TypeVar('KeyType')
 ValueType = TypeVar('ValueType')
 get_dht_time = time.time  # a global (weakly synchronized) time
-MAX_DHT_TIME_DISCREPANCY_SECONDS = 5  # max allowed difference between get_dht_time for two DHT nodes. Enforced when joining DHT.(TODO)
+MAX_DHT_TIME_DISCREPANCY_SECONDS = 3  # max allowed difference between get_dht_time for two DHT nodes. Enforced when joining DHT.(TODO)
 DHTExpiration = float
 ROOT = 0
 

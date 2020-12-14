@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 import ctypes
 from math import isfinite
-from typing import Sequence, Optional, Tuple, Any, Union, Awaitable, Dict
+from typing import Sequence, Optional, Tuple, Any, Union, Awaitable, Dict, AsyncIterator
 from concurrent.futures.thread import ThreadPoolExecutor
 import multiprocessing as mp
 import asyncio
@@ -75,6 +75,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         If found, jump to the specified dimension.
     """
     _matchmaking: Matchmaking
+    _pending_group_assembled: asyncio.Event
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
                  prefix: str, target_group_size: int, min_group_size: int = 1, initial_group_bits: Optional[str] = None,
@@ -148,6 +149,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             assert found_port != 0, f"Failed to listen to {self.listen_on}"
             self._port.value = found_port
             self._matchmaking = Matchmaking(self.endpoint, self.averaged_tensors, self.dht, **self.matchmaking_kwargs)
+            self._pending_group_assembled = asyncio.Event()
+            self._pending_group_assembled.set()
             await server.start()
             self.ready.set()
 
@@ -190,10 +193,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def _group_allreduce(self, *, future: MPFuture, timeout: Optional[float]):
         group_id = None
         try:
+            self._pending_group_assembled.clear()
             group_allreduce = await self._matchmaking.look_for_group(timeout=timeout)
+            print(f'{self.endpoint} - GOT {group_allreduce}')
             group_id = group_allreduce.group_id
             if group_allreduce is not None:
                 self._running_groups[group_id] = group_allreduce
+                self._pending_group_assembled.set()
                 future.set_result(await asyncio.wait_for(
                     group_allreduce.run(), self.allreduce_timeout if isfinite(self.allreduce_timeout) else None))
             else:
@@ -203,13 +209,20 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             future.set_exception(e)
             raise
         finally:
+            self._pending_group_assembled.set()
             if group_id is not None:
                 _ = self._running_groups.pop(group_id, None)
 
+    async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
+                             ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
+        """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
+        async for response in self._matchmaking.rpc_join_group(request, context):
+            yield response
+
     async def rpc_aggregate_part(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
         """ a groupmate sends us a part of his tensor; we should average it with other peers and return the result """
-        if request.group_id not in self._running_groups and self._matchmaking.looking_for_group:
-            await self._matchmaking.assembled_group  # this handles a special case when leader accepted us to group
+        if request.group_id not in self._running_groups and not self._pending_group_assembled.is_set():
+            await self._pending_group_assembled.wait()  # this handles a special case when leader accepted us to group
             # AND began allreduce right away, but his response with group_id was delayed and other peers got to us first
         if request.group_id not in self._running_groups:
             return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
