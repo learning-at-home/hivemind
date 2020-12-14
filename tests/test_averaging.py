@@ -5,7 +5,7 @@ import time
 import torch
 import pytest
 import hivemind
-from hivemind.client.averager import GroupAllReduce, split_into_parts, restore_from_parts
+from hivemind.client.averaging.allreduce import ButterflyAllReduceProtocol, split_into_parts, restore_from_parts
 from hivemind.utils import LOCALHOST, Endpoint
 
 
@@ -22,9 +22,10 @@ async def test_allreduce_direct():
 
     reference = [(tensors1[i] + tensors2[i] + tensors3[i]) / 3 for i in range(len(tensors1))]
 
-    averager1 = hivemind.DecentralizedAverager(tensors1, dht=dht, start=True, target_group_size=3, timeout=5)
-    averager2 = hivemind.DecentralizedAverager(tensors2, dht=dht, start=True, target_group_size=3, timeout=5)
-    averager3 = hivemind.DecentralizedAverager(tensors3, dht=dht, start=True, target_group_size=3, timeout=5)
+    averager1, averager2, averager3 = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=3, timeout=5,
+                                                                      prefix='group', initial_group_bits='0110',
+                                                                      listen_on='127.0.0.1:*', start=True)
+                                       for tensors in [tensors1, tensors2, tensors3]]
 
     future1 = averager1.group_allreduce(my_endpoint=f"{LOCALHOST}:{averager1.port}",
                                         leader_endpoint=None, return_future=True)
@@ -53,7 +54,7 @@ async def test_allreduce_protocol():
                        for i, peer in enumerate(peers)}
 
     group_id = bytes(hivemind.DHTID.generate())
-    allreduce_protocols = [GroupAllReduce(
+    allreduce_protocols = [ButterflyAllReduceProtocol(
         group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer], ordered_group_endpoints=peers)
         for peer in peers]
 

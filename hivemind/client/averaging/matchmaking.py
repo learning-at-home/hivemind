@@ -127,7 +127,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             await self.unpublish_averager()
 
         new_expiration_time = get_dht_time() + self.averaging_expiration
-        stored_ok = await self.dht.declare_averager(self.endpoint, group_key, new_expiration_time,
+        stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
                                                     looking_for_group=True, return_future=True)
         if stored_ok:
             self.declared_expiration_time, self.declared_group_key = new_expiration_time, group_key

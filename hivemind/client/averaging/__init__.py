@@ -17,7 +17,7 @@ import grpc
 import hivemind
 from hivemind.client.averaging.allreduce import GroupAllReduce
 from hivemind.client.averaging.matchmaking import Matchmaking
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 
@@ -83,12 +83,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without ."
-        if target_group_size != 2 ** target_group_size.bit_length():
+        if target_group_size != 2 ** (target_group_size.bit_length() - 1):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         if initial_group_bits is None:
             initial_group_bits = ''.join(random.choices('01', k=GROUP_NBITS_INTERVAL))
             logger.debug(f"Initializing with random {GROUP_NBITS_INTERVAL}-bit group index: {initial_group_bits}")
-        assert len(initial_group_bits) >= GROUP_NBITS_INTERVAL
+        assert len(initial_group_bits) >= GROUP_NBITS_INTERVAL and all(bit in '01' for bit in initial_group_bits)
 
         super().__init__()
         self.dht = dht
@@ -120,13 +120,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     @property
     def endpoint(self) -> Endpoint:
-        if not hasattr(self, '_averager_endpoint'):
-            logger.info(f"Assuming averager endpoint to be {self._averager_endpoint}")
-            self._averager_endpoint = f"{self.listen_on}:{self.port}"
+        if self._averager_endpoint is None:
+            self._averager_endpoint = replace_port(self.listen_on, self.port if self.port is not None else '*')
+            logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
         return self._averager_endpoint
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.endpoint}, matchmaking={repr(self._matchmaking)})"
+        return f"{self.__class__.__name__}({self.endpoint})"
 
     def run(self):
         """ Serve DecentralizedAverager forever. This function will not return until the averager is shut down """
