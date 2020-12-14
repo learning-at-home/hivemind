@@ -32,6 +32,7 @@ async def test_allreduce_once():
         for ref, our in zip(reference, future.result()):
             assert torch.allclose(ref, our)
 
+
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_allreduce_protocol():

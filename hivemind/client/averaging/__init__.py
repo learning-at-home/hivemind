@@ -178,7 +178,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
     def group_allreduce(self, timeout: Optional[float] = None, return_future=False
-                        ) -> Union[Sequence[torch.Tensor], Awaitable[Sequence[torch.Tensor]]]:
+                        ) -> Union[Sequence[torch.Tensor], MPFuture]:
         """
         Set up the averager to look for a group and run all-reduce once, then return the averaged tensors
 
