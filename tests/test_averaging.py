@@ -11,38 +11,26 @@ from hivemind.utils import LOCALHOST, Endpoint
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_allreduce_direct():
-    # WARNING! this test uses an early interface that will change by the time DecentralizedAverager is finished
-
+async def test_allreduce_once():
     dht = hivemind.DHT(start=True)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
     tensors3 = [-torch.rand(123), torch.arange(3).to(torch.float32)]
+    tensors4 = [torch.randn(123) ** 3, torch.arange(3).to(torch.float32) / 2]
 
-    reference = [(tensors1[i] + tensors2[i] + tensors3[i]) / 3 for i in range(len(tensors1))]
+    reference = [(tensors1[i] + tensors2[i] + tensors3[i] + tensors4[i]) / 4 for i in range(len(tensors1))]
 
-    averager1, averager2, averager3 = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=3, timeout=5,
-                                                                      prefix='group', initial_group_bits='0110',
-                                                                      listen_on='127.0.0.1:*', start=True)
-                                       for tensors in [tensors1, tensors2, tensors3]]
+    averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
+                                                prefix='mygroup', initial_group_bits='0110', listen_on='127.0.0.1:*',
+                                                start=True)
+                 for tensors in [tensors1, tensors2, tensors3, tensors4]]
 
-    future1 = averager1.group_allreduce(my_endpoint=f"{LOCALHOST}:{averager1.port}",
-                                        leader_endpoint=None, return_future=True)
-    time.sleep(0.1)
+    futures = [averager.group_allreduce(return_future=True) for averager in averagers]
 
-    future2 = averager2.group_allreduce(my_endpoint=f"{LOCALHOST}:{averager2.port}",
-                                        leader_endpoint=f"{LOCALHOST}:{averager1.port}",
-                                        return_future=True)
-
-    future3 = averager3.group_allreduce(my_endpoint=f"{LOCALHOST}:{averager3.port}",
-                                        leader_endpoint=f"{LOCALHOST}:{averager1.port}",
-                                        return_future=True)
-
-    for future in future1, future2, future3:
-        for ref, our in zip(reference, await future):
+    for future in futures:
+        for ref, our in zip(reference, future.result()):
             assert torch.allclose(ref, our)
-
 
 @pytest.mark.forked
 @pytest.mark.asyncio

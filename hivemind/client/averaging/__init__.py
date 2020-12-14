@@ -195,7 +195,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         try:
             self._pending_group_assembled.clear()
             group_allreduce = await self._matchmaking.look_for_group(timeout=timeout)
-            print(f'{self.endpoint} - GOT {group_allreduce}')
             group_id = group_allreduce.group_id
             if group_allreduce is not None:
                 self._running_groups[group_id] = group_allreduce
