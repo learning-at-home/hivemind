@@ -31,7 +31,7 @@ async def simple_traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID],
     visited_nodes = set(visited_nodes)  # note: copy visited_nodes because we will add more nodes to this collection.
     initial_nodes = [node_id for node_id in initial_nodes if node_id not in visited_nodes]
     if not initial_nodes:
-        return [], visited_nodes
+        return (), visited_nodes
 
     unvisited_nodes = [(distance, uid) for uid, distance in zip(initial_nodes, query_id.xor_distance(initial_nodes))]
     heapq.heapify(unvisited_nodes)  # nearest-first heap of candidates, unlimited size
@@ -59,7 +59,7 @@ async def simple_traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID],
                 heapq_add_or_replace(nearest_nodes, (-distance, neighbor_id))
                 upper_bound = -nearest_nodes[0][0]  # distance to beam_size-th nearest element found so far
 
-    return [node_id for _, node_id in heapq.nlargest(beam_size, nearest_nodes)], visited_nodes
+    return tuple(node_id for _, node_id in heapq.nlargest(beam_size, nearest_nodes)), visited_nodes
 
 
 async def traverse_dht(
