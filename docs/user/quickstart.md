@@ -11,16 +11,16 @@ You can also install the bleeding edge version from github:
 ```
 git clone https://github.com/learning-at-home/hivemind
 cd hivemind
-python setup.py install
+pip install .
 ```
 
-You can also install it in editable mode with `python setup.py develop`.
+You can also install it in the editable mode with `pip install -e .`.
 
 __Note:__ we currently recommend installing hivemind from github (i.e. not pip) as it can run RemoteMixtureOfExperts faster by an order of magnitude. These changes will only reach PyPI in v0.9.0 release.
 
 * __Dependencies:__ Hivemind requires python 3.7+ (3.8 is recommended), it will install [requirements](https://github.com/learning-at-home/hivemind/blob/master/requirements.txt) automatically; 
-* __OS support:__ Linux and Mac OS should [just work](https://github.com/learning-at-home/hivemind/issues).
-We do not officially support Windows, but you are welcome to try and contribute your windows build :)
+* __OS support:__ Linux and macOS should [just work](https://github.com/learning-at-home/hivemind/issues).
+We do not officially support Windows, but you are welcome to contribute your windows build :)
 
 
 #### Host a server
@@ -158,7 +158,7 @@ out.sum().backward()  # backward pass
 ```
 
 When called, expert1 will submit a request to the corresponding server (which you created above) and return
- the outputs tensor(s) or raise an exception. During backward, pytorch will submit the backward requests
+ the output tensor(s) or raise an exception. During backward, pytorch will submit the backward requests
  for the experts as they appear in the computation graph.
  
 By default, the experts will automatically update their parameters with one step of SGD after each backward pass.
