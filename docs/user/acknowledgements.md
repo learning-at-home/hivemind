@@ -18,9 +18,9 @@ We kindly thank (in random order)
 
 We also want to reference several projects that have similar ideas in mind:
 
-* [BitTensor](https://github.com/opentensor/BitTensor) - a decentralized deep learning ecosystem with with incentive
+* [BitTensor](https://github.com/opentensor/BitTensor) - a decentralized deep learning ecosystem with incentive
  mechanism. Like hivemind, but peers are getting rewarded for their contribution to other peers.
   _(note: as of 26.08.2020 the project is in the early stages development)_.
-* [GShard](https://arxiv.org/abs/2006.16668) - a paper by Dmitry Lepikhin et al that demonstrate the effectiveness
+* [GShard](https://arxiv.org/abs/2006.16668) - a paper by Dmitry Lepikhin et al. that demonstrate the effectiveness
   of huge Mixture-of-Experts models on conventional hpc hardware. Those guys train models 4 times the size of GPT-3 on thousands of TPUv3.
 * Also doing research in decentralized deep learning? Let us know!
