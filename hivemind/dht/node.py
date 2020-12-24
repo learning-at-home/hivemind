@@ -468,14 +468,16 @@ class DHTNode:
                 raise e
 
     def _reuse_finished_search_result(self, finished: _SearchState):
-        search_result = ValueWithExpiration(finished.binary_value, finished.expiration_time)
-        expiration_time_threshold = max(finished.expiration_time or -float('inf'), finished.sufficient_expiration_time)
-        concurrent_requests: SortedList[_SearchState] = self.pending_get_requests[finished.key_id]
-        # note: concurrent_requests is sorted in the order of descending sufficient_expiration_time
-        while concurrent_requests and expiration_time_threshold >= concurrent_requests[-1].sufficient_expiration_time:
-            concurrent_requests[-1].add_candidate(search_result, source_node_id=finished.source_node_id)
-            concurrent_requests[-1].finish_search()
-            concurrent_requests.pop(-1)
+        if finished.found_something:
+            search_result = ValueWithExpiration(finished.binary_value, finished.expiration_time)
+            expiration_time_threshold = max(finished.expiration_time, finished.sufficient_expiration_time)
+            concurrent_requests: SortedList[_SearchState] = self.pending_get_requests[finished.key_id]
+            # note: concurrent_requests is sorted in the order of descending sufficient_expiration_time
+            while concurrent_requests and expiration_time_threshold >= concurrent_requests[
+                -1].sufficient_expiration_time:
+                concurrent_requests[-1].add_candidate(search_result, source_node_id=finished.source_node_id)
+                concurrent_requests[-1].finish_search()
+                concurrent_requests.pop(-1)
 
     def _trigger_cache_refresh(self, search: _SearchState):
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
