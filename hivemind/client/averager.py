@@ -15,6 +15,7 @@ import grpc
 import hivemind
 from hivemind.dht import get_dht_time, DHTExpiration
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture
+from hivemind.utils.grpc import GRPC_KEEPALIVE_OPTIONS
 from hivemind.client.allreduce import GroupAllReduce, GroupID
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 
@@ -90,7 +91,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         async def _run():
             if listen:
                 grpc.aio.init_grpc_aio()
-                server = grpc.aio.server(**server_kwargs)
+                server = grpc.aio.server(**server_kwargs, options=GRPC_KEEPALIVE_OPTIONS)
                 averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
                 found_port = server.add_insecure_port(listen_on)
                 assert found_port != 0, f"Failed to listen to {listen_on}"

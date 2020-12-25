@@ -11,6 +11,7 @@ import uvloop
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
 from hivemind.server.expert_backend import ExpertBackend
 from hivemind.utils import get_logger, serialize_torch_tensor, deserialize_torch_tensor, Endpoint, nested_flatten
+from hivemind.utils.grpc import GRPC_KEEPALIVE_OPTIONS
 
 logger = get_logger(__name__)
 
@@ -38,10 +39,10 @@ class ConnectionHandler(mp.Process):
             grpc.aio.init_grpc_aio()
             logger.debug(f'Starting, pid {os.getpid()}')
             server = grpc.aio.server(options=[
-                ('grpc.so_reuseport', 1),
-                ('grpc.max_send_message_length', -1),
-                ('grpc.max_receive_message_length', -1)
-            ])
+                                                 ('grpc.so_reuseport', 1),
+                                                 ('grpc.max_send_message_length', -1),
+                                                 ('grpc.max_receive_message_length', -1)
+                                             ] + GRPC_KEEPALIVE_OPTIONS)
             runtime_grpc.add_ConnectionHandlerServicer_to_server(self, server)
 
             found_port = server.add_insecure_port(self.listen_on)
