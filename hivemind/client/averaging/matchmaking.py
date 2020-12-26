@@ -196,7 +196,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         :returns: if leader leader accepted us and started AllReduce, return that AllReduce. Otherwise, return None
         """
         assert self.looking_for_group and self.current_leader is None
-        call: Optional[grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]] = None
         async with self.lock_request_join_group:
             leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
             call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
