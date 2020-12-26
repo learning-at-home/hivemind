@@ -193,10 +193,7 @@ def test_client_anomaly_detection():
     server = hivemind.Server(dht, experts, num_connection_handlers=1)
     server.start()
     try:
-        # dht_listen_on = hivemind.replace_port(server.dht.listen_on, server.dht.port)
         server.ready.wait()
-
-        # dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_listen_on])
 
         dmoe = hivemind.RemoteMixtureOfExperts(in_features=16, grid_size=(3,), dht=dht, k_best=3, uid_prefix='expert.')
 
