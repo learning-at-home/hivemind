@@ -32,6 +32,7 @@ def test_call_many():
     backward_k_min = 1
     forward_timeout = None
     backward_timeout = None
+    detect_anomalies = False
     atol = 1e-5
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
@@ -42,8 +43,8 @@ def test_call_many():
         e5 = hivemind.RemoteExpert(f'thisshouldnotexist', '127.0.0.1:80')
 
         mask, expert_outputs = hivemind.client.moe._RemoteCallMany.apply(
-            DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []],
-            k_min, backward_k_min, timeout_after_k_min, forward_timeout, backward_timeout, e1.info, inputs
+            DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []], k_min, backward_k_min, timeout_after_k_min,
+            forward_timeout, backward_timeout, detect_anomalies, e1.info, inputs
         )
         assert mask.shape == (4, 3)
         assert expert_outputs.shape == (4, 3, 64)
