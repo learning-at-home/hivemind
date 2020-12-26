@@ -33,7 +33,6 @@ def test_getset_averagers():
     assert len(q4) == 2 and ('localhvost', t + 66) in q4 and ('localhvost2', t + 61) in q2
 
 
-
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_allreduce_once():
