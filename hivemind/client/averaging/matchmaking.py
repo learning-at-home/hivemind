@@ -148,7 +148,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             await self.dht.declare_averager(declared_group_key, self.endpoint, declared_expiration_time,
                                             looking_for_group=False, return_future=True)
         else:
-            logger.debug("Unpublish_averager has no effect: not published.")
+            logger.debug("Calling unpublish_averager had no effect: not published.")
 
     async def request_join_potential_leaders(self, group_key: GroupKey, timeout: Optional[float] = None
                                              ) -> Optional[AllReduceRunner]:
