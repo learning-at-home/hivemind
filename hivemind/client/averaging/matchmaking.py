@@ -235,28 +235,23 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
-            print(f"{self.endpoint} - received request_join_group from {request.endpoint}", flush=True)
             reason_to_reject = self._check_reasons_to_reject(request)
             if reason_to_reject is not None:
-                print(f"{self.endpoint} - rejected {request.endpoint}", flush=True)
                 yield reason_to_reject
                 return
 
             current_group = self.assembled_group  # copy current assembled_group to avoid overwriting
             async with self.lock_request_join_group:
                 self.current_followers.add(request.endpoint)
-                print(f"{self.endpoint} - accepted {request.endpoint}", flush=True)
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
                 if len(self.current_followers) + 1 >= self.target_group_size:
-                    print(f"{self.endpoint} - triggered allreduce by {request.endpoint} (reached target group size)", flush=True)
                     # outcome 1: we have assembled a full group and are ready for allreduce
                     await self.leader_assemble_group()
 
             if not current_group.done():
                 async with self.cond_notify_followers:
                     try:
-                        print(f"{self.endpoint} - peer {request.endpoint} awaiting", flush=True)
                         # wait for the group to be assembled or disbanded
                         await asyncio.wait_for(self.cond_notify_followers.wait(),
                                                timeout=max(0.0, self.declared_expiration_time - get_dht_time()))
@@ -264,32 +259,27 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         async with self.lock_request_join_group:
                             # outcome 2: the time is up, run allreduce with what we have or disband
                             if len(self.current_followers) + 1 >= self.min_group_size and self.looking_for_group:
-                                print(f"{self.endpoint} - assmebled group via timeout (peer={request.endpoint})", flush=True)
                                 await self.leader_assemble_group()
                             else:
                                 await self.leader_disband_group()
 
             if self.current_leader is not None:
                 # outcome 3: found by a leader with higher priority, send our followers to him
-                print(f"{self.endpoint} - kicked {request.endpoint} from group (SEND TO NEW LEADER)", flush=True)
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED,
                                                       suggested_leader=self.current_leader)
                 return
 
             if request.endpoint not in self.current_followers:
-                print(f"{self.endpoint} - kicked {request.endpoint} from group (GROUP DISBANDED)", flush=True)
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED)
                 return
 
             # finally, run allreduce
             allreduce_group = current_group.result()
-            print(f"{self.endpoint} - began allreduce with {request.endpoint}", flush=True)
             yield averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
                 ordered_group_endpoints=allreduce_group.ordered_group_endpoints)
 
         except Exception as e:
-            print(f"{self.endpoint} - got error {e} when processing {request.endpoint}", flush=True)
             logger.exception(e)
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
 
