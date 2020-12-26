@@ -10,6 +10,7 @@ from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpirat
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
 from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer, ChannelCache, ValueWithExpiration
+from hivemind.utils.grpc import GRPC_KEEPALIVE_OPTIONS
 
 logger = get_logger(__name__)
 
@@ -50,7 +51,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
         if listen:  # set up server to process incoming rpc requests
             grpc.aio.init_grpc_aio()
-            self.server = grpc.aio.server(**kwargs)
+            self.server = grpc.aio.server(**kwargs, options=GRPC_KEEPALIVE_OPTIONS)
             dht_grpc.add_DHTServicer_to_server(self, self.server)
 
             found_port = self.server.add_insecure_port(listen_on)

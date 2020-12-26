@@ -20,6 +20,15 @@ logger = get_logger(__file__)
 
 Stub = TypeVar("Stub")
 
+GRPC_KEEPALIVE_OPTIONS = (
+    ('grpc.keepalive_time_ms', 60 * 1000),
+    ('grpc.keepalive_timeout_ms', 60 * 1000),
+    ('grpc.keepalive_permit_without_calls', True),
+    ('grpc.http2.max_pings_without_data', 0),
+    ('grpc.http2.min_time_between_pings_ms', 30 * 1000),
+    ('grpc.http2.min_ping_interval_without_data_ms', 10 * 1000),
+)
+
 
 class ChannelInfo(NamedTuple):
     target: Endpoint
@@ -109,14 +118,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
                         compression: Optional[grpc.Compression]) -> Union[grpc.Channel, grpc.aio.Channel]:
         namespace = grpc.aio if aio else grpc
 
-        options = extra_options + (
-            ('grpc.keepalive_time_ms', 60 * 1000),
-            ('grpc.keepalive_timeout_ms', 60 * 1000),
-            ('grpc.keepalive_permit_without_calls', True),
-            ('grpc.http2.max_pings_without_data', 0),
-            ('grpc.http2.min_time_between_pings_ms', 30 * 1000),
-            ('grpc.http2.min_ping_interval_without_data_ms', 10 * 1000),
-        )
+        options = extra_options + GRPC_KEEPALIVE_OPTIONS
 
         if channel_credentials is None:
             logger.debug(f"Creating insecure {namespace} channel with options '{options}' "
