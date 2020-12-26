@@ -25,7 +25,7 @@ logger = get_logger(__file__)
 class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     f"""
     An internal class that is used to form groups of averages for running allreduce
-    See DecentralizedAverager docstring for the detailed description of all parameters 
+    See DecentralizedAverager docstring for the detailed description of all parameters
     """
 
     def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
@@ -78,7 +78,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """
         if self.looking_for_group:
             logger.debug("Another look_for_group is already in progress. The current run will be scheduled after"
-                         " the existing group is either assembled or botched.")
+                         " the existing group is either assembled or disbanded.")
         async with self.lock_looking_for_group:
             end_time = get_dht_time() + (timeout or float('inf'))
 
@@ -86,14 +86,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             # TODO update group_bits on success! reduce number of bits on not enough peers.
             # TODO after allreduce finishes, we may need to ask leader to notify lower keys about this
             # (so as to fix possible network partitioning if some peers operate on a much smaller nbits)
-
             try:
                 while True:
                     # step 1: declare the averager to DHT, make it visible for other averagers
                     await self.publish_averager(group_key)
 
                     # step 2: request potential leaders until first accept OR until we are chosen as a leader
-                    request_candidates_task = asyncio.create_task(self.request_join_potential_leaders(group_key, ))
+                    request_candidates_task = asyncio.create_task(self.request_join_potential_leaders(group_key, timeout))
 
                     try:  # wait until we are ready to run allreduce (as either follower or leader) or reach expiration
                         timeout = min(end_time, self.declared_expiration_time) - get_dht_time()
@@ -189,11 +188,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             else:
                 continue
 
-    async def request_join_group(self, leader: Endpoint, expiration_time: DHTExpiration) -> Optional[GroupAllReduce]:
+    async def request_join_group(self, leader: Endpoint, expiration_time: DHTExpiration) -> Optional[AllReduceRunner]:
         """
         :param leader: request this peer to be your leader for allreduce
         :param expiration_time: inform leader that we intend to begin averaging before this expiration_time
         :returns: if leader leader accepted us and started AllReduce, return that AllReduce. Otherwise, return None
+        :note: this function does not guarantee that your group leader is the same as :leader: parameter
+          The originally specified leader can disband group and redirect us to a different leader
         """
         assert self.looking_for_group and self.current_leader is None
         call: Optional[grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]] = None
