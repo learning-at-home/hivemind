@@ -66,6 +66,9 @@ class RemoteMixtureOfExperts(nn.Module):
         :param kwargs: extra keyword parameters that will be passed to each expert, batch-first
         :returns: averaged predictions of all experts that delivered result on time, nested structure of batch-first
         """
+        if not input.isfinite().all():
+            raise ValueError("The input tensor has nan/inf values")
+
         if input.ndim != 2:
             input_for_gating = input.mean(dim=tuple(range(1, input.ndim - 1)))
         else:
@@ -160,7 +163,12 @@ class _RemoteCallMany(torch.autograd.Function):
         assert not torch.is_grad_enabled()
         num_samples, max_experts = len(experts_per_sample), max(map(len, experts_per_sample))
 
-        flat_inputs_cpu = [tensor.cpu() for tensor in flat_inputs]
+        flat_inputs_cpu = []
+        for tensor in flat_inputs:
+            if not tensor.isfinite().all():
+                raise ValueError("One of inputs has nan/inf values")
+            flat_inputs_cpu.append(tensor.cpu())
+
         flat_inputs_per_sample = list(zip(*(x.split(1, dim=0) for x in flat_inputs_cpu)))
         assert len(experts_per_sample) == len(flat_inputs_per_sample) == num_samples
 
@@ -208,7 +216,12 @@ class _RemoteCallMany(torch.autograd.Function):
         alive_ii, alive_jj, *flat_inputs_cpu = ctx.saved_tensors
 
         dummy_grad_mask, *flat_grad_outputs = raw_grads
-        flat_grad_outputs_cpu = [tensor.cpu() for tensor in flat_grad_outputs]
+
+        flat_grad_outputs_cpu = []
+        for tensor in flat_grad_outputs:
+            if not tensor.isfinite().all():
+                raise ValueError("One of gradients has nan/inf values")
+            flat_grad_outputs_cpu.append(tensor.cpu())
 
         num_samples, max_experts = dummy_grad_mask.shape
 
@@ -275,20 +288,18 @@ class _RemoteCallMany(torch.autograd.Function):
                 task = finished_tasks.get(timeout=timeout)
                 pending_tasks.discard(task)
 
-                if task.exception() or task.cancelled():
-                    logger.warning(f"Task {task} failed: {type(task.exception())}")
-                    continue
+                task_output = _process_dispatched_task(task)
+                if task_output is not None:
+                    finished_indices.append(task_to_indices[task])
+                    finished_outputs.append(task_output)
 
-                finished_indices.append(task_to_indices[task])
-                finished_outputs.append(tuple(deserialize_torch_tensor(tensor) for tensor in task.result().tensors))
-
-                # count how many successes we have for each input sample
-                sample_index = task_to_indices[task][0]
-                num_successful_tasks[sample_index] += 1
-                if num_successful_tasks[sample_index] == k_min:
-                    pending_samples -= 1
-                    if pending_samples <= 0:  # all tasks finished, await stragglers for at most timeout_after_k_min
-                        t_finish = min(t_finish, time.perf_counter() + timeout_after_k_min)
+                    # count how many successes we have for each input sample
+                    sample_index = task_to_indices[task][0]
+                    num_successful_tasks[sample_index] += 1
+                    if num_successful_tasks[sample_index] == k_min:
+                        pending_samples -= 1
+                        if pending_samples <= 0:  # all tasks finished, await stragglers for at most timeout_after_k_min
+                            t_finish = min(t_finish, time.perf_counter() + timeout_after_k_min)
 
         except Empty:
             pass  # we reached t_finish, this is normal behavior
@@ -296,3 +307,19 @@ class _RemoteCallMany(torch.autograd.Function):
             for task in pending_tasks:
                 task.cancel()
         return finished_indices, finished_outputs
+
+
+def _process_dispatched_task(task: grpc.Future) -> Optional[Tuple[torch.Tensor]]:
+    if task.exception() or task.cancelled():
+        logger.warning(f"Task {task} failed: {type(task.exception())}")
+        return None
+
+    deserialized_outputs = []
+    for tensor in task.result().tensors:
+        deserialized_tensor = deserialize_torch_tensor(tensor)
+        if not deserialized_tensor.isfinite().all():
+            logger.error(f"Task {task} failed: output tensor contains nan/inf values")
+            return None
+        deserialized_outputs.append(deserialized_tensor)
+
+    return tuple(deserialized_outputs)

@@ -2,9 +2,11 @@ import grpc
 import numpy as np
 import pytest
 import torch
+
 import hivemind
-from hivemind.client.expert import DUMMY
 from hivemind import background_server
+from hivemind.client.expert import DUMMY
+from hivemind.server import layers
 
 
 @pytest.mark.forked
@@ -169,3 +171,52 @@ def test_compute_expert_scores():
                     "compute_expert_scores returned incorrect score"
     finally:
         dht.shutdown()
+
+
+@pytest.mark.forked
+def test_client_anomaly_detection():
+    HID_DIM = 16
+
+    experts = {}
+    for i in range(4):
+        expert = layers.name_to_block['ffn'](HID_DIM)
+        experts[f'expert.{i}'] = hivemind.ExpertBackend(name=f'expert.{i}',
+                                                        expert=expert, opt=torch.optim.Adam(expert.parameters()),
+                                                        args_schema=(hivemind.BatchTensorDescriptor(HID_DIM),),
+                                                        outputs_schema=hivemind.BatchTensorDescriptor(HID_DIM),
+                                                        max_batch_size=16,
+                                                        )
+
+    experts['expert.3'].expert.layers[0].weight.data[0, 0] = float('nan')
+
+    dht = hivemind.DHT(start=True, expiration=999)
+    server = hivemind.Server(dht, experts, num_connection_handlers=1)
+    server.start()
+    try:
+        # dht_listen_on = hivemind.replace_port(server.dht.listen_on, server.dht.port)
+        server.ready.wait()
+
+        # dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_listen_on])
+
+        dmoe = hivemind.RemoteMixtureOfExperts(in_features=16, grid_size=(3,), dht=dht, k_best=3, uid_prefix='expert.')
+
+        input = torch.randn(1, 16)
+        input[0, 0] = float('nan')
+
+        with pytest.raises(ValueError):
+            dmoe(input)
+
+        input[0, 0] = 0
+        output = dmoe(input)
+
+        inf_loss = float('inf') * output.sum()
+        with pytest.raises(ValueError):
+            inf_loss.backward()
+
+        dmoe = hivemind.RemoteMixtureOfExperts(in_features=16, grid_size=(4,), dht=dht, k_best=4, uid_prefix='expert.')
+        output = dmoe(input)
+        assert output.isfinite().all()
+
+
+    finally:
+        server.shutdown()
