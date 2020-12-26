@@ -180,8 +180,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
             del self.leader_queue[maybe_next_leader]
 
-            if maybe_next_leader is None or maybe_next_expiration < get_dht_time():
-                continue  # at this point, my own endpoint is the best leader for myself
+            if maybe_next_expiration < get_dht_time():
+                continue  # this leader expired before we could request to join his group
 
             maybe_allreduce_group = await self.request_join_group(maybe_next_leader, self.declared_expiration_time)
             if maybe_allreduce_group is not None:
