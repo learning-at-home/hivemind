@@ -195,7 +195,8 @@ def test_client_anomaly_detection():
     try:
         server.ready.wait()
 
-        dmoe = hivemind.RemoteMixtureOfExperts(in_features=16, grid_size=(3,), dht=dht, k_best=3, uid_prefix='expert.')
+        dmoe = hivemind.RemoteMixtureOfExperts(in_features=16, grid_size=(3,), dht=dht, k_best=3, uid_prefix='expert.',
+                                               detect_anomalies=True)
 
         input = torch.randn(1, 16)
         input[0, 0] = float('nan')
@@ -210,7 +211,8 @@ def test_client_anomaly_detection():
         with pytest.raises(ValueError):
             inf_loss.backward()
 
-        dmoe = hivemind.RemoteMixtureOfExperts(in_features=16, grid_size=(4,), dht=dht, k_best=4, uid_prefix='expert.')
+        dmoe = hivemind.RemoteMixtureOfExperts(in_features=16, grid_size=(4,), dht=dht, k_best=4, uid_prefix='expert.',
+                                               detect_anomalies=True)
         output = dmoe(input)
         assert output.isfinite().all()
 
