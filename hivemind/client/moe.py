@@ -69,9 +69,6 @@ class RemoteMixtureOfExperts(nn.Module):
         :param kwargs: extra keyword parameters that will be passed to each expert, batch-first
         :returns: averaged predictions of all experts that delivered result on time, nested structure of batch-first
         """
-        if self.detect_anomalies and not input.isfinite().all():
-            raise ValueError("Input tensor has nan/inf values")
-
         if input.ndim != 2:
             input_for_gating = input.mean(dim=tuple(range(1, input.ndim - 1)))
         else:
