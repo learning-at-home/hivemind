@@ -168,7 +168,7 @@ class _RemoteCallMany(torch.autograd.Function):
 
         flat_inputs_cpu = []
         for tensor in flat_inputs:
-            if not tensor.isfinite().all():
+            if detect_anomalies and not tensor.isfinite().all():
                 raise ValueError("One of inputs has nan/inf values")
             flat_inputs_cpu.append(tensor.cpu())
 
@@ -224,7 +224,7 @@ class _RemoteCallMany(torch.autograd.Function):
 
         flat_grad_outputs_cpu = []
         for tensor in flat_grad_outputs:
-            if not tensor.isfinite().all():
+            if detect_anomalies and not tensor.isfinite().all():
                 raise ValueError("One of gradients has nan/inf values")
             flat_grad_outputs_cpu.append(tensor.cpu())
 
