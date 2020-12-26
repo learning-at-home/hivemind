@@ -256,14 +256,14 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                                                timeout=max(0.0, self.declared_expiration_time - get_dht_time()))
                     except asyncio.TimeoutError:
                         async with self.lock_request_join_group:
-                            # outcome 2: the time is up, we have *enough* followers => run allreduce immediately
+                            # outcome 2: the time is up, run allreduce with what we have or disband
                             if len(self.current_followers) + 1 >= self.min_group_size and self.looking_for_group:
                                 await self.leader_assemble_group()
-                            else:  # outcome 3: not enough followers, disband group
+                            else:
                                 await self.leader_disband_group()
 
             if self.current_leader is not None:
-                # outcome 4: found by a leader with higher priority, send our followers to him
+                # outcome 3: found by a leader with higher priority, send our followers to him
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED,
                                                       suggested_leader=self.current_leader)
                 return
