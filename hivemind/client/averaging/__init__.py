@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import random
 import ctypes
-from math import isfinite
-from typing import Sequence, Optional, Tuple, Any, Union, Awaitable, Dict, AsyncIterator
+from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 from concurrent.futures.thread import ThreadPoolExecutor
 import multiprocessing as mp
 import asyncio
@@ -15,7 +14,7 @@ import uvloop
 import grpc
 
 import hivemind
-from hivemind.client.averaging.allreduce import AllReduceRunner
+from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException
 from hivemind.client.averaging.matchmaking import Matchmaking
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
@@ -24,10 +23,6 @@ from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 # flavour types
 GroupID = bytes
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
-
-
-class AllreduceException(Exception):
-    """ A special exception that is raised when allreduce can't continue normally (e.g. disbanded/bad request/etc) """
 
 
 GROUP_NBITS_INTERVAL = 3
