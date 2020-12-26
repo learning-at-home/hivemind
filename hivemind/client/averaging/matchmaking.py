@@ -11,7 +11,7 @@ import torch
 import grpc
 
 import hivemind
-from hivemind.client.averaging.allreduce import GroupAllReduce, GroupID
+from hivemind.client.averaging.allreduce import AllReduceRunner, GroupID
 from hivemind.dht import DHTID, DHTExpiration, get_dht_time, GroupKey
 from hivemind.utils import get_logger, Endpoint, TensorDescriptor, MSGPackSerializer, TimedStorage
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
@@ -71,7 +71,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         return f"{self.__class__.__name__}(endpoint={self.endpoint}, schema={schema_hash_repr}, {lfg_status}" \
                f" current key = {self.prefix}.0b{self.group_bits}, {declared_status})"
 
-    async def look_for_group(self, *, timeout: Optional[float] = None) -> GroupAllReduce:
+    async def look_for_group(self, *, timeout: Optional[float] = None) -> AllReduceRunner:
         """
         :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
         Iterate over the averagers from a given group_identifier that have higher leadership priority than yourself.
@@ -151,7 +151,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug("Unpublish_averager has no effect: not published.")
 
     async def request_join_potential_leaders(self, group_key: GroupKey, timeout: Optional[float] = None
-                                             ) -> Optional[GroupAllReduce]:
+                                             ) -> Optional[AllReduceRunner]:
         """ Find peers in a given DHT key that might accept us as a follower """
         end_time = self.declared_expiration_time
         allowed_discrepancy = hivemind.utils.timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
@@ -183,11 +183,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             if maybe_next_leader is None or maybe_next_expiration < get_dht_time():
                 continue  # at this point, my own endpoint is the best leader for myself
 
-            maybe_group_allreduce = await self.request_join_group(maybe_next_leader, self.declared_expiration_time)
-            if maybe_group_allreduce is not None:
-                return maybe_group_allreduce
+            maybe_allreduce_group = await self.request_join_group(maybe_next_leader, self.declared_expiration_time)
+            if maybe_allreduce_group is not None:
+                return maybe_allreduce_group
+            else:
+                continue
 
-    async def request_join_group(self, leader: Endpoint, expiration_time: DHTExpiration) -> Optional[GroupAllReduce]:
+    async def request_join_group(self, leader: Endpoint, expiration_time: DHTExpiration) -> Optional[AllReduceRunner]:
         """
         :param leader: request this peer to be your leader for allreduce
         :param expiration_time: inform leader that we intend to begin averaging before this expiration_time
@@ -271,10 +273,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 return
 
             # finally, run allreduce
-            group_allreduce = current_group.result()
+            allreduce_group = current_group.result()
             yield averaging_pb2.MessageFromLeader(
-                code=averaging_pb2.BEGIN_ALLREDUCE, group_id=group_allreduce.group_id,
-                ordered_group_endpoints=group_allreduce.ordered_group_endpoints)
+                code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
+                ordered_group_endpoints=allreduce_group.ordered_group_endpoints)
 
         except Exception as e:
             logger.exception(e)
@@ -310,35 +312,35 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         else:
             return None
 
-    async def leader_assemble_group(self) -> GroupAllReduce:
+    async def leader_assemble_group(self) -> AllReduceRunner:
         """ Form up all current followers into a group and prepare to _run_allreduce """
         assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
         group_id = DHTID.generate().to_bytes()
         ordered_group_endpoints = list(self.current_followers)
         ordered_group_endpoints.append(self.endpoint)
         logger.debug(f"{self.endpoint} - leader started allreduce with {len(ordered_group_endpoints)} followers.")
-        group_allreduce = GroupAllReduce(
+        allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
-        self.assembled_group.set_result(group_allreduce)
+        self.assembled_group.set_result(allreduce_group)
         async with self.cond_notify_followers:
             self.cond_notify_followers.notify_all()
-        return group_allreduce
+        return allreduce_group
 
     async def follower_assemble_group(self, leader: Endpoint, group_id: GroupID,
-                                      ordered_group_endpoints: Sequence[Endpoint]) -> GroupAllReduce:
+                                      ordered_group_endpoints: Sequence[Endpoint]) -> AllReduceRunner:
         """ Prepare to run allreduce using a list of peers provided by our leader """
         assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
         logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
-        group_allreduce = GroupAllReduce(
+        allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
-        self.assembled_group.set_result(group_allreduce)
+        self.assembled_group.set_result(allreduce_group)
         async with self.cond_notify_followers:
             self.cond_notify_followers.notify_all()
-        return group_allreduce
+        return allreduce_group
 
     async def leader_disband_group(self):
         """ Kick out all followers immediately, optionally direct them to our new leader (if we found one) """

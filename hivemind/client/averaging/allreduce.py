@@ -96,7 +96,7 @@ class AllReduceProtocol:
             return False
 
 
-class GroupAllReduce(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragingServicer):
+class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragingServicer):
     """
     A class that implements ButterflyAllReduceProtocol on top of a gRPC servicer
     """

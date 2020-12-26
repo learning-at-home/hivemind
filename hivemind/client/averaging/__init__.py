@@ -15,7 +15,7 @@ import uvloop
 import grpc
 
 import hivemind
-from hivemind.client.averaging.allreduce import GroupAllReduce
+from hivemind.client.averaging.allreduce import AllReduceRunner
 from hivemind.client.averaging.matchmaking import Matchmaking
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
@@ -105,7 +105,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                                        target_group_size=target_group_size, min_group_size=min_group_size,
                                        averaging_expiration=averaging_expiration)
         self.allreduce_timeout, self.compression_type = allreduce_timeout, compression_type
-        self._running_groups: Dict[GroupID, GroupAllReduce] = {}  # one or more assembled groups that run all-reduce
+        self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
@@ -194,12 +194,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         group_id = None
         try:
             self._pending_group_assembled.clear()
-            group_allreduce = await self._matchmaking.look_for_group(timeout=timeout)
-            group_id = group_allreduce.group_id
-            if group_allreduce is not None:
-                self._running_groups[group_id] = group_allreduce
+            allreduce_group = await self._matchmaking.look_for_group(timeout=timeout)
+            group_id = allreduce_group.group_id
+            if allreduce_group is not None:
+                self._running_groups[group_id] = allreduce_group
                 self._pending_group_assembled.set()
-                future.set_result(await asyncio.wait_for(group_allreduce.run(), self.allreduce_timeout))
+                future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
             else:
                 future.set_exception(AllreduceException(f"{self} - group_allreduce failed, unable to find group"))
 
