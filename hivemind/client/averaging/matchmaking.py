@@ -195,12 +195,11 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """
         assert self.looking_for_group and self.current_leader is None
         call: Optional[grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]] = None
-        try:
-            async with self.lock_request_join_group:
-                leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
-                call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
-                    endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
-
+        async with self.lock_request_join_group:
+            leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
+            call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
+                endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
+            try:
                 message = await call.read()  # TODO use timeout?
                 if message.code != averaging_pb2.ACCEPTED:
                     code = averaging_pb2.MessageCode.Name(message.code)
@@ -213,21 +212,21 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if len(self.current_followers) > 0:
                     await self.leader_disband_group()
 
-            message = await call.read()
-            if message.code == averaging_pb2.BEGIN_ALLREDUCE:
-                async with self.lock_request_join_group:
-                    return await self.follower_assemble_group(leader, message.group_id, message.ordered_group_endpoints)
-            elif message.code == averaging_pb2.GROUP_DISBANDED and bool(message.suggested_leader):
-                logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
-                return await self.request_join_group(message.suggested_leader, expiration_time)
+                message = await call.read()
+                if message.code == averaging_pb2.BEGIN_ALLREDUCE:
+                    async with self.lock_request_join_group:
+                        return await self.follower_assemble_group(leader, message.group_id, message.ordered_group_endpoints)
+                elif message.code == averaging_pb2.GROUP_DISBANDED and bool(message.suggested_leader):
+                    logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
+                    return await self.request_join_group(message.suggested_leader, expiration_time)
 
-            else:
-                logger.debug(f"{self} - leader sent {averaging_pb2.MessageCode.Name(message.code)}, leaving group")
-                return None
-        finally:
-            self.current_leader = None
-            if call is not None:
-                call.cancel()
+                else:
+                    logger.debug(f"{self} - leader sent {averaging_pb2.MessageCode.Name(message.code)}, leaving group")
+                    return None
+            finally:
+                self.current_leader = None
+                if call is not None:
+                    call.cancel()
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
