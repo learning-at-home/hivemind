@@ -12,7 +12,7 @@ GroupID = bytes
 logger = get_logger(__name__)
 
 
-class ButterflyAllReduceProtocol:
+class AllReduceProtocol:
     """
     An internal class that runs butterfly AllReduce in a predefined group of averagers
 
@@ -96,7 +96,7 @@ class ButterflyAllReduceProtocol:
             return False
 
 
-class GroupAllReduce(ButterflyAllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragingServicer):
+class GroupAllReduce(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragingServicer):
     """
     A class that implements ButterflyAllReduceProtocol on top of a gRPC servicer
     """

@@ -136,20 +136,19 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             self.declared_expiration_time, self.declared_group_key = new_expiration_time, group_key
             return new_expiration_time
         else:
-            logger.warning(f"failed to subscribe to group {group_key} : store rejected by DHT peers")
+            logger.warning(f"Failed to subscribe to group {group_key} : store rejected by DHT peers")
             return None
 
     async def unpublish_averager(self):
         """ Remove the previously published entries from the DHT """
         declared_expiration_time, declared_group_key = self.declared_expiration_time, self.declared_group_key
-        if isinstance(declared_group_key, GroupKey):
+        if declared_group_key is not None:
             self.declared_expiration_time, self.declared_group_key = float('-inf'), None
             self.leader_queue, self.max_assured_time = LeaderQueue(), float('-inf')
-            await self.dht.declare_averager(declared_group_key, self.endpoint,
-                                            expiration_time=declared_expiration_time,
+            await self.dht.declare_averager(declared_group_key, self.endpoint, declared_expiration_time,
                                             looking_for_group=False, return_future=True)
         else:
-            logger.debug("unpublish_averager has no effect: not published.")
+            logger.debug("Unpublish_averager has no effect: not published.")
 
     async def request_join_potential_leaders(self, group_key: GroupKey, timeout: Optional[float] = None
                                              ) -> Optional[GroupAllReduce]:

@@ -5,7 +5,7 @@ import time
 import torch
 import pytest
 import hivemind
-from hivemind.client.averaging.allreduce import ButterflyAllReduceProtocol, split_into_parts, restore_from_parts
+from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts
 from hivemind.utils import LOCALHOST, Endpoint
 
 
@@ -43,7 +43,7 @@ async def test_allreduce_protocol():
                        for i, peer in enumerate(peers)}
 
     group_id = bytes(hivemind.DHTID.generate())
-    allreduce_protocols = [ButterflyAllReduceProtocol(
+    allreduce_protocols = [AllReduceProtocol(
         group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer], ordered_group_endpoints=peers)
         for peer in peers]
 

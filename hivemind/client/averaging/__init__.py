@@ -79,7 +79,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
                  prefix: str, target_group_size: int, min_group_size: int = 1, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, allreduce_timeout: float = float('inf'),
+                 averaging_expiration: float = 15, allreduce_timeout: Optional[float] = None,
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
                  listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
@@ -199,8 +199,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             if group_allreduce is not None:
                 self._running_groups[group_id] = group_allreduce
                 self._pending_group_assembled.set()
-                future.set_result(await asyncio.wait_for(
-                    group_allreduce.run(), self.allreduce_timeout if isfinite(self.allreduce_timeout) else None))
+                future.set_result(await asyncio.wait_for(group_allreduce.run(), self.allreduce_timeout))
             else:
                 future.set_exception(AllreduceException(f"{self} - group_allreduce failed, unable to find group"))
 
