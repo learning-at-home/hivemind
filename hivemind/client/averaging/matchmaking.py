@@ -233,26 +233,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
             # stage 1: check if there is a reason to reject a peer outright
-                        error_msg = None
-            if not self.looking_for_group:
-                error_msg = averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
-            elif not is_valid_join_request(request):
-                error_msg = averaging_pb2.MessageFromLeader(code=averaging_pb2.PROTOCOL_VIOLATION)
-            elif request.schema_hash != self.schema_hash:
-                error_msg = averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_SCHEMA_HASH)
-            elif self.declared_expiration_time == float('-inf'):
-                error_msg = averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_DECLARED)
-            elif self.declared_expiration_time > (request.expiration or float('inf')):
-                error_msg = averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
-            elif self.current_leader is not None:
-                error_msg = averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER,
-                                                            suggested_leader=self.current_leader)
-            elif request.endpoint == self.endpoint or request.endpoint in self.current_followers:
-                error_msg = averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
-            elif len(self.current_followers) + 1 >= self.target_group_size:
-                error_msg = averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_IS_FULL)
-            if error_msg is not None:
-                yield error_msg
+            reason_to_reject = self._check_reasons_to_reject(request)
+            if reason_to_reject is not None:
+                yield reason_to_reject
                 return
 
             current_group = self.assembled_group  # copy current assembled_group to avoid overwriting
@@ -301,6 +284,33 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         finally:  # note: this code is guaranteed to run even if the coroutine is destroyed prematurely
             self.current_followers.discard(request.endpoint)
+
+    def _check_reasons_to_reject(self, request: averaging_pb2.JoinRequest) -> averaging_pb2.MessageFromLeader:
+        """ :returns: i accepted, return None, otherwise return a reason for rejection """
+        if not self.looking_for_group:
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
+        assert len(request.ListFields()) == 3, "this check assumes that JoinRequest has three fields, please update it."
+
+        if not isinstance(request.schema_hash, bytes) or len(request.schema_hash) == 0 \
+                or not isinstance(request.expiration, DHTExpiration) or not isfinite(request.expiration) \
+                or not isinstance(request.endpoint, Endpoint) or len(request.endpoint) == 0:
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.PROTOCOL_VIOLATION)
+
+        elif request.schema_hash != self.schema_hash:
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_SCHEMA_HASH)
+        elif self.declared_expiration_time == float('-inf'):
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_DECLARED)
+        elif self.declared_expiration_time > (request.expiration or float('inf')):
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
+        elif self.current_leader is not None:
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER,
+                                                   suggested_leader=self.current_leader)
+        elif request.endpoint == self.endpoint or request.endpoint in self.current_followers:
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
+        elif len(self.current_followers) + 1 >= self.target_group_size:
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_IS_FULL)
+        else:
+            return None
 
     async def leader_assemble_group(self) -> GroupAllReduce:
         """ Form up all current followers into a group and prepare to _run_allreduce """
@@ -352,10 +362,3 @@ def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
                     for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
                     for tensor in tensors]
     return DHTID.generate(source=MSGPackSerializer.dumps(schema_dicts)).to_bytes()
-
-
-def is_valid_join_request(request: averaging_pb2.JoinRequest) -> bool:
-    assert len(request.ListFields()) == 3, "this function assumes JoinRequest has three fields, it should be updated"
-    return (isinstance(request.schema_hash, bytes) and len(request.schema_hash) > 0 and
-            isinstance(request.expiration, DHTExpiration) and request.expiration != float('inf') and
-            isinstance(request.endpoint, Endpoint) and len(request.endpoint) > 0)
