@@ -524,6 +524,7 @@ class DHT(mp.Process):
             if result is None:
                 logger.warning(f"Allreduce group not found: {group_key}")
                 future.set_result([])
+                return
             assert isinstance(result.value, dict), f"expected {group_key} to be a Dict[Endpoint, is_active], " \
                                                    f"but got {result.value} of type {type(result.value)}."
             averagers = [(endpoint, entry.expiration_time) for endpoint, entry in result.value.items()

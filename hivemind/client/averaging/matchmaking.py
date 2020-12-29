@@ -301,7 +301,7 @@ class CandidateLeaders:
         self.max_assured_time = float('-inf')
         self.declared_expiration_time = float('inf')
         self.declared_group_key: Optional[GroupKey] = None
-        self.search_end_time = float('imf')
+        self.search_end_time = float('inf')
 
     @contextlib.asynccontextmanager
     async def begin_search(self, group_key: GroupKey, timeout: Optional[float]):
@@ -358,7 +358,9 @@ class CandidateLeaders:
                     continue
                 self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
                 self.max_assured_time = max(self.max_assured_time, peer_expiration_time - discrepancy)
-            self.update_finished.set()
+
+            if len(self.leader_queue) > 0:
+                self.update_finished.set()
 
             await asyncio.wait(
                 {self.running.wait(), self.update_triggered.wait()}, return_when=asyncio.ALL_COMPLETED,
@@ -369,15 +371,13 @@ class CandidateLeaders:
         try:
             while True:
                 new_expiration_time = min(get_dht_time() + self.averaging_expiration, self.search_end_time)
+                self.declared_group_key, self.declared_expiration_time = group_key, new_expiration_time
                 stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
                                                             looking_for_group=True, return_future=True)
                 if stored_ok:
-                    self.declared_expiration_time, self.declared_group_key = new_expiration_time, group_key
-                    return new_expiration_time
+                    await asyncio.sleep(self.declared_expiration_time - get_dht_time())
                 else:
                     logger.warning(f"Failed to subscribe to group {group_key} : store rejected by DHT peers")
-                    return None
-
         finally:
             if self.declared_group_key is not None:
                 previous_declared_key, previous_expiration_time = self.declared_group_key, self.declared_expiration_time
