@@ -105,12 +105,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             while True:
                 try:
                     time_to_expiration = self.candidate_leaders.declared_expiration_time - get_dht_time()
-                    cand = await asyncio.wait_for(self.candidate_leaders.pop_next_leader(),
-                                                  timeout=time_to_expiration if isfinite(time_to_expiration) else None)
+                    next_best_leader = await asyncio.wait_for(
+                        self.candidate_leaders.pop_next_leader(),
+                        timeout=time_to_expiration if isfinite(time_to_expiration) else None)
 
                     request_expiration_time = min(self.candidate_leaders.declared_expiration_time,
                                                   end_time, get_dht_time() + self.averaging_expiration)
-                    group = await self.request_join_group(cand, request_expiration_time)
+                    group = await self.request_join_group(next_best_leader, request_expiration_time)
                     if group is not None:
                         return group
 
@@ -295,109 +296,95 @@ class CandidateLeaders:
     """ An utility class that searches for averagers that could become our leaders """
     def __init__(self, endpoint: Endpoint, dht: hivemind.DHT, averaging_expiration: DHTExpiration):
         self.endpoint, self.dht, self.averaging_expiration = endpoint, dht, averaging_expiration
-        self.running, self.paused = False, False
+        self.running, self.update_triggered, self.update_finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        self.leader_queue = TimedStorage[Endpoint, DHTExpiration]()
+        self.max_assured_time = float('-inf')
         self.declared_expiration_time = float('inf')
         self.declared_group_key: Optional[GroupKey] = None
-        self.max_assured_time = float('-inf')
-        self.leader_queue = LeaderQueue()
+        self.search_end_time = float('imf')
 
     @contextlib.asynccontextmanager
     async def begin_search(self, group_key: GroupKey, timeout: Optional[float]):
-        assert not self.running, "already running"
-        self.running = True
-        self.leader_queue = LeaderQueue()
-        update_queue_task = asyncio.create_task(self._update_queue(group_key, timeout))
+        assert not self.running.is_set(), "already running"
+        self.running.set()
+        self.search_end_time = get_dht_time() + timeout if timeout is not None else float('inf')
+        update_queue_task = asyncio.create_task(self._update_queue_periodically(group_key))
+        declare_averager_task = asyncio.create_task(self._declare_averager_periodically(group_key))
         try:
             yield self
         finally:
             update_queue_task.cancel()
-            if self.declared_group_key is not None:
-                asyncio.create_task(self.unpublish_averager())
-            self.running = False
+            declare_averager_task.cancel()
+            self.running.clear()
+            self.update_triggered.clear()
+            self.update_finished.clear()
+
+    @contextlib.asynccontextmanager
+    async def pause_search(self):
+        was_running = self.running.is_set()
+        try:
+            self.running.clear()
+            yield
+        finally:
+            if was_running:
+                self.running.set()
+            else:
+                self.running.clear()
 
     async def pop_next_leader(self) -> Endpoint:
         """ Remove and return the next most suitable leader or throw an exception if reached timeout """
         assert self.running, "Not running search at the moment"
-        # TODO if this doesn't finish until expiration, make sure that found_next_leader sets exception
-        raise NotImplementedError("TODO")
+        maybe_next_leader, entry = self.leader_queue.top()
 
-    @contextlib.asynccontextmanager
-    def pause_search(self):
-        assert self.running, "can't pause search: not running"
-        raise NotImplementedError()
+        next_entry_time = entry.expiration_time if maybe_next_leader is not None else get_dht_time()
+        if self.max_assured_time < next_entry_time < self.search_end_time:
+            self.update_triggered.set()
 
-    def _update_queue(self, group_key: GroupKey, timeout: Optional[float]):
-        raise NotImplementedError()
-        # TODO respect timeout. also make sure publish_averager expiration time never exceeds timeout
-        # TODO respect pause_search
+        if maybe_next_leader is None:
+            await self.update_finished.wait()
+            return await self.pop_next_leader()
 
-    async def publish_averager(self, group_key: GroupKey, new_expiration_time: DHTExpiration) -> Optional[DHTExpiration]:
-        """ Subscribe thyself to a given group key and become visible to other averagers """
-        if group_key != self.declared_group_key:
-            await self.unpublish_averager()
+        del self.leader_queue[maybe_next_leader]
+        return maybe_next_leader
 
-        stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
-                                                    looking_for_group=True, return_future=True)
-        if stored_ok:
-            self.declared_expiration_time, self.declared_group_key = new_expiration_time, group_key
-            return new_expiration_time
-        else:
-            logger.warning(f"Failed to subscribe to group {group_key} : store rejected by DHT peers")
-            return None
+    async def _update_queue_periodically(self, group_key: GroupKey):
+        discrepancy = hivemind.utils.timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
+        while get_dht_time() < self.search_end_time:
+            new_peers = await self.dht.get_averagers(group_key, only_active=True, return_future=True)
+            self.max_assured_time = max(self.max_assured_time, get_dht_time() + self.averaging_expiration - discrepancy)
 
-    async def unpublish_averager(self):
-        """ Remove the previously published entries from the DHT """
-        declared_expiration_time, declared_group_key = self.declared_expiration_time, self.declared_group_key
-        if declared_group_key is not None:
-            self.declared_expiration_time, self.declared_group_key = float('inf'), None
-            self.leader_queue, self.max_assured_time = LeaderQueue(), float('-inf')
-            await self.dht.declare_averager(declared_group_key, self.endpoint, declared_expiration_time,
-                                            looking_for_group=False, return_future=True)
-        else:
-            logger.debug("Calling unpublish_averager had no effect: not published.")
+            for peer, peer_expiration_time in new_peers:
+                if peer == self.endpoint:
+                    continue
+                self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
+                self.max_assured_time = max(self.max_assured_time, peer_expiration_time - discrepancy)
+            self.update_finished.set()
 
-    async def request_join_potential_leaders(self, group_key: GroupKey, timeout: Optional[float] = None
-                                             ) -> Optional[AllReduceRunner]:
-        """ Find peers in a given DHT key that might accept us as a follower """
-        end_time = self.declared_expiration_time
-        allowed_discrepancy = hivemind.utils.timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
-        if timeout is not None:
-            end_time = min(self.declared_expiration_time, get_dht_time() + timeout)
-        assert isfinite(end_time)
+            await asyncio.wait(
+                {self.running.wait(), self.update_triggered.wait()}, return_when=asyncio.ALL_COMPLETED,
+                timeout=self.search_end_time - get_dht_time() if isfinite(self.search_end_time) else None)
+            self.update_triggered.clear()
 
-        while True:
-            maybe_next_leader, entry = self.leader_queue.top()
-            maybe_next_expiration = entry.expiration_time if entry is not None else None
-            if (maybe_next_expiration or get_dht_time()) > self.max_assured_time:
-                # if there's a chance that DHT contains averagers newer than the earliest one from our local heap,
-                # ... then fetch more candidates from the DHT until we are confident we know the next-earliest peer
-                new_peers = await self.dht.get_averagers(group_key, only_active=True, return_future=True)
-                self.max_assured_time = max(self.max_assured_time,
-                                            get_dht_time() + self.averaging_expiration - allowed_discrepancy)
-                for peer, peer_expiration_time in new_peers:
-                    if peer == self.endpoint:
-                        continue
-                    self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
-                    self.max_assured_time = max(self.max_assured_time, peer_expiration_time - allowed_discrepancy)
-                continue
+    async def _declare_averager_periodically(self, group_key: GroupKey):
+        try:
+            while True:
+                new_expiration_time = min(get_dht_time() + self.averaging_expiration, self.search_end_time)
+                stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
+                                                            looking_for_group=True, return_future=True)
+                if stored_ok:
+                    self.declared_expiration_time, self.declared_group_key = new_expiration_time, group_key
+                    return new_expiration_time
+                else:
+                    logger.warning(f"Failed to subscribe to group {group_key} : store rejected by DHT peers")
+                    return None
 
-            if maybe_next_expiration is None or maybe_next_expiration >= self.declared_expiration_time:
-                break  # no potential leaders are available until our expiration AND we can't fetch more
-
-            del self.leader_queue[maybe_next_leader]
-
-            if maybe_next_expiration < get_dht_time():
-                continue  # this leader expired before we could request to join his group
-
-            maybe_allreduce_group = await self.request_join_group(maybe_next_leader, self.declared_expiration_time)
-            if maybe_allreduce_group is not None:
-                return maybe_allreduce_group
-            else:
-                continue
-
-
-class LeaderQueue(TimedStorage[Endpoint, DHTExpiration]):
-    """ A queue of potential leaders ordered by their declared expiration time """
+        finally:
+            if self.declared_group_key is not None:
+                previous_declared_key, previous_expiration_time = self.declared_group_key, self.declared_expiration_time
+                self.declared_group_key, self.declared_expiration_time = None, float('inf')
+                self.leader_queue, self.max_assured_time = TimedStorage[Endpoint, DHTExpiration](), float('-inf')
+                await self.dht.declare_averager(previous_declared_key, self.endpoint, previous_expiration_time,
+                                                looking_for_group=False, return_future=True)
 
 
 def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
