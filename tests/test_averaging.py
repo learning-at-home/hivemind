@@ -1,46 +1,62 @@
 import asyncio
 import random
 import time
-from itertools import product
 
 import torch
 import pytest
 import hivemind
-from hivemind.client.allreduce import GroupAllReduce, split_into_parts, restore_from_parts
-from hivemind.utils import LOCALHOST
+from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts
+from hivemind.utils import Endpoint
+
+
+@pytest.mark.forked
+def test_getset_averagers():
+    dht = hivemind.DHT(start=True)
+
+    t = hivemind.get_dht_time()
+    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost', expiration_time=t + 60)
+    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost2', expiration_time=t + 61)
+
+    q1 = dht.get_averagers('bucket.0b10110', only_active=True)
+
+    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost', expiration_time=t + 66)
+    q2 = dht.get_averagers('bucket.0b10110', only_active=True)
+
+    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost2', looking_for_group=False,
+                         expiration_time=t + 61)
+    q3 = dht.get_averagers('bucket.0b10110', only_active=True)
+    q4 = dht.get_averagers('bucket.0b10110', only_active=False)
+
+    assert len(q1) == 2 and ('localhvost', t + 60) in q1 and ('localhvost2', t + 61) in q1
+    assert len(q2) == 2 and ('localhvost', t + 66) in q2 and ('localhvost2', t + 61) in q2
+    assert len(q3) == 1 and ('localhvost', t + 66) in q3
+    assert len(q4) == 2 and ('localhvost', t + 66) in q4 and ('localhvost2', t + 61) in q2
 
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_allreduce_direct():
-    # WARNING! this test uses an early interface that will change by the time DecentralizedAverager is finished
-
+async def test_allreduce_once():
     dht = hivemind.DHT(start=True)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
     tensors3 = [-torch.rand(123), torch.arange(3).to(torch.float32)]
+    tensors4 = [torch.randn(123) ** 3, torch.arange(3).to(torch.float32) / 2]
 
-    reference = [(tensors1[i] + tensors2[i] + tensors3[i]) / 3 for i in range(len(tensors1))]
+    reference = [(tensors1[i] + tensors2[i] + tensors3[i] + tensors4[i]) / 4 for i in range(len(tensors1))]
 
-    averager1 = hivemind.DecentralizedAverager(tensors1, dht=dht, start=True, max_size=3, timeout=5)
-    averager2 = hivemind.DecentralizedAverager(tensors2, dht=dht, start=True, max_size=3, timeout=5)
-    averager3 = hivemind.DecentralizedAverager(tensors3, dht=dht, start=True, max_size=3, timeout=5)
+    averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
+                                                prefix='mygroup', initial_group_bits='0110', listen_on='127.0.0.1:*',
+                                                start=True)
+                 for tensors in [tensors1, tensors2, tensors3, tensors4]]
 
-    future1 = averager1.group_allreduce(my_endpoint=f"{LOCALHOST}:{averager1.port}",
-                                        leader_endpoint=None, return_future=True)
-    time.sleep(0.1)
+    futures = []
+    for averager in averagers:
+        futures.append(averager.step(return_future=True))  # TODO revert to hard version
+        time.sleep(0.5)
 
-    future2 = averager2.group_allreduce(my_endpoint=f"{LOCALHOST}:{averager2.port}",
-                                        leader_endpoint=f"{LOCALHOST}:{averager1.port}",
-                                        return_future=True)
-
-    future3 = averager3.group_allreduce(my_endpoint=f"{LOCALHOST}:{averager3.port}",
-                                        leader_endpoint=f"{LOCALHOST}:{averager1.port}",
-                                        return_future=True)
-
-    for future in future1, future2, future3:
-        for ref, our in zip(reference, await future):
+    for future in futures:
+        for ref, our in zip(reference, future.result()):
             assert torch.allclose(ref, our)
 
 
@@ -49,50 +65,36 @@ async def test_allreduce_direct():
 async def test_allreduce_protocol():
     """ Run group allreduce protocol manually without grpc, see if the internal logic is working as intended """
     peers = "alice", "bob", "carol"
-    expiration_offsets = 4, 0, 1
 
     tensors_by_peer = {peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
                        for i, peer in enumerate(peers)}
 
-    alice, bob, carol = allreduce_protocols = [
-        GroupAllReduce(endpoint=peer, expiration=hivemind.get_dht_time() + offset, tensors=tensors_by_peer[peer])
-        for peer, offset in zip(peers, expiration_offsets)]
+    group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
+    allreduce_protocols = [AllReduceProtocol(
+        group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer], ordered_group_endpoints=peers)
+        for peer in peers]
 
-    bob.start_new_group()
-    bob.add_peer_to_group(alice.info.endpoint)
-    alice.join_group(bob, bob.group_id)
-    bob.add_peer_to_group(carol.info.endpoint)
-    carol.join_group(carol, bob.group_id)
+    async def _accumulate(sender: Endpoint, recipient: Endpoint):
+        sender_allreduce = allreduce_protocols[peers.index(sender)]
+        recipient_allreduce = allreduce_protocols[peers.index(recipient)]
+        averaged_part = await recipient_allreduce.accumulate_part(
+            source=sender, remote_part=sender_allreduce.local_tensor_parts[recipient])
+        sender_allreduce.register_averaged_part(source=recipient, averaged_part=averaged_part)
 
-    bob.leader_begin_allreduce()
-    ordered_group_endpoints = await bob.assembled_group
-    assert len(ordered_group_endpoints) == len(peers)
-
-    carol.follower_begin_allreduce(ordered_group_endpoints)
-    alice.follower_begin_allreduce(ordered_group_endpoints)
-
-    chunks_by_peer = {protocol.info.endpoint: {
-        peer: part for peer, part in zip(peers, split_into_parts(protocol.local_tensors, len(ordered_group_endpoints)))
-    } for protocol in allreduce_protocols}
-
-    all_pairs = list(product(allreduce_protocols, peers))
-    random.shuffle(all_pairs)
-    await asyncio.gather(*(
-        peer_allreduce.accumulate(source_peer, chunks_by_peer[source_peer][peer_allreduce.info.endpoint])
-        for peer_allreduce, source_peer in all_pairs))
-
-    averaged_parts = await asyncio.gather(*(protocol.averaged_part for protocol in allreduce_protocols))
-    tensor_shapes = [tensor.shape for tensor in alice.local_tensors]
-    averaged_tensors = restore_from_parts(averaged_parts, tensor_shapes)
+    await asyncio.wait({_accumulate(sender, recipient) for sender in peers for recipient in peers
+                        if sender != recipient})
 
     reference_tensors = [
         sum(tensors_by_peer[peer][i] for peer in peers) / len(peers)
         for i in range(len(tensors_by_peer[peers[0]]))
     ]
 
-    assert len(averaged_tensors) == len(reference_tensors)
-    assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
-               for our, ref in zip(averaged_tensors, reference_tensors))
+    for peer, allreduce in zip(peers, allreduce_protocols):
+        assert allreduce.averaged_tensors.done()
+        averaged_tensors = await allreduce
+        assert len(averaged_tensors) == len(reference_tensors)
+        assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
+                   for our, ref in zip(averaged_tensors, reference_tensors))
 
 
 @pytest.mark.forked

@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set
 
 import uvloop
+from numpy import nextafter
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
@@ -37,14 +38,23 @@ FLAT_EXPERT = -1     # grid prefix reserved for storing 1d expert uids. Used to 
 UID_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+$')  # e.g. ffn_expert.98.76.54 - prefix + some dims
 PREFIX_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))*[.]$')  # e.g. expert. or ffn.45. (ends with ".")
 #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
+GroupKey = str
+GROUP_PATTERN = re.compile('^(([^.])+)[.]0b[01]+$')  # e.g. bert_exp4_averaging.0b01001101
 
 
 def is_valid_uid(maybe_uid: str) -> bool:
+    """ An uid must contain a string expert type, followed by one or more .-separated numeric indices """
     return bool(UID_PATTERN.fullmatch(maybe_uid))
 
 
 def is_valid_prefix(maybe_prefix: str) -> bool:
+    """ An uid prefix must contain a string expert type, followed by optional numeric indices and a trailing period """
     return bool(PREFIX_PATTERN.fullmatch(maybe_prefix))
+
+
+def is_valid_group(maybe_group: str) -> bool:
+    """ A group identifier must contain group type, followed by one or more .-separated indices, and any ?metadata"""
+    return bool(GROUP_PATTERN.fullmatch(maybe_group))
 
 
 def split_uid(uid_or_prefix: Union[ExpertUID, ExpertPrefix]) -> Tuple[ExpertPrefix, Coordinate]:
@@ -118,6 +128,7 @@ class DHT(mp.Process):
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
                  receiver_threads: int = 1, negative_caching: bool = True, expiration: float = 300, **kwargs):
         super().__init__()
+        assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
         self.expiration, self.negative_caching = expiration, negative_caching
@@ -457,3 +468,67 @@ class DHT(mp.Process):
         if future is not None:
             future.set_result(best_experts_batch)
         return best_experts_batch
+
+    def declare_averager(self, group_key: GroupKey, endpoint: Endpoint, expiration_time: float, *,
+                         looking_for_group: bool = True, return_future: bool = False) -> Union[bool, MPFuture]:
+        """
+        Add (or remove) the averager to a given allreduce bucket
+
+        :param group_key: allreduce group key, e.g. my_averager.0b011011101
+        :param endpoint: averager public endpoint for incoming requests
+        :param expiration_time: intent to run allreduce before this timestamp
+        :param looking_for_group: by default (True), declare the averager as "looking for group" in a given group;
+          If False, this will instead mark that the averager as no longer looking for group, (e.g. it already finished)
+        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
+        :return: True if declared, False if declaration was rejected by DHT peers
+        :note: when leaving (i.e. is_active=False), please specify the same expiration_time as when entering the group
+        :note: setting is_active=False does *not* guarantee that others will immediately stop to query you.
+        """
+        assert is_valid_group(group_key), f"Group key {group_key} is invalid, must follow {GROUP_PATTERN}"
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_declare_averager', [],
+                        dict(group_key=group_key, endpoint=endpoint, expiration_time=expiration_time,
+                             looking_for_group=looking_for_group, future=_future)))
+        return future if return_future else future.result()
+
+    async def _declare_averager(self, node: DHTNode, *, group_key: str, endpoint: Endpoint,
+                                expiration_time: DHTExpiration, looking_for_group: bool, future: MPFuture):
+        try:
+            expiration_time = expiration_time if looking_for_group else nextafter(expiration_time, float('inf'))
+            # ^-- when declaring averager inactive, we increment expiration time to overwrite the pre-existing entry
+            store_ok = await node.store(
+                key=group_key, subkey=endpoint, value=looking_for_group, expiration_time=expiration_time)
+            future.set_result(store_ok)
+        except Exception as e:
+            future.set_exception(e)
+
+    def get_averagers(self, group_key: GroupKey, *, only_active: bool = True, return_future: bool = False
+                      ) -> Union[List[Tuple[Endpoint, DHTExpiration]], MPFuture]:
+        """
+        Find and return averagers in a specified all-reduce bucket
+
+        :param group_key: finds averagers that have the this group key, e.g. my_averager.0b011011101
+        :param only_active: if True, return only active averagers that are looking for group (i.e. with value = True)
+            if False, return all averagers under a given group_key regardless of value
+        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
+        :return: endpoints and expirations of every matching averager
+        """
+        assert is_valid_group(group_key), f"Group key {group_key} is invalid, must follow {GROUP_PATTERN}"
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_get_averagers', [], dict(group_key=group_key, only_active=only_active, future=_future)))
+        return future if return_future else future.result()
+
+    async def _get_averagers(self, node: DHTNode, *, group_key: str, only_active: bool, future: MPFuture):
+        try:
+            result = await node.get(group_key, latest=True)
+            if result is None:
+                logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
+                future.set_result([])
+                return
+            assert isinstance(result.value, dict), f"expected {group_key} to be a Dict[Endpoint, is_active], " \
+                                                   f"but got {result.value} of type {type(result.value)}."
+            averagers = [(endpoint, entry.expiration_time) for endpoint, entry in result.value.items()
+                         if not only_active or entry.value is True]
+            future.set_result(averagers)
+        except Exception as e:
+            future.set_exception(e)

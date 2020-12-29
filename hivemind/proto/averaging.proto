@@ -4,32 +4,35 @@ import "runtime.proto";
 
 // Runs alongside each trainer to perform gating function averaging every now and then. Read more: client/averaging.py
 service DecentralizedAveraging {
-  rpc rpc_group_allreduce(PeerInfo) returns (stream MessageFromLeader);  // assemble a group and run all-reduce
+  rpc rpc_join_group(JoinRequest) returns (stream MessageFromLeader);  // assemble a group for allreduce
   rpc rpc_aggregate_part(AveragingData) returns (AveragingData);  // send my local shard => get aggregated shard
 }
 
-message PeerInfo {
+enum MessageCode {
+  NO_CODE = 0;               // Default value that should not be used explicitly
+  REQUEST_JOIN = 1;          // "Dear maybe leader, will you have me in your group as a follower?"
+  ACCEPTED = 2;              // "I accept you in my group, you now commit to responding to me"
+  BEGIN_ALLREDUCE = 3;       // "We can begin allreduce now. These are your peers."
+  PART_FOR_AVERAGING = 4;    // "I am running allreduce with you, here's a part of my tensor that you should aggregate"
+  AVERAGED_PART = 5;         // "I aggregated your part with others and here's the average for that part"
+  NOT_DECLARED = 6;          // "I have not declared my group id yet, how the heck did you even find me? Go away."
+  NOT_A_LEADER = 7;          // "I am not a group a leader. Go ask my leader instead."
+  BAD_EXPIRATION_TIME = 8;   // "I will not accept you. I cannot guarantee that we begin before you expire."
+  BAD_SCHEMA_HASH = 9;       // "I will not accept you. I am not averaging the samy type of tensors as you."
+  BAD_GROUP_ID = 10;         // "I will not accept your request, your group id does not match with any groups i'm in."
+  DUPLICATE_ENDPOINT = 11;   // "I will not accept you, i already have exactly the same endpoint in my current group."
+  GROUP_IS_FULL = 12;        // "I will not accept you, my group already contains too many peers."
+  NOT_LOOKING_FOR_GROUP = 13;// "I'm not available at the moment. Please, get lost."
+  PROTOCOL_VIOLATION = 14;   // "You did something so unspeakable that i don't have a special code for that."
+  INTERNAL_ERROR = 15;       // "I messed up, we will have to stop allreduce because of that."
+  CANCELLED = 16;            // "[from peer during allreduce] I no longer want to participate in AllReduce."
+  GROUP_DISBANDED = 17;      // "[from leader] The group is closed. Go find another group."
+}
+
+message JoinRequest {
   string endpoint = 1;          // A follower accepts incoming allreduce requests at this address
   bytes schema_hash = 2;        // A hash that describes follower's tensors (shapes, num tensors, etc)
   double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time
-}
-
-enum MessageCode {
-  // response to join request
-  ACCEPTED = 0;              // "I accept you in my group, you will not commit to responding to me."
-  NOT_A_LEADER = 1;          // "I am not a group a leader. Go ask my leader instead."
-  ALREADY_RUNNING = 2;       // "My group has already began merging. Here's the group leader."
-  NOT_LOOKING_FOR_GROUP = 3; // "I'm not available at the moment. Please, get lost."
-  BAD_EXPIRATION_TIME = 4;   // "I will not accept you. I cannot guarantee that we begin before you expire."
-  BAD_SCHEMA_HASH = 5;       // "I will not accept you. I am not averaging the samy type of tensors as you."
-  DUPLICATE_ENDPOINT = 6;    // "I will not accept you, i already have exactly the same endpoint in my current group"
-  GROUP_IS_FULL = 7;         // "I will not accept you, my group already contains too many peers"
-  BEGIN_ALLREDUCE = 8;       // "We can begin allreduce now. These are your peers."
-  GROUP_DISBANDED = 9;       // "The group is closed. Go find another group."
-  UNKNOWN_GROUP_ID = 10;     // "Your request uses a group id that doesn't match with any group i know"
-  PROTOCOL_VIOLATION = 11;   // "One of peers did something in violation of the allreduce protocol"
-  INTERNAL_ERROR = 12;       // "We encountered an unexpected error on our side"
-  CANCELLED = 13;            // "A peer cancelled allreduce while averaging"
 }
 
 message MessageFromLeader {
