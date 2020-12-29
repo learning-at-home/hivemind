@@ -229,9 +229,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """ :returns: if accepted, return None, otherwise return a reason for rejection """
         if not self.is_looking_for_group:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
-        assert len(request.ListFields()) == 3, "this check assumes that JoinRequest has three fields, please update it."
 
-        if not isinstance(request.schema_hash, bytes) or len(request.schema_hash) == 0 \
+        if request.ListFields() == 3 and not isinstance(request.schema_hash, bytes) or len(request.schema_hash) == 0 \
                 or not isinstance(request.expiration, DHTExpiration) or not isfinite(request.expiration) \
                 or not isinstance(request.endpoint, Endpoint) or len(request.endpoint) == 0:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.PROTOCOL_VIOLATION)
