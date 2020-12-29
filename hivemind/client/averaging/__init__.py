@@ -168,7 +168,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """
         Set up the averager to look for a group and run one round of averaging, then return the averaged tensors
 
-        :param timeout: if averager was unable to *find* group in this many seconds, consider allreduce failed
+        :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failed
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         """
         future, _future = MPFuture.make_pair()
