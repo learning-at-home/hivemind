@@ -189,18 +189,18 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     await self.leader_assemble_group()
 
             if not current_group.done():
-                async with self.cond_notify_followers:
-                    try:
+                try:
+                    async with self.cond_notify_followers:
                         # wait for the group to be assembled or disbanded
                         timeout = max(0.0, self.potential_leaders.declared_expiration_time - get_dht_time())
                         await asyncio.wait_for(self.cond_notify_followers.wait(), timeout=timeout)
-                    except asyncio.TimeoutError:
-                        async with self.lock_request_join_group:
-                            # outcome 2: the time is up, run allreduce with what we have or disband
-                            if len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
-                                await self.leader_assemble_group()
-                            else:
-                                await self.leader_disband_group()
+                except asyncio.TimeoutError:
+                    async with self.lock_request_join_group:
+                        # outcome 2: the time is up, run allreduce with what we have or disband
+                        if len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
+                            await self.leader_assemble_group()
+                        else:
+                            await self.leader_disband_group()
 
             if self.current_leader is not None:
                 # outcome 3: found by a leader with higher priority, send our followers to him
