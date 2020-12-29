@@ -53,7 +53,7 @@ async def test_allreduce_once():
 
     futures = []
     for averager in averagers:
-        futures.append(averager.group_allreduce(return_future=True))#TODO revert to hard version
+        futures.append(averager.step(return_future=True))#TODO revert to hard version
         time.sleep(0.5)
 
     for future in futures:

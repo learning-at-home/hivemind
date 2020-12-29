@@ -25,7 +25,7 @@ GroupID = bytes
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
 
 
-GROUP_NBITS_INTERVAL = 3
+INITIAL_GROUP_NBITS = 3
 logger = get_logger(__file__)
 
 
@@ -33,11 +33,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     """
     **Warning!** Decentralized averager is in active development, some critical functionality is still underway
 
-    Gating function averaging service. A trainer can run this service in background to periodically average his gating
-    function with other trainers. The averaging pattern is chosen so that (1) you only need to average with a small
+    Parameter averaging service. A trainer can run this service in background to periodically average his parameters
+    with other trainers. The averaging pattern is chosen so that (1) you only need to average with a small
     group of peers at a time, but (2) all trainers will converge to global average in a logarithmic number of steps.
-    Why averaging is valid: see https://github.com/learning-at-home/hivemind/issues/95#issuecomment-688806705
-    On global convergence: see https://github.com/learning-at-home/hivemind/issues/95#issuecomment-717719400
 
     :param averaged_tensors: a sequence of pytorch tensors that will be averaged in each all-reduce
     :param dht: a DHT node that will be used to find groups
@@ -46,7 +44,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param prefix: a shared prefix for all group keys
     :param target_group_size: attempts to form groups with up to this many peers (recommended: a power of 2, e.g. 16)
     :param initial_group_bits: a string of bits ('0' and '1') that define initial group key (bucket index)
-      by default, sample a random bit sequence of length {GROUP_NBITS_INTERVAL}
+      by default, sample a random bit sequence of length {INITIAL_GROUP_NBITS}
     :param averaging_expiration: attempt to find a group for this many seconds, otherwise try again
       note - this expiration time only applies to looking for group, passing tensors in allreduce may take more time
     :param compression_type: optionally compress tensors with this compression algorithm before sending them to peers
@@ -58,16 +56,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param receiver_threads: uses this many threads to await on input pipe. Default = 1 should be enough in most cases
     :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
-    :param kwargs: extra parameters forwarded to in grpc.aio.server
+    :param kwargs: extra parameters forwarded to grpc.aio.server
     You can perform averaging using DecentralizedOptimizer (see below) or by manually running each step as such:
 
-    >> TODO add a working example
-    # TODO option: use a special key, group_prefix.SOMETHING to state the current number of dimensions
-    # each group leader should write this key (to a dict with subkeys) on a sucessful form_group; reader should pick key
-    # problem: this may cause excessive load on the peers that store that one special key.
-    Alternative: use group_prefix.NDIM{group_nbits[:min_group_nbits]} aka "balance the load between peers 2**min-group-nbits" peers
-    Alternative: add such keys to every smaller dimension group down to {GROUP_NBITS_INTERVAL}, check for such keys in your current highest dimension.
-        If found, jump to the specified dimension.
+    >> TODO add a working example here
     """
     _matchmaking: Matchmaking
     _pending_group_assembled: asyncio.Event
@@ -79,12 +71,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without ."
-        if target_group_size != 2 ** (target_group_size.bit_length() - 1):
+        if is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         if initial_group_bits is None:
-            initial_group_bits = ''.join(random.choices('01', k=GROUP_NBITS_INTERVAL))
-            logger.debug(f"Initializing with random {GROUP_NBITS_INTERVAL}-bit group index: {initial_group_bits}")
-        assert len(initial_group_bits) >= GROUP_NBITS_INTERVAL and all(bit in '01' for bit in initial_group_bits)
+            initial_group_bits = ''.join(random.choices('01', k=INITIAL_GROUP_NBITS))
+            logger.debug(f"Initializing with random {INITIAL_GROUP_NBITS}-bit group index: {initial_group_bits}")
+        assert len(initial_group_bits) >= INITIAL_GROUP_NBITS and all(bit in '01' for bit in initial_group_bits)
 
         super().__init__()
         self.dht = dht
@@ -172,8 +164,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
-    def group_allreduce(self, timeout: Optional[float] = None, return_future=False
-                        ) -> Union[Sequence[torch.Tensor], MPFuture]:
+    def step(self, timeout: Optional[float] = None, return_future=False) -> Union[Sequence[torch.Tensor], MPFuture]:
         """
         Set up the averager to look for a group and run all-reduce once, then return the averaged tensors
 
@@ -221,3 +212,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
         else:
             return await self._running_groups[request.group_id].rpc_aggregate_part(request, context)
+
+
+def is_power_of_two(n):
+    """ Check whether n is a power of 2 """
+    return (n != 0) and (n & (n-1) == 0)
