@@ -347,16 +347,16 @@ class PotentialLeaders:
         return maybe_next_leader
 
     async def _update_queue_periodically(self, group_key: GroupKey):
-        discrepancy = hivemind.utils.timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
+        DISCREPANCY = hivemind.utils.timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
         while get_dht_time() < self.search_end_time:
             new_peers = await self.dht.get_averagers(group_key, only_active=True, return_future=True)
-            self.max_assured_time = max(self.max_assured_time, get_dht_time() + self.averaging_expiration - discrepancy)
+            self.max_assured_time = max(self.max_assured_time, get_dht_time() + self.averaging_expiration - DISCREPANCY)
 
             for peer, peer_expiration_time in new_peers:
                 if peer == self.endpoint:
                     continue
                 self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
-                self.max_assured_time = max(self.max_assured_time, peer_expiration_time - discrepancy)
+                self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
 
             if len(self.leader_queue) > 0:
                 self.update_finished.set()
