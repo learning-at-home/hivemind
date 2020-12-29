@@ -22,7 +22,7 @@ class AllReduceProtocol:
     """
     def __init__(self, *, group_id: GroupID, tensors: Sequence[torch.Tensor], endpoint: Endpoint,
                  ordered_group_endpoints: Sequence[Endpoint]):
-        assert endpoint in ordered_group_endpoints, "my endpoint is not a part of the group"
+        assert endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
         self.group_id, self.endpoint, self.ordered_group_endpoints = group_id, endpoint, ordered_group_endpoints
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, self.group_size)))
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
