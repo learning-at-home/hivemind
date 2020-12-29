@@ -19,7 +19,6 @@ from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils.grpc import ChannelCache
 
 
-GROUP_NBITS_INTERVAL = 3
 logger = get_logger(__file__)
 
 
@@ -49,7 +48,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         self.current_leader: Optional[Endpoint] = None  # iff i am a follower, this is a link to my current leader
         self.current_followers: Set[Endpoint] = set()  # iff i am a leader, this contains my followers excluding myself
-        self.candidate_leaders = CandidateLeaders(self.endpoint, self.dht, self.averaging_expiration)
+        self.potential_leaders = PotentialLeaders(self.endpoint, self.dht, self.averaging_expiration)
 
     @property
     def looking_for_group(self):
@@ -98,18 +97,18 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     async def _request_join_potential_leaders(self, timeout: Optional[float]) -> AllReduceRunner:
         """ Request leaders from queue until we find the first runner. This coroutine is meant to run in background. """
         end_time = get_dht_time() + timeout if timeout is not None else float('inf')
-        async with self.candidate_leaders.begin_search(self.current_group_key, timeout):
+        async with self.potential_leaders.begin_search(self.current_group_key, timeout):
             # TODO update group_bits on success! reduce number of bits on not enough peers.
             # TODO after allreduce finishes, we may need to ask leader to notify lower keys about this
             # (so as to fix possible network partitioning if some peers operate on a much smaller nbits)
             while True:
                 try:
-                    time_to_expiration = self.candidate_leaders.declared_expiration_time - get_dht_time()
+                    time_to_expiration = self.potential_leaders.declared_expiration_time - get_dht_time()
                     next_best_leader = await asyncio.wait_for(
-                        self.candidate_leaders.pop_next_leader(),
+                        self.potential_leaders.pop_next_leader(),
                         timeout=time_to_expiration if isfinite(time_to_expiration) else None)
 
-                    request_expiration_time = min(self.candidate_leaders.declared_expiration_time,
+                    request_expiration_time = min(self.potential_leaders.declared_expiration_time,
                                                   end_time, get_dht_time() + self.averaging_expiration)
                     group = await self.request_join_group(next_best_leader, request_expiration_time)
                     if group is not None:
@@ -153,7 +152,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if len(self.current_followers) > 0:
                     await self.leader_disband_group()
 
-            async with self.candidate_leaders.pause_search():
+            async with self.potential_leaders.pause_search():
                 message = await call.read()
 
             if message.code == averaging_pb2.BEGIN_ALLREDUCE:
@@ -193,7 +192,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 async with self.cond_notify_followers:
                     try:
                         # wait for the group to be assembled or disbanded
-                        timeout = max(0.0, self.candidate_leaders.declared_expiration_time - get_dht_time())
+                        timeout = max(0.0, self.potential_leaders.declared_expiration_time - get_dht_time())
                         await asyncio.wait_for(self.cond_notify_followers.wait(), timeout=timeout)
                     except asyncio.TimeoutError:
                         async with self.lock_request_join_group:
@@ -239,9 +238,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         elif request.schema_hash != self.schema_hash:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_SCHEMA_HASH)
-        elif self.candidate_leaders.declared_group_key is None:
+        elif self.potential_leaders.declared_group_key is None:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_DECLARED)
-        elif self.candidate_leaders.declared_expiration_time > (request.expiration or float('inf')):
+        elif self.potential_leaders.declared_expiration_time > (request.expiration or float('inf')):
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
         elif self.current_leader is not None:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER,
@@ -292,7 +291,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             self.cond_notify_followers.notify_all()
 
 
-class CandidateLeaders:
+class PotentialLeaders:
     """ An utility class that searches for averagers that could become our leaders """
     def __init__(self, endpoint: Endpoint, dht: hivemind.DHT, averaging_expiration: DHTExpiration):
         self.endpoint, self.dht, self.averaging_expiration = endpoint, dht, averaging_expiration
