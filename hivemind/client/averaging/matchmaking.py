@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import random
 from dataclasses import asdict
 from math import isfinite
 from typing import Sequence, Optional, AsyncIterator, Set
@@ -257,6 +258,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         group_id = DHTID.generate().to_bytes()
         ordered_group_endpoints = list(self.current_followers)
         ordered_group_endpoints.append(self.endpoint)
+        random.shuffle(ordered_group_endpoints)
         logger.debug(f"{self.endpoint} - leader started allreduce with {len(ordered_group_endpoints)} followers.")
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
