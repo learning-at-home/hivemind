@@ -174,7 +174,7 @@ def split_into_parts(tensors: Sequence[torch.Tensor], group_size: int) -> Tuple[
 
 def restore_from_parts(chunks: Sequence[torch.Tensor], shapes: Sequence[torch.Size]) -> Tuple[torch.Tensor, ...]:
     """ restores the original tensor shapes from chunks obtained by split_into_chunks """
-    flat_tensor = torch.cat(list(chunks))
+    flat_tensor = torch.cat(tuple(chunks))
     result_sizes = tuple(map(torch.Size.numel, shapes))
     flat_original_tensors = torch.split_with_sizes(flat_tensor, result_sizes)
     return tuple(map(torch.Tensor.reshape, flat_original_tensors, shapes))
