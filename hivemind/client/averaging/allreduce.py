@@ -56,8 +56,9 @@ class AllReduceProtocol:
 
         assert len(self.accumulated_from) <= self.group_size
         if len(self.accumulated_from) == len(self.local_tensor_parts):
-            self.averaged_part.set_result(self.accumulator.div_(len(self.accumulated_from)))
-            self.register_averaged_part(self.endpoint, self.averaged_part.result())
+            average_result = self.accumulator.div_(len(self.accumulated_from))
+            self.register_averaged_part(self.endpoint, average_result)
+            self.averaged_part.set_result(average_result)
 
         return await self.averaged_part
 
