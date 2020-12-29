@@ -16,9 +16,8 @@ import grpc
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
 from hivemind.client.averaging.matchmaking import Matchmaking
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
-
 
 # flavour types
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
@@ -128,7 +127,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         async def _run():
             grpc.aio.init_grpc_aio()
-            server = grpc.aio.server(**self.kwargs)
+            server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
             averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
             found_port = server.add_insecure_port(self.listen_on)
             assert found_port != 0, f"Failed to listen to {self.listen_on}"
@@ -214,4 +213,4 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
 def is_power_of_two(n):
     """ Check whether n is a power of 2 """
-    return (n != 0) and (n & (n-1) == 0)
+    return (n != 0) and (n & (n - 1) == 0)
