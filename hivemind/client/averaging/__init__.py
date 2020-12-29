@@ -168,7 +168,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """
         Set up the averager to look for a group and run one round of averaging, then return the averaged tensors
 
-        :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failed
+        :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failedK
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         """
         future, _future = MPFuture.make_pair()
@@ -186,7 +186,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 self._pending_group_assembled.set()
                 future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
             else:
-                future.set_exception(AllreduceException(f"{self} - group_allreduce failed, unable to find group"))
+                future.set_exception(AllreduceException(f"{self} - group_allreduce failed, unable to find a group"))
 
         except Exception as e:
             future.set_exception(e)
