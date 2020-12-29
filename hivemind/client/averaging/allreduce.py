@@ -164,12 +164,12 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
 
-def split_into_parts(tensors: Sequence[torch.Tensor], group_size: int) -> Tuple[torch.Tensor]:
+def split_into_parts(tensors: Sequence[torch.Tensor], group_size: int) -> Tuple[torch.Tensor, ...]:
     """ combines averaged_tensors into one tensor and splits them into equal chunks of size group_size """
     flat_tensor = torch.cat(tuple(map(torch.Tensor.flatten, tensors)))
     chunk_slices = torch.linspace(start=0, end=len(flat_tensor), steps=group_size + 1, dtype=torch.int64)
     chunk_slices[-1] = len(flat_tensor)
-    return tuple(torch.as_tensor(flat_tensor[chunk_slices[i]: chunk_slices[i + 1]]) for i in range(group_size))
+    return tuple(flat_tensor[chunk_slices[i]: chunk_slices[i + 1]] for i in range(group_size))
 
 
 def restore_from_parts(chunks: Sequence[torch.Tensor], shapes: Sequence[torch.Size]) -> Tuple[torch.Tensor, ...]:
