@@ -205,8 +205,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def rpc_aggregate_part(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
         """ a groupmate sends us a part of his tensor; we should average it with other peers and return the result """
         if request.group_id not in self._running_groups and not self._pending_group_assembled.is_set():
-            await self._pending_group_assembled.wait()  # this handles a special case when leader accepted us to group
-            # AND began allreduce right away, but his response with group_id was delayed and other peers got to us first
+            # this handles a special case when leader accepted us to group AND began allreduce right away,
+            # but his response with group_id was delayed and other peers got to us first
+            await self._pending_group_assembled.wait()
         if request.group_id not in self._running_groups:
             return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
         else:
