@@ -287,7 +287,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """ Kick out all followers immediately, optionally direct them to our new leader (if we found one) """
         assert self.lock_request_join_group.locked()
         for follower in list(self.current_followers):
-            self.current_followers.discard(follower)  # this will cause rpc_foin_group to kick the follower out
+            self.current_followers.discard(follower)  # this will cause rpc_join_group to kick the follower out
         async with self.cond_notify_followers:
             self.cond_notify_followers.notify_all()
 
