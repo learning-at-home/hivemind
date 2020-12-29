@@ -166,9 +166,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     def step(self, timeout: Optional[float] = None, return_future=False) -> Union[Sequence[torch.Tensor], MPFuture]:
         """
-        Set up the averager to look for a group and run all-reduce once, then return the averaged tensors
+        Set up the averager to look for a group and run one round of averaging, then return the averaged tensors
 
-        :note: this function implemented for debugging and will be removed in future versions
         :param timeout: if averager was unable to *find* group in this many seconds, consider allreduce failed
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         """
