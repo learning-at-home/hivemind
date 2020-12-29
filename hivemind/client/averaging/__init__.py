@@ -14,16 +14,14 @@ import uvloop
 import grpc
 
 import hivemind
-from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException
+from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
 from hivemind.client.averaging.matchmaking import Matchmaking
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 
 # flavour types
-GroupID = bytes
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
-
 
 INITIAL_GROUP_NBITS = 3
 logger = get_logger(__file__)
