@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 
 import torch
 import pytest
@@ -50,7 +51,10 @@ async def test_allreduce_once():
                                                 start=True)
                  for tensors in [tensors1, tensors2, tensors3, tensors4]]
 
-    futures = [averager.group_allreduce(return_future=True) for averager in averagers]
+    futures = []
+    for averager in averagers:
+        futures.append(averager.group_allreduce(return_future=True))#TODO revert to hard version
+        time.sleep(0.5)
 
     for future in futures:
         for ref, our in zip(reference, future.result()):
