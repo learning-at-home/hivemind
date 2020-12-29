@@ -1,5 +1,4 @@
 import torch.autograd
-import torch.nn as nn
 from torch import nn as nn
 
 

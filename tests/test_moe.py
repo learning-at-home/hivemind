@@ -2,9 +2,11 @@ import grpc
 import numpy as np
 import pytest
 import torch
+
 import hivemind
-from hivemind.client.expert import DUMMY
 from hivemind import background_server
+from hivemind.client.expert import DUMMY
+from hivemind.server import layers
 
 
 @pytest.mark.forked
@@ -30,6 +32,7 @@ def test_call_many():
     backward_k_min = 1
     forward_timeout = None
     backward_timeout = None
+    detect_anomalies = False
     atol = 1e-5
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
@@ -40,8 +43,8 @@ def test_call_many():
         e5 = hivemind.RemoteExpert(f'thisshouldnotexist', '127.0.0.1:80')
 
         mask, expert_outputs = hivemind.client.moe._RemoteCallMany.apply(
-            DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []],
-            k_min, backward_k_min, timeout_after_k_min, forward_timeout, backward_timeout, e1.info, inputs
+            DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []], k_min, backward_k_min, timeout_after_k_min,
+            forward_timeout, backward_timeout, detect_anomalies, e1.info, inputs
         )
         assert mask.shape == (4, 3)
         assert expert_outputs.shape == (4, 3, 64)
@@ -169,3 +172,51 @@ def test_compute_expert_scores():
                     "compute_expert_scores returned incorrect score"
     finally:
         dht.shutdown()
+
+
+@pytest.mark.forked
+def test_client_anomaly_detection():
+    HID_DIM = 16
+
+    experts = {}
+    for i in range(4):
+        expert = layers.name_to_block['ffn'](HID_DIM)
+        experts[f'expert.{i}'] = hivemind.ExpertBackend(name=f'expert.{i}',
+                                                        expert=expert, opt=torch.optim.Adam(expert.parameters()),
+                                                        args_schema=(hivemind.BatchTensorDescriptor(HID_DIM),),
+                                                        outputs_schema=hivemind.BatchTensorDescriptor(HID_DIM),
+                                                        max_batch_size=16,
+                                                        )
+
+    experts['expert.3'].expert.layers[0].weight.data[0, 0] = float('nan')
+
+    dht = hivemind.DHT(start=True, expiration=999)
+    server = hivemind.Server(dht, experts, num_connection_handlers=1)
+    server.start()
+    try:
+        server.ready.wait()
+
+        dmoe = hivemind.RemoteMixtureOfExperts(in_features=16, grid_size=(3,), dht=dht, k_best=3, uid_prefix='expert.',
+                                               detect_anomalies=True)
+
+        input = torch.randn(1, 16)
+        input[0, 0] = float('nan')
+
+        with pytest.raises(ValueError):
+            dmoe(input)
+
+        input[0, 0] = 0
+        output = dmoe(input)
+
+        inf_loss = float('inf') * output.sum()
+        with pytest.raises(ValueError):
+            inf_loss.backward()
+
+        dmoe = hivemind.RemoteMixtureOfExperts(in_features=16, grid_size=(4,), dht=dht, k_best=4, uid_prefix='expert.',
+                                               detect_anomalies=True)
+        output = dmoe(input)
+        assert output.isfinite().all()
+
+
+    finally:
+        server.shutdown()

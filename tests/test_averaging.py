@@ -99,9 +99,9 @@ async def test_allreduce_protocol():
 
 @pytest.mark.forked
 def test_chunks():
-    for i in range(100):
+    for _ in range(100):
         tensors = []
-        for i in range(random.randint(1, 5)):
+        for _ in range(random.randint(1, 5)):
             ndim = random.randint(0, 4)
             shape = torch.Size([random.randint(0, 16) for _ in range(ndim)])
             make_tensor = random.choice([torch.rand, torch.randn, torch.zeros, torch.ones])

@@ -56,11 +56,11 @@ def main():
     if args.pop('increase_file_limit'):
         increase_file_limit()
 
-    compression_name = args.pop("compression")
-    if compression_name == "MEANSTD":
+    compression_type = args.pop("compression")
+    if compression_type == "MEANSTD":
         compression = CompressionType.MEANSTD_LAST_AXIS_FLOAT16
     else:
-        compression = getattr(CompressionType, compression_name)
+        compression = getattr(CompressionType, compression_type)
 
     try:
         server = Server.create(**args, optim_cls=optim_cls, start=True, verbose=True, compression=compression)

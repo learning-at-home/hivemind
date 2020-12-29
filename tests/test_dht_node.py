@@ -136,8 +136,7 @@ def test_empty_table():
         protocol.call_find(f'{LOCALHOST}:{peer_port}', [key]))[key]
     recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
     assert len(nodes_found) == 0
-    assert recv_value == value and recv_expiration == expiration, "call_find_value expected " \
-        f"{value} (expires by {expiration}) but got {recv_value} (expires by {recv_expiration})"
+    assert recv_value == value and recv_expiration == expiration
 
     assert loop.run_until_complete(protocol.call_ping(f'{LOCALHOST}:{peer_port}')) == peer_id
     assert loop.run_until_complete(protocol.call_ping(f'{LOCALHOST}:{hivemind.find_open_port()}')) is None

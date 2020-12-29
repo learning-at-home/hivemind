@@ -10,6 +10,7 @@ from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpirat
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
 from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer, ChannelCache, ValueWithExpiration
+from hivemind.utils.grpc import GRPC_KEEPALIVE_OPTIONS
 
 logger = get_logger(__name__)
 
@@ -17,7 +18,7 @@ logger = get_logger(__name__)
 class DHTProtocol(dht_grpc.DHTServicer):
     # fmt:off
     node_id: DHTID; port: int; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
-    channel_options: Optional[Sequence[Tuple[str, Any]]]; server: grpc.aio.Server
+    channel_options: Sequence[Tuple[str, Any]]; server: grpc.aio.Server
     storage: DHTLocalStorage; cache: DHTLocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
     # fmt:on
 
@@ -28,7 +29,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
     async def create(
             cls, node_id: DHTID, bucket_size: int, depth_modulo: int, num_replicas: int, wait_timeout: float,
             parallel_rpc: Optional[int] = None, cache_size: Optional[int] = None, listen=True, listen_on='0.0.0.0:*',
-            channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs) -> DHTProtocol:
+            channel_options: Sequence[Tuple[str, Any]] = (), **kwargs) -> DHTProtocol:
         """
         A protocol that allows DHT nodes to request keys/neighbors from other DHT nodes.
         As a side-effect, DHTProtocol also maintains a routing table as described in
@@ -50,7 +51,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
         if listen:  # set up server to process incoming rpc requests
             grpc.aio.init_grpc_aio()
-            self.server = grpc.aio.server(**kwargs)
+            self.server = grpc.aio.server(**kwargs, options=GRPC_KEEPALIVE_OPTIONS)
             dht_grpc.add_DHTServicer_to_server(self, self.server)
 
             found_port = self.server.add_insecure_port(listen_on)
@@ -59,7 +60,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             self.port = found_port
             await self.server.start()
         else:  # not listening to incoming requests, client-only mode
-            # note: use empty node_info so peers wont add you to their routing tables
+            # note: use empty node_info so peers won't add you to their routing tables
             self.node_info, self.server, self.port = dht_pb2.NodeInfo(), None, None
             if listen_on != '0.0.0.0:*' or len(kwargs) != 0:
                 logger.warning(f"DHTProtocol has no server (due to listen=False), listen_on"
@@ -186,8 +187,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 response.store_ok.append(storage.store_subkey(key_id, subkey, value_bytes, expiration_time))
         return response
 
-    async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> Optional[
-            Dict[DHTID, Tuple[Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]], Dict[DHTID, Endpoint]]]]:
+    async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> Optional[Dict[
+        DHTID, Tuple[Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]], Dict[DHTID, Endpoint]]]]:
         """
         Request keys from a peer. For each key, look for its (value, expiration time) locally and
          k additional peers that are most likely to have this key (ranked by XOR distance)
@@ -238,7 +239,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         for i, key_id in enumerate(map(DHTID.from_bytes, request.keys)):
             maybe_item = self.storage.get(key_id)
             cached_item = self.cache.get(key_id)
-            if cached_item is not None and (maybe_item is None or cached_item.expiration_time > maybe_item.expiration_time):
+            if cached_item is not None and (maybe_item is None
+                                            or cached_item.expiration_time > maybe_item.expiration_time):
                 maybe_item = cached_item
 
             if maybe_item is None:  # value not found
