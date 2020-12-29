@@ -51,7 +51,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.potential_leaders = PotentialLeaders(self.endpoint, self.dht, self.averaging_expiration)
 
     @property
-    def looking_for_group(self):
+    def is_looking_for_group(self):
         return self.lock_looking_for_group.locked()
 
     @property
@@ -59,8 +59,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         return f"{self.prefix}.0b{self.group_bits}"
 
     def __repr__(self):
-        lfg_status = "looking for group," if self.looking_for_group else "not looking for group,"
-        if self.looking_for_group:
+        lfg_status = "looking for group," if self.is_looking_for_group else "not looking for group,"
+        if self.is_looking_for_group:
             if self.current_leader:
                 lfg_status += f" following {self.current_leader},"
             if len(self.current_followers):
@@ -74,9 +74,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
         Iterate over the averagers from a given group_identifier that have higher leadership priority than yourself.
         """
-        if self.looking_for_group:
-            logger.debug("Another look_for_group is already in progress. The current run will be scheduled after"
-                         " the existing group is either assembled or disbanded.")
+        if self.is_looking_for_group:
+            logger.info("Another look_for_group is already in progress. The current run will be scheduled after"
+                        " the existing group is either assembled or disbanded.")
         async with self.lock_looking_for_group:
             request_leaders_task = asyncio.create_task(self._request_join_potential_leaders(timeout))
             try:
@@ -132,7 +132,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         :note: this function does not guarantee that your group leader is the same as :leader: parameter
           The originally specified leader can disband group and redirect us to a different leader
         """
-        assert self.looking_for_group and self.current_leader is None
+        assert self.is_looking_for_group and self.current_leader is None
         call: Optional[grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]] = None
         try:
             async with self.lock_request_join_group:
@@ -197,7 +197,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     except asyncio.TimeoutError:
                         async with self.lock_request_join_group:
                             # outcome 2: the time is up, run allreduce with what we have or disband
-                            if len(self.current_followers) + 1 >= self.min_group_size and self.looking_for_group:
+                            if len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
                                 await self.leader_assemble_group()
                             else:
                                 await self.leader_disband_group()
@@ -227,7 +227,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     def _check_reasons_to_reject(self, request: averaging_pb2.JoinRequest) -> averaging_pb2.MessageFromLeader:
         """ :returns: if accepted, return None, otherwise return a reason for rejection """
-        if not self.looking_for_group:
+        if not self.is_looking_for_group:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
         assert len(request.ListFields()) == 3, "this check assumes that JoinRequest has three fields, please update it."
 
