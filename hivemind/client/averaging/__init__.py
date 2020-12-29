@@ -172,10 +172,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_group_allreduce', [], dict(future=_future, timeout=timeout)))
+        self.pipe.send(('_step', [], dict(future=_future, timeout=timeout)))
         return future if return_future else future.result()
 
-    async def _group_allreduce(self, *, future: MPFuture, timeout: Optional[float]):
+    async def _step(self, *, future: MPFuture, timeout: Optional[float]):
         group_id = None
         try:
             self._pending_group_assembled.clear()
