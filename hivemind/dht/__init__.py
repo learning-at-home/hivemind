@@ -522,7 +522,7 @@ class DHT(mp.Process):
         try:
             result = await node.get(group_key, latest=True)
             if result is None:
-                logger.warning(f"Allreduce group not found: {group_key}, creating new group.")
+                logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
                 future.set_result([])
                 return
             assert isinstance(result.value, dict), f"expected {group_key} to be a Dict[Endpoint, is_active], " \
