@@ -11,7 +11,6 @@ from hivemind.utils import Endpoint
 
 @pytest.mark.forked
 def test_getset_averagers():
-    import hivemind
     dht = hivemind.DHT(start=True)
 
     t = hivemind.get_dht_time()
