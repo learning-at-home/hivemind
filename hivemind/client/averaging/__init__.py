@@ -16,7 +16,7 @@ import grpc
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
 from hivemind.client.averaging.matchmaking import Matchmaking
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, switch_to_uvloop
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 # flavour types
@@ -67,7 +67,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
                  listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
-        assert '.' not in prefix, "group prefix must be a string without ."
+        assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         if initial_group_bits is None:
@@ -115,13 +115,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     def run(self):
         """ Serve DecentralizedAverager forever. This function will not return until the averager is shut down """
-        if asyncio.get_event_loop().is_running():
-            asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
-
-        uvloop.install()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
+        loop = switch_to_uvloop()
         # initialize asyncio synchronization primitives in this event loop
         pipe_awaiter = ThreadPoolExecutor(self.receiver_threads)
 

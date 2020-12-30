@@ -27,7 +27,7 @@ from numpy import nextafter
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import get_dht_time, DHTValue
-from hivemind.utils import MPFuture, Endpoint, get_logger
+from hivemind.utils import MPFuture, Endpoint, get_logger, switch_to_uvloop
 
 logger = get_logger(__name__)
 
@@ -141,11 +141,7 @@ class DHT(mp.Process):
 
     def run(self) -> None:
         """ Serve DHT forever. This function will not return until DHT node is shut down """
-        if asyncio.get_event_loop().is_running():
-            asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
-        uvloop.install()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        loop = switch_to_uvloop()
         pipe_awaiter = ThreadPoolExecutor(self.receiver_threads)
 
         async def _run():
