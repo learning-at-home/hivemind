@@ -5,8 +5,6 @@ import torch
 
 from hivemind.proto.runtime_pb2 import CompressionType
 
-
-import warnings
 DUMMY_BATCH_SIZE = 3  # used for dummy runs only
 
 warnings.filterwarnings("ignore", "CUDA initialization*", category=UserWarning)
