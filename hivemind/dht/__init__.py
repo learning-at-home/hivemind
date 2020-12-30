@@ -490,7 +490,7 @@ class DHT(mp.Process):
     async def _declare_averager(self, node: DHTNode, *, group_key: str, endpoint: Endpoint,
                                 expiration_time: DHTExpiration, looking_for_group: bool, future: MPFuture):
         try:
-            expiration_time = expiration_time if looking_for_group else nextafter(expiration_time, float('inf'))
+            expiration_time = expiration_time if looking_for_group else float(nextafter(expiration_time, float('inf')))
             # ^-- when declaring averager inactive, we increment expiration time to overwrite the pre-existing entry
             store_ok = await node.store(
                 key=group_key, subkey=endpoint, value=looking_for_group, expiration_time=expiration_time)
