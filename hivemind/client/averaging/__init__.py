@@ -68,7 +68,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without ."
-        if is_power_of_two(target_group_size):
+        if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         if initial_group_bits is None:
             initial_group_bits = ''.join(random.choices('01', k=INITIAL_GROUP_NBITS))
