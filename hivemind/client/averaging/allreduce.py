@@ -140,7 +140,8 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
             self.set_exception(e)
             for peer_endpoint in self.ordered_group_endpoints:
-                asyncio.create_task(self._send_error_to_peer(peer_endpoint, code))
+                if peer_endpoint != self.endpoint:
+                    asyncio.create_task(self._send_error_to_peer(peer_endpoint, code))
             raise
 
     async def rpc_aggregate_part(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
