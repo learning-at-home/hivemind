@@ -263,6 +263,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
+        print("Running allreduce with", ordered_group_endpoints)
         self.assembled_group.set_result(allreduce_group)
         async with self.cond_notify_followers:
             self.cond_notify_followers.notify_all()
@@ -310,8 +311,10 @@ class PotentialLeaders:
         update_queue_task = asyncio.create_task(self._update_queue_periodically(group_key))
         declare_averager_task = asyncio.create_task(self._declare_averager_periodically(group_key))
         try:
+            print(f"{self.endpoint[-2:]} - began search")
             yield self
         finally:
+            print(f"{self.endpoint[-2:]} - finished search")
             update_queue_task.cancel()
             declare_averager_task.cancel()
             self.running.clear()
@@ -322,9 +325,11 @@ class PotentialLeaders:
     async def pause_search(self):
         was_running = self.running.is_set()
         try:
+            print(f"{self.endpoint[-2:]} - paused search")
             self.running.clear()
             yield
         finally:
+            print(f"{self.endpoint[-2:]} - resumed search")
             if was_running:
                 self.running.set()
             else:
@@ -341,6 +346,7 @@ class PotentialLeaders:
 
         if maybe_next_leader is None:
             await self.update_finished.wait()
+            self.update_finished.clear()
             return await self.pop_next_leader()
 
         del self.leader_queue[maybe_next_leader]
@@ -373,6 +379,7 @@ class PotentialLeaders:
                 self.declared_group_key, self.declared_expiration_time = group_key, new_expiration_time
                 stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
                                                             looking_for_group=True, return_future=True)
+                print(f"{self.endpoint[-2:]} - declared self")
                 if stored_ok:
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
                 else:
