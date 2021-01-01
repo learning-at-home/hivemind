@@ -357,7 +357,7 @@ class DHTNode:
         """
         if latest:
             kwargs["sufficient_expiration_time"] = float('inf')
-        result = await self.get_many([key])
+        result = await self.get_many([key], **kwargs)
         return result[key]
 
     async def get_many(self, keys: Collection[DHTKey], sufficient_expiration_time: Optional[DHTExpiration] = None,
