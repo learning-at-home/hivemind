@@ -39,6 +39,9 @@ class AllReduceProtocol:
     def __await__(self):
         return self.averaged_tensors.__await__()
 
+    def __contains__(self, endpoint: Endpoint):
+        return endpoint in self.local_tensor_parts
+
     @property
     def group_size(self):
         return len(self.ordered_group_endpoints)

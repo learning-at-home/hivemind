@@ -179,14 +179,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
-            current_group = self.assembled_group  # copy current assembled_group to avoid overwriting
+            current_group_future = self.assembled_group  # copy current assembled_group to avoid overwriting
             # TODOmake sure this didn't change after we acquired the lock
             reason_to_reject = self._check_reasons_to_reject(request)
             if reason_to_reject is not None:
                 yield reason_to_reject
                 return
 
-            current_group = self.assembled_group  # copy current assembled_group to avoid overwriting
             async with self.lock_request_join_group:
                 #TODO duplicate code
                 reason_to_reject = self._check_reasons_to_reject(request)
@@ -201,7 +200,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     # outcome 1: we have assembled a full group and are ready for allreduce
                     await self.leader_assemble_group()
 
-            if not current_group.done():
+            if not current_group_future.done():
                 try:
                     async with self.cond_notify_followers:
                         # wait for the group to be assembled or disbanded
@@ -215,18 +214,17 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         else:
                             await self.leader_disband_group()
 
-            if self.current_leader is not None:
-                # outcome 3: found by a leader with higher priority, send our followers to him
-                yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED,
-                                                      suggested_leader=self.current_leader)
-                return
+            if not current_group_future.done() or request.endpoint not in current_group_future.result():
+                if self.current_leader is not None:
+                    # outcome 3: found by a leader with higher priority, send our followers to him
+                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED,
+                                                          suggested_leader=self.current_leader)
+                    return
+                else:
+                    yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED)
+                    return
 
-            if request.endpoint not in self.current_followers:
-                yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED)
-                return
-
-            # finally, run allreduce
-            allreduce_group = current_group.result()
+            allreduce_group = current_group_future.result()
             yield averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
                 ordered_group_endpoints=allreduce_group.ordered_group_endpoints)
@@ -326,10 +324,8 @@ class PotentialLeaders:
         update_queue_task = asyncio.create_task(self._update_queue_periodically(group_key))
         declare_averager_task = asyncio.create_task(self._declare_averager_periodically(group_key))
         try:
-            print(f"{self.endpoint[-2:]} - began search")
             yield self
         finally:
-            print(f"{self.endpoint[-2:]} - finished search")
             update_queue_task.cancel()
             declare_averager_task.cancel()
             #TODO do we need to clear self.leader_queue and self.past_attempts here?
@@ -358,7 +354,7 @@ class PotentialLeaders:
         if self.max_assured_time < next_entry_time < self.search_end_time:
             self.update_triggered.set()
 
-        if maybe_next_leader is None:
+        if maybe_next_leader is None or next_entry_time >= self.declared_expiration_time:
             await self.update_finished.wait()
             self.update_finished.clear()
             return await self.pop_next_leader()
@@ -391,6 +387,7 @@ class PotentialLeaders:
     async def _declare_averager_periodically(self, group_key: GroupKey):
         try:
             while True:
+                await self.running.wait()
                 new_expiration_time = min(get_dht_time() + self.averaging_expiration, self.search_end_time)
                 self.declared_group_key, self.declared_expiration_time = group_key, new_expiration_time
                 stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
