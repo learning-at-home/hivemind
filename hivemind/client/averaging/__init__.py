@@ -10,7 +10,6 @@ import multiprocessing as mp
 import asyncio
 
 import torch
-import uvloop
 import grpc
 
 import hivemind
@@ -171,15 +170,15 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         try:
             self._pending_group_assembled.clear()
             allreduce_group = await self._matchmaking.look_for_group(timeout=timeout)
-            group_id = allreduce_group.group_id
             if allreduce_group is not None:
+                group_id = allreduce_group.group_id
                 self._running_groups[group_id] = allreduce_group
                 self._pending_group_assembled.set()
                 future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
             else:
                 raise AllreduceException(f"{self} - group_allreduce failed, unable to find a group")
 
-        except Exception as e:
+        except BaseException as e:
             future.set_exception(e)
             raise
         finally:
