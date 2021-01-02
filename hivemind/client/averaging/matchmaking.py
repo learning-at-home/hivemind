@@ -146,7 +146,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         assert self.is_looking_for_group and self.current_leader is None
         try:
             async with self.lock_request_join_group:
-                await asyncio.sleep(random.random() * 0.1)#TODO remove debug
+                await asyncio.sleep(random.random() * 1.0)#TODO remove debug
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
@@ -398,7 +398,8 @@ class PotentialLeaders:
                 self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
 
             self.update_finished.set()
-            print(f"P{self.endpoint[-2:]} - updating queue, found={len(new_peers)}, new_size={len(self.leader_queue)}")
+            print(f"P{self.endpoint[-2:]} - updating queue, found={len(new_peers)}, new_size={len(self.leader_queue)}",
+                  f"{'' if len(new_peers) > 3 else ['P' + peer[-2:] for peer, _ in new_peers]}")
 
             await asyncio.wait(
                 {self.running.wait(), self.update_triggered.wait()}, return_when=asyncio.ALL_COMPLETED,
