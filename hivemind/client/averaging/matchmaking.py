@@ -335,7 +335,7 @@ class PotentialLeaders:
         self.endpoint, self.dht, self.averaging_expiration = endpoint, dht, averaging_expiration
         self.target_group_size = target_group_size
         self.running, self.update_triggered, self.update_finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
-        self.declared_new_expiration = asyncio.Event()
+        self.declared_new_expiration, self.lock_declare_expiration = asyncio.Event(), asyncio.Lock()
         self.leader_queue = TimedStorage[Endpoint, DHTExpiration]()
         self.past_attempts: Set[Tuple[Endpoint, DHTExpiration]] = set()
         self.max_assured_time = float('-inf')
@@ -426,27 +426,27 @@ class PotentialLeaders:
             self.update_triggered.clear()
 
     async def _declare_averager_periodically(self, group_key: GroupKey):
-        try:
-            while True:
-                await self.running.wait()
+        async with self.lock_declare_expiration:
+            try:
+                while True:
+                    await self.running.wait()
 
-                new_expiration_time = min(get_dht_time() + self.averaging_expiration, self.search_end_time)
-                self.declared_group_key, self.declared_expiration_time = group_key, new_expiration_time
-                self.declared_new_expiration.set()
-                stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
-                                                            looking_for_group=True, return_future=True)
-                print(f"P{self.endpoint[-2:]} - declared self (ok={stored_ok})".ljust(70) + f"{time.time() % 100:.3f}")
-                await asyncio.sleep(self.declared_expiration_time - get_dht_time())
-        except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
-            logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
-        finally:
-            if self.declared_group_key is not None:
-                previous_declared_key, previous_expiration_time = self.declared_group_key, self.declared_expiration_time
-                self.declared_group_key, self.declared_expiration_time = None, float('inf')
-                self.leader_queue, self.max_assured_time = TimedStorage[Endpoint, DHTExpiration](), float('-inf')
-                await self.dht.declare_averager(previous_declared_key, self.endpoint, previous_expiration_time,
-                                                looking_for_group=False, return_future=True)
-                #TODO create a global lock to ensure there's only one such job at a time.
+                    new_expiration_time = min(get_dht_time() + self.averaging_expiration, self.search_end_time)
+                    self.declared_group_key, self.declared_expiration_time = group_key, new_expiration_time
+                    self.declared_new_expiration.set()
+                    stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
+                                                                looking_for_group=True, return_future=True)
+                    print(f"P{self.endpoint[-2:]} - declared self (ok={stored_ok})".ljust(70) + f"{time.time() % 100:.3f}")
+                    await asyncio.sleep(self.declared_expiration_time - get_dht_time())
+            except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
+                logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
+            finally:
+                if self.declared_group_key is not None:
+                    prev_declared_key, prev_expiration_time = self.declared_group_key, self.declared_expiration_time
+                    self.declared_group_key, self.declared_expiration_time = None, float('inf')
+                    self.leader_queue, self.max_assured_time = TimedStorage[Endpoint, DHTExpiration](), float('-inf')
+                    await self.dht.declare_averager(prev_declared_key, self.endpoint, prev_expiration_time,
+                                                    looking_for_group=False, return_future=True)
 
 
 def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
