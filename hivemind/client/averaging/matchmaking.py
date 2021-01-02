@@ -29,18 +29,30 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     An internal class that is used to form groups of averages for running allreduce
     See DecentralizedAverager docstring for the detailed description of all parameters
     
+    :note: on implementation: the current matchmaker protocol can encounter one type of (temporary) deadlock;
+      This deadlock occurs when averager A requests averager B at the same time as averager B requests averager A.
+      In that case, neither averager can process the other one's request because it is awaiting lock_request_join_group.
+      This deadlock only happens if averagers have outdated information on expirations (due to network delays). 
+      While A->B->A deadlock is easy to fix, it gets much harder with more peers (e.g. A -> B -> C -> D -> A).
+      Hence, instead of accounting for such deadlocks, we simply break them with request_timeout.
+    
     """
 
     def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
                  prefix: str, target_group_size: int, min_group_size: int, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, compression_type: runtime_pb2.CompressionType = runtime_pb2.NONE):
+                 averaging_expiration: float = 15, request_timeout: Optional[float] = 5,
+                 compression_type: runtime_pb2.CompressionType = runtime_pb2.NONE):
         assert '.' not in prefix, "group prefix must be a string without ."
+        if request_timeout is None or request_timeout >= averaging_expiration:
+            logger.warning("It is recommended to use request_timeout smaller than averaging_expiration. Otherwise,"
+                           "matchmaking can cause deadlocks in some rare cases. Please see Matchmaking docstring.")
 
         super().__init__()
         self.dht, self.endpoint, self.averaged_tensors = dht, endpoint, tuple(averaged_tensors)
         self.prefix, self.group_bits = prefix, initial_group_bits
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
-        self.averaging_expiration, self.compression_type = averaging_expiration, compression_type
+        self.averaging_expiration, self.request_timeout = averaging_expiration, request_timeout
+        self.compression_type = compression_type
 
         self.schema_hash = compute_schema_hash(self.averaged_tensors)
 
@@ -107,9 +119,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             # (so as to fix possible network partitioning if some peers operate on a much smaller nbits)
             while True:
                 try:
-                    next_leader = await asyncio.wait_for(
-                        self.potential_leaders.pop_next_leader(),
-                        timeout=self.potential_leaders.request_expiration_time - get_dht_time())
+                    next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration
 
                     print((f'P{self.endpoint[-2:]} - asking P{next_leader[-2:]}, '
                           f'queue={len(self.potential_leaders.leader_queue)}, '
@@ -126,10 +136,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         elif len(self.current_followers) >= self.min_group_size:
                             # the time is up, we have a *good enough* group. run allreduce as is.
                             return await self.leader_assemble_group()
-                        else:
+                        elif len(self.current_followers) > 0:
                             await self.leader_disband_group()
                             # TODO maybe adjust grid size
-                            continue
+                        continue
                 except Exception as e:
                     if not self.assembled_group.done():
                         self.assembled_group.set_exception(e)
@@ -151,7 +161,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
 
-                message = await call.read()
+                message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
 
                 if message.code != averaging_pb2.ACCEPTED:
                     code = averaging_pb2.MessageCode.Name(message.code)
@@ -167,7 +177,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
             print(f'P{self.endpoint[-2:]} - accepted by P{leader[-2:]}'.ljust(70) + f"{time.time() % 100:.3f}")
             async with self.potential_leaders.pause_search():
-                message = await call.read()
+                time_to_expiration = max(expiration_time - get_dht_time(), 0.0)
+                message = await asyncio.wait_for(call.read(), time_to_expiration + self.request_timeout)
 
             if message.code == averaging_pb2.BEGIN_ALLREDUCE:
                 async with self.lock_request_join_group:
@@ -185,6 +196,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             else:
                 logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
                 return None
+        except asyncio.TimeoutError as e:
+            logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
+            return None
         finally:
             self.current_leader = None
 
@@ -321,6 +335,7 @@ class PotentialLeaders:
         self.endpoint, self.dht, self.averaging_expiration = endpoint, dht, averaging_expiration
         self.target_group_size = target_group_size
         self.running, self.update_triggered, self.update_finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        self.declared_new_expiration = asyncio.Event()
         self.leader_queue = TimedStorage[Endpoint, DHTExpiration]()
         self.past_attempts: Set[Tuple[Endpoint, DHTExpiration]] = set()
         self.max_assured_time = float('-inf')
@@ -346,6 +361,7 @@ class PotentialLeaders:
             self.running.clear()
             self.update_triggered.clear()
             self.update_finished.clear()
+            self.declared_new_expiration.clear()
 
     @contextlib.asynccontextmanager
     async def pause_search(self):
@@ -369,9 +385,14 @@ class PotentialLeaders:
             self.update_triggered.set()
 
         if maybe_next_leader is None or entry.expiration_time >= self.declared_expiration_time:
-            await self.update_finished.wait()
-            self.update_finished.clear()
-            return await self.pop_next_leader()
+            await asyncio.wait({self.update_finished.wait(), self.declared_new_expiration.wait()},
+                               return_when=asyncio.FIRST_COMPLETED)
+            self.declared_new_expiration.clear()
+            if self.update_finished.is_set():
+                self.update_finished.clear()
+                return await self.pop_next_leader()
+            else:
+                raise asyncio.TimeoutError("pop_next_leader was invalidated: re-declared averager in background")
 
         del self.leader_queue[maybe_next_leader]
         self.past_attempts.add((maybe_next_leader, entry.expiration_time))
@@ -410,16 +431,14 @@ class PotentialLeaders:
         try:
             while True:
                 await self.running.wait()
+
                 new_expiration_time = min(get_dht_time() + self.averaging_expiration, self.search_end_time)
                 self.declared_group_key, self.declared_expiration_time = group_key, new_expiration_time
+                self.declared_new_expiration.set()
                 stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
                                                             looking_for_group=True, return_future=True)
                 print(f"P{self.endpoint[-2:]} - declared self (ok={stored_ok})".ljust(70) + f"{time.time() % 100:.3f}")
-
-                if stored_ok:
-                    await asyncio.sleep(self.declared_expiration_time - get_dht_time())
-                else:
-                    logger.warning(f"Failed to subscribe to group {group_key} : store rejected by DHT peers")
+                await asyncio.sleep(self.declared_expiration_time - get_dht_time())
         except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
             logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
         finally:
