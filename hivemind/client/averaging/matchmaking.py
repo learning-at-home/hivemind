@@ -146,7 +146,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         assert self.is_looking_for_group and self.current_leader is None
         try:
             async with self.lock_request_join_group:
-                await asyncio.sleep(random.random() * 0.1)#TODO remove debug
+                await asyncio.sleep(random.random() * 1.0)#TODO remove debug
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
@@ -192,7 +192,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
+            print(f"P{self.endpoint[-2:]} - incoming request from P{request.endpoint[-2:]}")
             async with self.lock_request_join_group:
+                print(f"P{self.endpoint[-2:]} - processing request from P{request.endpoint[-2:]}")
                 current_group_future = self.assembled_group  # copy current assembled_group to avoid overwriting
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
