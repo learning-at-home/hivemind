@@ -28,6 +28,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     f"""
     An internal class that is used to form groups of averages for running allreduce
     See DecentralizedAverager docstring for the detailed description of all parameters
+    
     """
 
     def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
@@ -50,7 +51,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         self.current_leader: Optional[Endpoint] = None  # iff i am a follower, this is a link to my current leader
         self.current_followers: Set[Endpoint] = set()  # iff i am a leader, this contains my followers excluding myself
-        self.potential_leaders = PotentialLeaders(self.endpoint, self.dht, self.averaging_expiration)
+        self.potential_leaders = PotentialLeaders(endpoint, dht, averaging_expiration, target_group_size)
 
     @property
     def is_looking_for_group(self):
@@ -106,20 +107,15 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             # (so as to fix possible network partitioning if some peers operate on a much smaller nbits)
             while True:
                 try:
-                    time_to_expiration = self.potential_leaders.declared_expiration_time - get_dht_time()
-                    next_best_leader = await asyncio.wait_for(
+                    next_leader = await asyncio.wait_for(
                         self.potential_leaders.pop_next_leader(),
-                        timeout=time_to_expiration if isfinite(time_to_expiration) else self.averaging_expiration)
+                        timeout=self.potential_leaders.request_expiration_time - get_dht_time())
 
-                    print((f'P{self.endpoint[-2:]} - asking P{next_best_leader[-2:]}, '
+                    print((f'P{self.endpoint[-2:]} - asking P{next_leader[-2:]}, '
                           f'queue={len(self.potential_leaders.leader_queue)}, '
-                          f'attempts={len(self.potential_leaders.past_attempts)}').ljust(90) + f"{time.time() % 100:.3f}")
+                          f'attempts={len(self.potential_leaders.past_attempts)}').ljust(70) + f"{time.time() % 100:.3f}")
 
-                    if isfinite(self.potential_leaders.declared_expiration_time):
-                        request_expiration_time = self.potential_leaders.declared_expiration_time
-                    else:
-                        request_expiration_time = get_dht_time() + self.averaging_expiration
-                    group = await self.request_join_group(next_best_leader, request_expiration_time)
+                    group = await self.request_join_group(next_leader, self.potential_leaders.request_expiration_time)
                     if group is not None:
                         return group
 
@@ -134,6 +130,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             await self.leader_disband_group()
                             # TODO maybe adjust grid size
                             continue
+                except Exception as e:
+                    if not self.assembled_group.done():
+                        self.assembled_group.set_exception(e)
+                    raise e
 
     async def request_join_group(self, leader: Endpoint, expiration_time: DHTExpiration) -> Optional[AllReduceRunner]:
         """
@@ -146,6 +146,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         assert self.is_looking_for_group and self.current_leader is None
         try:
             async with self.lock_request_join_group:
+                await asyncio.sleep(random.random() * 0.1)#TODO remove debug
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
@@ -155,7 +156,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if message.code != averaging_pb2.ACCEPTED:
                     code = averaging_pb2.MessageCode.Name(message.code)
                     logger.debug(f"{self.endpoint} - requested {leader} to be my leader, but got rejected with {code}")
-                    print(f'P{self.endpoint[-2:]} - rejected by P{leader[-2:]} with {averaging_pb2.MessageCode.Name(message.code)}'.ljust(90) + f"{time.time() % 100:.3f}")
+                    print(f'P{self.endpoint[-2:]} - rejected by P{leader[-2:]} with {averaging_pb2.MessageCode.Name(message.code)}'.ljust(70) + f"{time.time() % 100:.3f}")
                     return None
 
                 # else: we were accepted
@@ -164,7 +165,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if len(self.current_followers) > 0:
                     await self.leader_disband_group()
 
-            print(f'P{self.endpoint[-2:]} - accepted by P{leader[-2:]}'.ljust(90) + f"{time.time() % 100:.3f}")
+            print(f'P{self.endpoint[-2:]} - accepted by P{leader[-2:]}'.ljust(70) + f"{time.time() % 100:.3f}")
             async with self.potential_leaders.pause_search():
                 message = await call.read()
 
@@ -191,15 +192,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
-            current_group_future = self.assembled_group  # copy current assembled_group to avoid overwriting
-            # TODOmake sure this didn't change after we acquired the lock
-            reason_to_reject = self._check_reasons_to_reject(request)
-            if reason_to_reject is not None:
-                yield reason_to_reject
-                return
-
             async with self.lock_request_join_group:
-                #TODO duplicate code
+                current_group_future = self.assembled_group  # copy current assembled_group to avoid overwriting
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
                     yield reason_to_reject
@@ -320,8 +314,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
 class PotentialLeaders:
     """ An utility class that searches for averagers that could become our leaders """
-    def __init__(self, endpoint: Endpoint, dht: hivemind.DHT, averaging_expiration: DHTExpiration):
+    def __init__(self, endpoint: Endpoint, dht: hivemind.DHT, averaging_expiration: DHTExpiration,
+                 target_group_size: Optional[int]):
         self.endpoint, self.dht, self.averaging_expiration = endpoint, dht, averaging_expiration
+        self.target_group_size = target_group_size
         self.running, self.update_triggered, self.update_finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
         self.leader_queue = TimedStorage[Endpoint, DHTExpiration]()
         self.past_attempts: Set[Tuple[Endpoint, DHTExpiration]] = set()
@@ -340,8 +336,10 @@ class PotentialLeaders:
         try:
             yield self
         finally:
-            update_queue_task.cancel()
-            declare_averager_task.cancel()
+            if not update_queue_task.done():
+                update_queue_task.cancel()
+            if not declare_averager_task.done():
+                declare_averager_task.cancel()
             #TODO do we need to clear self.leader_queue and self.past_attempts here?
             self.running.clear()
             self.update_triggered.clear()
@@ -377,9 +375,18 @@ class PotentialLeaders:
         self.past_attempts.add((maybe_next_leader, entry.expiration_time))
         return maybe_next_leader
 
+    @property
+    def request_expiration_time(self) -> float:
+        """ this averager's current expiration time - used to send join requests to leaders """
+        if isfinite(self.declared_expiration_time):
+            return self.declared_expiration_time
+        else:
+            return min(get_dht_time() + self.averaging_expiration, self.search_end_time)
+
     async def _update_queue_periodically(self, group_key: GroupKey):
         DISCREPANCY = hivemind.utils.timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
         while get_dht_time() < self.search_end_time:
+            print(f"P{self.endpoint[-2:]} - updating queue")
             new_peers = await self.dht.get_averagers(group_key, only_active=True, return_future=True)
             self.max_assured_time = max(self.max_assured_time, get_dht_time() + self.averaging_expiration - DISCREPANCY)
 
@@ -404,11 +411,14 @@ class PotentialLeaders:
                 self.declared_group_key, self.declared_expiration_time = group_key, new_expiration_time
                 stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
                                                             looking_for_group=True, return_future=True)
-                print(f"P{self.endpoint[-2:]} - declared self (ok={stored_ok})".ljust(90) + f"{time.time() % 100:.3f}")
+                print(f"P{self.endpoint[-2:]} - declared self (ok={stored_ok})".ljust(70) + f"{time.time() % 100:.3f}")
+
                 if stored_ok:
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
                 else:
                     logger.warning(f"Failed to subscribe to group {group_key} : store rejected by DHT peers")
+        except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
+            logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
         finally:
             if self.declared_group_key is not None:
                 previous_declared_key, previous_expiration_time = self.declared_group_key, self.declared_expiration_time

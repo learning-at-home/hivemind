@@ -69,6 +69,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
+            # TODO do we ACTUALLY need target_group_size to be a power of 2?
         if initial_group_bits is None:
             initial_group_bits = ''.join(random.choices('01', k=INITIAL_GROUP_NBITS))
             logger.debug(f"Initializing with random {INITIAL_GROUP_NBITS}-bit group index: {initial_group_bits}")
