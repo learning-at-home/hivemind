@@ -579,12 +579,20 @@ class _SearchState:
     future: asyncio.Future[Optional[ValueWithExpiration[DHTValue]]] = field(default_factory=asyncio.Future)
     serializer: type(SerializerBase) = MSGPackSerializer
 
-    def add_candidate(self, candidate: Optional[ValueWithExpiration[BinaryDHTValue]], source_node_id: Optional[DHTID]):
-        binary_value, expiration_time = candidate or (None, -float('inf'))
-        if not self.finished and expiration_time > (self.expiration_time or -float('inf')):
-            self.binary_value, self.expiration_time, self.source_node_id = binary_value, expiration_time, source_node_id
-            if self.expiration_time >= self.sufficient_expiration_time:
-                self.finish_search()
+    def add_candidate(self, candidate: Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]],
+                      source_node_id: Optional[DHTID]):
+        if self.finished or candidate is None:
+            return
+        if isinstance(candidate.value, DictionaryDHTValue) and isinstance(self.binary_value, DictionaryDHTValue):
+            for subkey, subentry in candidate.value.items():
+                self.binary_value.store(subkey, subentry.value, subentry.expiration_time)
+        elif candidate.expiration_time > (self.expiration_time or -float('inf')):
+            self.binary_value, self.expiration_time = candidate.value, candidate.expiration_time
+
+        if candidate.expiration_time > self.expiration_time:
+            self.source_node_id = source_node_id
+        if self.expiration_time >= self.sufficient_expiration_time:
+            self.finish_search()
 
     def add_done_callback(self, callback: Callable[[_SearchState], Any]):
         """ Add callback that will be called when _SearchState is done (found OR cancelled by user) """
