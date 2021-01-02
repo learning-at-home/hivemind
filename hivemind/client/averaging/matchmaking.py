@@ -175,7 +175,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     return await self.follower_assemble_group(leader, message.group_id, message.ordered_group_endpoints)
             elif message.code == averaging_pb2.GROUP_DISBANDED:
                 print(f'P{self.endpoint[-2:]} - leader disbanded group (P{leader[-2:]}), suggested={message.suggested_leader}')
-                if message.suggested_leader:
+                if message.suggested_leader and message.suggested_leader != self.endpoint:
                     logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
                     self.current_leader = None
                     return await self.request_join_group(message.suggested_leader, expiration_time)
@@ -388,7 +388,6 @@ class PotentialLeaders:
     async def _update_queue_periodically(self, group_key: GroupKey):
         DISCREPANCY = hivemind.utils.timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
         while get_dht_time() < self.search_end_time:
-            print(f"P{self.endpoint[-2:]} - updating queue")
             new_peers = await self.dht.get_averagers(group_key, only_active=True, return_future=True)
             self.max_assured_time = max(self.max_assured_time, get_dht_time() + self.averaging_expiration - DISCREPANCY)
 
@@ -399,6 +398,7 @@ class PotentialLeaders:
                 self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
 
             self.update_finished.set()
+            print(f"P{self.endpoint[-2:]} - updating queue, found={len(new_peers)}, new_size={len(self.leader_queue)}")
 
             await asyncio.wait(
                 {self.running.wait(), self.update_triggered.wait()}, return_when=asyncio.ALL_COMPLETED,
@@ -423,7 +423,6 @@ class PotentialLeaders:
             logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
         finally:
             if self.declared_group_key is not None:
-                print(f"{self.endpoint[-2:]} - undeclaring!")
                 previous_declared_key, previous_expiration_time = self.declared_group_key, self.declared_expiration_time
                 self.declared_group_key, self.declared_expiration_time = None, float('inf')
                 self.leader_queue, self.max_assured_time = TimedStorage[Endpoint, DHTExpiration](), float('-inf')
