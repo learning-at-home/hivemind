@@ -81,6 +81,11 @@ class TimedStorage(Generic[KeyType, ValueType]):
             return top_key, self.data[top_key]
         return None, None
 
+    def clear(self):
+        self.data.clear()
+        self.key_to_heap.clear()
+        self.expiration_heap.clear()
+
     def __contains__(self, key: KeyType):
         self._remove_outdated()
         return key in self.data
