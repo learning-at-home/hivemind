@@ -338,9 +338,9 @@ class PotentialLeaders:
         self.declared_new_expiration, self.lock_declare_expiration = asyncio.Event(), asyncio.Lock()
         self.leader_queue = TimedStorage[Endpoint, DHTExpiration]()
         self.past_attempts: Set[Tuple[Endpoint, DHTExpiration]] = set()
-        self.max_assured_time = float('-inf')
         self.declared_expiration_time = float('inf')
         self.declared_group_key: Optional[GroupKey] = None
+        self.max_assured_time = float('-inf')
         self.search_end_time = float('inf')
 
     @contextlib.asynccontextmanager
@@ -360,6 +360,8 @@ class PotentialLeaders:
             for field in (self.past_attempts, self.leader_queue, self.running,
                           self.update_finished, self.update_triggered, self.declared_new_expiration):
                 field.clear()
+            self.max_assured_time = float('-inf')
+            self.search_end_time = float('inf')
 
     @contextlib.asynccontextmanager
     async def pause_search(self):
