@@ -93,7 +93,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.info("Another look_for_group is already in progress. The current run will be scheduled after"
                         " the existing group is either assembled or disbanded.")
         async with self.lock_looking_for_group:
-            print(f"P{self.endpoint[-2:]} - began looking for group!")
             request_leaders_task = asyncio.create_task(self._request_join_potential_leaders(timeout))
             try:
                 return await asyncio.wait_for(self.assembled_group, timeout=timeout)
@@ -109,7 +108,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     request_leaders_task.cancel()
                 if self.assembled_group.done():
                     self.assembled_group = asyncio.Future()
-                print(f"P{self.endpoint[-2:]} - no longer looking for group!")
 
     async def _request_join_potential_leaders(self, timeout: Optional[float]) -> AllReduceRunner:
         """ Request leaders from queue until we find the first runner. This coroutine is meant to run in background. """
@@ -120,11 +118,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             while True:
                 try:
                     next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration
-
-                    print((f'P{self.endpoint[-2:]} - asking P{next_leader[-2:]}, '
-                          f'queue={len(self.potential_leaders.leader_queue)}, '
-                          f'attempts={len(self.potential_leaders.past_attempts)}').ljust(70) + f"{time.time() % 100:.3f}")
-
                     group = await self.request_join_group(next_leader, self.potential_leaders.request_expiration_time)
                     if group is not None:
                         return group
@@ -140,7 +133,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             await self.leader_disband_group()
                             # TODO maybe adjust grid size
                         continue
-                except Exception as e:
+                except BaseException as e:
                     if not self.assembled_group.done():
                         self.assembled_group.set_exception(e)
                     raise e
@@ -165,7 +158,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if message.code != averaging_pb2.ACCEPTED:
                     code = averaging_pb2.MessageCode.Name(message.code)
                     logger.debug(f"{self.endpoint} - requested {leader} to be my leader, but got rejected with {code}")
-                    print(f'P{self.endpoint[-2:]} - rejected by P{leader[-2:]} with {averaging_pb2.MessageCode.Name(message.code)}'.ljust(70) + f"{time.time() % 100:.3f}")
                     return None
 
                 # else: we were accepted
@@ -174,17 +166,14 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if len(self.current_followers) > 0:
                     await self.leader_disband_group()
 
-            print(f'P{self.endpoint[-2:]} - accepted by P{leader[-2:]}'.ljust(70) + f"{time.time() % 100:.3f}")
             async with self.potential_leaders.pause_search():
                 time_to_expiration = max(expiration_time - get_dht_time(), 0.0)
                 message = await asyncio.wait_for(call.read(), time_to_expiration + self.request_timeout)
 
             if message.code == averaging_pb2.BEGIN_ALLREDUCE:
                 async with self.lock_request_join_group:
-                    print(f'P{self.endpoint[-2:]} - began allreduce under P{leader[-2:]}')
                     return await self.follower_assemble_group(leader, message.group_id, message.ordered_group_endpoints)
             elif message.code == averaging_pb2.GROUP_DISBANDED:
-                print(f'P{self.endpoint[-2:]} - leader disbanded group (P{leader[-2:]}), suggested={message.suggested_leader}')
                 if message.suggested_leader and message.suggested_leader != self.endpoint:
                     logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
                     self.current_leader = None
@@ -205,9 +194,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
-            print(f"P{self.endpoint[-2:]} - incoming request from P{request.endpoint[-2:]}")
             async with self.lock_request_join_group:
-                print(f"P{self.endpoint[-2:]} - processing request from P{request.endpoint[-2:]}")
                 current_group_future = self.assembled_group  # copy current assembled_group to avoid overwriting
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
@@ -310,7 +297,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
-        print(f'P{self.endpoint[-2:]} - running allreduce with P{leader[-2:]} as a leader')
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
@@ -418,8 +404,6 @@ class PotentialLeaders:
                 self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
 
             self.update_finished.set()
-            print(f"P{self.endpoint[-2:]} - updating queue, found={len(new_peers)}, new_size={len(self.leader_queue)}",
-                  f"{'' if len(new_peers) > 3 else ['P' + peer[-2:] for peer, _ in new_peers]}")
 
             await asyncio.wait(
                 {self.running.wait(), self.update_triggered.wait()}, return_when=asyncio.ALL_COMPLETED,
@@ -437,7 +421,6 @@ class PotentialLeaders:
                     self.declared_new_expiration.set()
                     stored_ok = await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
                                                                 looking_for_group=True, return_future=True)
-                    print(f"P{self.endpoint[-2:]} - declared self (ok={stored_ok})".ljust(70) + f"{time.time() % 100:.3f}")
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
             except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
                 logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
