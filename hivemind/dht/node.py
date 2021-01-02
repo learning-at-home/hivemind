@@ -586,6 +586,7 @@ class _SearchState:
         if isinstance(candidate.value, DictionaryDHTValue) and isinstance(self.binary_value, DictionaryDHTValue):
             for subkey, subentry in candidate.value.items():
                 self.binary_value.store(subkey, subentry.value, subentry.expiration_time)
+            self.expiration_time = self.binary_value.latest_expiration_time
         elif candidate.expiration_time > (self.expiration_time or -float('inf')):
             self.binary_value, self.expiration_time = candidate.value, candidate.expiration_time
 
