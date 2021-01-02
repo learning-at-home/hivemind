@@ -98,11 +98,12 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             try:
                 return await asyncio.wait_for(self.assembled_group, timeout=timeout)
             except BaseException as e:
-                if len(self.current_followers) > 0:
-                    async with self.lock_request_join_group:
-                        await self.leader_disband_group()
-                self.assembled_group.set_exception(e)
-                raise
+                if not self.assembled_group.done():
+                    if len(self.current_followers) > 0:
+                        async with self.lock_request_join_group:
+                            await self.leader_disband_group()
+                    self.assembled_group.set_exception(e)
+                    raise
 
             finally:
                 if not request_leaders_task.done():
@@ -117,7 +118,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             # TODO update group_bits on success! reduce number of bits on not enough peers.
             # TODO after allreduce finishes, we may need to ask leader to notify lower keys about this
             # (so as to fix possible network partitioning if some peers operate on a much smaller nbits)
-            while True:
+            while not self.assembled_group.done():
                 try:
                     next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration
 
