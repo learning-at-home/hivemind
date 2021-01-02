@@ -357,11 +357,9 @@ class PotentialLeaders:
                 update_queue_task.cancel()
             if not declare_averager_task.done():
                 declare_averager_task.cancel()
-            #TODO do we need to clear self.leader_queue and self.past_attempts here?
-            self.running.clear()
-            self.update_triggered.clear()
-            self.update_finished.clear()
-            self.declared_new_expiration.clear()
+            for field in (self.past_attempts, self.leader_queue, self.running,
+                          self.update_finished, self.update_triggered, self.declared_new_expiration):
+                field.clear()
 
     @contextlib.asynccontextmanager
     async def pause_search(self):
