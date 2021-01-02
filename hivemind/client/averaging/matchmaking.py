@@ -160,7 +160,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
 
-                await asyncio.sleep(random.random() * 1.0)#TODO remove debug
                 message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
 
                 if message.code != averaging_pb2.ACCEPTED:
@@ -178,10 +177,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             print(f'P{self.endpoint[-2:]} - accepted by P{leader[-2:]}'.ljust(70) + f"{time.time() % 100:.3f}")
             async with self.potential_leaders.pause_search():
                 time_to_expiration = max(expiration_time - get_dht_time(), 0.0)
-                await asyncio.sleep(random.random() * 1.0)#TODO remove debug
                 message = await asyncio.wait_for(call.read(), time_to_expiration + self.request_timeout)
 
-            await asyncio.sleep(random.random() * 1.0)#TODO remove debug
             if message.code == averaging_pb2.BEGIN_ALLREDUCE:
                 async with self.lock_request_join_group:
                     print(f'P{self.endpoint[-2:]} - began allreduce under P{leader[-2:]}')
@@ -238,7 +235,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         else:
                             await self.leader_disband_group()
 
-            await asyncio.sleep(random.random() * 1.0)#TODO remove debug
             if not current_group_future.done() or request.endpoint not in current_group_future.result():
                 if self.current_leader is not None:
                     # outcome 3: found by a leader with higher priority, send our followers to him
