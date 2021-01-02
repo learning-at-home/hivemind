@@ -96,7 +96,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             request_leaders_task = asyncio.create_task(self._request_join_potential_leaders(timeout))
             try:
                 return await asyncio.wait_for(self.assembled_group, timeout=timeout)
-            except BaseException as e:
+            except Exception as e:
                 if len(self.current_followers) > 0:
                     async with self.lock_request_join_group:
                         await self.leader_disband_group()
