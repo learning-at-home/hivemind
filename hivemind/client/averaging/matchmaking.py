@@ -133,7 +133,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     async with self.lock_request_join_group:
                         if self.assembled_group.done():
                             return self.assembled_group.result()
-                        elif len(self.current_followers) >= self.min_group_size:
+                        elif len(self.current_followers) + 1 >= self.min_group_size:
                             # the time is up, we have a *good enough* group. run allreduce as is.
                             return await self.leader_assemble_group()
                         elif len(self.current_followers) > 0:
