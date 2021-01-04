@@ -283,7 +283,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """ Form up all current followers into a group and prepare to _run_allreduce """
         assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
         assert not self.assembled_group.done()
-        group_id = DHTID.generate().to_bytes()
+        import uuid #TODO REMOVE
+        group_id = str(uuid.uuid1())[:8].encode() #DHTID.generate().to_bytes()
         ordered_group_endpoints = list(self.current_followers)
         ordered_group_endpoints.append(self.endpoint)
         random.shuffle(ordered_group_endpoints)
