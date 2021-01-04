@@ -118,6 +118,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             while True:
                 try:
                     next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration
+
                     group = await self.request_join_group(next_leader, self.potential_leaders.request_expiration_time)
                     if group is not None:
                         return group
@@ -133,7 +134,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             await self.leader_disband_group()
                             # TODO maybe adjust grid size
                         continue
-                except BaseException as e:
+                except Exception as e:
                     if not self.assembled_group.done():
                         self.assembled_group.set_exception(e)
                     raise e
@@ -214,7 +215,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         # wait for the group to be assembled or disbanded
                         timeout = max(0.0, self.potential_leaders.declared_expiration_time - get_dht_time())
                         await asyncio.wait_for(self.cond_notify_followers.wait(), timeout=timeout)
-                except asyncio.TimeoutError:
+                except (asyncio.TimeoutError, RuntimeError):
                     async with self.lock_request_join_group:
                         # outcome 2: the time is up, run allreduce with what we have or disband
                         if len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
@@ -278,12 +279,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         ordered_group_endpoints = list(self.current_followers)
         ordered_group_endpoints.append(self.endpoint)
         random.shuffle(ordered_group_endpoints)
-        logger.debug(f"{self.endpoint} - leader started allreduce with {len(ordered_group_endpoints)} followers.")
+        logger.debug(f"{self.endpoint} - leader started allreduce for {len(ordered_group_endpoints)} peers.")
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
-        print(f"P{self.endpoint[-2:]} - running allreduce with", ['P' + e[-2:] for e in ordered_group_endpoints],
-              f"group id = {group_id[-5:]}")
         self.assembled_group.set_result(allreduce_group)
         async with self.cond_notify_followers:
             self.cond_notify_followers.notify_all()
