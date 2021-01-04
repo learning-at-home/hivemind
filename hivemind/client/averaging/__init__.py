@@ -188,7 +188,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             if allow_retries and timeout is None or time_left > 0:
                 self._pending_group_assembled.set()
                 _ = self._running_groups.pop(group_id, None)
-                print(f"P{self.endpoint[-2:]} - retrying!")
                 return await self._step(future=future, allow_retries=allow_retries, timeout=time_left)
             else:
                 future.set_result(None)
