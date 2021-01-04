@@ -182,12 +182,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self._running_groups[group_id] = allreduce_group
             self._pending_group_assembled.set()
             future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
+            print(f"P{self.endpoint[-2:]} - success")
 
         except AllreduceException:
             time_left = timeout - get_dht_time() + start_time if timeout is not None else None
             if allow_retries and timeout is None or time_left > 0:
-                self._pending_group_assembled.set()
                 _ = self._running_groups.pop(group_id, None)
+                self._pending_group_assembled.set()
                 return await self._step(future=future, allow_retries=allow_retries, timeout=time_left)
             else:
                 future.set_result(None)
@@ -195,8 +196,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             future.set_exception(e)
             raise
         finally:
-            self._pending_group_assembled.set()
             _ = self._running_groups.pop(group_id, None)
+            self._pending_group_assembled.set()
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
