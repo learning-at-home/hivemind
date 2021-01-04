@@ -19,6 +19,11 @@ from hivemind.utils import get_logger, Endpoint, TensorDescriptor, MSGPackSerial
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils.grpc import ChannelCache
 
+_print = print
+def print(end, *, flush):
+    with open('./log', 'a') as f:
+        f.write(end)
+
 
 logger = get_logger(__file__)
 
