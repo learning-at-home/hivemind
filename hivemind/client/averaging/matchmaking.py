@@ -157,12 +157,12 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
           The originally specified leader can disband group and redirect us to a different leader
         """
         assert self.is_looking_for_group and self.current_leader is None
+        call = Optional[grpc.aio.UnaryStreamCall] = None
         try:
             async with self.lock_request_join_group:
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
-
                 message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
 
                 if message.code == averaging_pb2.ACCEPTED:
@@ -204,6 +204,11 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         finally:
             self.was_accepted_to_group.clear()
             self.current_leader = None
+            if call is not None:
+                asyncio.create_task(self._wait_for_completion(call))
+    async def _wait_for_completion(self, call: grpc.aio.UnaryStreamCall):
+        async for msg in call:
+            pass
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
