@@ -583,7 +583,7 @@ class _SearchState:
                       source_node_id: Optional[DHTID]):
         if self.finished or candidate is None:
             return
-        if isinstance(candidate.value, DictionaryDHTValue) and isinstance(self.binary_value, DictionaryDHTValue):
+        elif isinstance(candidate.value, DictionaryDHTValue) and isinstance(self.binary_value, DictionaryDHTValue):
             self.binary_value.maxsize = max(self.binary_value.maxsize, candidate.value.maxsize)
             for subkey, subentry in candidate.value.items():
                 self.binary_value.store(subkey, subentry.value, subentry.expiration_time)
