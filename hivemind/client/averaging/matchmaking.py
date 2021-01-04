@@ -160,7 +160,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """
         assert self.is_looking_for_group and self.current_leader is None
         try:
-            async with self.lock_request_join_group_('request leader'):
+            async with self.lock_request_join_group:
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
@@ -210,26 +210,11 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         finally:
             self.current_leader = None
 
-    @contextlib.asynccontextmanager
-    async def lock_request_join_group_(self, msg):
-        import time
-        t0 = time.time()
-        try:
-            async with self.lock_request_join_group:
-                t1 = time.time()
-                yield
-                if t1 - t0 > 1:
-                    print(f"\nP{self.endpoint[-2:]} - awaited lock [{msg}] for {t1 - t0:.3f}s\n")
-        finally:
-            t2 = time.time()
-            if t2 - t0 > 3:
-                print(f"\nP{self.endpoint[-2:]} - used lock for {t2 - t0:.3f}s\n")
-
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
-            async with self.lock_request_join_group_('incoming request from '):
+            async with self.lock_request_join_group:
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
                     yield reason_to_reject
