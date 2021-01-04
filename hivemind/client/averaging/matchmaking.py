@@ -157,6 +157,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """
         assert self.is_looking_for_group and self.current_leader is None
         try:
+            call: Optional[grpc.aio.UnaryStreamCall] = None
             async with self.lock_request_join_group:
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
@@ -197,6 +198,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
             return None
         except asyncio.TimeoutError:
+            if call is not None:
+                call.cancel()
             logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
             return None
         finally:
