@@ -232,6 +232,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 except (asyncio.TimeoutError, asyncio.CancelledError, RuntimeError):
                     async with self.lock_request_join_group:
                         if current_group_future.cancelled() or current_group_future is not self.assembled_group:
+                            print(end=f'P{self.endpoint[-2:]} - disbanding P{request.endpoint[-2:]} from group [2] '
+                                      f'{current_group_future.cancelled()}{current_group_future is not self.assembled_group}\n')
                             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.CANCELLED)
                             return
                         elif current_group_future.done():
@@ -244,7 +246,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
             if current_group_future.cancelled() or not current_group_future.done() or\
                     request.endpoint not in current_group_future.result():
-                print(end=f'P{self.endpoint[-2:]} - disbanding {request.endpoint} from group '
+                print(end=f'P{self.endpoint[-2:]} - disbanding P{request.endpoint[-2:]} from group '
                           f'{current_group_future.done()}{current_group_future.cancelled()}\n')
                 if self.current_leader is not None:
                     # outcome 3: found by a leader with higher priority, send our followers to him
