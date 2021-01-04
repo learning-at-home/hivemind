@@ -58,7 +58,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.lock_looking_for_group = asyncio.Lock()
         self.lock_request_join_group = asyncio.Lock()
         self.cond_notify_followers = asyncio.Condition()
-        self.cond_request_finished = asyncio.Condition()
+        self.cond_follower_discarded = asyncio.Condition()
         self.assembled_group = asyncio.Future()
 
         self.current_leader: Optional[Endpoint] = None  # iff i am a follower, this is a link to my current leader
@@ -113,8 +113,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if not self.assembled_group.done():
                     self.assembled_group.cancel()
                 while len(self.current_followers) > 0:
-                    async with self.cond_request_finished:
-                        await self.cond_request_finished.wait()
+                    async with self.cond_follower_discarded:
+                        await self.cond_follower_discarded.wait()
                 # note: the code above ensures that we send all followers away before creating new future
                 self.assembled_group = asyncio.Future()
 
@@ -261,8 +261,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         finally:  # note: this code is guaranteed to run even if the coroutine is destroyed prematurely
             self.current_followers.discard(request.endpoint)
-            async with self.cond_request_finished:
-                self.cond_request_finished.notify()
+            async with self.cond_follower_discarded:
+                self.cond_follower_discarded.notify()
 
     def _check_reasons_to_reject(self, request: averaging_pb2.JoinRequest) -> Optional[averaging_pb2.MessageFromLeader]:
         """ :returns: if accepted, return None, otherwise return a reason for rejection """
