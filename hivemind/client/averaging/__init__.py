@@ -203,7 +203,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             # but his response with group_id was delayed and other peers got to us first
             await self._pending_group_assembled.wait()
         if request.group_id not in self._running_groups:
-            print(end=f'P{self.endpoint[-2:]} - was given unknown group_id {request.group_id.decode} from P{request.endpoint[-2:]}\n')
+            print(end=f'P{self.endpoint[-2:]} - was given unknown group_id {request.group_id[:4].decode()} from P{request.endpoint[-2:]}\n')
             return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
         else:
             return await self._running_groups[request.group_id].rpc_aggregate_part(request, context)
