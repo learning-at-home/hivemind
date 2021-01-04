@@ -429,6 +429,7 @@ class PotentialLeaders:
                     continue
                 self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
                 self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
+            print(end='U')
 
             self.update_finished.set()
 
@@ -448,6 +449,7 @@ class PotentialLeaders:
                     self.declared_new_expiration.set()
                     await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
                                                     looking_for_group=True, return_future=True)
+                    print(end='D')
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
             except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
                 logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
