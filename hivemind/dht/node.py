@@ -587,10 +587,10 @@ class _SearchState:
             self.binary_value.maxsize = max(self.binary_value.maxsize, candidate.value.maxsize)
             for subkey, subentry in candidate.value.items():
                 self.binary_value.store(subkey, subentry.value, subentry.expiration_time)
-        elif candidate.expiration_time > self.expiration_time or float('-inf'):
+        elif candidate.expiration_time > (self.expiration_time or float('-inf')):
             self.binary_value = candidate.value
 
-        if candidate.expiration_time > self.expiration_time or float('-inf'):
+        if candidate.expiration_time > (self.expiration_time or float('-inf')):
             self.expiration_time = candidate.expiration_time
             self.source_node_id = source_node_id
             if self.expiration_time >= self.sufficient_expiration_time:
