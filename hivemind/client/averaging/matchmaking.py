@@ -174,18 +174,18 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
                 message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
 
-                if message.code != averaging_pb2.ACCEPTED:
-                    code = averaging_pb2.MessageCode.Name(message.code)
-                    logger.debug(f"{self.endpoint} - requested {leader} to be my leader, but got rejected with {code}")
-                    # if message.suggested_leader and message.suggested_leader != self.endpoint:
-                    #     return await self.request_join_group(message.suggested_leader, expiration_time)#TODO run this out of lock
-                    return None
+                if message.code == averaging_pb2.ACCEPTED:
+                    logger.debug(f"{self.endpoint} - joining the group of {leader}; waiting for peers")
+                    self.current_leader = leader
+                    if len(self.current_followers) > 0:
+                        await self.leader_disband_group()
 
-                # else: we were accepted
-                logger.debug(f"{self.endpoint} - joining the group of {leader}; waiting for peers")
-                self.current_leader = leader
-                if len(self.current_followers) > 0:
-                    await self.leader_disband_group()
+            if message.code != averaging_pb2.ACCEPTED:
+                code = averaging_pb2.MessageCode.Name(message.code)
+                logger.debug(f"{self.endpoint} - requested {leader} to be my leader, but got rejected with {code}")
+                if message.suggested_leader and message.suggested_leader != self.endpoint:
+                    return await self.request_join_group(message.suggested_leader, expiration_time)
+                return None
 
             async with self.potential_leaders.pause_search():
                 time_to_expiration = max(expiration_time - get_dht_time(), 0.0)
