@@ -134,7 +134,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         return group
 
                 except asyncio.TimeoutError:
-                    print(end=f"P{self.endpoint[-2:]} - timeout when requesting {next_leader}", flush=True)
+                    print(end=f"T", flush=True)
                     async with self.lock_request_join_group:
                         if self.assembled_group.done():
                             return self.assembled_group.result()
@@ -146,6 +146,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             # TODO maybe adjust grid size
                         continue
                 except Exception as e:
+                    print(end=f"F", flush=True)
                     if not self.assembled_group.done():
                         self.assembled_group.set_exception(e)
                     raise e
@@ -205,6 +206,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
             return None
         except asyncio.TimeoutError:
+            print(end='T', flush=True)
             logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
             return None
         finally:
@@ -218,10 +220,12 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
                     yield reason_to_reject
+                    print(end='R', flush=True)
                     return
 
                 self.current_followers.add(request.endpoint)
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
+                print(end='A', flush=True)
 
                 if len(self.current_followers) + 1 >= self.target_group_size and not self.assembled_group.done():
                     # outcome 1: we have assembled a full group and are ready for allreduce
@@ -255,11 +259,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     return
 
             allreduce_group = self.assembled_group.result()
+            print(end='+', flush=True)
             yield averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
                 ordered_group_endpoints=allreduce_group.ordered_group_endpoints)
 
         except Exception as e:
+            print(end='E', flush=True)
             logger.exception(e)
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
 
@@ -399,7 +405,6 @@ class PotentialLeaders:
                     self.update_finished.clear()
                     continue
                 else:
-                    print(f'P{self.endpoint[-2:]} - pop was invalidated - declared new expiration\n', flush=True)
                     raise asyncio.TimeoutError("pop_next_leader was invalidated: re-declared averager in background")
 
             del self.leader_queue[maybe_next_leader]
