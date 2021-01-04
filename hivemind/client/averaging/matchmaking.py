@@ -239,11 +239,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         elif len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
                             # outcome 2: the time is up, run allreduce with what we have or disband
                             await self.leader_assemble_group()
-                        elif current_group_future is self.assembled_group:
+                        else:
                             await self.leader_disband_group()
 
-            if not current_group_future.done() or current_group_future.cancelled() or\
+            if current_group_future.cancelled() or not current_group_future.done() or\
                     request.endpoint not in current_group_future.result():
+                print(end=f'P{self.endpoint[-2:]} - disbanding {request.endpoint} from group '
+                          f'{current_group_future.done()}{current_group_future.cancelled()}\n')
                 if self.current_leader is not None:
                     # outcome 3: found by a leader with higher priority, send our followers to him
                     yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED,
