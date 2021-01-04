@@ -97,9 +97,11 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             try:
                 return await asyncio.wait_for(self.assembled_group, timeout=timeout)
             except asyncio.TimeoutError:
+                print(end=f"P{self.endpoint[-2:]} - timeout in look_for_group\n")
                 return None
 
             except BaseException as e:
+                print(end=f"P{self.endpoint[-2:]} - caught {e} in look_for_group\n")
                 if len(self.current_followers) > 0:
                     async with self.lock_request_join_group:
                         await self.leader_disband_group()
@@ -127,6 +129,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             while True:
                 try:
                     next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration
+                    print(end=f"P{self.endpoint[-2:]} - asking {next_leader}\n")
 
                     group = await self.request_join_group(next_leader, self.potential_leaders.request_expiration_time)
                     if group is not None:

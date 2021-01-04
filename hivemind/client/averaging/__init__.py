@@ -185,6 +185,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             print(end=f"P{self.endpoint[-2:]} - success\n")
 
         except AllreduceException:
+            print(end=f"P{self.endpoint[-2:]} - allreduce failed\n")
             time_left = timeout - get_dht_time() + start_time if timeout is not None else None
             if allow_retries and timeout is None or time_left > 0:
                 _ = self._running_groups.pop(group_id, None)
