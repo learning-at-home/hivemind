@@ -231,6 +231,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 except RuntimeError:
                     print(end='!!>\n')
                     return
+                except asyncio.CancelledError:
+                    print(end='!!C\n')
+                    return
                 except asyncio.TimeoutError:
                     async with self.lock_request_join_group:
                         if self.assembled_group.done():
