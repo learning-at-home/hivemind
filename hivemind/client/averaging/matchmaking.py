@@ -127,7 +127,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             while True:
                 try:
                     next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration
-                    print(end=f".", flush=True)
+                    print(end=f'P{self.endpoint[-2:]} - asking {next_leader}, '
+                              f'queue size = {len(self.potential_leaders.leader_queue)}\n', flush=True)
 
                     group = await self.request_join_group(next_leader, self.potential_leaders.request_expiration_time)
                     if group is not None:
@@ -166,17 +167,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
 
-                try:
-                    message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
-                except asyncio.TimeoutError:
-                    print(f'P{self.endpoint[-2:]} timeout requesting {leader}')
-                    raise
+                message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
 
                 if message.code != averaging_pb2.ACCEPTED:
                     code = averaging_pb2.MessageCode.Name(message.code)
                     logger.debug(f"{self.endpoint} - requested {leader} to be my leader, but got rejected with {code}")
                     # if message.suggested_leader and message.suggested_leader != self.endpoint:
-                    #     return await self.request_join_group(message.suggested_leader, expiration_time)
+                    #     return await self.request_join_group(message.suggested_leader, expiration_time)#TODO run this out of lock
                     return None
 
                 # else: we were accepted
@@ -206,7 +203,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
             return None
         except asyncio.TimeoutError:
-            print(end='T', flush=True)
+            print(end=f'P{self.endpoint[-2:]} - timeout awaiting response from {leader} \n', flush=True)
             logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
             return None
         finally:
@@ -220,12 +217,13 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
                     yield reason_to_reject
-                    print(end='R', flush=True)
+                    print(end=f'P{self.endpoint[-2:]} - rejected {request.endpoint} with'
+                              f' {averaging_pb2.MessageCode.Name(reason_to_reject)} \n', flush=True)
                     return
 
                 self.current_followers.add(request.endpoint)
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
-                print(end='A', flush=True)
+                print(end=f'P{self.endpoint[-2:]} - accepted {request.endpoint} \n', flush=True)
 
                 if len(self.current_followers) + 1 >= self.target_group_size and not self.assembled_group.done():
                     # outcome 1: we have assembled a full group and are ready for allreduce
@@ -431,11 +429,8 @@ class PotentialLeaders:
                     continue
                 self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
                 self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
-            if len(self.leader_queue) > 0:
-                print(end='U', flush=True)
-            else:
-                print(end='Uf', flush=True)
 
+            print(end=f'P{self.endpoint[-2:]} - updated queue, found={len(new_peers)}, queue={len(self.leader_queue)}\n', flush=True)
             self.update_finished.set()
 
             await asyncio.wait(
