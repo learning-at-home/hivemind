@@ -58,6 +58,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.lock_looking_for_group = asyncio.Lock()
         self.lock_request_join_group = asyncio.Lock()
         self.cond_notify_followers = asyncio.Condition()
+        self.cond_request_finished = asyncio.Condition()
         self.assembled_group = asyncio.Future()
 
         self.current_leader: Optional[Endpoint] = None  # iff i am a follower, this is a link to my current leader
@@ -96,7 +97,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             try:
                 return await asyncio.wait_for(self.assembled_group, timeout=timeout)
             except asyncio.TimeoutError:
-                print("TIMEOUT!!!")  # TODO REMOVE
+                print(end=f"P{self.endpoint[-2:]} - TIMEOUT!")
                 return None
 
             except BaseException as e:
@@ -112,6 +113,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     request_leaders_task.cancel()
                 if not self.assembled_group.done():
                     self.assembled_group.cancel()
+                while len(self.current_followers) > 0:
+                    async with self.cond_request_finished:
+                        await self.cond_request_finished.wait()
+                # note: the code above ensures that we send all followers away before creating new future
                 self.assembled_group = asyncio.Future()
 
     async def _request_join_potential_leaders(self, timeout: Optional[float]) -> AllReduceRunner:
@@ -231,7 +236,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         await asyncio.wait_for(self.cond_notify_followers.wait(), timeout=timeout)
                 except (asyncio.TimeoutError, asyncio.CancelledError, RuntimeError):
                     async with self.lock_request_join_group:
-                        if current_group_future.cancelled() or current_group_future is not self.assembled_group:
+                        if self.assembled_group is not current_group_future:
+                            print('!!!!!!!2')
+                        if current_group_future.cancelled():
                             print(end=f'P{self.endpoint[-2:]} - disbanding P{request.endpoint[-2:]} from group [2] '
                                       f'{current_group_future.cancelled()}{current_group_future is not self.assembled_group}\n')
                             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.CANCELLED)
@@ -244,6 +251,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         else:
                             await self.leader_disband_group()
 
+            if self.assembled_group is not current_group_future:
+                print('!!!!!!!1')
             if current_group_future.cancelled() or not current_group_future.done() or\
                     request.endpoint not in current_group_future.result():
                 print(end=f'P{self.endpoint[-2:]} - disbanding P{request.endpoint[-2:]} from group '
@@ -268,6 +277,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         finally:  # note: this code is guaranteed to run even if the coroutine is destroyed prematurely
             self.current_followers.discard(request.endpoint)
+            async with self.cond_request_finished:
+                self.cond_request_finished.notify()
 
     def _check_reasons_to_reject(self, request: averaging_pb2.JoinRequest) -> Optional[averaging_pb2.MessageFromLeader]:
         """ :returns: if accepted, return None, otherwise return a reason for rejection """
