@@ -150,7 +150,6 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
     async def rpc_aggregate_part(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
         """ a groupmate sends us a part of his tensor; we should average it with other peers and return the result """
         if request.group_id != self.group_id:
-            print(end=f'P{self.endpoint[-2:]} - was given wrong group id inside allreduce!!!! WTF?!\n')
             return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
 
         if request.code == averaging_pb2.PART_FOR_AVERAGING:

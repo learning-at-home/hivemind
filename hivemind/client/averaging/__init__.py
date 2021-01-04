@@ -15,7 +15,8 @@ import grpc
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
 from hivemind.client.averaging.matchmaking import Matchmaking
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, switch_to_uvloop
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, switch_to_uvloop, \
+    get_dht_time
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 # flavour types
@@ -155,40 +156,47 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
-    def step(self, timeout: Optional[float] = None, return_future=False) -> Union[Sequence[torch.Tensor], MPFuture]:
+    def step(self, allow_retries: bool = True, timeout: Optional[float] = None,
+             return_future=False) -> Union[Sequence[torch.Tensor], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, then return the averaged tensors
-
+        :param allow_retries: if averager fails to run one round of allreduce, this option will allow it to try again
+          within the specified timeout
         :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failedK
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_step', [], dict(future=_future, timeout=timeout)))
+        self.pipe.send(('_step', [], dict(future=_future, allow_retries=allow_retries, timeout=timeout)))
         return future if return_future else future.result()
 
-    async def _step(self, *, future: MPFuture, timeout: Optional[float]):
+    async def _step(self, *, future: MPFuture, allow_retries: bool, timeout: Optional[float]):
+        start_time = get_dht_time()
         group_id = None
         try:
             self._pending_group_assembled.clear()
             allreduce_group = await self._matchmaking.look_for_group(timeout=timeout)
-            if allreduce_group is not None:
-                group_id = allreduce_group.group_id
-                self._running_groups[group_id] = allreduce_group
-                print(end=f'P{self.endpoint[-2:]} - registered group {group_id[:4].decode()}\n')
+            if allreduce_group is None:
+                raise AllreduceException("Averaging step failed: could not find a group.")
+
+            group_id = allreduce_group.group_id
+            self._running_groups[group_id] = allreduce_group
+            self._pending_group_assembled.set()
+            future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
+
+        except AllreduceException:
+            time_left = timeout - get_dht_time() + start_time if timeout is not None else None
+            if allow_retries and timeout is None or time_left > 0:
                 self._pending_group_assembled.set()
-                future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
+                _ = self._running_groups.pop(group_id, None)
+                return await self._step(future=future, allow_retries=allow_retries, timeout=time_left)
             else:
                 future.set_result(None)
-
         except Exception as e:
-            if not future.done():
-                future.set_exception(e)
+            future.set_exception(e)
             raise
         finally:
             self._pending_group_assembled.set()
-            if group_id is not None:
-                _ = self._running_groups.pop(group_id, None)
-                print(end=f'P{self.endpoint[-2:]} - removed group {group_id[:4].decode()}\n')
+            _ = self._running_groups.pop(group_id, None)
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
@@ -203,7 +211,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             # but his response with group_id was delayed and other peers got to us first
             await self._pending_group_assembled.wait()
         if request.group_id not in self._running_groups:
-            print(end=f'P{self.endpoint[-2:]} - was given unknown group_id {request.group_id[:4].decode()} from P{request.endpoint[-2:]}\n')
             return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
         else:
             return await self._running_groups[request.group_id].rpc_aggregate_part(request, context)
