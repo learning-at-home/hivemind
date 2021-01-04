@@ -218,7 +218,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if reason_to_reject is not None:
                     yield reason_to_reject
                     print(end=f'P{self.endpoint[-2:]} - rejected {request.endpoint} with'
-                              f' {averaging_pb2.MessageCode.Name(reason_to_reject)} \n', flush=True)
+                              f' {averaging_pb2.MessageCode.Name(reason_to_reject.code)} \n', flush=True)
                     return
 
                 self.current_followers.add(request.endpoint)
