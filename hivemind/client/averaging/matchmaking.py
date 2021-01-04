@@ -19,12 +19,6 @@ from hivemind.utils import get_logger, Endpoint, TensorDescriptor, MSGPackSerial
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils.grpc import ChannelCache
 
-_print = print
-def print(end, *, flush):
-    with open('./log', 'a') as f:
-        f.write(end)
-
-
 logger = get_logger(__file__)
 
 
@@ -132,15 +126,12 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             while True:
                 try:
                     next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration
-                    print(end=f'P{self.endpoint[-2:]} - asking {next_leader}, '
-                              f'queue size = {len(self.potential_leaders.leader_queue)}\n', flush=True)
 
                     group = await self.request_join_group(next_leader, self.potential_leaders.request_expiration_time)
                     if group is not None:
                         return group
 
                 except asyncio.TimeoutError:
-                    print(end=f"T", flush=True)
                     async with self.lock_request_join_group:
                         if self.assembled_group.done():
                             return self.assembled_group.result()
@@ -152,7 +143,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             # TODO maybe adjust grid size
                         continue
                 except Exception as e:
-                    print(end=f"F", flush=True)
                     if not self.assembled_group.done():
                         self.assembled_group.set_exception(e)
                     raise e
@@ -206,7 +196,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
             return None
         except asyncio.TimeoutError:
-            print(end=f'P{self.endpoint[-2:]} - timeout awaiting response from {leader} \n', flush=True)
             logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
             return None
         finally:
@@ -220,13 +209,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
                     yield reason_to_reject
-                    print(end=f'P{self.endpoint[-2:]} - rejected {request.endpoint} with'
-                              f' {averaging_pb2.MessageCode.Name(reason_to_reject.code)} \n', flush=True)
                     return
 
                 self.current_followers.add(request.endpoint)
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
-                print(end=f'P{self.endpoint[-2:]} - accepted {request.endpoint} \n', flush=True)
 
                 if len(self.current_followers) + 1 >= self.target_group_size and not self.assembled_group.done():
                     # outcome 1: we have assembled a full group and are ready for allreduce
@@ -260,13 +246,11 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     return
 
             allreduce_group = self.assembled_group.result()
-            print(end='+', flush=True)
             yield averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
                 ordered_group_endpoints=allreduce_group.ordered_group_endpoints)
 
         except Exception as e:
-            print(end='E', flush=True)
             logger.exception(e)
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
 
@@ -433,7 +417,6 @@ class PotentialLeaders:
                 self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
                 self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
 
-            print(end=f'P{self.endpoint[-2:]} - updated queue, found={len(new_peers)}, queue={len(self.leader_queue)}\n', flush=True)
             self.update_finished.set()
 
             await asyncio.wait(
@@ -452,7 +435,6 @@ class PotentialLeaders:
                     self.declared_new_expiration.set()
                     await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
                                                     looking_for_group=True, return_future=True)
-                    print(end='D', flush=True)
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
             except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
                 logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
