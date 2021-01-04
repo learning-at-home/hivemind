@@ -56,8 +56,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         self.lock_looking_for_group = asyncio.Lock()
         self.lock_request_join_group = asyncio.Lock()
-        self.cond_notify_followers = asyncio.Condition()
         self.cond_follower_discarded = asyncio.Condition()
+        self.was_accepted_to_group = asyncio.Event()
         self.assembled_group = asyncio.Future()
 
         self.current_leader: Optional[Endpoint] = None  # iff i am a follower, this is a link to my current leader
@@ -116,6 +116,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         await self.cond_follower_discarded.wait()
                 # note: the code above ensures that we send all followers away before creating new future
                 self.assembled_group = asyncio.Future()
+                self.was_accepted_to_group.clear()
 
     async def _request_join_potential_leaders(self, timeout: Optional[float]) -> AllReduceRunner:
         """ Request leaders from queue until we find the first runner. This coroutine is meant to run in background. """
@@ -168,6 +169,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if message.code == averaging_pb2.ACCEPTED:
                     logger.debug(f"{self.endpoint} - joining the group of {leader}; waiting for peers")
                     self.current_leader = leader
+                    self.was_accepted_to_group.set()
                     if len(self.current_followers) > 0:
                         await self.leader_disband_group()
 
@@ -203,6 +205,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
             return None
         finally:
+            self.was_accepted_to_group.clear()
             self.current_leader = None
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
@@ -222,29 +225,21 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     # outcome 1: we have assembled a full group and are ready for allreduce
                     await self.leader_assemble_group()
 
-            if not self.assembled_group.done():
-                try:
-                    async with self.cond_notify_followers:
-                        # wait for the group to be assembled or disbanded
-                        timeout = max(0.0, self.potential_leaders.declared_expiration_time - get_dht_time())
-                        await asyncio.wait_for(self.cond_notify_followers.wait(), timeout=timeout)
-                except RuntimeError:
-                    print(end='!!>\n')
-                    return
-                except asyncio.CancelledError:
-                    print(end='!!C\n')
-                    return
-                except asyncio.TimeoutError:
-                    async with self.lock_request_join_group:
-                        if self.assembled_group.done():
-                            pass  # this covers a rare case when the group is assembled while the event loop was busy.
-                        elif len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
-                            # outcome 2: the time is up, run allreduce with what we have or disband
-                            await self.leader_assemble_group()
-                        else:
-                            await self.leader_disband_group()
+            # wait for the group to be assembled or disbanded
+            timeout = max(0.0, self.potential_leaders.declared_expiration_time - get_dht_time())
+            await asyncio.wait({self.assembled_group, self.was_accepted_to_group.wait()},
+                               return_when=asyncio.FIRST_COMPLETED, timeout=timeout)
+            if not self.assembled_group:
+                async with self.lock_request_join_group:
+                    if self.assembled_group.done():
+                        pass  # this covers a rare case when the group is assembled while the event loop was busy.
+                    elif len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
+                        # outcome 2: the time is up, run allreduce with what we have or disband
+                        await self.leader_assemble_group()
+                    else:
+                        await self.leader_disband_group()
 
-            if self.assembled_group.cancelled() or not self.assembled_group.done() or\
+            if self.assembled_group.cancelled() or not self.assembled_group.done() or \
                     request.endpoint not in self.assembled_group.result():
                 if self.current_leader is not None:
                     # outcome 3: found by a leader with higher priority, send our followers to him
@@ -308,8 +303,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
         self.assembled_group.set_result(allreduce_group)
-        async with self.cond_notify_followers:
-            self.cond_notify_followers.notify_all()
         return allreduce_group
 
     async def follower_assemble_group(self, leader: Endpoint, group_id: GroupID,
@@ -324,16 +317,12 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
         self.assembled_group.set_result(allreduce_group)
-        async with self.cond_notify_followers:
-            self.cond_notify_followers.notify_all()
         return allreduce_group
 
     async def leader_disband_group(self):
         """ Kick out all followers immediately, optionally direct them to our new leader (if we found one) """
         assert self.lock_request_join_group.locked()
         self.current_followers.clear()  # this will cause rpc_join_group to kick all followers out
-        async with self.cond_notify_followers:
-            self.cond_notify_followers.notify_all()
 
 
 class PotentialLeaders:
