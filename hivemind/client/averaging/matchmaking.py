@@ -157,7 +157,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
           The originally specified leader can disband group and redirect us to a different leader
         """
         assert self.is_looking_for_group and self.current_leader is None
-        call = Optional[grpc.aio.UnaryStreamCall] = None
+        call: Optional[grpc.aio.UnaryStreamCall] = None
         try:
             async with self.lock_request_join_group:
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
