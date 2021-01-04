@@ -527,4 +527,5 @@ class DHT(mp.Process):
                          if not only_active or entry.value is True]
             future.set_result(averagers)
         except Exception as e:
-            future.set_exception(e)
+            if not future.done():
+                future.set_exception(e)
