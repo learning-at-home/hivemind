@@ -289,7 +289,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         ordered_group_endpoints.append(self.endpoint)
         random.shuffle(ordered_group_endpoints)
         logger.debug(f"{self.endpoint} - leader started allreduce for {len(ordered_group_endpoints)} peers.")
-        print(end=f'P{self.endpoint[-2:]} - assembled group {group_id[:4]}: '
+        print(end=f'P{self.endpoint[-2:]} - assembled group {group_id[:4].decode()}: '
                   f'{",".join(["P" + e[-2:] for e in ordered_group_endpoints])}\n')
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
@@ -307,7 +307,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
-        print(end=f'P{self.endpoint[-2:]} - following group {group_id[:4]}')
+        print(end=f'P{self.endpoint[-2:]} - following group {group_id[:4].decode()}\n')
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
