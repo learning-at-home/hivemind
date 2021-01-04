@@ -219,6 +219,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         try:
             async with lock:
                 t1 = time.time()
+                yield
                 if t1 - t0 > 1:
                     print(f"\nP{self.endpoint[-2:]} - awaited for {t1 - t0:.3f}s\n")
         finally:
