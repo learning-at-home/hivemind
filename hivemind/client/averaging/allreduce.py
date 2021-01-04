@@ -158,7 +158,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                 averaged_part = await self.accumulate_part(request.endpoint, tensor_part)
                 serialized = serialize_torch_tensor(averaged_part, request.tensor_part.compression, allow_inplace=False)
                 return averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized)
-            except BaseException as e:
+            except Exception as e:
                 self.set_exception(e)
                 return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
         else:
