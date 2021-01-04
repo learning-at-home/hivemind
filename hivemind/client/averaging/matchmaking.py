@@ -154,6 +154,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """
         assert self.is_looking_for_group and self.current_leader is None
         try:
+            call: Optional[grpc.aio.UnaryStreamCall] = None
+            call.
             async with self.lock_request_join_group:
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
@@ -168,6 +170,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
                 # else: we were accepted
                 logger.debug(f"{self.endpoint} - joining the group of {leader}; waiting for peers")
+                print(end=f"P{self.endpoint[-2:]} - accepted by P{leader[-2:]}\n")
                 self.current_leader = leader
                 if len(self.current_followers) > 0:
                     await self.leader_disband_group()
@@ -183,18 +186,25 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 if message.suggested_leader and message.suggested_leader != self.endpoint:
                     logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
                     self.current_leader = None
+                    call.cancel()
+                    print(end=f"P{self.endpoint[-2:]} - left P{leader[-2:]} via redirect\n")
                     return await self.request_join_group(message.suggested_leader, expiration_time)
                 else:
                     logger.debug(f"{self} - leader disbanded group")
+                    print(end=f"P{self.endpoint[-2:]} - left P{leader[-2:]} via leader disbanded group\n")
                     return None
             else:
                 logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
+                print(end=f"P{self.endpoint[-2:]} - left P{leader[-2:]} via unexpected message from leader\n")
                 return None
         except asyncio.TimeoutError:
             logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
+            print(end=f"P{self.endpoint[-2:]} - left P{leader[-2:]} via timeout\n")
             return None
         finally:
             self.current_leader = None
+            if call is not None and not call.done():
+                call.cancel()
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
@@ -284,7 +294,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
         assert not self.assembled_group.done()
         import uuid #TODO REMOVE
-        group_id = str(uuid.uuid1())[:8].encode() #DHTID.generate().to_bytes()
+        group_id = str(uuid.uuid1()).encode() #DHTID.generate().to_bytes()
         ordered_group_endpoints = list(self.current_followers)
         ordered_group_endpoints.append(self.endpoint)
         random.shuffle(ordered_group_endpoints)
