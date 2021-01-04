@@ -183,8 +183,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             if message.code != averaging_pb2.ACCEPTED:
                 code = averaging_pb2.MessageCode.Name(message.code)
                 logger.debug(f"{self.endpoint} - requested {leader} to be my leader, but got rejected with {code}")
-                if message.suggested_leader and message.suggested_leader != self.endpoint:
-                    return await self.request_join_group(message.suggested_leader, expiration_time)
                 return None
 
             async with self.potential_leaders.pause_search():
@@ -294,8 +292,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         elif self.potential_leaders.declared_expiration_time > (request.expiration or float('inf')):
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
         elif self.current_leader is not None:
-            return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER,
-                                                   suggested_leader=self.current_leader)
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER, suggested_leader=self.current_leader
+                                                   ) # note: this suggested leader is currently ignored
         elif request.endpoint == self.endpoint or request.endpoint in self.current_followers:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
         elif len(self.current_followers) + 1 >= self.target_group_size:
