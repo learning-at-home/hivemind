@@ -228,7 +228,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         # wait for the group to be assembled or disbanded
                         timeout = max(0.0, self.potential_leaders.declared_expiration_time - get_dht_time())
                         await asyncio.wait_for(self.cond_notify_followers.wait(), timeout=timeout)
-                except (asyncio.TimeoutError, RuntimeError):
+                except RuntimeError:
+                    print(end='!!>\n')
+                    return
+                except asyncio.TimeoutError:
                     async with self.lock_request_join_group:
                         if self.assembled_group.done():
                             pass  # this covers a rare case when the group is assembled while the event loop was busy.
