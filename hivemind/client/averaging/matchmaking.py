@@ -219,10 +219,12 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
                     yield reason_to_reject
+                    print(end='R')
                     return
 
                 self.current_followers.add(request.endpoint)
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
+                print(end='A')
 
                 if len(self.current_followers) + 1 >= self.target_group_size and not self.assembled_group.done():
                     # outcome 1: we have assembled a full group and are ready for allreduce
@@ -256,6 +258,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     return
 
             allreduce_group = self.assembled_group.result()
+            print(end='+')
             yield averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
                 ordered_group_endpoints=allreduce_group.ordered_group_endpoints)
