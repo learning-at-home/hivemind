@@ -220,12 +220,11 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         # wait for the group to be assembled or disbanded
                         timeout = max(0.0, self.potential_leaders.declared_expiration_time - get_dht_time())
                         await asyncio.wait_for(self.cond_notify_followers.wait(), timeout=timeout)
-                except asyncio.CancelledError:
-                    print("!!!! THIS SHOULD NEVER HAPPEN")
-                except (asyncio.TimeoutError, RuntimeError):
+                except (asyncio.TimeoutError, asyncio.CancelledError, RuntimeError):
                     async with self.lock_request_join_group:
-                        if current_group_future.done():
-                            pass
+                        if current_group_future.done() or current_group_future is not self.assembled_group:
+                            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.CANCELLED)
+                            return
                         # outcome 2: the time is up, run allreduce with what we have or disband
                         elif len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
                             await self.leader_assemble_group()
@@ -289,7 +288,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         ordered_group_endpoints.append(self.endpoint)
         random.shuffle(ordered_group_endpoints)
         logger.debug(f"{self.endpoint} - leader started allreduce for {len(ordered_group_endpoints)} peers.")
-        print(end=f'P{self.endpoint[-2:]} - assembled group: {",".join(["P" + e[-2:] for e in ordered_group_endpoints])}\n')
+        print(end=f'P{self.endpoint[-2:]} - assembled group {group_id[:4]}: '
+                  f'{",".join(["P" + e[-2:] for e in ordered_group_endpoints])}\n')
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
@@ -306,6 +306,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
+        print(end=f'P{self.endpoint[-2:]} - following group {group_id[:4]}')
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
             ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)

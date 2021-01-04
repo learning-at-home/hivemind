@@ -174,6 +174,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             if allreduce_group is not None:
                 group_id = allreduce_group.group_id
                 self._running_groups[group_id] = allreduce_group
+                print(end=f'P{self.endpoint[-2:]} - registered group {group_id[:4]}')
                 self._pending_group_assembled.set()
                 future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
             else:
@@ -187,6 +188,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self._pending_group_assembled.set()
             if group_id is not None:
                 _ = self._running_groups.pop(group_id, None)
+                print(end=f'P{self.endpoint[-2:]} - removed group {group_id[:4]}')
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
