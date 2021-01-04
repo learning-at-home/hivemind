@@ -136,6 +136,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         return group
 
                 except asyncio.TimeoutError:
+                    print(end=f"T")
                     async with self.lock_request_join_group:
                         if self.assembled_group.done():
                             return self.assembled_group.result()
@@ -147,6 +148,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             # TODO maybe adjust grid size
                         continue
                 except Exception as e:
+                    print(end=f"F")
                     if not self.assembled_group.done():
                         self.assembled_group.set_exception(e)
                     raise e
@@ -204,6 +206,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
             return None
         except asyncio.TimeoutError:
+            print(end='T')
             logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
             return None
         finally:
