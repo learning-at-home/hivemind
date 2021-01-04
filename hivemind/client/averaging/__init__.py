@@ -182,10 +182,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self._running_groups[group_id] = allreduce_group
             self._pending_group_assembled.set()
             future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
-            print(end=f"P{self.endpoint[-2:]} - success\n")
+            print(end=f"P{self.endpoint[-2:]} - success\n", flush=True)
 
         except AllreduceException:
-            print(end=f"P{self.endpoint[-2:]} - allreduce failed\n")
+            print(end=f"P{self.endpoint[-2:]} - allreduce failed\n", flush=True)
             time_left = timeout - get_dht_time() + start_time if timeout is not None else None
             if allow_retries and timeout is None or time_left > 0:
                 _ = self._running_groups.pop(group_id, None)
