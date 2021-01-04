@@ -177,10 +177,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 self._pending_group_assembled.set()
                 future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
             else:
-                raise AllreduceException(f"{self} - group_allreduce failed, unable to find a group")
+                future.set_result(None)
 
-        except BaseException as e:
-            future.set_exception(e)
+        except Exception as e:
+            if not future.done():
+                future.set_exception(e)
             raise
         finally:
             self._pending_group_assembled.set()
