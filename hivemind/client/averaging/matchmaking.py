@@ -249,6 +249,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             await self.leader_assemble_group()
                         else:
                             await self.leader_disband_group()
+                except (asyncio.CancelledError, RuntimeError):
+                    return  # mitigate "lock is not acquired" error
 
             if self.assembled_group.cancelled() or not self.assembled_group.done() or\
                     request.endpoint not in self.assembled_group.result():
