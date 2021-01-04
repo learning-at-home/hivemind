@@ -415,6 +415,7 @@ class PotentialLeaders:
             new_peers = await self.dht.get_averagers(group_key, only_active=True, return_future=True)
             self.max_assured_time = max(self.max_assured_time, get_dht_time() + self.averaging_expiration - DISCREPANCY)
 
+            self.leader_queue.clear()
             for peer, peer_expiration_time in new_peers:
                 if peer == self.endpoint or (peer, peer_expiration_time) in self.past_attempts:
                     continue
