@@ -427,7 +427,10 @@ class PotentialLeaders:
                     continue
                 self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
                 self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
-            print(end='U', flush=True)
+            if len(self.leader_queue) > 0:
+                print(end='U', flush=True)
+            else:
+                print(end='Uf', flush=True)
 
             self.update_finished.set()
 
