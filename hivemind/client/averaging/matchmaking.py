@@ -183,10 +183,12 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 time_to_expiration = max(expiration_time - get_dht_time(), 0.0)
                 message = await asyncio.wait_for(call.read(), time_to_expiration + self.request_timeout)
 
-            if message.code == averaging_pb2.BEGIN_ALLREDUCE:
-                async with self.lock_request_join_group:
-                    return await self.follower_assemble_group(leader, message.group_id, message.ordered_group_endpoints)
-            elif message.code in (averaging_pb2.GROUP_DISBANDED, averaging_pb2.CANCELLED):
+                if message.code == averaging_pb2.BEGIN_ALLREDUCE:
+                    async with self.lock_request_join_group:
+                        return await self.follower_assemble_group(
+                            leader, message.group_id, message.ordered_group_endpoints)
+
+            if message.code in (averaging_pb2.GROUP_DISBANDED, averaging_pb2.CANCELLED):
                 if message.suggested_leader and message.suggested_leader != self.endpoint:
                     logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
                     self.current_leader = None
@@ -195,9 +197,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 else:
                     logger.debug(f"{self} - leader disbanded group")
                     return None
-            else:
-                logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
-                return None
+
+            logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
+            return None
         except asyncio.TimeoutError:
             logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
             return None
