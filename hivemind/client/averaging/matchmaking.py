@@ -129,7 +129,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             while True:
                 try:
                     next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration
-                    print(end=f"P{self.endpoint[-2:]} - asking {next_leader}\n")
+                    print(end=f".")
 
                     group = await self.request_join_group(next_leader, self.potential_leaders.request_expiration_time)
                     if group is not None:
