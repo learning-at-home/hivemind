@@ -496,7 +496,8 @@ class DHT(mp.Process):
                 key=group_key, subkey=endpoint, value=looking_for_group, expiration_time=expiration_time)
             future.set_result(store_ok)
         except Exception as e:
-            future.set_exception(e)
+            if not future.done():
+                future.set_exception(e)
 
     def get_averagers(self, group_key: GroupKey, *, only_active: bool = True, return_future: bool = False
                       ) -> Union[List[Tuple[Endpoint, DHTExpiration]], MPFuture]:
