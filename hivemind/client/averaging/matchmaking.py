@@ -207,7 +207,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             if call is not None:
                 asyncio.create_task(self._wait_for_completion(call))
     async def _wait_for_completion(self, call: grpc.aio.UnaryStreamCall):
-        async for msg in call:
+        while (await call.read()) != grpc.aio.EOF:
             pass
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
