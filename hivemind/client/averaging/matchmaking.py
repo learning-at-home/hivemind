@@ -166,7 +166,11 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
 
-                message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
+                try:
+                    message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
+                except asyncio.TimeoutError:
+                    print(f'P{self.endpoint[-2:]} timeout requesting {leader}')
+                    raise
 
                 if message.code != averaging_pb2.ACCEPTED:
                     code = averaging_pb2.MessageCode.Name(message.code)
@@ -183,11 +187,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
             async with self.potential_leaders.pause_search():
                 time_to_expiration = max(expiration_time - get_dht_time(), 0.0)
-                try:
-                    message = await asyncio.wait_for(call.read(), time_to_expiration + self.request_timeout)
-                except asyncio.TimeoutError:
-                    print(end='Taw', flush=True)
-                    raise
+                message = await asyncio.wait_for(call.read(), time_to_expiration + self.request_timeout)
 
                 if message.code == averaging_pb2.BEGIN_ALLREDUCE:
                     async with self.lock_request_join_group:
