@@ -181,7 +181,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             if message.code == averaging_pb2.BEGIN_ALLREDUCE:
                 async with self.lock_request_join_group:
                     return await self.follower_assemble_group(leader, message.group_id, message.ordered_group_endpoints)
-            elif message.code == averaging_pb2.GROUP_DISBANDED:
+            elif message.code in (averaging_pb2.GROUP_DISBANDED, averaging_pb2.CANCELLED):
                 if message.suggested_leader and message.suggested_leader != self.endpoint:
                     logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
                     self.current_leader = None
@@ -231,14 +231,16 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         await asyncio.wait_for(self.cond_notify_followers.wait(), timeout=timeout)
                 except (asyncio.TimeoutError, asyncio.CancelledError, RuntimeError):
                     async with self.lock_request_join_group:
-                        if current_group_future.done() or current_group_future is not self.assembled_group:
+                        if current_group_future.done():
+                            pass
+                        # outcome 2: the time is up, run allreduce with what we have or disband
+                        if len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
+                            await self.leader_assemble_group()
+                        elif current_group_future is self.assembled_group:
+                            await self.leader_disband_group()
+                        else:
                             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.CANCELLED)
                             return
-                        # outcome 2: the time is up, run allreduce with what we have or disband
-                        elif len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
-                            await self.leader_assemble_group()
-                        else:
-                            await self.leader_disband_group()
 
             if not current_group_future.done() or request.endpoint not in current_group_future.result():
                 if self.current_leader is not None:
