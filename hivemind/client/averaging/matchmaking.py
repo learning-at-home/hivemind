@@ -261,6 +261,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     return
 
             allreduce_group = self.assembled_group.result()
+            print(end=f"P{self.endpoint[-2:]} - triggered allreduce for P{request.endpoint[-2:]}\n")
             yield averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
                 ordered_group_endpoints=allreduce_group.ordered_group_endpoints)
@@ -272,6 +273,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         finally:  # note: this code is guaranteed to run even if the coroutine is destroyed prematurely
             self.current_followers.discard(request.endpoint)
             self.follower_was_discarded.set()
+            print(end=f"P{self.endpoint[-2:]} - finished processing P{request.endpoint[-2:]}\n")
 
     def _check_reasons_to_reject(self, request: averaging_pb2.JoinRequest) -> Optional[averaging_pb2.MessageFromLeader]:
         """ :returns: if accepted, return None, otherwise return a reason for rejection """
