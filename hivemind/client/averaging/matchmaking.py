@@ -195,6 +195,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             if message.code in (averaging_pb2.GROUP_DISBANDED, averaging_pb2.CANCELLED):
                 if message.suggested_leader and message.suggested_leader != self.endpoint:
                     logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
+                    self.was_accepted_to_group.clear()
+                    self.current_leader = None
                     asyncio.create_task(_end_call())
                     return await self.request_join_group(message.suggested_leader, expiration_time)
                 else:
