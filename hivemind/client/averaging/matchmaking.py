@@ -159,10 +159,12 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         assert self.is_looking_for_group and self.current_leader is None
         call: Optional[grpc.aio.UnaryStreamCall] = None
 
-        async def _end_call():
+        def _finish():
+            self.was_accepted_to_group.clear()
+            self.current_leader = None
             if call is not None and not call.cancelled():
                 call.cancel()
-                await asyncio.gather(call.code(), call.trailing_metadata())
+                asyncio.create_task(asyncio.gather(call.code(), call.trailing_metadata()))
 
         try:
             async with self.lock_request_join_group:
@@ -195,9 +197,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             if message.code in (averaging_pb2.GROUP_DISBANDED, averaging_pb2.CANCELLED):
                 if message.suggested_leader and message.suggested_leader != self.endpoint:
                     logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
-                    self.was_accepted_to_group.clear()
-                    self.current_leader = None
-                    asyncio.create_task(_end_call())
+                    _finish()
                     return await self.request_join_group(message.suggested_leader, expiration_time)
                 else:
                     logger.debug(f"{self} - leader disbanded group")
@@ -211,7 +211,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         finally:
             self.was_accepted_to_group.clear()
             self.current_leader = None
-            asyncio.create_task(_end_call())
+            _finish()
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
