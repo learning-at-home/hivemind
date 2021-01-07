@@ -209,8 +209,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             return None
         finally:
-            self.was_accepted_to_group.clear()
-            self.current_leader = None
             await _finish(call)
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
