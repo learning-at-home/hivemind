@@ -199,7 +199,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
             return None
         except asyncio.TimeoutError:
-            logger.debug(f"{self} - leader did not respond within {self.request_timeout}")
+            logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             if call is not None:
                 call.cancel()
             return None
