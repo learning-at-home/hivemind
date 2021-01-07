@@ -164,7 +164,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             self.current_leader = None
             if call is not None and not call.cancelled():
                 call.cancel()
-                asyncio.create_task(asyncio.gather(call.code(), call.trailing_metadata()))
+                asyncio.create_task(call.code())
 
         try:
             async with self.lock_request_join_group:
