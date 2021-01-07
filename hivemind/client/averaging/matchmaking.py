@@ -165,7 +165,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 self.was_accepted_to_group.clear()
                 self.current_leader = None
                 call.cancel()
-                await call.code()
+                await asyncio.gather(call.code(), call.trailing_metadata())
                 call = None
 
         try:
