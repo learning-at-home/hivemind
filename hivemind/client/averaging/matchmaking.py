@@ -160,10 +160,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         call: Optional[grpc.aio.UnaryStreamCall] = None
 
         async def _end_call():
-            nonlocal call
-            if call is not None:
-                self.was_accepted_to_group.clear()
-                self.current_leader = None
+            if call is not None and not call.cancelled():
                 call.cancel()
                 await asyncio.gather(call.code(), call.trailing_metadata())
 
@@ -210,6 +207,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             return None
         finally:
+            self.was_accepted_to_group.clear()
+            self.current_leader = None
             asyncio.create_task(_end_call())
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
