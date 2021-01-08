@@ -332,7 +332,7 @@ class PotentialLeaders:
         self.endpoint, self.dht, self.averaging_expiration = endpoint, dht, averaging_expiration
         self.target_group_size = target_group_size
         self.running, self.update_triggered, self.update_finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
-        self.declared_new_expiration, self.lock_declare_expiration = asyncio.Event(), asyncio.Lock()
+        self.declared_expiration, self.lock_search, self.lock_declare = asyncio.Event(), asyncio.Lock(), asyncio.Lock()
         self.leader_queue = TimedStorage[Endpoint, DHTExpiration]()
         self.past_attempts: Set[Tuple[Endpoint, DHTExpiration]] = set()
         self.declared_expiration_time = float('inf')
@@ -342,23 +342,23 @@ class PotentialLeaders:
 
     @contextlib.asynccontextmanager
     async def begin_search(self, group_key: GroupKey, timeout: Optional[float]):
-        assert not self.running.is_set(), "already running"
-        self.running.set()
-        self.search_end_time = get_dht_time() + timeout if timeout is not None else float('inf')
-        update_queue_task = asyncio.create_task(self._update_queue_periodically(group_key))
-        declare_averager_task = asyncio.create_task(self._declare_averager_periodically(group_key))
-        try:
-            yield self
-        finally:
-            if not update_queue_task.done():
-                update_queue_task.cancel()
-            if not declare_averager_task.done():
-                declare_averager_task.cancel()
-            for field in (self.past_attempts, self.leader_queue, self.running,
-                          self.update_finished, self.update_triggered, self.declared_new_expiration):
-                field.clear()
-            self.max_assured_time = float('-inf')
-            self.search_end_time = float('inf')
+        async with self.lock_search:
+            self.running.set()
+            self.search_end_time = get_dht_time() + timeout if timeout is not None else float('inf')
+            update_queue_task = asyncio.create_task(self._update_queue_periodically(group_key))
+            declare_averager_task = asyncio.create_task(self._declare_averager_periodically(group_key))
+            try:
+                yield self
+            finally:
+                if not update_queue_task.done():
+                    update_queue_task.cancel()
+                if not declare_averager_task.done():
+                    declare_averager_task.cancel()
+                for field in (self.past_attempts, self.leader_queue, self.running,
+                              self.update_finished, self.update_triggered, self.declared_expiration):
+                    field.clear()
+                self.max_assured_time = float('-inf')
+                self.search_end_time = float('inf')
 
     @contextlib.asynccontextmanager
     async def pause_search(self):
@@ -382,9 +382,9 @@ class PotentialLeaders:
                 self.update_triggered.set()
 
             if maybe_next_leader is None or entry.expiration_time >= self.declared_expiration_time:
-                await asyncio.wait({self.update_finished.wait(), self.declared_new_expiration.wait()},
+                await asyncio.wait({self.update_finished.wait(), self.declared_expiration.wait()},
                                    return_when=asyncio.FIRST_COMPLETED)
-                self.declared_new_expiration.clear()
+                self.declared_expiration.clear()
                 if self.update_finished.is_set():
                     self.update_finished.clear()
                     continue
@@ -424,14 +424,14 @@ class PotentialLeaders:
             self.update_triggered.clear()
 
     async def _declare_averager_periodically(self, group_key: GroupKey):
-        async with self.lock_declare_expiration:
+        async with self.lock_declare:
             try:
                 while True:
                     await self.running.wait()
 
                     new_expiration_time = min(get_dht_time() + self.averaging_expiration, self.search_end_time)
                     self.declared_group_key, self.declared_expiration_time = group_key, new_expiration_time
-                    self.declared_new_expiration.set()
+                    self.declared_expiration.set()
                     await self.dht.declare_averager(group_key, self.endpoint, new_expiration_time,
                                                     looking_for_group=True, return_future=True)
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
