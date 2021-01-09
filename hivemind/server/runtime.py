@@ -1,13 +1,13 @@
 import multiprocessing as mp
 import multiprocessing.pool
 import threading
-from itertools import chain
-from selectors import DefaultSelector, EVENT_READ
-from typing import Dict, DefaultDict, NamedTuple
 from collections import defaultdict
-from time import time
+from itertools import chain
 from queue import SimpleQueue
+from selectors import DefaultSelector, EVENT_READ
 from statistics import mean
+from time import time
+from typing import Dict, NamedTuple
 
 import torch
 from prefetch_generator import BackgroundGenerator
@@ -120,16 +120,6 @@ class Runtime(threading.Thread):
                 yield pool, batch_index, batch_tensors
 
 
-def report_stats(stats: DefaultDict[str, list], stats_write_lock: threading.Lock, report_interval: int):
-    total_processed_batches = sum(len(pool_stats) for pool_stats in stats.values())
-    logger.info(f'Processed {total_processed_batches} batches in last {report_interval} seconds:')
-    for pool_uid, pool_stats in stats.items():
-        logger.info(f'{pool_uid}: {len(pool_stats)} batches, {sum(pool_stats)} examples')
-
-    with stats_write_lock:
-        stats.clear()
-
-
 BatchStats = NamedTuple('BatchStats', (('batch_size', int), ('processing_time', float)))
 
 
@@ -168,4 +158,4 @@ class StatsReporter(threading.Thread):
 
     def report_stats(self, pool_uid, batch_size, processing_time):
         batch_stats = BatchStats(batch_size, processing_time)
-        self.stats_queue.put((pool_uid, batch_stats))
+        self.stats_queue.put_nowait((pool_uid, batch_stats))
