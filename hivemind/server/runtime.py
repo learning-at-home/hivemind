@@ -6,6 +6,7 @@ from selectors import DefaultSelector, EVENT_READ
 from typing import Dict, DefaultDict, NamedTuple
 from collections import defaultdict
 from time import time
+from queue import SimpleQueue
 from statistics import mean
 
 import torch
@@ -40,7 +41,7 @@ class Runtime(threading.Thread):
     """
 
     def __init__(self, expert_backends: Dict[str, ExpertBackend], prefetch_batches=64, sender_threads: int = 1,
-                 device: torch.device = None, stats_report_interval=5):
+                 device: torch.device = None, stats_report_interval=30):
         super().__init__()
         self.expert_backends = expert_backends
         self.pools = tuple(chain(*(expert.get_pools() for expert in expert_backends.values())))
@@ -136,34 +137,35 @@ class StatsReporter(threading.Thread):
     def __init__(self, report_interval: int):
         super().__init__()
         self.report_interval = report_interval
-        self.pool_batch_stats = defaultdict(list)
-        self.stats_write_lock = threading.Lock()
         self.stop = threading.Event()
+        self.stats_queue = SimpleQueue()
 
     def run(self):
         while not self.stop.wait(self.report_interval):
-            with self.stats_write_lock:
-                total_processed_batches = sum(len(pool_stats) for pool_stats in self.pool_batch_stats.values())
-                logger.info(f'Processed {total_processed_batches} batches in last {self.report_interval} seconds:')
-                for pool_uid, pool_stats in self.pool_batch_stats.items():
-                    total_batches = len(pool_stats)
-                    total_examples = sum(batch_stats.batch_size for batch_stats in pool_stats)
-                    avg_batch_size = mean(batch_stats.batch_size for batch_stats in pool_stats)
-                    total_time = sum(batch_stats.processing_time for batch_stats in pool_stats)
-                    batches_to_time = total_batches / total_time
-                    batch_performance = f'{batches_to_time:.2f} ' + 'batches/s' if batches_to_time > 1 else 's/batch'
+            pool_batch_stats = defaultdict(list)
+            while not self.stats_queue.empty():
+                pool_uid, batch_stats = self.stats_queue.get()
+                pool_batch_stats[pool_uid].append(batch_stats)
 
-                    examples_to_time = total_examples / total_time
-                    example_performance = f'{examples_to_time:.2f} ' + 'examples/s' if batches_to_time > 1 else 's/example'
+            total_processed_batches = sum(len(pool_stats) for pool_stats in pool_batch_stats.values())
+            logger.info(f'Processed {total_processed_batches} batches in last {self.report_interval} seconds:')
+            for pool_uid, pool_stats in pool_batch_stats.items():
+                total_batches = len(pool_stats)
+                total_examples = sum(batch_stats.batch_size for batch_stats in pool_stats)
+                avg_batch_size = mean(batch_stats.batch_size for batch_stats in pool_stats)
+                total_time = sum(batch_stats.processing_time for batch_stats in pool_stats)
+                batches_to_time = total_batches / total_time
+                batch_performance = f'{batches_to_time:.2f} ' + ('batches/s' if batches_to_time > 1 else 's/batch')
 
-                    logger.info(f'{pool_uid}: '
-                                f'{total_batches} batches ({batch_performance}), '
-                                f'{total_examples} examples ({example_performance}), '
-                                f'avg batch size {avg_batch_size:.2f}')
+                examples_to_time = total_examples / total_time
+                example_performance = f'{examples_to_time:.2f} ' + (
+                    'examples/s' if examples_to_time > 1 else 's/example')
 
-                self.pool_batch_stats.clear()
+                logger.info(f'{pool_uid}: '
+                            f'{total_batches} batches ({batch_performance}), '
+                            f'{total_examples} examples ({example_performance}), '
+                            f'avg batch size {avg_batch_size:.2f}')
 
     def report_stats(self, pool_uid, batch_size, processing_time):
         batch_stats = BatchStats(batch_size, processing_time)
-        with self.stats_write_lock:
-            self.pool_batch_stats[pool_uid].append(batch_stats)
+        self.stats_queue.put((pool_uid, batch_stats))
