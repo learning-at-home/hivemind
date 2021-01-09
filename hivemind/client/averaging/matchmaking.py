@@ -20,7 +20,7 @@ from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils.grpc import ChannelCache
 
 
-logger = get_logger(__file__)
+logger = get_logger(__name__)
 
 
 class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):

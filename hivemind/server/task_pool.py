@@ -142,55 +142,62 @@ class TaskPool(TaskPoolBase):
 
     def _pool_input_loop(self, pending_batches: Dict[Any, List[Task]], *args, **kwargs):
         """ Infinite loop: aggregate tasks into batches and send them to runtime """
-        prev_num_tasks = 0  # number of tasks currently in shared buffer
-        batch_index = max(pending_batches.keys(), default=0)
-        batch_iterator = self.iterate_minibatches(*args, **kwargs)
+        try:
+            prev_num_tasks = 0  # number of tasks currently in shared buffer
+            batch_index = max(pending_batches.keys(), default=0)
+            batch_iterator = self.iterate_minibatches(*args, **kwargs)
 
-        while True:
-            # SIDE-EFFECT - compute pool priority from timestamp of earliest undispatched task
-            # assumes that tasks are processed in the same order as they are created
-            for skip_i in range(prev_num_tasks):
-                finished_task_timestamp = self.undispatched_task_timestamps.get()  # earlier timestamp = higher priority
-                if skip_i == prev_num_tasks - 1:
-                    self.priority = finished_task_timestamp
+            while True:
+                # SIDE-EFFECT - compute pool priority from timestamp of earliest undispatched task
+                # assumes that tasks are processed in the same order as they are created
+                for skip_i in range(prev_num_tasks):
+                    finished_task_timestamp = self.undispatched_task_timestamps.get()  # earlier timestamp = higher priority
+                    if skip_i == prev_num_tasks - 1:
+                        self.priority = finished_task_timestamp
 
-            logger.debug(f"{self.uid} getting next batch")
-            batch_tasks = next(batch_iterator)
-            # save batch futures, _output_loop will deliver on them later
-            pending_batches[batch_index] = batch_tasks
+                logger.debug(f"{self.uid} getting next batch")
+                batch_tasks = next(batch_iterator)
+                # save batch futures, _output_loop will deliver on them later
+                pending_batches[batch_index] = batch_tasks
 
-            logger.debug(f"{self.uid}, batch  {batch_index}: aggregating inputs")
-            # find or create shared arrays for current batch size
-            batch_inputs = [torch.cat([task.args[i] for task in batch_tasks]) for i in range(len(batch_tasks[0].args))]
-            batch_inputs = [inp.detach().requires_grad_(inp.requires_grad).share_memory_() for inp in batch_inputs]
+                logger.debug(f"{self.uid}, batch  {batch_index}: aggregating inputs")
+                # find or create shared arrays for current batch size
+                batch_inputs = [torch.cat([task.args[i] for task in batch_tasks]) for i in
+                                range(len(batch_tasks[0].args))]
+                batch_inputs = [inp.detach().requires_grad_(inp.requires_grad).share_memory_() for inp in batch_inputs]
 
-            logger.debug(f"{self.uid}, batch {batch_index}: sending to runtime")
-            self.batch_sender.send((batch_index, batch_inputs))
-            logger.debug(f"{self.uid}, batch {batch_index}: sent to runtime")
-            prev_num_tasks = len(batch_tasks)
-            batch_index += 1
+                logger.debug(f"{self.uid}, batch {batch_index}: sending to runtime")
+                self.batch_sender.send((batch_index, batch_inputs))
+                logger.debug(f"{self.uid}, batch {batch_index}: sent to runtime")
+                prev_num_tasks = len(batch_tasks)
+                batch_index += 1
+        except KeyboardInterrupt:
+            logger.debug('Caught KeyboardInterrupt, shutting down')
 
     def _pool_output_loop(self, pending_batches: Dict[Any, List[Task]]):
         """ Infinite loop: receive results from runtime and dispatch them to task Futures """
 
-        while True:
-            logger.debug(f"{self.uid} waiting for results from runtime")
-            payload = self.outputs_receiver.recv()
-            if isinstance(payload, BaseException):
-                raise payload
-            else:
-                batch_index, batch_outputs = payload
-            logger.debug(f"{self.uid}, batch {batch_index}: got results")
+        try:
+            while True:
+                logger.debug(f"{self.uid} waiting for results from runtime")
+                payload = self.outputs_receiver.recv()
+                if isinstance(payload, BaseException):
+                    raise payload
+                else:
+                    batch_index, batch_outputs = payload
+                logger.debug(f"{self.uid}, batch {batch_index}: got results")
 
-            # split batch into partitions for individual tasks
-            batch_tasks = pending_batches.pop(batch_index)
-            task_sizes = [self.get_task_size(task) for task in batch_tasks]
-            outputs_per_task = zip(*(torch.split_with_sizes(tensor, task_sizes, dim=0) for tensor in batch_outputs))
-            logger.debug(f"{self.uid}, batch {batch_index}: sending outputs to handlers")
+                # split batch into partitions for individual tasks
+                batch_tasks = pending_batches.pop(batch_index)
+                task_sizes = [self.get_task_size(task) for task in batch_tasks]
+                outputs_per_task = zip(*(torch.split_with_sizes(tensor, task_sizes, dim=0) for tensor in batch_outputs))
+                logger.debug(f"{self.uid}, batch {batch_index}: sending outputs to handlers")
 
-            # dispatch results to futures
-            for task, task_outputs in zip(batch_tasks, outputs_per_task):
-                task.future.set_result(tuple(task_outputs))
+                # dispatch results to futures
+                for task, task_outputs in zip(batch_tasks, outputs_per_task):
+                    task.future.set_result(tuple(task_outputs))
+        except KeyboardInterrupt:
+            logger.debug(f"Caught KeyboardInterrupt, shutting down")
 
     @property
     def empty(self):
