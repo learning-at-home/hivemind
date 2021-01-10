@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 ExpertUID, ExpertPrefix, Coordinate, Score = str, str, int, float
 UidEndpoint = NamedTuple("UidEndpoint", [('uid', ExpertUID), ('endpoint', Endpoint)])
 UID_DELIMITER = '.'  # when declaring experts, DHT store all prefixes of that expert's uid, split over this prefix
-FLAT_EXPERT = -1     # grid prefix reserved for storing 1d expert uids. Used to speed up find_best_experts in 1d case.
+FLAT_EXPERT = -1  # grid prefix reserved for storing 1d expert uids. Used to speed up find_best_experts in 1d case.
 UID_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+$')  # e.g. ffn_expert.98.76.54 - prefix + some dims
 PREFIX_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))*[.]$')  # e.g. expert. or ffn.45. (ends with ".")
 #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
@@ -160,7 +160,10 @@ class DHT(mp.Process):
                 method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
                 asyncio.create_task(getattr(self, method)(node, *args, **kwargs))
 
-        loop.run_until_complete(_run())
+        try:
+            loop.run_until_complete(_run())
+        except KeyboardInterrupt:
+            logger.debug("Caught KeyboardInterrupt, shutting down")
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
