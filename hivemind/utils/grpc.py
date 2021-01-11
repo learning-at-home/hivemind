@@ -4,7 +4,7 @@ Utilities for running GRPC services: compile protobuf, patch legacy versions, et
 from __future__ import annotations
 import os
 import threading
-from typing import NamedTuple, Tuple, Optional, Union, Any, Dict, TypeVar, Type
+from typing import NamedTuple, Tuple, Optional, Union, Any, Dict, TypeVar, Type, Iterator, Iterable, List
 
 import grpc
 import numpy as np
@@ -235,3 +235,27 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
 
     tensor.requires_grad_(serialized_tensor.requires_grad)
     return tensor
+
+
+def split_into_chunks(serialized_tensor: runtime_pb2.Tensor, chunk_size_bytes: int) -> Iterator[runtime_pb2.Tensor]:
+    """ Split serialized_tensor into multiple chunks for gRPC streaming """
+    buffer = memoryview(serialized_tensor.buffer)
+    num_chunks = (len(buffer) - 1) // chunk_size_bytes + 1
+    yield runtime_pb2.Tensor(
+        compression=serialized_tensor.compression, buffer=buffer[:chunk_size_bytes].tobytes(), chunks=num_chunks,
+        size=serialized_tensor.size, dtype=serialized_tensor.dtype, requires_grad=serialized_tensor.requires_grad)
+    for chunk_start in range(chunk_size_bytes, len(buffer), chunk_size_bytes):
+        yield runtime_pb2.Tensor(buffer=buffer[chunk_start: chunk_start + chunk_size_bytes].tobytes())
+
+
+def restore_from_chunks(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.Tensor:
+    """ Restore a result of split_into_chunks into a single serialized tensor """
+    stream = iter(stream)
+    first_chunk: runtime_pb2.Tensor = next(stream)
+    serialized_tensor = runtime_pb2.Tensor()
+    serialized_tensor.CopyFrom(first_chunk)
+    buffer_chunks: List[bytes] = [first_chunk.buffer]
+    for tensor_part in stream:
+        buffer_chunks.append(tensor_part.buffer)
+    serialized_tensor.buffer = b''.join(buffer_chunks)
+    return serialized_tensor

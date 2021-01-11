@@ -301,7 +301,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         logger.debug(f"{self.endpoint} - leader started allreduce for {len(ordered_group_endpoints)} peers.")
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-            ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
+            ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type,
+            chunk_size_bytes=self.chunk_size_bytes)
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 
@@ -315,7 +316,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
         allreduce_group = AllReduceRunner(
             group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-            ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type)
+            ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type,
+            chunk_size_bytes=self.chunk_size_bytes)
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 

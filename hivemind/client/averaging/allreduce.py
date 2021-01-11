@@ -1,10 +1,11 @@
 import asyncio
-from typing import Sequence, Set, Dict, Tuple
+from typing import Sequence, Set, Dict, Tuple, AsyncIterator, Iterator
 
 import grpc
 import torch
 
-from hivemind.utils import Endpoint, get_logger, serialize_torch_tensor, deserialize_torch_tensor, ChannelCache
+from hivemind.utils import Endpoint, get_logger, serialize_torch_tensor, deserialize_torch_tensor, ChannelCache, \
+    restore_from_chunks
 from hivemind.proto import averaging_pb2_grpc, runtime_pb2, averaging_pb2
 
 # flavour types
@@ -105,10 +106,11 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
     A class that implements ButterflyAllReduceProtocol on top of a gRPC servicer
     """
     def __init__(self, *, group_id: GroupID, tensors: Sequence[torch.Tensor], endpoint: Endpoint,
-                 ordered_group_endpoints: Sequence[Endpoint], compression_type: runtime_pb2.CompressionType):
+                 ordered_group_endpoints: Sequence[Endpoint], compression_type: runtime_pb2.CompressionType,
+                 chunk_size_bytes: int):
         super().__init__(group_id=group_id, tensors=tensors, endpoint=endpoint,
                          ordered_group_endpoints=ordered_group_endpoints)
-        self.compression_type = compression_type
+        self.compression_type, self.chunk_size_bytes = compression_type, chunk_size_bytes
 
     def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
         return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
@@ -147,16 +149,22 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                     asyncio.create_task(self._send_error_to_peer(peer_endpoint, code))
             raise
 
-    async def rpc_aggregate_part(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
+    async def rpc_aggregate_part(self, stream, context: grpc.ServicerContext):
         """ a groupmate sends us a part of his tensor; we should average it with other peers and return the result """
+        request: averaging_pb2.AveragingData = await stream.read()
+
         if request.group_id != self.group_id:
             return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
 
         if request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
-                tensor_part = deserialize_torch_tensor(request.tensor_part)
+                chunks = [request.tensor_part]
+                async for extra_data in stream:
+                    chunks.append(deserialize_torch_tensor(extra_data.tensor_part))
+                tensor_part = restore_from_chunks(chunks)
                 averaged_part = await self.accumulate_part(request.endpoint, tensor_part)
-                serialized = serialize_torch_tensor(averaged_part, request.tensor_part.compression, allow_inplace=False)
+                serialized = serialize_torch_tensor(averaged_part, tensor_part.compression, allow_inplace=False)
+                # TODO return AveragingData in a stream
                 return averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized)
             except Exception as e:
                 self.set_exception(e)
