@@ -38,7 +38,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
                  prefix: str, target_group_size: int, min_group_size: int, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, request_timeout: Optional[float] = 3,
+                 averaging_expiration: float = 15, request_timeout: float, chunk_size_bytes: int,
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.NONE):
         assert '.' not in prefix, "group prefix must be a string without ."
         if request_timeout is None or request_timeout >= averaging_expiration:
@@ -50,7 +50,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.prefix, self.group_bits = prefix, initial_group_bits
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.request_timeout = averaging_expiration, request_timeout
-        self.compression_type = compression_type
+        self.compression_type, self.chunk_size_bytes = compression_type, chunk_size_bytes
 
         self.schema_hash = compute_schema_hash(self.averaged_tensors)
 

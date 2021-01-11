@@ -46,7 +46,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
       note - this expiration time only applies to looking for group, passing tensors in allreduce may take more time
     :param compression_type: optionally compress tensors with this compression algorithm before sending them to peers
     :param allreduce_timeout: spend at most this many seconds for allreduce (after group is formed)
-
+    :param request_timeout: when looking for group, wait for a response from leader for at most this many seconds.
+    :note: request_timeout must be smaller than averaging_expiration to avoid potential deadlocks.
+    :param chunk_size_bytes: tensors for AllReduce will be divided into chunks of this size (to improve gRPC throughput)
     :param listen: if True (default), this averager will accept incoming requests from other peers and perform allreduce
             if False, the averager will register as a freeloader and attempt to fetch vectors from other averagers
     :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
@@ -64,13 +66,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
                  prefix: str, target_group_size: int, min_group_size: int = 2, initial_group_bits: Optional[str] = None,
                  averaging_expiration: float = 15, allreduce_timeout: Optional[float] = None,
+                 request_timeout: float = 3, chunk_size_bytes: int = 2 ** 16,
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
                  listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
-            # TODO do we ACTUALLY need target_group_size to be a power of 2?
         if initial_group_bits is None:
             initial_group_bits = ''.join(random.choices('01', k=INITIAL_GROUP_NBITS))
             logger.debug(f"Initializing with random {INITIAL_GROUP_NBITS}-bit group index: {initial_group_bits}")
@@ -86,9 +88,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
             tensor.share_memory_()
 
-        self.matchmaking_kwargs = dict(prefix=prefix, initial_group_bits=initial_group_bits,
-                                       target_group_size=target_group_size, min_group_size=min_group_size,
-                                       averaging_expiration=averaging_expiration)
+        self.matchmaking_kwargs = dict(
+            prefix=prefix, initial_group_bits=initial_group_bits, target_group_size=target_group_size,
+            min_group_size=min_group_size, averaging_expiration=averaging_expiration, request_timeout=request_timeout,
+            chunk_size_bytes=chunk_size_bytes)
         self.allreduce_timeout, self.compression_type = allreduce_timeout, compression_type
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
