@@ -48,9 +48,6 @@ if __name__ == "__main__":
     peer_tensors = [sample_tensors(args['hid_size'], args['num_layers'])
                     for _ in range(args['num_peers'])]
 
-    time.sleep(1)
-    print('!!!', dht_root.port, flush=True)
-
     def run_averager(index):
         dht = hivemind.DHT(listen_on=f'{LOCALHOST}:*',
                            initial_peers=[f"{LOCALHOST}:{dht_root.port}"],
