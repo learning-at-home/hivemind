@@ -280,7 +280,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
         elif self.current_leader is not None:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_A_LEADER, suggested_leader=self.current_leader
-                                                   ) # note: this suggested leader is currently ignored
+                                                   )  # note: this suggested leader is currently ignored
         elif request.endpoint == self.endpoint or request.endpoint in self.current_followers:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
         elif len(self.current_followers) + 1 >= self.target_group_size:
@@ -323,6 +323,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
 class PotentialLeaders:
     """ An utility class that searches for averagers that could become our leaders """
+
     def __init__(self, endpoint: Endpoint, dht: hivemind.DHT, averaging_expiration: DHTExpiration,
                  target_group_size: Optional[int]):
         self.endpoint, self.dht, self.averaging_expiration = endpoint, dht, averaging_expiration
@@ -445,6 +446,6 @@ class PotentialLeaders:
 def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
     """ A hash that describes follower's tensor shapes, dtypes, devices, but not the actual values """
     schema_dicts = [{field_name: str(field_value)
-                    for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
+                     for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
                     for tensor in tensors]
     return DHTID.generate(source=MSGPackSerializer.dumps(schema_dicts)).to_bytes()
