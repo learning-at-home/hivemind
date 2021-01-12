@@ -47,6 +47,7 @@ if __name__ == "__main__":
     dht_root = hivemind.DHT(listen_on=f'{LOCALHOST}:*', start=True)
     peer_tensors = [sample_tensors(args['hid_size'], args['num_layers'])
                     for _ in range(args['num_peers'])]
+    processes = {dht_root}
 
     def run_averager(index):
         dht = hivemind.DHT(listen_on=f'{LOCALHOST}:*',
@@ -57,13 +58,13 @@ if __name__ == "__main__":
             compression_type=runtime_pb2.CompressionType.FLOAT16, target_group_size=args['target_group_size'],
             averaging_expiration=args['averaging_expiration'], request_timeout=args['request_timeout'],
             start=True)
+        processes.update({dht, averager})
 
         print(end=f'<started {index}>\n', flush=True)
         for _ in range(args['num_rounds']):
             success = averager.step(timeout=args['round_timeout']) is not None
             print(end=('+' if success else '-'), flush=True)
         print(end=f'<finished {index}>\n', flush=True)
-
 
     threads = []
     for i in range(args['num_peers']):
@@ -76,3 +77,5 @@ if __name__ == "__main__":
     for thread in threads:
         thread.join()
     print(f"\ntest run took {time.time() - t:.3f} seconds")
+    for process in processes:
+        process.terminate()
