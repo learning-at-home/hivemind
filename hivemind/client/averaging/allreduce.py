@@ -128,7 +128,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             await stream.write(averaging_pb2.AveragingData(tensor_part=chunk))
         await stream.done_writing()
 
-        response = await stream.read()
+        response = await anext(stream)
         if response.code == averaging_pb2.AVERAGED_PART:
             averaged_part_chunks = (response, *[chunk.tensor_part async for chunk in stream])
             averaged_part = deserialize_torch_tensor(combine_from_streaming(averaged_part_chunks))
