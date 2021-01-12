@@ -173,21 +173,21 @@ def test_serialize_tensor():
 
     serialized_tensor = hivemind.serialize_torch_tensor(tensor, hivemind.CompressionType.NONE)
     for chunk_size in [1024, 64 * 1024, 64 * 1024 + 1, 10 ** 9]:
-        chunks = list(hivemind.split_into_stream(serialized_tensor, chunk_size))
+        chunks = list(hivemind.split_tensor_for_streaming(serialized_tensor, chunk_size))
         assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-        restored = hivemind.combine_from_stream(chunks)
+        restored = hivemind.combine_from_streaming(chunks)
         assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor)
 
     chunk_size = 30 * 1024
     serialized_tensor = hivemind.serialize_torch_tensor(tensor, hivemind.CompressionType.FLOAT16)
-    chunks = list(hivemind.split_into_stream(serialized_tensor, chunk_size))
+    chunks = list(hivemind.split_tensor_for_streaming(serialized_tensor, chunk_size))
     assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-    restored = hivemind.combine_from_stream(chunks)
+    restored = hivemind.combine_from_streaming(chunks)
     assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor, rtol=0, atol=1e-2)
 
     tensor = torch.randint(0, 100, (512, 1, 1))
     serialized_tensor = hivemind.serialize_torch_tensor(tensor, hivemind.CompressionType.NONE)
-    chunks = list(hivemind.split_into_stream(serialized_tensor, chunk_size))
+    chunks = list(hivemind.split_tensor_for_streaming(serialized_tensor, chunk_size))
     assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-    restored = hivemind.combine_from_stream(chunks)
+    restored = hivemind.combine_from_streaming(chunks)
     assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor)
