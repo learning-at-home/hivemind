@@ -129,8 +129,9 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         await stream.done_writing()
 
         outputs: Sequence[averaging_pb2.AveragingData] = [message async for message in stream]
-        if not outputs or outputs[0].code != averaging_pb2.AVERAGED_PART:
-            raise AllreduceException(f"peer {peer_endpoint} returned {averaging_pb2.MessageCode.Name(outputs[0].code)}"
+        code = outputs[0].code if outputs else averaging_pb2.INTERNAL_ERROR
+        if code != averaging_pb2.AVERAGED_PART:
+            raise AllreduceException(f"peer {peer_endpoint} returned {averaging_pb2.MessageCode.Name(code)}"
                                      f" instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)},"
                                      f" allreduce failed")
 
