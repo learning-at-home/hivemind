@@ -4,8 +4,8 @@ from typing import Sequence, Set, Dict, Tuple, Iterable, AsyncIterator
 import grpc
 import torch
 
-from hivemind.utils import Endpoint, get_logger, serialize_torch_tensor, deserialize_torch_tensor, ChannelCache, \
-    combine_from_stream, split_into_stream, anext
+from hivemind.utils import Endpoint, get_logger, ChannelCache, anext
+from hivemind.utils.grpc import serialize_torch_tensor, deserialize_torch_tensor, combine_from_stream, split_into_stream
 from hivemind.proto import averaging_pb2_grpc, runtime_pb2, averaging_pb2
 
 # flavour types

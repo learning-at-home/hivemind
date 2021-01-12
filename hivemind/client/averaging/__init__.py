@@ -15,8 +15,8 @@ import grpc
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
 from hivemind.client.averaging.matchmaking import Matchmaking
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, switch_to_uvloop, \
-    get_dht_time, anext, achain, aiter
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, get_dht_time
+from hivemind.utils.asyncio import anext, achain, aiter,  switch_to_uvloop
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 # flavour types
