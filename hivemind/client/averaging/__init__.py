@@ -162,7 +162,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def step(self, allow_retries: bool = True, timeout: Optional[float] = None, wait=True
              ) -> Union[bool, MPFuture]:
         """
-        Set up the averager to look for a group and run one round of averaging, then return the averaged tensors
+        Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
         :param allow_retries: if averager fails to run one round of allreduce, this option will allow it to try again
           within the specified timeout
         :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failedK
