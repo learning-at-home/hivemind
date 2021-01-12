@@ -28,6 +28,9 @@ jobs:
           command: python tests/benchmark_dht.py
           name: benchmark_dht
       - run:
+          command: python tests/benchmark_averaging.py
+          name: benchmark_dht
+      - run:
           command: codecov
           name: codecov
 
