@@ -1,4 +1,4 @@
-from typing import TypeVar, AsyncIterator, Union
+from typing import TypeVar, AsyncIterator, Union, AsyncIterable
 import asyncio
 import uvloop
 T = TypeVar('T')
@@ -27,7 +27,7 @@ async def aiter(*args: T) -> AsyncIterator[T]:
         yield arg
 
 
-async def achain(*async_iters: AsyncIterator[T]) -> AsyncIterator[T]:
+async def achain(*async_iters: AsyncIterable[T]) -> AsyncIterator[T]:
     """ equivalent to chain(iter1, iter2, ...) for asynchronous iterators. """
     for aiter in async_iters:
         async for elem in aiter:
