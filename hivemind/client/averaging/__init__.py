@@ -69,7 +69,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  averaging_expiration: float = 15, allreduce_timeout: Optional[float] = None,
                  request_timeout: float = 3, chunk_size_bytes: int = 2 ** 16,
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
-                 listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1,
+                 listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1, daemon: bool = True,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         if not is_power_of_two(target_group_size):
@@ -79,7 +79,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             logger.debug(f"Initializing with random {INITIAL_GROUP_NBITS}-bit group index: {initial_group_bits}")
         assert len(initial_group_bits) >= INITIAL_GROUP_NBITS and all(bit in '01' for bit in initial_group_bits)
 
-        super().__init__()
+        super().__init__(daemon=daemon)
         self.dht = dht
         self.listen_on, self.receiver_threads, self.kwargs = listen_on, receiver_threads, kwargs
         self.channel_options = channel_options
