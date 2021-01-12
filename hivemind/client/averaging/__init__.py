@@ -184,7 +184,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             group_id = allreduce_group.group_id
             self._running_groups[group_id] = allreduce_group
             self._pending_group_assembled.set()
-            await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
+            averaging_results = await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
+            with torch.no_grad():
+                for tensor, averaging_result in zip(self.averaged_tensors, averaging_results):
+                    tensor[...] = averaging_result
             future.set_result(True)
 
         except AllreduceException:
