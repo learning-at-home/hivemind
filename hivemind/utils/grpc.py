@@ -2,19 +2,20 @@
 Utilities for running GRPC services: compile protobuf, patch legacy versions, etc
 """
 from __future__ import annotations
+
 import os
 import threading
-from typing import NamedTuple, Tuple, Optional, Union, Any, Dict, TypeVar, Type, Iterator, Iterable, List
+from typing import NamedTuple, Tuple, Optional, Union, Any, Dict, TypeVar, Type, Iterator, Iterable
 
 import grpc
 import numpy as np
 import torch
+from hivemind.proto.runtime_pb2 import CompressionType
 
 from hivemind.proto import runtime_pb2
-from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils.timed_storage import TimedStorage, get_dht_time, ValueWithExpiration
-from hivemind.utils.networking import Endpoint
 from hivemind.utils.logging import get_logger
+from hivemind.utils.networking import Endpoint
+from hivemind.utils.timed_storage import TimedStorage, get_dht_time, ValueWithExpiration
 
 logger = get_logger(__file__)
 
@@ -240,7 +241,7 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
 def split_for_streaming(serialized_tensor: runtime_pb2.Tensor, chunk_size_bytes: int) -> Iterator[runtime_pb2.Tensor]:
     """ Split serialized_tensor into multiple chunks for gRPC streaming """
     buffer = memoryview(serialized_tensor.buffer)
-    num_chunks = (len(buffer) - 1) // chunk_size_bytes + 1
+    num_chunks = len(range(0, len(buffer), chunk_size_bytes))
     yield runtime_pb2.Tensor(
         compression=serialized_tensor.compression, buffer=buffer[:chunk_size_bytes].tobytes(), chunks=num_chunks,
         size=serialized_tensor.size, dtype=serialized_tensor.dtype, requires_grad=serialized_tensor.requires_grad)
@@ -251,10 +252,10 @@ def split_for_streaming(serialized_tensor: runtime_pb2.Tensor, chunk_size_bytes:
 def combine_from_streaming(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.Tensor:
     """ Restore a result of split_into_chunks into a single serialized tensor """
     stream = iter(stream)
-    first_chunk: runtime_pb2.Tensor = next(stream)
+    first_chunk = next(stream)
     serialized_tensor = runtime_pb2.Tensor()
     serialized_tensor.CopyFrom(first_chunk)
-    buffer_chunks: List[bytes] = [first_chunk.buffer]
+    buffer_chunks = [first_chunk.buffer]
     for tensor_part in stream:
         buffer_chunks.append(tensor_part.buffer)
     serialized_tensor.buffer = b''.join(buffer_chunks)
