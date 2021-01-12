@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import random
 import ctypes
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
@@ -222,6 +223,21 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 else:
                     tensor[...] = update
         return True
+
+    @contextlib.contextmanager
+    def get_tensors(self) -> Sequence[torch.Tensor]:
+        """
+        A contextmanager that gives user access to averaged tensors.
+        It is guaranteed that the averager will not modify tensors while this context is active.
+
+        Example:
+              >>> with averager.get_tensors() as tensors:
+              >>>     update_model(tensors)
+              >>>     tensors[0] += 1
+              >>> # do not use tensors after the lock is acquired
+        """
+        with self.lock_averaged_tensors:
+            yield self._averaged_tensors
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:

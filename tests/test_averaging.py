@@ -56,8 +56,9 @@ def test_allreduce_once():
         assert future.result() is True
 
     for averager in averagers:
-        for ref, our in zip(reference, averager._averaged_tensors):
-            assert torch.allclose(ref, our, atol=1e-6)
+        with averager.get_tensors() as averaged_tensors:
+            for ref, our in zip(reference, averaged_tensors):
+                assert torch.allclose(ref, our, atol=1e-6)
 
 
 @pytest.mark.forked
