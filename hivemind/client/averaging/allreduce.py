@@ -1,5 +1,5 @@
 import asyncio
-from typing import Sequence, Set, Dict, Tuple, Iterable, AsyncIterator, Iterator
+from typing import Sequence, Set, Dict, Tuple, Iterable, AsyncIterator, Iterator, AsyncGenerator
 
 import grpc
 import torch
@@ -128,9 +128,10 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             await stream.write(averaging_pb2.AveragingData(tensor_part=chunk))
         await stream.done_writing()
 
-        response = await anext(stream)
+        outputs = iter(message async for message in stream)
+        response: averaging_pb2.AveragingData = next(outputs)
         if response.code == averaging_pb2.AVERAGED_PART:
-            averaged_part_chunks = (response, *[chunk.tensor_part async for chunk in stream])
+            averaged_part_chunks = (response, *(chunk.tensor_part for chunk in outputs))
             averaged_part = deserialize_torch_tensor(combine_from_streaming(averaged_part_chunks))
             self.register_averaged_part(peer_endpoint, averaged_part)
             return averaged_part
