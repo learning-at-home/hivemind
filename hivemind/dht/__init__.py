@@ -27,7 +27,7 @@ from numpy import nextafter
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import get_dht_time, DHTValue
-from hivemind.utils import MPFuture, Endpoint, get_logger
+from hivemind.utils import MPFuture, Endpoint, get_logger, switch_to_uvloop
 
 logger = get_logger(__name__)
 
@@ -141,11 +141,7 @@ class DHT(mp.Process):
 
     def run(self) -> None:
         """ Serve DHT forever. This function will not return until DHT node is shut down """
-        if asyncio.get_event_loop().is_running():
-            asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
-        uvloop.install()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        loop = switch_to_uvloop()
         pipe_awaiter = ThreadPoolExecutor(self.receiver_threads)
 
         async def _run():
@@ -497,13 +493,14 @@ class DHT(mp.Process):
     async def _declare_averager(self, node: DHTNode, *, group_key: str, endpoint: Endpoint,
                                 expiration_time: DHTExpiration, looking_for_group: bool, future: MPFuture):
         try:
-            expiration_time = expiration_time if looking_for_group else nextafter(expiration_time, float('inf'))
+            expiration_time = expiration_time if looking_for_group else float(nextafter(expiration_time, float('inf')))
             # ^-- when declaring averager inactive, we increment expiration time to overwrite the pre-existing entry
             store_ok = await node.store(
                 key=group_key, subkey=endpoint, value=looking_for_group, expiration_time=expiration_time)
             future.set_result(store_ok)
         except Exception as e:
-            future.set_exception(e)
+            if not future.done():
+                future.set_exception(e)
 
     def get_averagers(self, group_key: GroupKey, *, only_active: bool = True, return_future: bool = False
                       ) -> Union[List[Tuple[Endpoint, DHTExpiration]], MPFuture]:
@@ -534,4 +531,5 @@ class DHT(mp.Process):
                          if not only_active or entry.value is True]
             future.set_result(averagers)
         except Exception as e:
-            future.set_exception(e)
+            if not future.done():
+                future.set_exception(e)

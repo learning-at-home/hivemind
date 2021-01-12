@@ -357,7 +357,7 @@ class DHTNode:
         """
         if latest:
             kwargs["sufficient_expiration_time"] = float('inf')
-        result = await self.get_many([key])
+        result = await self.get_many([key], **kwargs)
         return result[key]
 
     async def get_many(self, keys: Collection[DHTKey], sufficient_expiration_time: Optional[DHTExpiration] = None,
@@ -579,10 +579,20 @@ class _SearchState:
     future: asyncio.Future[Optional[ValueWithExpiration[DHTValue]]] = field(default_factory=asyncio.Future)
     serializer: type(SerializerBase) = MSGPackSerializer
 
-    def add_candidate(self, candidate: Optional[ValueWithExpiration[BinaryDHTValue]], source_node_id: Optional[DHTID]):
-        binary_value, expiration_time = candidate or (None, -float('inf'))
-        if not self.finished and expiration_time > (self.expiration_time or -float('inf')):
-            self.binary_value, self.expiration_time, self.source_node_id = binary_value, expiration_time, source_node_id
+    def add_candidate(self, candidate: Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]],
+                      source_node_id: Optional[DHTID]):
+        if self.finished or candidate is None:
+            return
+        elif isinstance(candidate.value, DictionaryDHTValue) and isinstance(self.binary_value, DictionaryDHTValue):
+            self.binary_value.maxsize = max(self.binary_value.maxsize, candidate.value.maxsize)
+            for subkey, subentry in candidate.value.items():
+                self.binary_value.store(subkey, subentry.value, subentry.expiration_time)
+        elif candidate.expiration_time > (self.expiration_time or float('-inf')):
+            self.binary_value = candidate.value
+
+        if candidate.expiration_time > (self.expiration_time or float('-inf')):
+            self.expiration_time = candidate.expiration_time
+            self.source_node_id = source_node_id
             if self.expiration_time >= self.sufficient_expiration_time:
                 self.finish_search()
 

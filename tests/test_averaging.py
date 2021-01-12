@@ -34,8 +34,7 @@ def test_getset_averagers():
 
 
 @pytest.mark.forked
-@pytest.mark.asyncio
-async def test_allreduce_once():
+def test_allreduce_once():
     dht = hivemind.DHT(start=True)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
@@ -52,12 +51,14 @@ async def test_allreduce_once():
 
     futures = []
     for averager in averagers:
-        futures.append(averager.step(return_future=True))  # TODO revert to hard version
-        time.sleep(0.5)
-
+        futures.append(averager.step(wait=False))
     for future in futures:
-        for ref, our in zip(reference, future.result()):
-            assert torch.allclose(ref, our)
+        assert future.result() is True
+
+    for averager in averagers:
+        with averager.get_tensors() as averaged_tensors:
+            for ref, our in zip(reference, averaged_tensors):
+                assert torch.allclose(ref, our, atol=1e-6)
 
 
 @pytest.mark.forked
@@ -90,7 +91,7 @@ async def test_allreduce_protocol():
     ]
 
     for peer, allreduce in zip(peers, allreduce_protocols):
-        assert allreduce.averaged_tensors.done()
+        assert allreduce.future.done()
         averaged_tensors = await allreduce
         assert len(averaged_tensors) == len(reference_tensors)
         assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
@@ -98,7 +99,7 @@ async def test_allreduce_protocol():
 
 
 @pytest.mark.forked
-def test_chunks():
+def test_partitioning():
     for _ in range(100):
         tensors = []
         for _ in range(random.randint(1, 5)):

@@ -54,7 +54,7 @@ class MPFuture(base.Future):
                 self.connection.close()
         except TimeoutError as e:
             raise e
-        except (BrokenPipeError, OSError) as e:
+        except (BrokenPipeError, OSError, EOFError) as e:
             if self._state in (base.PENDING, base.RUNNING):
                 self._state, self._exception = base.FINISHED, e
 

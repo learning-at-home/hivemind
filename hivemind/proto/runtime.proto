@@ -38,5 +38,6 @@ message Tensor {
   bool requires_grad = 3;
   string dtype = 4;
   CompressionType compression = 5;
+  int32 chunks = 6;
 }
 
