@@ -128,7 +128,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             await stream.write(averaging_pb2.AveragingData(tensor_part=chunk))
         await stream.done_writing()
 
-        outputs = iter(message async for message in stream)
+        outputs = (message async for message in stream)
         response: averaging_pb2.AveragingData = next(outputs)
         if response.code == averaging_pb2.AVERAGED_PART:
             averaged_part_chunks = (response, *(chunk.tensor_part for chunk in outputs))
