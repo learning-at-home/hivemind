@@ -15,4 +15,5 @@ def get_logger(module_name: str) -> logging.Logger:
     logger = logging.getLogger(name_without_prefix)
     logger.setLevel(loglevel)
     logger.addHandler(handler)
+    logger.propagate = False
     return logger

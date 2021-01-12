@@ -17,7 +17,7 @@ from hivemind.utils.logging import get_logger
 from hivemind.utils.networking import Endpoint
 from hivemind.utils.timed_storage import TimedStorage, get_dht_time, ValueWithExpiration
 
-logger = get_logger(__file__)
+logger = get_logger(__name__)
 
 Stub = TypeVar("Stub")
 

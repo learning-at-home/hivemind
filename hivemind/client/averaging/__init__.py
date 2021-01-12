@@ -24,7 +24,7 @@ from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
 
 INITIAL_GROUP_NBITS = 3
-logger = get_logger(__file__)
+logger = get_logger(__name__)
 
 
 class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragingServicer):

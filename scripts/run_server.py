@@ -6,6 +6,9 @@ import torch
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.server import Server
 from hivemind.utils.threading import increase_file_limit
+from hivemind.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def main():
@@ -62,9 +65,12 @@ def main():
     else:
         compression = getattr(CompressionType, compression_type)
 
+    server = Server.create(**args, optim_cls=optim_cls, start=True, compression=compression)
+
     try:
-        server = Server.create(**args, optim_cls=optim_cls, start=True, verbose=True, compression=compression)
         server.join()
+    except KeyboardInterrupt:
+        logger.info("Caught KeyboardInterrupt, shutting down")
     finally:
         server.shutdown()
 

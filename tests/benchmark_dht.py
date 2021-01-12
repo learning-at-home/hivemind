@@ -7,7 +7,7 @@ from tqdm import trange
 import hivemind
 from hivemind.utils.threading import increase_file_limit
 
-logger = hivemind.get_logger(__file__)
+logger = hivemind.get_logger(__name__)
 
 
 def random_endpoint() -> hivemind.Endpoint:
