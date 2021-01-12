@@ -82,17 +82,17 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.dht = dht
         self.listen_on, self.receiver_threads, self.kwargs = listen_on, receiver_threads, kwargs
         self.channel_options = channel_options
-        self.averaged_tensors = tuple(averaged_tensors)
-        # TODO use mp.Lock to prevent someone from modifying tensors before we copy them! maybe.
-        for tensor in self.averaged_tensors:
+        self._averaged_tensors = tuple(averaged_tensors)
+        self.lock_averaged_tensors = mp.Lock()
+        for tensor in self._averaged_tensors:
             assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
             tensor.share_memory_()
 
         self.matchmaking_kwargs = dict(
             prefix=prefix, initial_group_bits=initial_group_bits, target_group_size=target_group_size,
             min_group_size=min_group_size, averaging_expiration=averaging_expiration, request_timeout=request_timeout,
-            chunk_size_bytes=chunk_size_bytes)
-        self.allreduce_timeout, self.compression_type = allreduce_timeout, compression_type
+            chunk_size_bytes=chunk_size_bytes, compression_type=compression_type)
+        self.allreduce_timeout = allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
@@ -130,7 +130,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             found_port = server.add_insecure_port(self.listen_on)
             assert found_port != 0, f"Failed to listen to {self.listen_on}"
             self._port.value = found_port
-            self._matchmaking = Matchmaking(self.endpoint, self.averaged_tensors, self.dht, **self.matchmaking_kwargs)
+            self._matchmaking = Matchmaking(self.endpoint, self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
+                                            return_deltas=True)  # note: we need deltas to make allreduce lock-free
             self._pending_group_assembled = asyncio.Event()
             self._pending_group_assembled.set()
             await server.start()
@@ -173,6 +174,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return future.result() if wait else future
 
     async def _step(self, *, future: MPFuture, allow_retries: bool, timeout: Optional[float]):
+        loop = asyncio.get_event_loop()
         start_time = get_dht_time()
         group_id = None
         try:
@@ -184,11 +186,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             group_id = allreduce_group.group_id
             self._running_groups[group_id] = allreduce_group
             self._pending_group_assembled.set()
-            averaging_results = await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
-            with torch.no_grad():
-                for tensor, averaging_result in zip(self.averaged_tensors, averaging_results):
-                    tensor[...] = averaging_result
-            future.set_result(True)
+            averaging_deltas = await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
+            update_ok = await loop.run_in_executor(None, lambda: self.update_tensors(averaging_deltas, add=True))
+            future.set_result(update_ok)
 
         except AllreduceException:
             time_left = timeout - get_dht_time() + start_time if timeout is not None else None
@@ -204,6 +204,24 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         finally:
             _ = self._running_groups.pop(group_id, None)
             self._pending_group_assembled.set()
+
+    def update_tensors(self, tensors: Sequence[torch.Tensor], *, add: bool = False) -> bool:
+        """
+        Set or change the values of self.averaged_tensors.
+
+        :param tensors: list/tuple of tensors of same shape as self.averaged_tensors
+        :param add: if True, add tensors to self.averaged_tensors in-place
+          by default, simply write the values of :tensors: to self.averaged_tensors
+        :note: if there may be updates running in background, it is recommended to use add=True
+        """
+        assert len(tensors) == len(self._averaged_tensors)
+        with torch.no_grad(), self.lock_averaged_tensors:
+            for tensor, update in zip(self._averaged_tensors, tensors):
+                if add:
+                    tensor += update
+                else:
+                    tensor[...] = update
+        return True
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:

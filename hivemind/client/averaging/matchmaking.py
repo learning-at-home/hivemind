@@ -38,8 +38,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
                  prefix: str, target_group_size: int, min_group_size: int, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, request_timeout: float, chunk_size_bytes: int,
-                 compression_type: runtime_pb2.CompressionType = runtime_pb2.NONE):
+                 averaging_expiration: float = 15, request_timeout: float, **allreduce_kwargs):
         assert '.' not in prefix, "group prefix must be a string without ."
         if request_timeout is None or request_timeout >= averaging_expiration:
             logger.warning("It is recommended to use request_timeout smaller than averaging_expiration. Otherwise,"
@@ -50,8 +49,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.prefix, self.group_bits = prefix, initial_group_bits
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.request_timeout = averaging_expiration, request_timeout
-        self.compression_type, self.chunk_size_bytes = compression_type, chunk_size_bytes
-
+        self.allreduce_kwargs = allreduce_kwargs
         self.schema_hash = compute_schema_hash(self.averaged_tensors)
 
         self.lock_looking_for_group = asyncio.Lock()
@@ -299,10 +297,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         ordered_group_endpoints.append(self.endpoint)
         random.shuffle(ordered_group_endpoints)
         logger.debug(f"{self.endpoint} - leader started allreduce for {len(ordered_group_endpoints)} peers.")
-        allreduce_group = AllReduceRunner(
-            group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-            ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type,
-            chunk_size_bytes=self.chunk_size_bytes)
+        allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
+                                          ordered_group_endpoints=ordered_group_endpoints, **self.allreduce_kwargs)
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 
@@ -314,10 +310,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
-        allreduce_group = AllReduceRunner(
-            group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-            ordered_group_endpoints=ordered_group_endpoints, compression_type=self.compression_type,
-            chunk_size_bytes=self.chunk_size_bytes)
+        allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
+                                          ordered_group_endpoints=ordered_group_endpoints, **self.allreduce_kwargs)
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 

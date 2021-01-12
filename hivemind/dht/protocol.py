@@ -207,10 +207,10 @@ class DHTProtocol(dht_grpc.DHTServicer):
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
-            assert len(keys) == len(response.results), "DHTProtocol: response is not aligned with keys"
+            assert len(keys) == len(response.future), "DHTProtocol: response is not aligned with keys"
 
             output = {}  # unpack data depending on its type
-            for key, result in zip(keys, response.results):
+            for key, result in zip(keys, response.future):
                 nearest = dict(zip(map(DHTID.from_bytes, result.nearest_node_ids), result.nearest_endpoints))
 
                 if result.type == dht_pb2.NOT_FOUND:
@@ -256,7 +256,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                     key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id)):
                 item.nearest_node_ids.append(node_id.to_bytes())
                 item.nearest_endpoints.append(endpoint)
-            response.results.append(item)
+            response.future.append(item)
         return response
 
     async def update_routing_table(self, node_id: Optional[DHTID], peer_endpoint: Endpoint, responded=True):

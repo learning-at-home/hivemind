@@ -20,25 +20,28 @@ class AllReduceProtocol:
     :param tensors: local tensors that should be averaged with groupmates
     :param endpoint: your endpoint, must be included in ordered_group_endpoints
     :param ordered_group_endpoints: group endpoints ordered s.t. i-th endpoint is responsible for averaging i-th part
+    :param return_deltas: if True, returns the element-wise differences (averaged_tensors - original_tensors)
+           default (False) - return averaged_tensors by themselves
     """
     def __init__(self, *, group_id: GroupID, tensors: Sequence[torch.Tensor], endpoint: Endpoint,
-                 ordered_group_endpoints: Sequence[Endpoint]):
+                 ordered_group_endpoints: Sequence[Endpoint], return_deltas: bool = False):
         assert endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
         self.group_id, self.endpoint, self.ordered_group_endpoints = group_id, endpoint, ordered_group_endpoints
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, self.group_size)))
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
+        self.return_deltas = return_deltas
 
         self.accumulator = self.local_tensor_parts[self.endpoint].clone()  # sum inputs from peers to this tensor
         self.accumulated_from: Set[Endpoint] = {self.endpoint}  # peers that we have accumulated our part from
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
-        self.averaged_tensors: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
+        self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.endpoint}, group_size={self.group_size})"
 
     def __await__(self):
-        return self.averaged_tensors.__await__()
+        return self.future.__await__()
 
     def __contains__(self, endpoint: Endpoint):
         return endpoint in self.local_tensor_parts
@@ -50,7 +53,7 @@ class AllReduceProtocol:
     async def accumulate_part(self, source: Endpoint, remote_part: torch.Tensor) -> torch.Tensor:
         """ Add vector part to accumulator, wait for all other vectors to be added, then return the average part """
         assert not self.averaged_part.done(), f"already finished averaging part: {self.averaged_part}"
-        assert not self.averaged_tensors.done(), f"already finished allreduce: {self.averaged_tensors}"
+        assert not self.future.done(), f"already finished allreduce: {self.future}"
         assert source in self.local_tensor_parts, "unexpected source, not a part of current group"
         assert source not in self.accumulated_from, "duplicate source, already received that part"
         logger.debug(f"{self} - accumulating tensor part from {source}")
@@ -67,7 +70,7 @@ class AllReduceProtocol:
         return await self.averaged_part
 
     def register_averaged_part(self, source: Endpoint, averaged_part: torch.Tensor):
-        assert not self.averaged_tensors.done(), f"already finished allreduce: {self.averaged_tensors}"
+        assert not self.future.done(), f"already finished allreduce: {self.future}"
         assert source in self.local_tensor_parts, "the provider of averaged part is not from my group"
         assert source not in self.averaged_tensor_parts, "already registered the average from this peer"
         assert averaged_part.shape == self.local_tensor_parts[source].shape, "averaged part shape mismatch"
@@ -76,28 +79,37 @@ class AllReduceProtocol:
         self.averaged_tensor_parts[source] = averaged_part
         if len(self.averaged_tensor_parts) == len(self.local_tensor_parts):
             ordered_averaged_parts = [self.averaged_tensor_parts[endpoint] for endpoint in self.ordered_group_endpoints]
-            self.averaged_tensors.set_result(restore_from_parts(ordered_averaged_parts, self.tensor_shapes))
+            outputs = restore_from_parts(ordered_averaged_parts, self.tensor_shapes)
+
+            if self.return_deltas:
+                local_parts = [self.local_tensor_parts[peer] for peer in self.ordered_group_endpoints]
+                with torch.no_grad():
+                    original_tensors = restore_from_parts(local_parts, self.tensor_shapes)
+                    for averaged_tensor, original_tensor in zip(outputs, original_tensors):
+                        averaged_tensor -= original_tensor
+
+            self.future.set_result(outputs)
 
     def cancel(self) -> bool:
-        if not self.averaged_tensors.done():
+        if not self.future.done():
             logger.debug(f"{self} - cancelled")
-            self.averaged_tensors.cancel()
+            self.future.cancel()
             if not self.averaged_part.done():
                 self.averaged_part.cancel()
             return True
         else:
-            logger.debug(f"{self} - failed to cancel, allreduce is already finished: {self.averaged_tensors}")
+            logger.debug(f"{self} - failed to cancel, allreduce is already finished: {self.future}")
             return False
 
     def set_exception(self, exception: Exception) -> bool:
-        if not self.averaged_tensors.done():
+        if not self.future.done():
             logger.debug(f"{self} - {exception}")
-            self.averaged_tensors.set_exception(exception)
+            self.future.set_exception(exception)
             if not self.averaged_part.done():
                 self.averaged_part.cancel()
             return True
         else:
-            logger.debug(f"{self} - failed to set {exception}, allreduce already finished: {self.averaged_tensors}")
+            logger.debug(f"{self} - failed to set {exception}, allreduce already finished: {self.future}")
             return False
 
 
@@ -107,9 +119,9 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
     """
     def __init__(self, *, group_id: GroupID, tensors: Sequence[torch.Tensor], endpoint: Endpoint,
                  ordered_group_endpoints: Sequence[Endpoint], compression_type: runtime_pb2.CompressionType,
-                 chunk_size_bytes: int):
+                 chunk_size_bytes: int, return_deltas: bool = False):
         super().__init__(group_id=group_id, tensors=tensors, endpoint=endpoint,
-                         ordered_group_endpoints=ordered_group_endpoints)
+                         ordered_group_endpoints=ordered_group_endpoints, return_deltas=return_deltas)
         self.compression_type, self.chunk_size_bytes = compression_type, chunk_size_bytes
         self.averaged_part_stream: asyncio.Future[Tuple[runtime_pb2.Tensor, ...]] = asyncio.Future()
 
@@ -144,7 +156,9 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         await stream.write(averaging_pb2.AveragingData(group_id=self.group_id, endpoint=self.endpoint, code=code))
 
     async def run(self) -> Sequence[torch.Tensor]:
-        """ send allreduce requests to all peers and collect results, return the averaged tensor """
+        """
+        send allreduce requests to all peers and collect results, return the averaged tensor (or deltas)
+        """
         try:
             await asyncio.gather(self, *(self._average_one_part(peer, part)
                                          for peer, part in self.local_tensor_parts.items() if peer != self.endpoint))
