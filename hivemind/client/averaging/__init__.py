@@ -159,18 +159,18 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
-    def step(self, allow_retries: bool = True, timeout: Optional[float] = None,
-             return_future=False) -> Union[Sequence[torch.Tensor], MPFuture]:
+    def step(self, allow_retries: bool = True, timeout: Optional[float] = None, wait=True
+             ) -> Union[bool, MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, then return the averaged tensors
         :param allow_retries: if averager fails to run one round of allreduce, this option will allow it to try again
           within the specified timeout
         :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failedK
-        :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
+        :param wait: if True (default), return when finished. Otherwise return MPFuture and run in background.
         """
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_step', [], dict(future=_future, allow_retries=allow_retries, timeout=timeout)))
-        return future if return_future else future.result()
+        return future.result() if wait else future
 
     async def _step(self, *, future: MPFuture, allow_retries: bool, timeout: Optional[float]):
         start_time = get_dht_time()
@@ -194,7 +194,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 self._pending_group_assembled.set()
                 return await self._step(future=future, allow_retries=allow_retries, timeout=time_left)
             else:
-                future.set_result(None)
+                future.set_result(False)
         except Exception as e:
             future.set_exception(e)
             raise
