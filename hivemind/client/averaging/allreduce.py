@@ -128,17 +128,15 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             await stream.write(averaging_pb2.AveragingData(tensor_part=chunk))
         await stream.done_writing()
 
-        outputs = (message async for message in stream)
-        response: averaging_pb2.AveragingData = next(outputs)
-        if response.code == averaging_pb2.AVERAGED_PART:
-            averaged_part_chunks = (response, *(chunk.tensor_part for chunk in outputs))
-            averaged_part = deserialize_torch_tensor(combine_from_streaming(averaged_part_chunks))
-            self.register_averaged_part(peer_endpoint, averaged_part)
-            return averaged_part
-        else:
-            raise AllreduceException(f"peer {peer_endpoint} returned {averaging_pb2.MessageCode.Name(response.code)}"
+        outputs: Sequence[averaging_pb2.AveragingData] = [message async for message in stream]
+        if not outputs or outputs[0].code != averaging_pb2.AVERAGED_PART:
+            raise AllreduceException(f"peer {peer_endpoint} returned {averaging_pb2.MessageCode.Name(outputs[0].code)}"
                                      f" instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)},"
                                      f" allreduce failed")
+
+        averaged_part = deserialize_torch_tensor(combine_from_streaming([message.tensor_part for message in outputs]))
+        self.register_averaged_part(peer_endpoint, averaged_part)
+        return averaged_part
 
     async def _send_error_to_peer(self, peer_endpoint: Endpoint, code: averaging_pb2.MessageCode):
         stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
