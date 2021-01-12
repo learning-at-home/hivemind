@@ -22,15 +22,6 @@ jobs:
           command: pytest ./tests
           name: tests
       - run:
-          command: python tests/benchmark_throughput.py --preset minimalistic
-          name: benchmark_throughput
-      - run:
-          command: python tests/benchmark_dht.py
-          name: benchmark_dht
-      - run:
-          command: python tests/benchmark_averaging.py
-          name: benchmark_dht
-      - run:
           command: codecov
           name: codecov
 
