@@ -121,7 +121,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
         chunks: Iterator[runtime_pb2.Tensor] = split_tensor_for_streaming(serialized_tensor_part, self.chunk_size_bytes)
 
-        stream: grpc.aio.StreamStreamCall = await self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
+        stream: grpc.aio.StreamStreamCall = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
         await stream.write(averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING, group_id=self.group_id,
                                                        endpoint=self.endpoint, tensor_part=next(chunks)))
         for chunk in chunks:
@@ -140,8 +140,8 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                                      f" allreduce failed")
 
     async def _send_error_to_peer(self, peer_endpoint: Endpoint, code: averaging_pb2.MessageCode):
-        await self._get_peer_stub(peer_endpoint).rpc_aggregate_part(averaging_pb2.AveragingData(
-            group_id=self.group_id, endpoint=self.endpoint, code=code))
+        stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
+        await stream.write(averaging_pb2.AveragingData(group_id=self.group_id, endpoint=self.endpoint, code=code))
 
     async def run(self) -> Sequence[torch.Tensor]:
         """ send allreduce requests to all peers and collect results, return the averaged tensor """
