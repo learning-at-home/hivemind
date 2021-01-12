@@ -143,12 +143,12 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
         await stream.write(averaging_pb2.AveragingData(group_id=self.group_id, endpoint=self.endpoint, code=code))
 
-    async def run(self) -> Sequence[torch.Tensor]:
+    async def run(self):
         """ send allreduce requests to all peers and collect results, return the averaged tensor """
         try:
             await asyncio.gather(self, *(self._average_one_part(peer, part)
                                          for peer, part in self.local_tensor_parts.items() if peer != self.endpoint))
-            return await self
+            await self
         except BaseException as e:
             code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
             logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
