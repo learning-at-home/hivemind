@@ -2,23 +2,23 @@
 
 from __future__ import annotations
 
-import contextlib
-import random
-import ctypes
-from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
-from concurrent.futures.thread import ThreadPoolExecutor
-import multiprocessing as mp
 import asyncio
+import contextlib
+import ctypes
+import multiprocessing as mp
+import random
+from concurrent.futures.thread import ThreadPoolExecutor
+from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 
-import torch
 import grpc
+import torch
 
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
 from hivemind.client.averaging.matchmaking import Matchmaking
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, get_dht_time
-from hivemind.utils.asyncio import anext, achain, aiter,  switch_to_uvloop
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, get_dht_time
+from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 
 # flavour types
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
@@ -179,34 +179,39 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def _step(self, *, future: MPFuture, allow_retries: bool, timeout: Optional[float]):
         loop = asyncio.get_event_loop()
         start_time = get_dht_time()
+
+        try_averaging = True
         group_id = None
-        try:
-            self._pending_group_assembled.clear()
-            allreduce_group = await self._matchmaking.look_for_group(timeout=timeout)
-            if allreduce_group is None:
-                raise AllreduceException("Averaging step failed: could not find a group.")
 
-            group_id = allreduce_group.group_id
-            self._running_groups[group_id] = allreduce_group
-            self._pending_group_assembled.set()
-            averaging_deltas = await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
-            update_ok = await loop.run_in_executor(None, lambda: self.update_tensors(averaging_deltas, add=True))
-            future.set_result(update_ok)
+        while try_averaging:
+            try:
+                self._pending_group_assembled.clear()
+                allreduce_group = await self._matchmaking.look_for_group(timeout=timeout)
+                if allreduce_group is None:
+                    raise AllreduceException("Averaging step failed: could not find a group.")
 
-        except AllreduceException:
-            time_left = timeout - get_dht_time() + start_time if timeout is not None else None
-            if allow_retries and timeout is None or time_left > 0:
+                group_id = allreduce_group.group_id
+                self._running_groups[group_id] = allreduce_group
+                self._pending_group_assembled.set()
+                averaging_deltas = await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
+                update_ok = await loop.run_in_executor(None, lambda: self.update_tensors(averaging_deltas, add=True))
+
+                # averaging is finished, exit the loop
+                future.set_result(update_ok)
+                try_averaging = False
+
+            except AllreduceException:
+                time_elapsed = get_dht_time() - start_time
+                if not allow_retries or (timeout is not None and timeout < time_elapsed):
+                    future.set_result(False)
+                    try_averaging = False
+
+            except Exception as e:
+                future.set_exception(e)
+                raise
+            finally:
                 _ = self._running_groups.pop(group_id, None)
                 self._pending_group_assembled.set()
-                return await self._step(future=future, allow_retries=allow_retries, timeout=time_left)
-            else:
-                future.set_result(False)
-        except Exception as e:
-            future.set_exception(e)
-            raise
-        finally:
-            _ = self._running_groups.pop(group_id, None)
-            self._pending_group_assembled.set()
 
     def update_tensors(self, tensors: Sequence[torch.Tensor], *, add: bool = False) -> bool:
         """
