@@ -27,6 +27,47 @@ def sample_tensors(hid_size, num_layers):
     return tuple(tensors)
 
 
+def benchmark_averaging(num_peers: int, target_group_size: int, num_rounds: int,
+                        averaging_expiration: float, request_timeout: float, round_timeout: float,
+                        hid_size: int, num_layers: int, spawn_dtime: float):
+    dht_root = hivemind.DHT(listen_on=f'{LOCALHOST}:*', start=True)
+    peer_tensors = [sample_tensors(hid_size, num_layers)
+                    for _ in range(num_peers)]
+    processes = {dht_root}
+
+    def run_averager(index):
+        dht = hivemind.DHT(listen_on=f'{LOCALHOST}:*',
+                           initial_peers=[f"{LOCALHOST}:{dht_root.port}"],
+                           start=True)
+        averager = hivemind.DecentralizedAverager(
+            peer_tensors[i], dht, prefix='my_tensor', initial_group_bits='0110', listen_on=f"{LOCALHOST}:*",
+            compression_type=runtime_pb2.CompressionType.FLOAT16, target_group_size=target_group_size,
+            averaging_expiration=averaging_expiration, request_timeout=request_timeout, start=True)
+        processes.update({dht, averager})
+
+        print(end=f'<started {index}>\n', flush=True)
+        for _ in range(num_rounds):
+            success = averager.step(timeout=round_timeout)
+            print(end=('+' if success else '-'), flush=True)
+        print(end=f'<finished {index}>\n', flush=True)
+
+    threads = []
+    for i in range(num_peers):
+        thread = threading.Thread(target=run_averager, args=[i])
+        threads.append(thread)
+        thread.start()
+        time.sleep(spawn_dtime)
+
+    t = time.time()
+    for thread in threads:
+        thread.join()
+
+    print(f"\ntest run took {time.time() - t:.3f} seconds")
+
+    for process in processes:
+        process.terminate()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--num_peers', type=int, default=16, required=False)
@@ -44,38 +85,4 @@ if __name__ == "__main__":
     if args.pop('increase_file_limit', False):
         increase_file_limit()
 
-    dht_root = hivemind.DHT(listen_on=f'{LOCALHOST}:*', start=True)
-    peer_tensors = [sample_tensors(args['hid_size'], args['num_layers'])
-                    for _ in range(args['num_peers'])]
-    processes = {dht_root}
-
-    def run_averager(index):
-        dht = hivemind.DHT(listen_on=f'{LOCALHOST}:*',
-                           initial_peers=[f"{LOCALHOST}:{dht_root.port}"],
-                           start=True)
-        averager = hivemind.DecentralizedAverager(
-            peer_tensors[i], dht, prefix='my_tensor', initial_group_bits='0110', listen_on=f"{LOCALHOST}:*",
-            compression_type=runtime_pb2.CompressionType.FLOAT16, target_group_size=args['target_group_size'],
-            averaging_expiration=args['averaging_expiration'], request_timeout=args['request_timeout'],
-            start=True)
-        processes.update({dht, averager})
-
-        print(end=f'<started {index}>\n', flush=True)
-        for _ in range(args['num_rounds']):
-            success = averager.step(timeout=args['round_timeout']) is not None
-            print(end=('+' if success else '-'), flush=True)
-        print(end=f'<finished {index}>\n', flush=True)
-
-    threads = []
-    for i in range(args['num_peers']):
-        thread = threading.Thread(target=run_averager, args=[i])
-        threads.append(thread)
-        thread.start()
-        time.sleep(args['spawn_dtime'])
-
-    t = time.time()
-    for thread in threads:
-        thread.join()
-    print(f"\ntest run took {time.time() - t:.3f} seconds")
-    for process in processes:
-        process.terminate()
+    benchmark_averaging(**args)
