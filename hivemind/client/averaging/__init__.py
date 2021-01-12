@@ -184,7 +184,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             group_id = allreduce_group.group_id
             self._running_groups[group_id] = allreduce_group
             self._pending_group_assembled.set()
-            future.set_result(await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout))
+            await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
+            future.set_result(True)
 
         except AllreduceException:
             time_left = timeout - get_dht_time() + start_time if timeout is not None else None
