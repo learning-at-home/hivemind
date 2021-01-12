@@ -16,7 +16,7 @@ import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
 from hivemind.client.averaging.matchmaking import Matchmaking
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, switch_to_uvloop, \
-    get_dht_time
+    get_dht_time, anext, achain, aiter
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 
 # flavour types
@@ -207,16 +207,22 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         async for response in self._matchmaking.rpc_join_group(request, context):
             yield response
 
-    async def rpc_aggregate_part(self, request: averaging_pb2.AveragingData, context: grpc.ServicerContext):
+    async def rpc_aggregate_part(self, stream: AsyncIterator[averaging_pb2.AveragingData], context: grpc.ServicerContext
+                                 ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """ a groupmate sends us a part of his tensor; we should average it with other peers and return the result """
+        request = await anext(stream)
         if request.group_id not in self._running_groups:
             # this handles a special case when leader accepted us to group AND began allreduce right away,
             # but his response with group_id was delayed and other peers got to us first
             await self._pending_group_assembled.wait()
-        if request.group_id not in self._running_groups:
-            return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
-        else:
-            return await self._running_groups[request.group_id].rpc_aggregate_part(request, context)
+
+        group = self._running_groups.get(request.group_id)
+        if group is None:
+            yield averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
+            return
+
+        async for message in group.rpc_aggregate_part(achain(aiter(request), stream), context):
+            yield message
 
 
 def is_power_of_two(n):

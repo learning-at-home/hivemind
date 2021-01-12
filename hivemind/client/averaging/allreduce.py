@@ -1,11 +1,11 @@
 import asyncio
-from typing import Sequence, Set, Dict, Tuple, AsyncIterator, Iterator
+from typing import Sequence, Set, Dict, Tuple, Iterable, AsyncIterator
 
 import grpc
 import torch
 
 from hivemind.utils import Endpoint, get_logger, serialize_torch_tensor, deserialize_torch_tensor, ChannelCache, \
-    restore_from_chunks
+    combine_from_stream, split_into_stream, anext
 from hivemind.proto import averaging_pb2_grpc, runtime_pb2, averaging_pb2
 
 # flavour types
@@ -111,6 +111,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         super().__init__(group_id=group_id, tensors=tensors, endpoint=endpoint,
                          ordered_group_endpoints=ordered_group_endpoints)
         self.compression_type, self.chunk_size_bytes = compression_type, chunk_size_bytes
+        self.averaged_part_stream: asyncio.Future[Tuple[runtime_pb2.Tensor, ...]] = asyncio.Future()
 
     def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
         return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
@@ -149,31 +150,40 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                     asyncio.create_task(self._send_error_to_peer(peer_endpoint, code))
             raise
 
-    async def rpc_aggregate_part(self, stream, context: grpc.ServicerContext):
+    async def accumulate_part_streaming(self, source: Endpoint, stream_messages: Iterable[runtime_pb2.Tensor]
+                                        ) -> Iterable[runtime_pb2.Tensor]:
+        """ accumulate_part using streams of serialized tensors. Used to prevent duplicate work in serialization """
+        tensor_part: torch.Tensor = deserialize_torch_tensor(combine_from_stream(stream_messages))
+        averaged_part = await self.accumulate_part(source, tensor_part)
+        if not self.averaged_part_stream.done():
+            serialized_tensor = serialize_torch_tensor(averaged_part, self.compression_type, allow_inplace=False)
+            stream_chunks = tuple(split_into_stream(serialized_tensor, self.chunk_size_bytes))
+            self.averaged_part_stream.set_result(stream_chunks)
+            return stream_chunks
+        else:
+            return self.averaged_part_stream.result()
+
+    async def rpc_aggregate_part(self, stream: AsyncIterator[averaging_pb2.AveragingData], context: grpc.ServicerContext
+                                 ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """ a groupmate sends us a part of his tensor; we should average it with other peers and return the result """
-        request: averaging_pb2.AveragingData = await stream.read()
+        request: averaging_pb2.AveragingData = await anext(stream)
 
         if request.group_id != self.group_id:
-            return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
+            yield averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
 
-        if request.code == averaging_pb2.PART_FOR_AVERAGING:
+        elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
-                chunks = [request.tensor_part]
-                async for extra_data in stream:
-                    chunks.append(deserialize_torch_tensor(extra_data.tensor_part))
-                tensor_part = restore_from_chunks(chunks)
-                averaged_part = await self.accumulate_part(request.endpoint, tensor_part)
-                serialized = serialize_torch_tensor(averaged_part, tensor_part.compression, allow_inplace=False)
-                # TODO return AveragingData in a stream
-                return averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized)
+                stream = (request.tensor_part, *(msg.tensor_part async for msg in stream))
+                for average_part in await self.accumulate_part_streaming(request.endpoint, stream):
+                    yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=average_part)
             except Exception as e:
                 self.set_exception(e)
-                return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
+                yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
         else:
             error_code = averaging_pb2.MessageCode.Name(request.code)
             logger.debug(f"{self} - peer {request.endpoint} sent {error_code}, allreduce cannot continue")
             self.set_exception(AllreduceException(f"peer {request.endpoint} sent {error_code}."))
-            return averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
+            yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
 
 def split_into_parts(tensors: Sequence[torch.Tensor], group_size: int) -> Tuple[torch.Tensor, ...]:

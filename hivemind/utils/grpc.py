@@ -237,7 +237,7 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
     return tensor
 
 
-def split_into_chunks(serialized_tensor: runtime_pb2.Tensor, chunk_size_bytes: int) -> Iterator[runtime_pb2.Tensor]:
+def split_into_stream(serialized_tensor: runtime_pb2.Tensor, chunk_size_bytes: int) -> Iterator[runtime_pb2.Tensor]:
     """ Split serialized_tensor into multiple chunks for gRPC streaming """
     buffer = memoryview(serialized_tensor.buffer)
     num_chunks = (len(buffer) - 1) // chunk_size_bytes + 1
@@ -248,7 +248,7 @@ def split_into_chunks(serialized_tensor: runtime_pb2.Tensor, chunk_size_bytes: i
         yield runtime_pb2.Tensor(buffer=buffer[chunk_start: chunk_start + chunk_size_bytes].tobytes())
 
 
-def restore_from_chunks(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.Tensor:
+def combine_from_stream(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.Tensor:
     """ Restore a result of split_into_chunks into a single serialized tensor """
     stream = iter(stream)
     first_chunk: runtime_pb2.Tensor = next(stream)

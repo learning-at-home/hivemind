@@ -1,5 +1,7 @@
+from typing import TypeVar, AsyncIterator, Union
 import asyncio
 import uvloop
+T = TypeVar('T')
 
 
 def switch_to_uvloop() -> asyncio.AbstractEventLoop:
@@ -12,3 +14,21 @@ def switch_to_uvloop() -> asyncio.AbstractEventLoop:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     return loop
+
+
+async def anext(aiter: AsyncIterator[T]) -> Union[T, StopAsyncIteration]:
+    """ equivalent to next(iter) for asynchronous iterators. Modifies aiter in-place! """
+    return await aiter.__anext__()
+
+
+async def aiter(*args: T) -> AsyncIterator[T]:
+    """ create an asynchronous iterator from a sequence of values """
+    for arg in args:
+        yield arg
+
+
+async def achain(*async_iters: AsyncIterator[T]) -> AsyncIterator[T]:
+    """ equivalent to chain(iter1, iter2, ...) for asynchronous iterators. """
+    for aiter in async_iters:
+        async for elem in aiter:
+            yield elem
