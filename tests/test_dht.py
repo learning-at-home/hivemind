@@ -40,8 +40,7 @@ def test_store_get_experts():
 def test_dht_get_address(addr=LOCALHOST, dummy_endpoint='123.45.67.89:*'):
     node1 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*")
     node2 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", initial_peers=[f"{addr}:{node1.port}"])
-    node3 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*",
-                         initial_peers=[f"{node1.get_visible_address()}:{node2.port}"])
+    node3 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", initial_peers=[f"{addr}:{node2.port}"])
     assert addr in node3.get_visible_address(num_peers=2)
 
     node4 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*")
