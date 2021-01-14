@@ -202,7 +202,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                         if self.averaging_eta is not None:
                             for tensor in averaging_deltas:
                                 tensor.mul_(self.averaging_eta)
-                        self.update_tensors(averaging_deltas, add=True)
+                        return self.update_tensors(averaging_deltas, add=True)
 
                 update_ok = await loop.run_in_executor(None, _apply_deltas)
 
