@@ -183,7 +183,7 @@ class DHT(mp.Process):
     def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
         """
         Get this machine's visible address by requesting other peers or using pre-specified network addresses.
-        If no parameters are specified, this function will check for pre-specified address; if not, ask 1 random peer.
+        If no parameters are specified, this function will check for manual endpoint; if unavailable, ask 1 random peer.
 
         :param num_peers: if specified, ask multiple peers and check that they perceive the same endpoint
         :param peers: if specified, ask these exact peers instead of choosing random known peers
