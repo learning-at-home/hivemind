@@ -189,7 +189,7 @@ class DHT(mp.Process):
         :param peers: if specified, ask these exact peers instead of choosing random known peers
         :note: if this node has no known peers in routing table, one must specify :peers: manually
         """
-        assert num_peers is None or peers == (), "please specify either a number of peers or the list of peers, but not both"
+        assert num_peers is None or peers == (), "please specify either a num_peers or the list of peers, not both"
         assert not isinstance(peers, str) and isinstance(peers, Sequence), "Please send a list / tuple of endpoints"
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=_future)))
