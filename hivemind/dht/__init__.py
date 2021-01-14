@@ -203,7 +203,7 @@ class DHT(mp.Process):
 
         chosen_address = None
         if peers:
-            endpoint_variants: Sequence[str] = await asyncio.gather(*(
+            possible_endpoints: Sequence[str] = await asyncio.gather(*(
                 node.protocol.get_outgoing_request_endpoint(peer) for peer in peers))
 
             for endpoint in endpoint_variants:
