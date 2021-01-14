@@ -687,6 +687,10 @@ class Blacklist:
     def __contains__(self, peer: Endpoint) -> bool:
         return peer in self.banned_peers
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(base_time={self.base_time}, backoff={self.backoff}, " \
+               f"banned_peers={len(self.banned_peers)})"
+
     def clear(self):
         self.banned_peers.clear()
         self.ban_counter.clear()
