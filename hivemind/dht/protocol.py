@@ -110,14 +110,14 @@ class DHTProtocol(dht_grpc.DHTServicer):
         if responded and validate:
             try:
                 if self.server is not None and not response.available:
-                    ValidationException(f"peer {peer} couldn't access this node's endpoint {response.sender_endpoint}.")
+                    raise ValidationError(f"peer {peer} couldn't access this node via {response.sender_endpoint} .")
 
                 if response.dht_time != dht_pb2.PingResponse.dht_time.DESCRIPTOR.default_value:
                     if response.dht_time < time_requested - MAX_DHT_TIME_DISCREPANCY_SECONDS or \
                             response.dht_time > time_responded + MAX_DHT_TIME_DISCREPANCY_SECONDS:
-                        ValidationException(f"local time must be within {MAX_DHT_TIME_DISCREPANCY_SECONDS} seconds of "
+                        ValidationError(f"local time must be within {MAX_DHT_TIME_DISCREPANCY_SECONDS} seconds of "
                                             f"other peers (local: {time_requested:.5f}, peer: {response.dht_time:.5f})")
-            except ValidationException as e:
+            except ValidationError as e:
                 if strict:
                     raise
                 else:
@@ -346,5 +346,5 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 del self.routing_table[node_id]
 
 
-class ValidationException(Exception):
+class ValidationError(Exception):
     """ This exception is thrown if DHT node didn't pass validation by other nodes. """
