@@ -216,7 +216,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 self._pending_group_assembled.set()
 
     def _apply_averaging_results(self, allreduce_group: AllReduceRunner) -> bool:
-        """ Internal (overridable) method to apply changes from allreduce, return True on success, False on failure """
+        """
+        a private (extendable) method that applies changes from a finished allreduce
+
+        :return: True on success, False on failure
+        """
         assert allreduce_group.return_deltas and allreduce_group.future.done()
         averaging_deltas = allreduce_group.future.result()
 
