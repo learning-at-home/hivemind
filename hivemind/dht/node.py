@@ -678,7 +678,7 @@ class Blacklist:
         if peer not in self.banned_peers and self.base_time > 0:
             ban_duration = self.base_time * self.backoff ** self.ban_counter[peer]
             self.banned_peers.store(peer, self.ban_counter[peer], expiration_time=get_dht_time() + ban_duration)
-            self.ban_counter.update(peer)
+            self.ban_counter[peer] += 1
 
     def register_success(self, peer):
         """ peer responded successfully, remove him from blacklist and reset his ban time """
