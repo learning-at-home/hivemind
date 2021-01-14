@@ -9,7 +9,7 @@ import pytest
 import hivemind
 from typing import List, Dict
 
-from hivemind import get_dht_time
+from hivemind import get_dht_time, replace_port
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.storage import DictionaryDHTValue
@@ -392,3 +392,34 @@ async def test_dhtnode_reuse_get():
     assert (await futures1['k1'])[0] == 123
     assert await futures1['k2'] == await futures2['k2'] and (await futures1['k2'])[0] == 567
     assert await futures2['k3'] == await futures3['k3'] and (await futures3['k3']) is None
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_dhtnode_blacklist():
+    node1 = await hivemind.DHTNode.create(blacklist_time=999)
+    node2 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
+    node3 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
+    node4 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
+
+    assert await node2.store('abc', 123, expiration_time=hivemind.get_dht_time() + 99)
+
+    await node3.shutdown()
+    await node4.shutdown()
+
+    assert await node2.store('abc', 123, expiration_time=hivemind.get_dht_time() + 99)
+
+    assert len(node2.blacklist.ban_counter) == 2
+
+    for banned_peer in node2.blacklist.ban_counter:
+        assert any(banned_peer.endswith(str(port)) for port in [node3.port, node4.port])
+
+    node3_endpoint = await node3.protocol.get_outgoing_request_endpoint(f"{hivemind.LOCALHOST}:{node1.port}")
+    node3_endpoint = replace_port(node3_endpoint, node3.port)
+    assert await node1.get('abc', latest=True)  # force node1 to crawl dht and discover unresponsive peers
+    assert node3_endpoint in node1.blacklist
+
+    node2_endpoint = await node2.protocol.get_outgoing_request_endpoint(f"{hivemind.LOCALHOST}:{node1.port}")
+    node2_endpoint = replace_port(node2_endpoint, node2.port)
+    assert await node1.get('abc', latest=True)  # force node1 to crawl dht and discover unresponsive peers
+    assert node2_endpoint not in node1.blacklist
