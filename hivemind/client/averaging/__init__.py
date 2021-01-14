@@ -217,7 +217,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     def _apply_averaging_results(self, allreduce_group: AllReduceRunner) -> bool:
         """
-        a private (extendable) method that applies changes from a finished allreduce
+        a private (extendable) method that applies changes from a finished allreduce to local tensors
 
         :return: True on success, False on failure
         """
