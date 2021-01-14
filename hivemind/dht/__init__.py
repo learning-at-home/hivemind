@@ -185,7 +185,7 @@ class DHT(mp.Process):
         Get this machine's visible address by requesting other peers or using pre-specified network addresses.
         If no parameters are specified, this function will check for pre-specified address; if not, ask 1 random peer.
 
-        :param num_peers: if specified, ask multiple peers and chek that they perceive the same endpoint
+        :param num_peers: if specified, ask multiple peers and check that they perceive the same endpoint
         :param peers: if specified, ask these exact peers instead of choosing random known peers
         :note: if this node has no known peers in routing table, one must specify :peers: manually
         """
@@ -204,7 +204,7 @@ class DHT(mp.Process):
 
         chosen_address = None
         if peers:
-            endpoint_variants: Sequence[str] = await asyncio.gather(*(
+            possible_endpoints: Sequence[str] = await asyncio.gather(*(
                 node.protocol.get_outgoing_request_endpoint(peer) for peer in peers))
 
             for endpoint in endpoint_variants:
