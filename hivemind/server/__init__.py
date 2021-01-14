@@ -110,6 +110,7 @@ class Server(threading.Thread):
         else:
             dht_endpoint = replace_port(listen_on, dht_port or hivemind.find_open_port())
             dht = hivemind.DHT(initial_peers=initial_peers, start=True, listen_on=dht_endpoint)
+            logger.info(f"Running DHT node on port {dht.port}, initial peers = {initial_peers}")
 
         if load_experts:
             assert dir_is_correct(checkpoint_dir)
