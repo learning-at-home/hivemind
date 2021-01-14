@@ -195,16 +195,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 group_id = allreduce_group.group_id
                 self._running_groups[group_id] = allreduce_group
                 self._pending_group_assembled.set()
-                averaging_deltas = await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
-
-                def _apply_deltas():
-                    with torch.no_grad():
-                        if self.averaging_eta is not None:
-                            for tensor in averaging_deltas:
-                                tensor.mul_(self.averaging_eta)
-                        return self.update_tensors(averaging_deltas, add=True)
-
-                update_ok = await loop.run_in_executor(None, _apply_deltas)
+                await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
+                update_ok = await loop.run_in_executor(None, self._apply_averaging_results, allreduce_group)
 
                 # averaging is finished, exit the loop
                 future.set_result(update_ok)
@@ -222,6 +214,17 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             finally:
                 _ = self._running_groups.pop(group_id, None)
                 self._pending_group_assembled.set()
+
+    def _apply_averaging_results(self, allreduce_group: AllReduceRunner) -> bool:
+        """ Internal (overridable) method to apply changes from allreduce, return True on success, False on failure """
+        assert allreduce_group.return_deltas and allreduce_group.future.done()
+        averaging_deltas = allreduce_group.future.result()
+
+        with torch.no_grad():
+            if self.averaging_eta is not None:
+                for tensor in averaging_deltas:
+                    tensor.mul_(self.averaging_eta)
+            return self.update_tensors(averaging_deltas, add=True)
 
     def update_tensors(self, tensors: Sequence[torch.Tensor], *, add: bool = False) -> bool:
         """
