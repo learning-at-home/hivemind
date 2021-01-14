@@ -34,7 +34,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     print(f"Sampled {len(expert_uids)} unique ids (after deduplication)")
     random.shuffle(expert_uids)
 
-    print(f"Storing peers to dht in batches of {expert_batch_size}...")
+    print(f"Storing experts to dht in batches of {expert_batch_size}...")
     successful_stores = total_stores = total_store_time = 0
     benchmark_started = time.perf_counter()
     endpoints = []

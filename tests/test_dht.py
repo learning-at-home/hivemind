@@ -2,10 +2,9 @@ import random
 import numpy as np
 import pytest
 import asyncio
-import multiprocessing as mp
 
 import hivemind
-from hivemind import LOCALHOST, UidEndpoint
+from hivemind import LOCALHOST, UidEndpoint, strip_port
 
 
 @pytest.mark.forked
@@ -21,7 +20,7 @@ def test_store_get_experts():
     expert_uids = [f"my_expert.{i}" for i in range(110)]
     batch_size = 10
     for batch_start in range(0, len(expert_uids), batch_size):
-        you.declare_experts(expert_uids[batch_start: batch_start + batch_size], 'localhost', 1234)
+        you.declare_experts(expert_uids[batch_start: batch_start + batch_size], 'localhost:1234')
 
     found = theguyshetoldyounottoworryabout.get_experts(random.sample(expert_uids, 5) + ['foo', 'bar'])
     assert all(res is not None for res in found[:-2]), "Could not find some existing experts"
@@ -35,6 +34,22 @@ def test_store_get_experts():
 
     for peer in peers:
         peer.shutdown()
+
+
+@pytest.mark.forked
+def test_dht_get_address(addr=LOCALHOST, dummy_endpoint='123.45.67.89:*'):
+    node1 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*")
+    node2 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", initial_peers=[f"{addr}:{node1.port}"])
+    node3 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", initial_peers=[f"{addr}:{node2.port}"])
+    assert addr in node3.get_visible_address(num_peers=2)
+
+    node4 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*")
+    with pytest.raises(ValueError):
+        node4.get_visible_address()
+    assert node4.get_visible_address(peers=[f'{addr}:{node1.port}']).endswith(addr)
+
+    node5 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", endpoint=f"{dummy_endpoint}")
+    assert node5.get_visible_address() == strip_port(dummy_endpoint)
 
 
 @pytest.mark.forked

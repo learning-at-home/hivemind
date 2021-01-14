@@ -65,6 +65,3 @@ class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTVal
             return False
 
 
-class CacheRefreshQueue(TimedStorage[DHTID, DHTExpiration]):
-    """ a queue of keys scheduled for refresh in future, used in DHTNode """
-    frozen = True

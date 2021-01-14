@@ -47,6 +47,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
       note - this expiration time only applies to looking for group, passing tensors in allreduce may take more time
     :param compression_type: optionally compress tensors with this compression algorithm before sending them to peers
     :param allreduce_timeout: spend at most this many seconds for allreduce (after group is formed)
+    :param averaging_alpha: optional "learning rate" for averaging. If specified, local parameters will be shifted
+      towards the (estimated) average by this coefficient. By default, local parameters are set equal to average.
     :param request_timeout: when looking for group, wait for a response from leader for at most this many seconds.
     :note: request_timeout must be smaller than averaging_expiration to avoid potential deadlocks.
     :param chunk_size_bytes: tensors for AllReduce will be divided into chunks of this size (to improve gRPC throughput)
@@ -66,8 +68,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
                  prefix: str, target_group_size: int, min_group_size: int = 2, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, allreduce_timeout: Optional[float] = None,
-                 request_timeout: float = 3, chunk_size_bytes: int = 2 ** 16,
+                 averaging_expiration: float = 15, request_timeout: float = 3, chunk_size_bytes: int = 2 ** 16,
+                 allreduce_timeout: Optional[float] = None, averaging_alpha: float = 1.0,
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
                  listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1, daemon: bool = True,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
@@ -95,7 +97,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             prefix=prefix, initial_group_bits=initial_group_bits, target_group_size=target_group_size,
             min_group_size=min_group_size, averaging_expiration=averaging_expiration, request_timeout=request_timeout,
             chunk_size_bytes=chunk_size_bytes, compression_type=compression_type)
-        self.allreduce_timeout = allreduce_timeout
+        self.averaging_alpha, self.allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
@@ -193,8 +195,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 group_id = allreduce_group.group_id
                 self._running_groups[group_id] = allreduce_group
                 self._pending_group_assembled.set()
-                averaging_deltas = await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
-                update_ok = await loop.run_in_executor(None, lambda: self.update_tensors(averaging_deltas, add=True))
+                await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
+                update_ok = await loop.run_in_executor(None, self.update_tensors, allreduce_group)
 
                 # averaging is finished, exit the loop
                 future.set_result(update_ok)
@@ -213,23 +215,20 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 _ = self._running_groups.pop(group_id, None)
                 self._pending_group_assembled.set()
 
-    def update_tensors(self, tensors: Sequence[torch.Tensor], *, add: bool = False) -> bool:
+    def update_tensors(self, allreduce_group: AllReduceRunner) -> bool:
         """
-        Set or change the values of self.averaged_tensors.
+        a private (extendable) method that applies changes from a finished allreduce to local tensors
 
-        :param tensors: list/tuple of tensors of same shape as self.averaged_tensors
-        :param add: if True, add tensors to self.averaged_tensors in-place
-          by default, simply write the values of :tensors: to self.averaged_tensors
-        :note: if there may be updates running in background, it is recommended to use add=True
+        :return: True on success, False on failure
         """
-        assert len(tensors) == len(self._averaged_tensors)
-        with torch.no_grad(), self.lock_averaged_tensors:
-            for tensor, update in zip(self._averaged_tensors, tensors):
-                if add:
-                    tensor += update
-                else:
-                    tensor[...] = update
-        return True
+        assert allreduce_group.return_deltas and allreduce_group.future.done()
+        averaging_deltas = allreduce_group.future.result()
+
+        with torch.no_grad(), self.get_tensors() as local_tensors:
+            assert len(local_tensors) == len(self._averaged_tensors)
+            for tensor, update in zip(local_tensors, averaging_deltas):
+                tensor.add_(update, alpha=self.averaging_alpha)
+            return True
 
     @contextlib.contextmanager
     def get_tensors(self) -> Sequence[torch.Tensor]:

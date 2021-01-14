@@ -5,7 +5,7 @@ syntax = "proto3";
 
 service DHT {
   // find out recipient's DHTID and possibly update its routing table
-  rpc rpc_ping(NodeInfo) returns (NodeInfo);
+  rpc rpc_ping(PingRequest) returns (PingResponse);
 
   // request a node to store one or multiple data items (key - value - expiration)
   rpc rpc_store(StoreRequest) returns (StoreResponse);
@@ -19,6 +19,19 @@ message NodeInfo {
   // if either node_id or port is absent, simply request recipient info (for client-only mode)
   bytes node_id = 1;                   // sender's own node id serialized with DHTID.to_bytes()
   int32 rpc_port = 2;                  // port to which sender listens for DHT RPCs
+  string endpoint = 3;                 // (optional) node's preferred return address
+}
+
+message PingRequest {
+  NodeInfo peer = 1;                   // (optional) sender's own node info, same behavior as in DHT.rpc_ping
+  bool validate = 2;                   // set to True if sender wants to validate that he is accessible and synchronized
+}
+
+message PingResponse {
+  NodeInfo peer = 1;                   // respondent's node id, for you to update routing table
+  string sender_endpoint = 2;          // echo sender's visible endpoint - used to infer his ip address
+  double dht_time = 3;                 // recipient's local DHT time - used to soft-synchronize peers
+  bool available = 4;                  // if validate = True, this flag asserts that the sender is available for ping
 }
 
 message StoreRequest {
