@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import random
-from collections import defaultdict
+from collections import defaultdict, Counter
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Optional, Tuple, List, Dict, DefaultDict, Collection, Union, Set, Awaitable, Callable, Any
@@ -68,6 +68,7 @@ class DHTNode:
     chunk_size: int; refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
     cache_on_store: bool; reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedSet[_SearchState]]
     cache_refresh_task: Optional[asyncio.Task]; cache_refresh_evt: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
+    blacklist: Blacklist
     # fmt:on
 
     @classmethod
@@ -77,6 +78,7 @@ class DHTNode:
             wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
             cache_on_store: bool = True, reuse_get_requests: bool = True, num_workers: int = 1, chunk_size: int = 16,
+            blacklist_time: float = 5.0, backoff_rate: float = 2.0,
             listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
@@ -103,6 +105,8 @@ class DHTNode:
           all concurrent get requests for the same key will reuse the procedure that is currently in progress
         :param num_workers: concurrent workers in traverse_dht (see traverse_dht num_workers param)
         :param chunk_size: maximum number of concurrent calls in get_many and cache refresh queue
+        :param blacklist_time: excludes non-responsive peers from search for this many seconds (set 0 to disable)
+        :param backoff_rate: blacklist time will be multiplied by :backoff_rate: for each successive non-response
         :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
           if False, this node will refuse any incoming request, effectively being only a "client"
         :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
@@ -122,6 +126,7 @@ class DHTNode:
         self.refresh_timeout = refresh_timeout
         self.cache_locally, self.cache_nearest, self.cache_on_store = cache_locally, cache_nearest, cache_on_store
         self.cache_refresh_before_expiry = cache_refresh_before_expiry
+        self.blacklist = Blacklist(blacklist_time, backoff_rate)
         self.cache_refresh_queue = CacheRefreshQueue()
         self.cache_refresh_evt = asyncio.Event()
         self.cache_refresh_task = None
@@ -193,11 +198,11 @@ class DHTNode:
         if node_to_endpoint is None:
             node_to_endpoint: Dict[DHTID, Endpoint] = dict()
             for query in queries:
-                node_to_endpoint.update(
-                    self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id))
+                neighbors = self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id)
+                node_to_endpoint.update(self._filter_blacklisted(dict(neighbors)))
 
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[Tuple[DHTID], bool]]:
-            response = await self.protocol.call_find(node_to_endpoint[peer], queries)
+            response = await self._call_find_with_blacklist(node_to_endpoint[peer], queries)
             if not response:
                 return {query: ([], False) for query in queries}
 
@@ -434,7 +439,7 @@ class DHTNode:
         # V-- this function will be called every time traverse_dht decides to request neighbors from a remote peer
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[Tuple[DHTID], bool]]:
             queries = list(queries)
-            response = await self.protocol.call_find(node_to_endpoint[peer], queries)
+            response = await self._call_find_with_blacklist(node_to_endpoint[peer], queries)
             if not response:
                 return {query: ([], False) for query in queries}
 
@@ -480,6 +485,22 @@ class DHTNode:
                 pending_requests.pop()
         else:
             pending_requests.discard(finished)
+
+    async def _call_find_with_blacklist(self, endpoint: Endpoint, keys: Collection[DHTID]):
+        """ same as call_find, but skip if :endpoint: is blacklisted; also exclude blacklisted neighbors from result """
+        if endpoint in self.blacklist:
+            return None
+        response = await self.protocol.call_find(endpoint, keys)
+        if response:
+            self.blacklist.register_success(endpoint)
+            return {key: (maybe_value, self._filter_blacklisted(nearest_peers))
+                    for key, (maybe_value, nearest_peers) in response.items()}
+        else:
+            self.blacklist.register_failure(endpoint)
+            return None
+
+    def _filter_blacklisted(self, peer_endpoints: Dict[DHTID, Endpoint]):
+        return {peer: endpoint for peer, endpoint in peer_endpoints.items() if endpoint not in self.blacklist}
 
     def _trigger_cache_refresh(self, search: _SearchState):
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
@@ -630,6 +651,36 @@ class _SearchState:
 
     def __hash__(self):
         return hash(self.key_id)
+
+
+class Blacklist:
+    """
+    A temporary blacklist of non-responding peers with exponential backoff policy
+    :param base_time: peers are suspended for this many seconds by default
+    :param backoff_rate: suspension time increases by this factor after each successive failure
+    """
+    def __init__(self, base_time: float, backoff_rate: float, **kwargs):
+        self.base_time, self.backoff = base_time, backoff_rate
+        self.banned_peers = TimedStorage[Endpoint, int](**kwargs)
+        self.ban_counter = Counter()
+
+    def register_failure(self, peer: Endpoint):
+        """ peer failed to respond, add him to blacklist or increase his downtime """
+        if peer not in self.banned_peers and self.base_time > 0:
+            ban_duration = self.base_time * self.backoff ** self.ban_counter[peer]
+            self.banned_peers.store(peer, self.ban_counter[peer], expiration_time=get_dht_time() + ban_duration)
+            self.ban_counter.update(peer)
+
+    def register_success(self, peer):
+        """ peer responded successfully, remove him from blacklist and reset his ban time """
+        del self.banned_peers[peer], self.ban_counter[peer]
+
+    def __contains__(self, peer: Endpoint) -> bool:
+        return peer in self.banned_peers
+
+    def clear(self):
+        self.banned_peers.clear()
+        self.ban_counter.clear()
 
 
 class CacheRefreshQueue(TimedStorage[DHTID, DHTExpiration]):
