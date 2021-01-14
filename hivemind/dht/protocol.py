@@ -115,8 +115,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 if response.dht_time != dht_pb2.PingResponse.dht_time.DESCRIPTOR.default_value:
                     if response.dht_time < time_requested - MAX_DHT_TIME_DISCREPANCY_SECONDS or \
                             response.dht_time > time_responded + MAX_DHT_TIME_DISCREPANCY_SECONDS:
-                        ValidationError(f"local time must be within {MAX_DHT_TIME_DISCREPANCY_SECONDS} seconds of "
-                                            f"other peers (local: {time_requested:.5f}, peer: {response.dht_time:.5f})")
+                        raise ValidationError(f"local time must be within {MAX_DHT_TIME_DISCREPANCY_SECONDS} seconds "
+                                              f" of others(local: {time_requested:.5f}, peer: {response.dht_time:.5f})")
             except ValidationError as e:
                 if strict:
                     raise
@@ -153,7 +153,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             response.sender_endpoint = sender_endpoint
             if request.validate:
                 test_response = await self.call_ping(response.sender_endpoint)
-                response.available = test_response is not None and test_response.peer.node_id == request.peer.node_id
+                response.available = test_response is not None and test_response == request.peer.node_id
 
             asyncio.create_task(self.update_routing_table(sender_id, sender_endpoint,
                                                           responded=response.available or not request.validate))
