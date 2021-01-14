@@ -78,8 +78,9 @@ class DHTNode:
             wait_timeout: float = 5, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
             cache_on_store: bool = True, reuse_get_requests: bool = True, num_workers: int = 1, chunk_size: int = 16,
-            blacklist_time: float = 5.0, backoff_rate: float = 2.0, endpoint: Optional[Endpoint] = None,
-            listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", **kwargs) -> DHTNode:
+            blacklist_time: float = 5.0, backoff_rate: float = 2.0,
+            listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", endpoint: Optional[Endpoint] = None,
+            validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
         :param initial_peers: connects to these peers to populate routing table, defaults to no peers
@@ -107,6 +108,8 @@ class DHTNode:
         :param chunk_size: maximum number of concurrent calls in get_many and cache refresh queue
         :param blacklist_time: excludes non-responsive peers from search for this many seconds (set 0 to disable)
         :param backoff_rate: blacklist time will be multiplied by :backoff_rate: for each successive non-response
+        :param validate: if True, use initial peers to validate that this node is accessible and synchronized
+        :param strict: if True, any error encountered in validation will interrupt the creation of DHTNode
         :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
           if False, this node will refuse any incoming request, effectively being only a "client"
         :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
@@ -140,7 +143,8 @@ class DHTNode:
             # stage 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
             start_time = get_dht_time()
-            ping_tasks = map(self.protocol.call_ping, initial_peers)
+            ping_tasks = set(asyncio.create_task(self.protocol.call_ping(peer, validate=validate, strict=strict))
+                             for peer in initial_peers)
             finished_pings, unfinished_pings = await asyncio.wait(ping_tasks, return_when=asyncio.FIRST_COMPLETED)
 
             # stage 2: gather remaining peers (those who respond within bootstrap_timeout)
@@ -153,6 +157,10 @@ class DHTNode:
 
             if not finished_pings:
                 logger.warning("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
+
+            if strict:
+                for task in asyncio.as_completed(finished_pings):
+                    await task.result()  # propagate exceptions
 
             # stage 3: traverse dht to find my own nearest neighbors and populate the routing table
             # ... maybe receive some values that we are meant to store (see protocol.update_routing_table)
