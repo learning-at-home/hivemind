@@ -145,8 +145,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
         if request.peer and request.peer.node_id and request.peer.rpc_port:
             sender_id = DHTID.from_bytes(request.peer.node_id)
-            if response.peer.endpoint != dht_pb2.NodeInfo.endpoint.DESCRIPTOR.default_value:
-                sender_endpoint = response.peer.endpoint  # if peer has preferred endpoint, use it
+            if request.peer.endpoint != dht_pb2.NodeInfo.endpoint.DESCRIPTOR.default_value:
+                sender_endpoint = request.peer.endpoint  # if peer has preferred endpoint, use it
             else:
                 sender_endpoint = replace_port(context.peer(), new_port=request.peer.rpc_port)
 
