@@ -20,7 +20,7 @@ def test_store_get_experts():
     expert_uids = [f"my_expert.{i}" for i in range(110)]
     batch_size = 10
     for batch_start in range(0, len(expert_uids), batch_size):
-        you.declare_experts(expert_uids[batch_start: batch_start + batch_size], 'localhost', 1234)
+        you.declare_experts(expert_uids[batch_start: batch_start + batch_size], 'localhost:1234')
 
     found = theguyshetoldyounottoworryabout.get_experts(random.sample(expert_uids, 5) + ['foo', 'bar'])
     assert all(res is not None for res in found[:-2]), "Could not find some existing experts"
@@ -37,7 +37,7 @@ def test_store_get_experts():
 
 
 @pytest.mark.forked
-def test_dht_get_address(addr=LOCALHOST, dummy_endpoint='123.45.67.89:1337'):
+def test_dht_get_address(addr=LOCALHOST, dummy_endpoint='123.45.67.89:*'):
     node1 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*")
     node2 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", initial_peers=[f"{addr}:{node1.port}"])
     node3 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*",
