@@ -47,6 +47,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
       note - this expiration time only applies to looking for group, passing tensors in allreduce may take more time
     :param compression_type: optionally compress tensors with this compression algorithm before sending them to peers
     :param allreduce_timeout: spend at most this many seconds for allreduce (after group is formed)
+    :param averaging_eta: optional "learning rate" for averaging. If specified, local parameters will be shifted towards
+      the (estimated) average by this coefficient. By default, local parameters are set equal to average (i.e. eta = 1)
     :param request_timeout: when looking for group, wait for a response from leader for at most this many seconds.
     :note: request_timeout must be smaller than averaging_expiration to avoid potential deadlocks.
     :param chunk_size_bytes: tensors for AllReduce will be divided into chunks of this size (to improve gRPC throughput)
@@ -66,8 +68,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
                  prefix: str, target_group_size: int, min_group_size: int = 2, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, allreduce_timeout: Optional[float] = None,
-                 request_timeout: float = 3, chunk_size_bytes: int = 2 ** 16,
+                 averaging_expiration: float = 15, request_timeout: float = 3, chunk_size_bytes: int = 2 ** 16,
+                 allreduce_timeout: Optional[float] = None, averaging_eta: Optional[float] = None,
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
                  listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1, daemon: bool = True,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
