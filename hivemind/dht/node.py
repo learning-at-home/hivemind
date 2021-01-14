@@ -160,7 +160,7 @@ class DHTNode:
 
             if strict:
                 for task in asyncio.as_completed(finished_pings):
-                    await task.result()  # propagate exceptions
+                    await task  # propagate exceptions
 
             # stage 3: traverse dht to find my own nearest neighbors and populate the routing table
             # ... maybe receive some values that we are meant to store (see protocol.update_routing_table)
