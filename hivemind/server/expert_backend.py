@@ -61,6 +61,8 @@ class ExpertBackend(nn.Module):
         self.forward_pool = TaskPool(self.forward, uid=f'{self.name}_forward', **kwargs)
         self.backward_pool = TaskPool(self.backward, uid=f'{self.name}_backward', **kwargs)
 
+        self.register_buffer('update_count', torch.zeros(1, dtype=torch.long))
+
     def forward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
         Apply forward pass to an aggregated batch of requests. Used by Runtime, do not call this manually;
@@ -130,6 +132,7 @@ class ExpertBackend(nn.Module):
         """
         self.opt.step()
         self.opt.zero_grad()
+        self.update_count += 1
 
     def get_info(self) -> Dict[str, Any]:
         """ Get expert parameters and stats. Used by RemoteExpert to check shapes and for DMoE orchestration. """

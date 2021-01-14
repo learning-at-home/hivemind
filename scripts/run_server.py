@@ -1,4 +1,5 @@
 from functools import partial
+from pathlib import Path
 
 import configargparse
 import torch
@@ -43,6 +44,9 @@ def main():
                              'a server can spawn before hitting "Too many open files"; Use at your own risk.')
     parser.add_argument('--compression', type=str, default='NONE', required=False, help='Tensor compression '
                         'parameter for grpc. Can be NONE, MEANSTD or FLOAT16')
+    parser.add_argument('--checkpoint_dir', type=Path, required=False, help='Directory to store expert checkpoints')
+    parser.add_argument('--load_experts', action='store_true', help='Load experts from the checkpoint directory')
+
     # fmt:on
     args = vars(parser.parse_args())
     args.pop('config', None)
