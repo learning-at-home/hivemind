@@ -403,11 +403,12 @@ async def test_dhtnode_blacklist():
     node4 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
 
     assert await node2.store('abc', 123, expiration_time=hivemind.get_dht_time() + 99)
+    assert len(node2.blacklist.ban_counter) == 0
 
     await node3.shutdown()
     await node4.shutdown()
 
-    assert await node2.store('abc', 123, expiration_time=hivemind.get_dht_time() + 99)
+    assert await node2.store('def', 456, expiration_time=hivemind.get_dht_time() + 99)
 
     assert len(node2.blacklist.ban_counter) == 2
 
