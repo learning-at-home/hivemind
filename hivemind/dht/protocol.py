@@ -155,7 +155,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 response.available = await self.call_ping(response.sender_endpoint) is not None
 
             asyncio.create_task(self.update_routing_table(sender_id, sender_endpoint,
-                                                          responded=request.available or not request.validate))
+                                                          responded=response.available or not request.validate))
 
         return response
 
