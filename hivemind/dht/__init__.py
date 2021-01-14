@@ -197,7 +197,7 @@ class DHT(mp.Process):
 
     async def _get_visible_address(self, node: DHTNode, num_peers: Optional[int], peers: Sequence[Endpoint],
                                    future: Optional[MPFuture]):
-        if not peers and not node.protocol.node_info.endpoint:
+        if not peers and (num_peers or not node.protocol.node_info.endpoint):
             peers_and_endpoints = node.protocol.routing_table.get_nearest_neighbors(
                 DHTID.generate(), num_peers or 1, exclude=node.node_id)
             peers = tuple(endpoint for node_id, endpoint in peers_and_endpoints)
