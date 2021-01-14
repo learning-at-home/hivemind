@@ -104,6 +104,8 @@ def test_dht_protocol():
         assert recv_dict.data[subkey1] == (protocol.serializer.dumps(value1), expiration)
         assert recv_dict.data[subkey2] == (protocol.serializer.dumps(value2), expiration + 5)
 
+        assert LOCALHOST in loop.run_until_complete(protocol.get_outgoing_request_endpoint(f'{LOCALHOST}:{peer1_port}'))
+
         if listen:
             loop.run_until_complete(protocol.shutdown())
         print("DHTProtocol test finished successfully!")
