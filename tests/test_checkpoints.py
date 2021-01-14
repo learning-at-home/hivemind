@@ -1,6 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 import torch
 from torch.nn import Linear
 
@@ -12,6 +13,7 @@ BACKWARD_PASSES_BEFORE_SAVE = 2
 BACKWARD_PASSES_AFTER_SAVE = 2
 
 
+@pytest.mark.forked
 def test_save_load_checkpoints():
     experts = {}
     expert = Linear(1, 1)
@@ -42,6 +44,7 @@ def test_save_load_checkpoints():
         assert expert.weight.data[0] == EXPERT_WEIGHT_UPDATES
 
 
+@pytest.mark.forked
 def test_restore_update_count():
     experts = {}
     expert = Linear(1, 1)
