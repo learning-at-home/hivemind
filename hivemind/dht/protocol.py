@@ -110,7 +110,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         if responded and validate:
             try:
                 if self.server is not None and not response.available:
-                    raise ValidationError(f"peer {peer} couldn't access this node via {response.sender_endpoint} .")
+                    raise ValidationError(f"peer {peer} couldn't access this node at {response.sender_endpoint} .")
 
                 if response.dht_time != dht_pb2.PingResponse.dht_time.DESCRIPTOR.default_value:
                     if response.dht_time < time_requested - MAX_DHT_TIME_DISCREPANCY_SECONDS or \
@@ -152,7 +152,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
             response.sender_endpoint = sender_endpoint
             if request.validate:
-                response.available = await self.call_ping(response.sender_endpoint) is not None
+                test_response = await self.call_ping(response.sender_endpoint)
+                response.available = test_response is not None and test_response.peer.node_id == request.peer.node_id
 
             asyncio.create_task(self.update_routing_table(sender_id, sender_endpoint,
                                                           responded=response.available or not request.validate))
