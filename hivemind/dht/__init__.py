@@ -219,8 +219,11 @@ class DHT(mp.Process):
             if chosen_address is None:
                 logger.warning(f"None of the selected peers responded with an address ({peers})")
 
-        if not chosen_address and node.protocol.node_info.endpoint:
-            chosen_address = strip_port(node.protocol.node_info.endpoint)
+        if node.protocol.node_info.endpoint:
+            address = strip_port(node.protocol.node_info.endpoint)
+            if chosen_address is not None and address != chosen_address:
+                logger.warning(f"Node was manually given endpoint {address} , but other peers report {chosen_address}")
+            chosen_address = chosen_address or address
 
         if chosen_address:
             future.set_result(chosen_address)
