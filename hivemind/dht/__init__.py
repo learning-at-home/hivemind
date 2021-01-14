@@ -155,6 +155,7 @@ class DHT(mp.Process):
                 method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
                 asyncio.create_task(getattr(self, method)(node, *args, **kwargs))
 
+        logger.info(f"Running DHT node on port {self.port}, initial peers = {self.initial_peers}")
         try:
             loop.run_until_complete(_run())
         except KeyboardInterrupt:
