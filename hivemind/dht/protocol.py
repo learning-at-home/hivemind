@@ -95,7 +95,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             async with self.rpc_semaphore:
                 peer_info = await self._get_dht_stub(peer).rpc_ping(self.node_info, timeout=self.wait_timeout)
         except grpc.aio.AioRpcError as error:
-            logger.warning(f"DHTProtocol failed to ping {peer}: {error.code()}")
+            logger.debug(f"DHTProtocol failed to ping {peer}: {error.code()}")
             peer_info = None
         responded = bool(peer_info and peer_info.node_id)
         peer_id = DHTID.from_bytes(peer_info.node_id) if responded else None
@@ -161,7 +161,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
             return response.store_ok
         except grpc.aio.AioRpcError as error:
-            logger.warning(f"DHTProtocol failed to store at {peer}: {error.code()}")
+            logger.debug(f"DHTProtocol failed to store at {peer}: {error.code()}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
             return None
 
@@ -225,7 +225,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
             return output
         except grpc.aio.AioRpcError as error:
-            logger.warning(f"DHTProtocol failed to find at {peer}: {error.code()}")
+            logger.debug(f"DHTProtocol failed to find at {peer}: {error.code()}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
 
     async def rpc_find(self, request: dht_pb2.FindRequest, context: grpc.ServicerContext) -> dht_pb2.FindResponse:
