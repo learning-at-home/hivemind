@@ -11,7 +11,7 @@ from typing import List, Dict
 
 from hivemind import get_dht_time, replace_port
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST
-from hivemind.dht.protocol import DHTProtocol
+from hivemind.dht.protocol import DHTProtocol, ValidationError
 from hivemind.dht.storage import DictionaryDHTValue
 
 
@@ -424,3 +424,13 @@ async def test_dhtnode_blacklist():
     node2_endpoint = replace_port(node2_endpoint, node2.port)
     assert await node1.get('abc', latest=True)  # force node1 to crawl dht and discover unresponsive peers
     assert node2_endpoint not in node1.blacklist
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_dhtnode_validate(fake_endpoint='127.0.0.721:*'):
+
+    node1 = await hivemind.DHTNode.create(blacklist_time=999)
+    with pytest.raises(ValidationError):
+        node2 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"],
+                                              endpoint=fake_endpoint)
