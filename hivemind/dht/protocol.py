@@ -149,11 +149,13 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 sender_endpoint = response.peer.endpoint  # if peer has preferred endpoint, use it
             else:
                 sender_endpoint = replace_port(context.peer(), new_port=request.peer.rpc_port)
-            asyncio.create_task(self.update_routing_table(sender_id, sender_endpoint))
 
             response.sender_endpoint = sender_endpoint
             if request.validate:
                 response.available = await self.call_ping(response.sender_endpoint) is not None
+
+            asyncio.create_task(self.update_routing_table(sender_id, sender_endpoint,
+                                                          responded=request.available or not request.validate))
 
         return response
 
