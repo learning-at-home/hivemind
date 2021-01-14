@@ -97,7 +97,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             prefix=prefix, initial_group_bits=initial_group_bits, target_group_size=target_group_size,
             min_group_size=min_group_size, averaging_expiration=averaging_expiration, request_timeout=request_timeout,
             chunk_size_bytes=chunk_size_bytes, compression_type=compression_type)
-        self.allreduce_timeout = allreduce_timeout
+        self.averaging_eta, self.allreduce_timeout = averaging_eta, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
@@ -196,7 +196,15 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 self._running_groups[group_id] = allreduce_group
                 self._pending_group_assembled.set()
                 averaging_deltas = await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
-                update_ok = await loop.run_in_executor(None, lambda: self.update_tensors(averaging_deltas, add=True))
+
+                def _apply_deltas():
+                    with torch.no_grad():
+                        if self.averaging_eta is not None:
+                            for tensor in averaging_deltas:
+                                tensor.mul_(self.averaging_eta)
+                        self.update_tensors(averaging_deltas, add=True)
+
+                update_ok = await loop.run_in_executor(None, _apply_deltas)
 
                 # averaging is finished, exit the loop
                 future.set_result(update_ok)
