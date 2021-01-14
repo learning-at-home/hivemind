@@ -57,6 +57,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
             self.port = self.server.add_insecure_port(listen_on)
             assert self.port != 0, f"Failed to listen to {listen_on}"
+            if endpoint is not None and endpoint.endswith('*'):
+                endpoint = replace_port(endpoint, self.port)
             self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes(), rpc_port=self.port,
                                               endpoint=endpoint or dht_pb2.NodeInfo.endpoint.DESCRIPTOR.default_value)
             await self.server.start()

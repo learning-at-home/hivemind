@@ -21,13 +21,12 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set
 
-import uvloop
 from numpy import nextafter
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import get_dht_time, DHTValue
-from hivemind.utils import MPFuture, Endpoint, get_logger, switch_to_uvloop
+from hivemind.utils import MPFuture, Endpoint, Hostname, get_logger, switch_to_uvloop, strip_port
 
 logger = get_logger(__name__)
 
@@ -180,6 +179,53 @@ class DHT(mp.Process):
     @property
     def port(self) -> Optional[int]:
         return self._port.value if self._port.value != 0 else None
+
+    def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
+        """
+        Get this machine's visible address by requesting other peers or using pre-specified network addresses.
+
+        :param num_peers: if specified, ask multiple peers and chek that they perceive the same endpoint
+        :param peers: if specified, ask these exact peers instead of choosing random known peers
+        :note: if this node has no known peers in routing table, one must specify :peers: manually
+        """
+        assert num_peers is None or peers == (), "please specify either a number of peers, but not both"
+        assert not isinstance(peers, str) and isinstance(peers, Sequence), "Please send a list / tuple of endpoints"
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=_future)))
+        return future.result()
+
+    async def _get_visible_address(self, node: DHTNode, num_peers: Optional[int], peers: Sequence[Endpoint],
+                                   future: Optional[MPFuture]):
+        if not peers and not node.protocol.node_info.endpoint:
+            peers_and_endpoints = node.protocol.routing_table.get_nearest_neighbors(
+                DHTID.generate(), num_peers or 1, exclude=node.node_id)
+            peers = tuple(endpoint for node_id, endpoint in peers_and_endpoints)
+
+        chosen_address = None
+        if peers:
+            endpoint_variants: Sequence[str] = await asyncio.gather(*(
+                node.protocol.get_outgoing_request_endpoint(peer) for peer in peers))
+
+            for endpoint in endpoint_variants:
+                if endpoint is None:
+                    continue
+                address = strip_port(endpoint)
+                if chosen_address is not None and address != chosen_address:
+                    logger.warning("At least two peers returned different visible addresses for this node:"
+                                   f"{address} and {chosen_address} (keeping the former one)")
+                chosen_address = chosen_address or address
+
+            if chosen_address is None:
+                logger.warning(f"None of the selected peers responded with an address ({peers})")
+
+        if not chosen_address and node.protocol.node_info.endpoint:
+            chosen_address = strip_port(node.protocol.node_info.endpoint)
+
+        if chosen_address:
+            future.set_result(chosen_address)
+        else:
+            future.set_exception(ValueError(f"Can't get address: DHT node has no peers and no public endpoint."
+                                            f" Please ensure the node is connected or specify peers=... manually."))
 
     def declare_experts(self, uids: Sequence[ExpertUID], endpoint: Endpoint, wait: bool = True,
                         timeout: Optional[float] = None) -> Dict[ExpertUID, bool]:

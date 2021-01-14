@@ -21,6 +21,11 @@ def replace_port(endpoint: Endpoint, new_port: Port) -> Endpoint:
     return f"{endpoint[:endpoint.rindex(':')]}:{new_port}"
 
 
+def strip_port(endpoint: Endpoint) -> Hostname:
+    """ Removes port from the end of endpoint. If port is not specified, does nothing """
+    return endpoint[:endpoint.rindex(':')] if str.isdigit(endpoint[endpoint.rindex(':') + 1:]) else endpoint
+
+
 def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):
     """ Finds a tcp port that can be occupied with a socket with *params and use *opt options """
     try:

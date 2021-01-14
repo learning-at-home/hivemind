@@ -2,10 +2,9 @@ import random
 import numpy as np
 import pytest
 import asyncio
-import multiprocessing as mp
 
 import hivemind
-from hivemind import LOCALHOST, UidEndpoint
+from hivemind import LOCALHOST, UidEndpoint, strip_port
 
 
 @pytest.mark.forked
@@ -35,6 +34,23 @@ def test_store_get_experts():
 
     for peer in peers:
         peer.shutdown()
+
+
+@pytest.mark.forked
+def test_dht_get_address(addr=LOCALHOST, dummy_endpoint='123.45.67.89:1337'):
+    node1 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*")
+    node2 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", initial_peers=[f"{addr}:{node1.port}"])
+    node3 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*",
+                         initial_peers=[f"{node1.get_visible_address()}:{node2.port}"])
+    assert addr in node3.get_visible_address(num_peers=2)
+
+    node4 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*")
+    with pytest.raises(ValueError):
+        node4.get_visible_address()
+    assert node4.get_visible_address(peers=[f'{addr}:{node1.port}']).endswith(addr)
+
+    node5 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", endpoint=f"{dummy_endpoint}")
+    assert node5.get_visible_address() == strip_port(dummy_endpoint)
 
 
 @pytest.mark.forked
