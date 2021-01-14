@@ -126,7 +126,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         return peer_id
 
     async def get_outgoing_request_endpoint(self, peer: Endpoint) -> Optional[Endpoint]:
-        """ ask this peer how does it perceive this node's outgoing request address """
+        """ ask this peer how it perceives this node's outgoing request address """
         try:
             async with self.rpc_semaphore:
                 ping_request = dht_pb2.PingRequest(peer=None, validate=False)
