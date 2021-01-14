@@ -184,7 +184,7 @@ class DHT(mp.Process):
         """
         Get this machine's visible address by requesting other peers or using pre-specified network addresses.
 
-        :param num_peers: if specified, ask multiple peers and chek that they perceive the same endpoint
+        :param num_peers: if specified, ask multiple peers and check that they perceive the same endpoint
         :param peers: if specified, ask these exact peers instead of choosing random known peers
         :note: if this node has no known peers in routing table, one must specify :peers: manually
         """
