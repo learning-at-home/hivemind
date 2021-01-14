@@ -215,7 +215,8 @@ class DHT(mp.Process):
                 if chosen_address is not None and address != chosen_address:
                     logger.warning("At least two peers returned different visible addresses for this node:"
                                    f"{address} and {chosen_address} (keeping the former one)")
-                chosen_address = chosen_address or address
+                else:
+                    chosen_address = address
 
             if chosen_address is None:
                 logger.warning(f"None of the selected peers responded with an address ({peers})")
