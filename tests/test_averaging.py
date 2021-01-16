@@ -136,7 +136,7 @@ def test_load_balancing():
     for i in range(10):
         vector_size = np.random.randint(1, 1024 ** 3)
         num_peers = np.random.randint(1, 256)
-        scale = 1e-9 + np.random.rand() * 1000
+        scale = 1e-9 + np.random.rand() * 1e5
         throughputs = np.random.rand(num_peers) * scale + 1e-6
         min_size = np.random.choice([0, np.random.randint(0, vector_size // 10)])
         assignment = load_balance_peers(vector_size, throughputs, min_size)
