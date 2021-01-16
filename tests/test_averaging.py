@@ -2,10 +2,12 @@ import asyncio
 import random
 import time
 
+import numpy as np
 import torch
 import pytest
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts
+from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.utils import Endpoint
 
 
