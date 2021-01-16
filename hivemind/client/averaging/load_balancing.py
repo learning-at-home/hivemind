@@ -1,3 +1,6 @@
+import numpy as np
+import scipy.optimize
+
 def load_balance_peers(vector_size: int, throughputs: np.ndarray, min_size: int = 0) -> np.ndarray:
     """
     Find an optimal partitioning of weights for butterfly all-reduce given peer throughputs.
