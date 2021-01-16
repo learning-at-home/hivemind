@@ -1,5 +1,11 @@
+from typing import Sequence
 import numpy as np
 import scipy.optimize
+
+from hivemind.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def load_balance_peers(vector_size: int, throughputs: np.ndarray, min_size: int = 0) -> np.ndarray:
     """
