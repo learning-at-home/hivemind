@@ -119,3 +119,24 @@ def test_partitioning():
         assert len(restored) == len(tensors)
         assert all(new.shape == old.shape for new, old in zip(restored, tensors))
         assert all(torch.allclose(new, old) for new, old in zip(restored, tensors))
+
+@pytest.mark.forked
+def test_load_balancing():
+    assert load_balance_peers(60, np.array([0.25, 0.25, 0.25, 0.25])).tolist() == [15, 15, 15, 15]
+    assert load_balance_peers(1024, np.array([0.3, 0.5, 0.9])).tolist() == [0, 255, 769]
+    assert load_balance_peers(60, np.array([0.44, 0.33, 0.22])).tolist() == [42, 18, 0]
+    assert load_balance_peers(60, np.array([0.55, 0.44, 0.40])).tolist() == [35, 16, 9]
+    assert load_balance_peers(60, np.array([0.55, 0.44, 0.40]), min_size=10).tolist() == [41, 19, 0]
+    assert load_balance_peers(60, np.array([0.55, 0.20, 0.44]), min_size=10).tolist() == [36, 0, 24]
+    assert load_balance_peers(2, np.array([0.55, 0.20, 0.44]), min_size=10).tolist() == [1, 0, 1]
+    assert load_balance_peers(1, np.array([0.55, 0.20, 0.44]), min_size=10).tolist() == [1, 0, 0]
+
+    for i in range(10):
+        vector_size = np.random.randint(1, 1024 ** 3)
+        num_peers = np.random.randint(1, 256)
+        scale = 1e-9 + np.random.rand() * 1000
+        throughputs = np.random.rand(num_peers) * scale + 1e-6
+        min_size = np.random.choice([0, np.random.randint(0, vector_size // 10)])
+        assignment = load_balance_peers(vector_size, throughputs, min_size)
+        assert np.sum(assignment) == vector_size
+        assert np.min(assignment) >= 0
