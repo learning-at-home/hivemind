@@ -30,6 +30,9 @@ def load_balance_peers(vector_size: int, throughputs: np.ndarray, min_size: int 
     :returns: an integer array where i-th element is the number of weights assigned to i-th peer
     """
     assert np.min(throughputs) > 0
+    permutation = np.argsort(-throughputs)
+    throughputs = throughputs[permutation]
+
     group_size = len(throughputs)
     num_variables = group_size + 1  # [w_1, ..., w_N, ksi]
 
@@ -39,7 +42,7 @@ def load_balance_peers(vector_size: int, throughputs: np.ndarray, min_size: int 
     # the constraints below are tuples (A, b) such that Ax <= b
     nonnegative_weights = -np.eye(group_size, M=num_variables), np.zeros(group_size)
     weights_sum_to_one = c[None, :] - 1.0, np.array([-1.0])
-    coeff_per_variable = (group_size - 1.0) / throughputs
+    coeff_per_variable = (group_size - 2.0) / throughputs
     coeff_matrix_minus_ksi = np.hstack([np.diag(coeff_per_variable), -np.ones((group_size, 1))])
     ksi_is_maximum = coeff_matrix_minus_ksi, -1.0 / throughputs
 
@@ -48,12 +51,14 @@ def load_balance_peers(vector_size: int, throughputs: np.ndarray, min_size: int 
     solution = scipy.optimize.linprog(c, A_ub=A, b_ub=b)
     if solution.success:
         peer_fractions = solution.x[:group_size]
-        peer_fractions[peer_fractions < min_size / float(vector_size)] = 0.0
-        return peer_fractions
+        if np.max(peer_fractions) >= min_size / float(vector_size):
+            peer_fractions[peer_fractions < min_size / float(vector_size)] = 0.0
     else:
         logger.error(f"Failed to solve load-balancing for bandwidths {throughputs}.")
         peer_fractions = np.ones(group_size) / group_size
-    return hagenbach_bishoff(vector_size, peer_fractions)
+
+    return np.asarray(hagenbach_bishoff(vector_size, peer_fractions))[np.argsort(permutation)]
+
 
 def hagenbach_bishoff(vector_size: int, scores: Sequence[float]) -> Sequence[int]:
     """
@@ -67,7 +72,6 @@ def hagenbach_bishoff(vector_size: int, scores: Sequence[float]) -> Sequence[int
     total_score = sum(scores)
     allocated = [int(vector_size * score_i / total_score) for score_i in scores]
     while sum(allocated) < vector_size:
-        print('.')
         quotients = [score / (allocated[idx] + 1) for idx, score in enumerate(scores)]
         idx_max = quotients.index(max(quotients))
         allocated[idx_max] += 1
