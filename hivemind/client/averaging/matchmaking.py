@@ -84,6 +84,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     async def look_for_group(self, *, timeout: Optional[float] = None) -> Optional[AllReduceRunner]:
         """
+        :param timeout: maximum time that may be spent looking for group (does not include allreduce itself)
         :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
         Iterate over the averagers from a given group_identifier that have higher leadership priority than yourself.
         """
