@@ -37,7 +37,7 @@ def test_getset_averagers():
 
 @pytest.mark.forked
 def test_allreduce_once():
-    dht = hivemind.DHT(start=True)
+    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
@@ -121,6 +121,7 @@ def test_partitioning():
         assert len(restored) == len(tensors)
         assert all(new.shape == old.shape for new, old in zip(restored, tensors))
         assert all(torch.allclose(new, old) for new, old in zip(restored, tensors))
+
 
 @pytest.mark.forked
 def test_load_balancing():

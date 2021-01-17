@@ -114,8 +114,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     @property
     def endpoint(self) -> Endpoint:
+        assert self.port is not None, "Averager is not running yet"
         if self._averager_endpoint is None:
-            self._averager_endpoint = replace_port(self.listen_on, self.port if self.port is not None else '*')
+            self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
             logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
         return self._averager_endpoint
 
