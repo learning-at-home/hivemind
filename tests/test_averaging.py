@@ -55,12 +55,39 @@ def test_allreduce_once():
     for averager in averagers:
         futures.append(averager.step(wait=False))
     for future in futures:
-        assert future.result() is True
+        result = future.result()
+        for averager in averagers:
+            assert averager.endpoint in result
 
     for averager in averagers:
         with averager.get_tensors() as averaged_tensors:
             for ref, our in zip(reference, averaged_tensors):
                 assert torch.allclose(ref, our, atol=1e-6)
+
+
+@pytest.mark.forked
+def test_allgather():
+    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+    averagers = [hivemind.DecentralizedAverager(torch.ones(1), dht=dht, target_group_size=4, averaging_expiration=15,
+                                                prefix='mygroup', initial_group_bits='000', listen_on='127.0.0.1:*',
+                                                start=True)
+                 for _ in range(8)]
+
+    futures = []
+    for i, averager in enumerate(averagers):
+        futures.append(averager.step(wait=False, gather=dict(batch_size=123 + i, foo='bar')))
+
+    assert len(set(repr(sorted(future.result())) for future in futures)) == 2
+
+    reference_metadata = {averager.endpoint: dict(batch_size=123 + i, foo='bar')
+                          for i, averager in enumerate(averagers)}
+    for future in futures:
+        gathered = future.result()
+
+        assert len(gathered) == 4
+
+        for endpoint in gathered:
+            assert gathered[endpoint] == reference_metadata[endpoint]
 
 
 @pytest.mark.forked

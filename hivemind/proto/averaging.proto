@@ -44,7 +44,8 @@ message MessageFromLeader {
 
 message AveragingData {
   MessageCode code = 1;     // in case of a protocol violation, this will be the error message
-  bytes group_id = 2;        // a unique group identifier, same as in MessageFromLeader
+  bytes group_id = 2;       // a unique group identifier, same as in MessageFromLeader
   string endpoint = 3;      // sender's rpc endpoint, used for coordination
-  Tensor tensor_part = 4;    // either peer's local tensor part (rpc input) or group average of this part (rpc output)
+  Tensor tensor_part = 4;   // either peer's local tensor part (rpc input) or group average of this part (rpc output)
+  bytes gather = 5;         // optional metadata that is gathered from all peers (e.g. batch size or current loss)
 }
