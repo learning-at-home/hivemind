@@ -14,7 +14,7 @@ import grpc
 import torch
 
 import hivemind
-from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
+from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, DataForGather
 from hivemind.client.averaging.matchmaking import Matchmaking
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, get_dht_time
@@ -166,27 +166,29 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
-    def step(self, allow_retries: bool = True, timeout: Optional[float] = None, wait=True
-             ) -> Union[bool, MPFuture]:
+    def step(self, allow_retries: bool = True, gather: Optional[DataForGather] = None, timeout: Optional[float] = None,
+             wait=True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
+
         :param allow_retries: if averager fails to run one round of allreduce, this option will allow it to try again
           within the specified timeout
+        :param gather: optionally send this informaton to all peers in the next group and gather it from every groupmate
+          (this operation is known as all-gather). The gathered data will be available as the output of this function.
         :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failedK
         :param wait: if True (default), return when finished. Otherwise return MPFuture and run in background.
+        :returns: on success, update averaged_tensors  and return gathered messages, on failure, return None
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_step', [], dict(future=_future, allow_retries=allow_retries, timeout=timeout)))
+        self.pipe.send(('_step', [], dict(future=_future, gather=gather, allow_retries=allow_retries, timeout=timeout)))
         return future.result() if wait else future
 
-    async def _step(self, *, future: MPFuture, allow_retries: bool, timeout: Optional[float]):
+    async def _step(self, *, future: MPFuture, gather: DataForGather, allow_retries: bool, timeout: Optional[float]):
         loop = asyncio.get_event_loop()
         start_time = get_dht_time()
-
-        try_averaging = True
         group_id = None
 
-        while try_averaging:
+        while not future.done():
             try:
                 self._pending_group_assembled.clear()
                 allreduce_group = await self._matchmaking.look_for_group(timeout=timeout)
@@ -196,18 +198,16 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 group_id = allreduce_group.group_id
                 self._running_groups[group_id] = allreduce_group
                 self._pending_group_assembled.set()
-                await asyncio.wait_for(allreduce_group.run(), self.allreduce_timeout)
-                update_ok = await loop.run_in_executor(None, self.update_tensors, allreduce_group)
+                await asyncio.wait_for(allreduce_group.run(gather=gather), self.allreduce_timeout)
+                await loop.run_in_executor(None, self.update_tensors, allreduce_group)
 
                 # averaging is finished, exit the loop
-                future.set_result(update_ok)
-                try_averaging = False
+                future.set_result(allreduce_group.gathered)
 
             except AllreduceException:
                 time_elapsed = get_dht_time() - start_time
                 if not allow_retries or (timeout is not None and timeout < time_elapsed):
-                    future.set_result(False)
-                    try_averaging = False
+                    future.set_result(None)
 
             except Exception as e:
                 future.set_exception(e)
@@ -216,11 +216,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 _ = self._running_groups.pop(group_id, None)
                 self._pending_group_assembled.set()
 
-    def update_tensors(self, allreduce_group: AllReduceRunner) -> bool:
+    def update_tensors(self, allreduce_group: AllReduceRunner):
         """
         a private (extendable) method that applies changes from a finished allreduce to local tensors
-
-        :return: True on success, False on failure
         """
         assert allreduce_group.return_deltas and allreduce_group.future.done()
         averaging_deltas = allreduce_group.future.result()
