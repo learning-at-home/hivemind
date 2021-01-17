@@ -33,6 +33,7 @@ message JoinRequest {
   string endpoint = 1;          // A follower accepts incoming allreduce requests at this address
   bytes schema_hash = 2;        // A hash that describes follower's tensors (shapes, num tensors, etc)
   double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time
+  uint32 throughput = 4;        // Follower has this bandwidth for averaging (0 = no incoming requests, -1 = default)
 }
 
 message MessageFromLeader {

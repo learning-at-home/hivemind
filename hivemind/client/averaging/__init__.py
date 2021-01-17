@@ -17,7 +17,7 @@ import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, DataForGather
 from hivemind.client.averaging.matchmaking import Matchmaking
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, replace_port, GRPC_KEEPALIVE_OPTIONS, get_dht_time
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture, GRPC_KEEPALIVE_OPTIONS, get_dht_time
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 
 # flavour types
@@ -97,7 +97,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             prefix=prefix, initial_group_bits=initial_group_bits, target_group_size=target_group_size,
             min_group_size=min_group_size, averaging_expiration=averaging_expiration, request_timeout=request_timeout,
             chunk_size_bytes=chunk_size_bytes, compression_type=compression_type)
-        self.averaging_alpha, self.allreduce_timeout = averaging_alpha, allreduce_timeout
+        self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
@@ -198,7 +198,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 group_id = allreduce_group.group_id
                 self._running_groups[group_id] = allreduce_group
                 self._pending_group_assembled.set()
-                await asyncio.wait_for(allreduce_group.run(gather=gather), self.allreduce_timeout)
+                await asyncio.wait_for(allreduce_group.run(gather=gather), self._allreduce_timeout)
                 await loop.run_in_executor(None, self.update_tensors, allreduce_group)
 
                 # averaging is finished, exit the loop
@@ -226,7 +226,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         with torch.no_grad(), self.get_tensors() as local_tensors:
             assert len(local_tensors) == len(self._averaged_tensors)
             for tensor, update in zip(local_tensors, averaging_deltas):
-                tensor.add_(update, alpha=self.averaging_alpha)
+                tensor.add_(update, alpha=self._averaging_alpha)
             return True
 
     @contextlib.contextmanager
