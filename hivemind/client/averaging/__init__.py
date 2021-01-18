@@ -16,7 +16,7 @@ import numpy as np
 
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
-from hivemind.client.averaging.matchmaking import Matchmaking
+from hivemind.client.averaging.matchmaking import Matchmaking, DataForGather
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, GRPC_KEEPALIVE_OPTIONS, get_dht_time
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
@@ -75,8 +75,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  averaging_expiration: float = 15, request_timeout: float = 3, chunk_size_bytes: int = 2 ** 16,
                  allreduce_timeout: Optional[float] = None, averaging_alpha: float = 1.0,
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
-                 throughput: Optional[float] = None, listen: bool = True, listen_on: Endpoint = '0.0.0.0:*',
-                 receiver_threads: int = 1, daemon: bool = True,
+                 throughput: Optional[float] = None, min_vector_size: int = 0,
+                 listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1, daemon: bool = True,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), "throughput must be a" \
@@ -105,7 +105,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.matchmaking_kwargs = dict(
             prefix=prefix, initial_group_bits=initial_group_bits, target_group_size=target_group_size,
             min_group_size=min_group_size, averaging_expiration=averaging_expiration, request_timeout=request_timeout,
-            chunk_size_bytes=chunk_size_bytes, compression_type=compression_type, throughput=throughput)
+            chunk_size_bytes=chunk_size_bytes, compression_type=compression_type,
+            throughput=throughput, min_vector_size=min_vector_size)
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
@@ -193,6 +194,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return future.result() if wait else future
 
     async def _step(self, *, future: MPFuture, gather: DataForGather, allow_retries: bool, timeout: Optional[float]):
+        #TODO gather
         loop = asyncio.get_event_loop()
         start_time = get_dht_time()
         group_id = None
@@ -207,11 +209,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 group_id = allreduce_group.group_id
                 self._running_groups[group_id] = allreduce_group
                 self._pending_group_assembled.set()
-                await asyncio.wait_for(allreduce_group.run(gather=gather), self._allreduce_timeout)
+                await asyncio.wait_for(allreduce_group.run(), self._allreduce_timeout)
                 await loop.run_in_executor(None, self.update_tensors, allreduce_group)
 
                 # averaging is finished, exit the loop
-                future.set_result(allreduce_group.gathered)
+                future.set_result(allreduce_group.averaged_tensor_parts)#allreduce_group.gathered TODO
 
             except AllreduceException:
                 time_elapsed = get_dht_time() - start_time

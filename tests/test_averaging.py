@@ -100,7 +100,8 @@ async def test_allreduce_protocol():
 
     group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
     allreduce_protocols = [AllReduceProtocol(
-        group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer], ordered_group_endpoints=peers)
+        group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer],
+        ordered_group_endpoints=peers, part_sizes=(150, 200, 67))
         for peer in peers]
 
     async def _accumulate(sender: Endpoint, recipient: Endpoint):

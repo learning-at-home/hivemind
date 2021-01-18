@@ -6,7 +6,7 @@ import contextlib
 import random
 from dataclasses import asdict
 from math import isfinite
-from typing import Sequence, Optional, AsyncIterator, Set, Tuple, Dict
+from typing import Sequence, Optional, AsyncIterator, Set, Tuple, Dict, TypeVar
 import asyncio
 
 import grpc
@@ -20,7 +20,7 @@ from hivemind.utils import get_logger, Endpoint, TensorDescriptor, MSGPackSerial
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 from hivemind.utils.grpc import ChannelCache
 
-
+DataForGather = TypeVar('DataForGather')
 logger = get_logger(__name__)
 
 
@@ -188,8 +188,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
                 if message.code == averaging_pb2.BEGIN_ALLREDUCE:
                     async with self.lock_request_join_group:
-                        return await self.follower_assemble_group(
-                            leader, message.group_id, message.ordered_group_endpoints)
+                        return await self.follower_assemble_group(leader, message)
 
             if message.code in (averaging_pb2.GROUP_DISBANDED, averaging_pb2.CANCELLED):
                 if message.suggested_leader and message.suggested_leader != self.endpoint:
@@ -257,9 +256,9 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     return
 
             allreduce_group = self.assembled_group.result()
-            yield averaging_pb2.MessageFromLeader(
-                code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
-                ordered_group_endpoints=allreduce_group.ordered_group_endpoints)
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
+                                                  ordered_group_endpoints=allreduce_group.ordered_group_endpoints,
+                                                  part_sizes=allreduce_group.part_sizes)
 
         except Exception as e:
             logger.exception(e)
@@ -314,16 +313,20 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 
-    async def follower_assemble_group(self, leader: Endpoint, group_id: GroupID,
-                                      ordered_group_endpoints: Sequence[Endpoint]) -> AllReduceRunner:
+    async def follower_assemble_group(self, leader: Endpoint, msg: averaging_pb2.MessageFromLeader) -> AllReduceRunner:
         """ Prepare to run allreduce using a list of peers provided by our leader """
         assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
         assert not self.assembled_group.done()
-        logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
+
+        group_id, ordered_group_endpoints, part_sizes = msg.group_id, msg.ordered_group_endpoints, msg.part_sizes
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
+        assert len(ordered_group_endpoints) == len(part_sizes)
+
+        logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-                                          ordered_group_endpoints=ordered_group_endpoints, **self.allreduce_kwargs)
+                                          ordered_group_endpoints=tuple(ordered_group_endpoints),
+                                          part_sizes=tuple(part_sizes), **self.allreduce_kwargs)
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 
