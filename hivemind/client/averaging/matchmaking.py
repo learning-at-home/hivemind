@@ -6,17 +6,18 @@ import contextlib
 import random
 from dataclasses import asdict
 from math import isfinite
-from typing import Sequence, Optional, AsyncIterator, Set, Tuple
+from typing import Sequence, Optional, AsyncIterator, Set, Tuple, Dict
 import asyncio
 
-import torch
 import grpc
+import torch
 
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, GroupID
+from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.dht import DHTID, DHTExpiration, get_dht_time, GroupKey
 from hivemind.utils import get_logger, Endpoint, TensorDescriptor, MSGPackSerializer, TimedStorage
-from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
+from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 from hivemind.utils.grpc import ChannelCache
 
 
@@ -39,7 +40,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *,
                  prefix: str, target_group_size: int, min_group_size: int, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, request_timeout: float, **allreduce_kwargs):
+                 averaging_expiration: float = 15, request_timeout: float, throughput: Optional[float] = None,
+                 min_vector_size: int, **allreduce_kwargs):
         assert '.' not in prefix, "group prefix must be a string without ."
         if request_timeout is None or request_timeout >= averaging_expiration:
             logger.warning("It is recommended to use request_timeout smaller than averaging_expiration. Otherwise,"
@@ -50,8 +52,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.prefix, self.group_bits = prefix, initial_group_bits
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.request_timeout = averaging_expiration, request_timeout
+        self.throughput, self.min_vector_size = throughput, min_vector_size
         self.allreduce_kwargs = allreduce_kwargs
         self.schema_hash = compute_schema_hash(self.averaged_tensors)
+        self.total_size = sum(tensor.numel() for tensor in self.averaged_tensors)
 
         self.lock_looking_for_group = asyncio.Lock()
         self.lock_request_join_group = asyncio.Lock()
@@ -60,7 +64,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.assembled_group = asyncio.Future()
 
         self.current_leader: Optional[Endpoint] = None  # iff i am a follower, this is a link to my current leader
-        self.current_followers: Set[Endpoint] = set()  # iff i am a leader, this contains my followers excluding myself
+        self.current_followers: Dict[Endpoint, float] = {}  # iff i am a leader, this contains followers excluding self
         self.potential_leaders = PotentialLeaders(endpoint, dht, averaging_expiration, target_group_size)
 
     @property
@@ -162,7 +166,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             async with self.lock_request_join_group:
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
-                    endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time))
+                    endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time,
+                    throughput=self.throughput if self.throughput is not None else -1.0))
                 message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
 
                 if message.code == averaging_pb2.ACCEPTED:
@@ -219,7 +224,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     yield reason_to_reject
                     return
 
-                self.current_followers.add(request.endpoint)
+                self.current_followers[request.endpoint] = request.throughput if request.throughput >= 0 else None
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
                 if len(self.current_followers) + 1 >= self.target_group_size and not self.assembled_group.done():
@@ -261,7 +266,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
 
         finally:  # note: this code is guaranteed to run even if the coroutine is destroyed prematurely
-            self.current_followers.discard(request.endpoint)
+            self.current_followers.pop(request.endpoint, None)
             self.follower_was_discarded.set()
 
     def _check_reasons_to_reject(self, request: averaging_pb2.JoinRequest) -> Optional[averaging_pb2.MessageFromLeader]:
@@ -298,9 +303,14 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         ordered_group_endpoints = list(self.current_followers)
         ordered_group_endpoints.append(self.endpoint)
         random.shuffle(ordered_group_endpoints)
+
+        throughputs = [self.current_followers.get(endpoint, self.throughput) for endpoint in ordered_group_endpoints]
+        part_sizes = load_balance_peers(self.total_size, throughputs, self.min_vector_size)
+
         logger.debug(f"{self.endpoint} - leader started allreduce for {len(ordered_group_endpoints)} peers.")
         allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-                                          ordered_group_endpoints=ordered_group_endpoints, **self.allreduce_kwargs)
+                                          ordered_group_endpoints=ordered_group_endpoints,
+                                          part_sizes=part_sizes, **self.allreduce_kwargs)
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 
@@ -451,3 +461,5 @@ def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
                      for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
                     for tensor in tensors]
     return DHTID.generate(source=MSGPackSerializer.dumps(schema_dicts)).to_bytes()
+
+

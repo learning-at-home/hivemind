@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Sequence, Optional
 import numpy as np
 import scipy.optimize
 
@@ -7,10 +7,28 @@ from hivemind.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def load_balance_peers(vector_size: int, throughputs: np.ndarray, min_size: int = 0) -> np.ndarray:
+def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_size: int = 0) -> Sequence[int]:
     """
     Find an optimal partitioning of weights for butterfly all-reduce given peer throughputs.
+    :param vector_size: total size of the averaged vector (in elements, not bytes)
+    :param throughputs: 1d array of non-negative throughputs for each peer, typically min(upload speed, download speed)
+    :param min_size: peers that can aggregate less than this many elements will be assigned nothing
+    :returns: an integer array where i-th element is the number of weights assigned to i-th peer
+    """
+    specified_throughputs = [throughput for throughput in throughputs if throughput is not None and throughput > 0]
 
+    if specified_throughputs:
+        default_throughput = np.mean(specified_throughputs)
+        throughputs = [throughput if throughput is not None else default_throughput for throughput in throughputs]
+        fractions = optimize_parts_lp(vector_size, np.asarray(throughputs), min_size)
+    else:
+        fractions = np.asarray([1.0 if throughput is None else 0.0 for throughput in throughputs])
+
+    return hagenbach_bishoff(vector_size, fractions)
+
+
+def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int = 0, eps: float = 1e-15) -> np.ndarray:
+    """
     This method solves an optimization problem to minimize the total allreduce time.
     In butterfly all-reduce, each peer acts both as a "client" and as an "aggregator":
     * a "client" splits his local vector into shards and sends each shard to one peer, then downloads the average
@@ -24,14 +42,11 @@ def load_balance_peers(vector_size: int, throughputs: np.ndarray, min_size: int 
     We find optimal vector fractions by minimizing the total time (using https://tinyurl.com/minimax-to-lp )
     Then, we use Hagenbach-Bishoff apportionment to split the finite vector based on the optimal fractions.
 
-    :param vector_size: total size of the averaged vector (in elements, not bytes)
-    :param throughputs: 1d array of throughputs for each peer, typically min(upload speed, download speed)
-    :param min_size: peers that can aggregate less than this many elements will be assigned nothing
-    :returns: an integer array where i-th element is the number of weights assigned to i-th peer
     """
-    assert np.min(throughputs) > 0
+    assert np.all(throughputs >= 0) and np.any(throughputs > 0)
     permutation = np.argsort(-throughputs)
     throughputs = throughputs[permutation]
+    is_nonzero = throughputs != 0
 
     group_size = len(throughputs)
     num_variables = group_size + 1  # [w_1, ..., w_N, ksi]
@@ -42,11 +57,12 @@ def load_balance_peers(vector_size: int, throughputs: np.ndarray, min_size: int 
     # the constraints below are tuples (A, b) such that Ax <= b
     nonnegative_weights = -np.eye(group_size, M=num_variables), np.zeros(group_size)
     weights_sum_to_one = c[None, :] - 1.0, np.array([-1.0])
-    coeff_per_variable = (group_size - 2.0) / throughputs
+    coeff_per_variable = (group_size - 2.0) / np.maximum(throughputs, eps)
     coeff_matrix_minus_ksi = np.hstack([np.diag(coeff_per_variable), -np.ones((group_size, 1))])
-    ksi_is_maximum = coeff_matrix_minus_ksi, -1.0 / throughputs
+    ksi_is_maximum = coeff_matrix_minus_ksi[is_nonzero], -1.0 / throughputs[is_nonzero]
+    force_max_weights = np.eye(group_size, M=num_variables), is_nonzero.astype(c.dtype)
 
-    A, b = list(map(np.concatenate, zip(nonnegative_weights, weights_sum_to_one, ksi_is_maximum)))
+    A, b = list(map(np.concatenate, zip(nonnegative_weights, weights_sum_to_one, ksi_is_maximum, force_max_weights)))
 
     solution = scipy.optimize.linprog(c, A_ub=A, b_ub=b)
     if solution.success:
@@ -57,7 +73,7 @@ def load_balance_peers(vector_size: int, throughputs: np.ndarray, min_size: int 
         logger.error(f"Failed to solve load-balancing for bandwidths {throughputs}.")
         peer_fractions = np.ones(group_size) / group_size
 
-    return np.asarray(hagenbach_bishoff(vector_size, peer_fractions))[np.argsort(permutation)]
+    return peer_fractions[np.argsort(permutation)]
 
 
 def hagenbach_bishoff(vector_size: int, scores: Sequence[float]) -> Sequence[int]:
