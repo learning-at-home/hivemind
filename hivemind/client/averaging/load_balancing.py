@@ -22,6 +22,7 @@ def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_
         throughputs = [throughput if throughput is not None else default_throughput for throughput in throughputs]
         fractions = optimize_parts_lp(vector_size, np.asarray(throughputs), min_size)
     else:
+        assert not all(throughput == 0 for throughput in throughputs), "Must have at least one nonzero throughput"
         fractions = np.asarray([1.0 if throughput is None else 0.0 for throughput in throughputs])
 
     return tuple(hagenbach_bishoff(vector_size, fractions))

@@ -176,6 +176,9 @@ def test_load_balancing():
     assert load_balance_peers(100, (None, None, None, None, None)) == (20, 20, 20, 20, 20)
     assert load_balance_peers(100, (0, 0, 0, None, None)) == (0, 0, 0, 50, 50)
 
+    with pytest.raises(AssertionError):
+        load_balance_peers(100, (0, 0, 0))
+
     for i in range(10):
         vector_size = np.random.randint(1, 1024 ** 3)
         num_peers = np.random.randint(1, 256)
