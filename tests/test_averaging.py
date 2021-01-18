@@ -1,6 +1,5 @@
 import asyncio
 import random
-import time
 
 import numpy as np
 import torch
@@ -152,12 +151,22 @@ def test_partitioning():
 
 @pytest.mark.forked
 def test_load_balancing():
-    assert load_balance_peers(60, np.array([0.25, 0.25, 0.25, 0.25])).tolist() == [15, 15, 15, 15]
-    assert load_balance_peers(1024, np.array([0.3, 0.5, 0.9])).tolist() == [0, 255, 769]
-    assert load_balance_peers(60, np.array([0.44, 0.33, 0.22])).tolist() == [42, 18, 0]
-    assert load_balance_peers(60, np.array([0.55, 0.44, 0.40])).tolist() == [35, 16, 9]
+    def get_cost(vector_size, partitions, throughputs):
+        return max((vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(throughputs[i], 1e-9)
+                   for i in range(len(partitions)))
+
+    def check_optimality(vector_size, throughputs, ref_partitions):
+        partitions = load_balance_peers(vector_size, throughputs).tolist()
+        assert get_cost(vector_size, partitions, throughputs) <= get_cost(vector_size, ref_partitions, throughputs)
+
+    check_optimality(60, np.array([0.25, 0.25, 0.25, 0.25]), [15, 15, 15, 15])
+    check_optimality(1024, np.array([0.3, 0.5, 0.9]), [0, 255, 769])
+    check_optimality(60, np.array([0.44, 0.33, 0.22]), [42, 18, 0])
+    check_optimality(60, np.array([0.55, 0.44, 0.40]), [35, 16, 9])
+    check_optimality(1024 * 1024, np.array([0.3, 0.5, 0.9, 0.6]), [0, 169327, 602629, 276620])
+    check_optimality(1024 * 1024, np.array([0.0, 0.5, 0.0, 0.6]), [0, 428963, 0, 619613])
     assert load_balance_peers(60, np.array([0.55, 0.44, 0.40]), min_size=10).tolist() == [41, 19, 0]
-    assert load_balance_peers(60, np.array([0.55, 0.20, 0.44]), min_size=10).tolist() == [36, 0, 24]
+    assert load_balance_peers(60, np.array([0.32, 0.55, 0.44]), min_size=10).tolist() == [0, 40, 20]
     assert load_balance_peers(2, np.array([0.55, 0.20, 0.44]), min_size=10).tolist() == [1, 0, 1]
     assert load_balance_peers(1, np.array([0.55, 0.20, 0.44]), min_size=10).tolist() == [1, 0, 0]
 
@@ -170,3 +179,5 @@ def test_load_balancing():
         assignment = load_balance_peers(vector_size, throughputs, min_size)
         assert np.sum(assignment) == vector_size
         assert np.min(assignment) >= 0
+
+
