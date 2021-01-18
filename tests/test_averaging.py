@@ -172,6 +172,10 @@ def test_load_balancing():
     assert load_balance_peers(2, np.array([0.55, 0.20, 0.44]), min_size=10) == (1, 0, 1)
     assert load_balance_peers(1, np.array([0.55, 0.20, 0.44]), min_size=10) == (1, 0, 0)
 
+    assert load_balance_peers(100, (None, None)) == (50, 50)
+    assert load_balance_peers(100, (None, None, None, None, None)) == (20, 20, 20, 20, 20)
+    assert load_balance_peers(100, (0, 0, 0, None, None)) == (0, 0, 0, 50, 50)
+
     for i in range(10):
         vector_size = np.random.randint(1, 1024 ** 3)
         num_peers = np.random.randint(1, 256)
