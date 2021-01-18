@@ -42,6 +42,8 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
 
     We solve this optimization problem by reducing it to linear programming with a minimax reduction
     (see lecture notes: https://www.usna.edu/Users/math/dphillip/sa305.s15/phillips/lessons/32/32.pdf )
+
+    :returns: a vector of "scores", i-th score is proportional to the fraction of weights assigned to i-th peer
     """
     assert np.all(throughputs >= 0) and np.any(throughputs > 0)
     permutation = np.argsort(-throughputs)
@@ -66,15 +68,15 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
 
     solution = scipy.optimize.linprog(c, A_ub=A, b_ub=b)
     if solution.success:
-        peer_fractions = solution.x[:group_size]
+        peer_scores = solution.x[:group_size]
         # if some peers have less than min_size elements, transfer their share to other peers (if any)
-        if np.max(peer_fractions) >= min_size / float(vector_size):
-            peer_fractions[peer_fractions < min_size / float(vector_size)] = 0.0
+        if np.max(peer_scores) >= min_size / float(vector_size):
+            peer_scores[peer_scores < min_size / float(vector_size)] = 0.0
     else:
         logger.error(f"Failed to solve load-balancing for bandwidths {throughputs}.")
-        peer_fractions = np.ones(group_size) / group_size
+        peer_scores = np.ones(group_size)
 
-    return peer_fractions[np.argsort(permutation)]
+    return peer_scores[np.argsort(permutation)]
 
 
 def hagenbach_bishoff(vector_size: int, scores: Sequence[float]) -> Sequence[int]:
