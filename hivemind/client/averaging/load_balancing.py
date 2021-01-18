@@ -20,12 +20,12 @@ def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_
     if specified_throughputs:
         default_throughput = np.mean(specified_throughputs)
         throughputs = [throughput if throughput is not None else default_throughput for throughput in throughputs]
-        fractions = optimize_parts_lp(vector_size, np.asarray(throughputs), min_size)
+        scores = optimize_parts_lp(vector_size, np.asarray(throughputs), min_size)
     else:
         assert not all(throughput == 0 for throughput in throughputs), "Must have at least one nonzero throughput"
-        fractions = np.asarray([1.0 if throughput is None else 0.0 for throughput in throughputs])
+        scores = np.asarray([1.0 if throughput is None else 0.0 for throughput in throughputs])
 
-    return tuple(hagenbach_bishoff(vector_size, fractions))
+    return tuple(hagenbach_bishoff(vector_size, scores))
 
 
 def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int = 0, eps: float = 1e-15) -> np.ndarray:
@@ -67,9 +67,9 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
     solution = scipy.optimize.linprog(c, A_ub=A, b_ub=b)
     if solution.success:
         peer_fractions = solution.x[:group_size]
+        # if some peers have less than min_size elements, transfer their share to other peers (if any)
         if np.max(peer_fractions) >= min_size / float(vector_size):
             peer_fractions[peer_fractions < min_size / float(vector_size)] = 0.0
-            peer_fractions /= np.sum(peer_fractions)
     else:
         logger.error(f"Failed to solve load-balancing for bandwidths {throughputs}.")
         peer_fractions = np.ones(group_size) / group_size
