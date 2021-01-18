@@ -151,16 +151,18 @@ def test_partitioning():
         assert all(torch.allclose(new, old) for new, old in zip(restored, tensors))
 
 
+def get_cost(vector_size, partitions, throughputs):
+    return max((vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(throughputs[i], 1e-9)
+               for i in range(len(partitions)))
+
+
+def check_optimality(vector_size, throughputs, ref_partitions):
+    partitions = list(load_balance_peers(vector_size, throughputs))
+    assert get_cost(vector_size, partitions, throughputs) <= get_cost(vector_size, ref_partitions, throughputs)
+
+
 @pytest.mark.forked
 def test_load_balancing():
-    def get_cost(vector_size, partitions, throughputs):
-        return max((vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(throughputs[i], 1e-9)
-                   for i in range(len(partitions)))
-
-    def check_optimality(vector_size, throughputs, ref_partitions):
-        partitions = list(load_balance_peers(vector_size, throughputs))
-        assert get_cost(vector_size, partitions, throughputs) <= get_cost(vector_size, ref_partitions, throughputs)
-
     check_optimality(60, np.array([0.25, 0.25, 0.25, 0.25]), [15, 15, 15, 15])
     check_optimality(1024, np.array([0.3, 0.5, 0.9]), [0, 255, 769])
     check_optimality(60, np.array([0.44, 0.33, 0.22]), [42, 18, 0])

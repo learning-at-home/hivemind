@@ -40,9 +40,8 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
     Peer i total communication = vector_size * [1 + (group_size - 2) * fraction_assigned_to_peer_i]
     Total time = max_i (total_communication_for_peer_i / throughputs[i])
 
-    We find optimal vector fractions by minimizing the total time (using https://tinyurl.com/minimax-to-lp )
-    Then, we use Hagenbach-Bishoff apportionment to split the finite vector based on the optimal fractions.
-
+    We solve this optimization problem by reducing it to linear programming with a minimax reduction
+    (see lecture notes: https://www.usna.edu/Users/math/dphillip/sa305.s15/phillips/lessons/32/32.pdf )
     """
     assert np.all(throughputs >= 0) and np.any(throughputs > 0)
     permutation = np.argsort(-throughputs)
@@ -50,26 +49,27 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
     is_nonzero = throughputs != 0
 
     group_size = len(throughputs)
-    num_variables = group_size + 1  # [w_1, ..., w_N, ksi]
+    num_variables = group_size + 1  # [w_1, ..., w_N, xi]
 
     c = np.zeros(num_variables)
-    c[-1] = 1.0  # optimize w.r.t. ksi
+    c[-1] = 1.0  # optimize w.r.t. xi
 
     # the constraints below are tuples (A, b) such that Ax <= b
     nonnegative_weights = -np.eye(group_size, M=num_variables), np.zeros(group_size)
     weights_sum_to_one = c[None, :] - 1.0, np.array([-1.0])
     coeff_per_variable = (group_size - 2.0) / np.maximum(throughputs, eps)
-    coeff_matrix_minus_ksi = np.hstack([np.diag(coeff_per_variable), -np.ones((group_size, 1))])
-    ksi_is_maximum = coeff_matrix_minus_ksi[is_nonzero], -1.0 / throughputs[is_nonzero]
+    coeff_matrix_minus_xi = np.hstack([np.diag(coeff_per_variable), -np.ones((group_size, 1))])
+    xi_is_maximum = coeff_matrix_minus_xi[is_nonzero], -1.0 / throughputs[is_nonzero]
     force_max_weights = np.eye(group_size, M=num_variables), is_nonzero.astype(c.dtype)
 
-    A, b = list(map(np.concatenate, zip(nonnegative_weights, weights_sum_to_one, ksi_is_maximum, force_max_weights)))
+    A, b = list(map(np.concatenate, zip(nonnegative_weights, weights_sum_to_one, xi_is_maximum, force_max_weights)))
 
     solution = scipy.optimize.linprog(c, A_ub=A, b_ub=b)
     if solution.success:
         peer_fractions = solution.x[:group_size]
         if np.max(peer_fractions) >= min_size / float(vector_size):
             peer_fractions[peer_fractions < min_size / float(vector_size)] = 0.0
+            peer_fractions /= np.sum(peer_fractions)
     else:
         logger.error(f"Failed to solve load-balancing for bandwidths {throughputs}.")
         peer_fractions = np.ones(group_size) / group_size
@@ -81,6 +81,7 @@ def hagenbach_bishoff(vector_size: int, scores: Sequence[float]) -> Sequence[int
     """
     Split a vector between participants based on continuous fractions.
     https://en.wikipedia.org/wiki/Hagenbach-Bischoff_system
+    The code is based on https://github.com/crflynn/voting
 
     :param vector_size: the total number of elements to be split
     :param scores: real-valued vector fractions for each peer

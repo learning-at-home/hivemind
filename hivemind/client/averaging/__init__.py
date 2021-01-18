@@ -242,7 +242,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             assert len(local_tensors) == len(self._averaged_tensors)
             for tensor, update in zip(local_tensors, averaging_deltas):
                 tensor.add_(update, alpha=self._averaging_alpha)
-            return True
 
     @contextlib.contextmanager
     def get_tensors(self) -> Sequence[torch.Tensor]:
