@@ -1,4 +1,4 @@
-from typing import Sequence, Optional
+from typing import Sequence, Optional, Tuple
 import numpy as np
 import scipy.optimize
 
@@ -7,7 +7,7 @@ from hivemind.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_size: int = 0) -> Sequence[int]:
+def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_size: int = 0) -> Tuple[int, ...]:
     """
     Find an optimal partitioning of weights for butterfly all-reduce given peer throughputs.
     :param vector_size: total size of the averaged vector (in elements, not bytes)
@@ -24,7 +24,7 @@ def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_
     else:
         fractions = np.asarray([1.0 if throughput is None else 0.0 for throughput in throughputs])
 
-    return hagenbach_bishoff(vector_size, fractions)
+    return tuple(hagenbach_bishoff(vector_size, fractions))
 
 
 def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int = 0, eps: float = 1e-15) -> np.ndarray:

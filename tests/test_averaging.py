@@ -140,7 +140,8 @@ def test_partitioning():
         if total_size == 0:
             continue
         num_chunks = random.randint(1, min(1000, sum(x.numel() for x in tensors)))
-        chunks = split_into_parts(tensors, group_size=num_chunks)
+        part_sizes = load_balance_peers(total_size, [None] * num_chunks)
+        chunks = split_into_parts(tensors, part_sizes)
         assert len(chunks) == num_chunks
         shapes = [tensor.shape for tensor in tensors]
         restored = restore_from_parts(chunks, shapes)
@@ -156,7 +157,7 @@ def test_load_balancing():
                    for i in range(len(partitions)))
 
     def check_optimality(vector_size, throughputs, ref_partitions):
-        partitions = load_balance_peers(vector_size, throughputs)
+        partitions = list(load_balance_peers(vector_size, throughputs))
         assert get_cost(vector_size, partitions, throughputs) <= get_cost(vector_size, ref_partitions, throughputs)
 
     check_optimality(60, np.array([0.25, 0.25, 0.25, 0.25]), [15, 15, 15, 15])
@@ -165,10 +166,10 @@ def test_load_balancing():
     check_optimality(60, np.array([0.55, 0.44, 0.40]), [35, 16, 9])
     check_optimality(1024 * 1024, np.array([0.3, 0.5, 0.9, 0.6]), [0, 169327, 602629, 276620])
     check_optimality(1024 * 1024, np.array([0.0, 0.5, 0.0, 0.6]), [0, 428963, 0, 619613])
-    assert load_balance_peers(60, np.array([0.55, 0.44, 0.40]), min_size=10) == [41, 19, 0]
-    assert load_balance_peers(60, np.array([0.32, 0.55, 0.44]), min_size=10) == [0, 40, 20]
-    assert load_balance_peers(2, np.array([0.55, 0.20, 0.44]), min_size=10) == [1, 0, 1]
-    assert load_balance_peers(1, np.array([0.55, 0.20, 0.44]), min_size=10) == [1, 0, 0]
+    assert load_balance_peers(60, np.array([0.55, 0.44, 0.40]), min_size=10) == (41, 19, 0)
+    assert load_balance_peers(60, np.array([0.32, 0.55, 0.44]), min_size=10) == (0, 40, 20)
+    assert load_balance_peers(2, np.array([0.55, 0.20, 0.44]), min_size=10) == (1, 0, 1)
+    assert load_balance_peers(1, np.array([0.55, 0.20, 0.44]), min_size=10) == (1, 0, 0)
 
     for i in range(10):
         vector_size = np.random.randint(1, 1024 ** 3)
@@ -179,5 +180,3 @@ def test_load_balancing():
         assignment = load_balance_peers(vector_size, throughputs, min_size)
         assert np.sum(assignment) == vector_size
         assert np.min(assignment) >= 0
-
-

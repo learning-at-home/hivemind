@@ -15,7 +15,7 @@ import torch
 import numpy as np
 
 import hivemind
-from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, DataForGather
+from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
 from hivemind.client.averaging.matchmaking import Matchmaking
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, GRPC_KEEPALIVE_OPTIONS, get_dht_time
