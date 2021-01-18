@@ -1,6 +1,7 @@
 PyYAML
 torch>=1.6.0
 numpy>=1.17
+scipy>=1.2.1
 prefetch_generator>=1.0.1
 msgpack>=0.5.6
 sortedcontainers

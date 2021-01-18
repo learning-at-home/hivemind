@@ -1,11 +1,12 @@
 import asyncio
 import random
-import time
 
+import numpy as np
 import torch
 import pytest
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts
+from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.utils import Endpoint
 
 
@@ -35,7 +36,7 @@ def test_getset_averagers():
 
 @pytest.mark.forked
 def test_allreduce_once():
-    dht = hivemind.DHT(start=True)
+    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
@@ -53,12 +54,39 @@ def test_allreduce_once():
     for averager in averagers:
         futures.append(averager.step(wait=False))
     for future in futures:
-        assert future.result() is True
+        result = future.result()
+        for averager in averagers:
+            assert averager.endpoint in result
 
     for averager in averagers:
         with averager.get_tensors() as averaged_tensors:
             for ref, our in zip(reference, averaged_tensors):
                 assert torch.allclose(ref, our, atol=1e-6)
+
+
+@pytest.mark.forked
+def test_allgather():
+    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+    averagers = [hivemind.DecentralizedAverager(torch.ones(1), dht=dht, target_group_size=4, averaging_expiration=15,
+                                                prefix='mygroup', initial_group_bits='000', listen_on='127.0.0.1:*',
+                                                start=True)
+                 for _ in range(8)]
+
+    futures = []
+    for i, averager in enumerate(averagers):
+        futures.append(averager.step(wait=False, gather=dict(batch_size=123 + i, foo='bar')))
+
+    assert len(set(repr(sorted(future.result())) for future in futures)) == 2
+
+    reference_metadata = {averager.endpoint: dict(batch_size=123 + i, foo='bar')
+                          for i, averager in enumerate(averagers)}
+    for future in futures:
+        gathered = future.result()
+
+        assert len(gathered) == 4
+
+        for endpoint in gathered:
+            assert gathered[endpoint] == reference_metadata[endpoint]
 
 
 @pytest.mark.forked
@@ -72,7 +100,8 @@ async def test_allreduce_protocol():
 
     group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
     allreduce_protocols = [AllReduceProtocol(
-        group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer], ordered_group_endpoints=peers)
+        group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer],
+        ordered_group_endpoints=peers, part_sizes=(150, 200, 67))
         for peer in peers]
 
     async def _accumulate(sender: Endpoint, recipient: Endpoint):
@@ -112,10 +141,52 @@ def test_partitioning():
         if total_size == 0:
             continue
         num_chunks = random.randint(1, min(1000, sum(x.numel() for x in tensors)))
-        chunks = split_into_parts(tensors, group_size=num_chunks)
+        part_sizes = load_balance_peers(total_size, [None] * num_chunks)
+        chunks = split_into_parts(tensors, part_sizes)
         assert len(chunks) == num_chunks
         shapes = [tensor.shape for tensor in tensors]
         restored = restore_from_parts(chunks, shapes)
         assert len(restored) == len(tensors)
         assert all(new.shape == old.shape for new, old in zip(restored, tensors))
         assert all(torch.allclose(new, old) for new, old in zip(restored, tensors))
+
+
+def get_cost(vector_size, partitions, throughputs):
+    return max((vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(throughputs[i], 1e-9)
+               for i in range(len(partitions)))
+
+
+def check_optimality(vector_size, throughputs, ref_partitions):
+    partitions = list(load_balance_peers(vector_size, throughputs))
+    assert get_cost(vector_size, partitions, throughputs) <= get_cost(vector_size, ref_partitions, throughputs)
+
+
+@pytest.mark.forked
+def test_load_balancing():
+    check_optimality(60, np.array([0.25, 0.25, 0.25, 0.25]), [15, 15, 15, 15])
+    check_optimality(1024, np.array([0.3, 0.5, 0.9]), [0, 255, 769])
+    check_optimality(60, np.array([0.44, 0.33, 0.22]), [42, 18, 0])
+    check_optimality(60, np.array([0.55, 0.44, 0.40]), [35, 16, 9])
+    check_optimality(1024 * 1024, np.array([0.3, 0.5, 0.9, 0.6]), [0, 169327, 602629, 276620])
+    check_optimality(1024 * 1024, np.array([0.0, 0.5, 0.0, 0.6]), [0, 428963, 0, 619613])
+    assert load_balance_peers(60, np.array([0.55, 0.44, 0.40]), min_size=10) == (41, 19, 0)
+    assert load_balance_peers(60, np.array([0.32, 0.55, 0.44]), min_size=10) == (0, 40, 20)
+    assert load_balance_peers(2, np.array([0.55, 0.20, 0.44]), min_size=10) == (1, 0, 1)
+    assert load_balance_peers(1, np.array([0.55, 0.20, 0.44]), min_size=10) == (1, 0, 0)
+
+    assert load_balance_peers(100, (None, None)) == (50, 50)
+    assert load_balance_peers(100, (None, None, None, None, None)) == (20, 20, 20, 20, 20)
+    assert load_balance_peers(100, (0, 0, 0, None, None)) == (0, 0, 0, 50, 50)
+
+    with pytest.raises(AssertionError):
+        load_balance_peers(100, (0, 0, 0))
+
+    for i in range(10):
+        vector_size = np.random.randint(1, 1024 ** 3)
+        num_peers = np.random.randint(1, 256)
+        scale = 1e-9 + np.random.rand() * 1e5
+        throughputs = np.random.rand(num_peers) * scale + 1e-6
+        min_size = np.random.choice([0, np.random.randint(0, vector_size // 10)])
+        assignment = load_balance_peers(vector_size, throughputs, min_size)
+        assert np.sum(assignment) == vector_size
+        assert np.min(assignment) >= 0
