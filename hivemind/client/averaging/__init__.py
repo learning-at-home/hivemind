@@ -16,15 +16,16 @@ import numpy as np
 
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
-from hivemind.client.averaging.matchmaking import Matchmaking, DataForGather
+from hivemind.client.averaging.matchmaking import Matchmaking
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, GRPC_KEEPALIVE_OPTIONS, get_dht_time
+from hivemind.utils import get_logger, Endpoint, Port, MPFuture, GRPC_KEEPALIVE_OPTIONS, get_dht_time, MSGPackSerializer
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 
 # flavour types
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
 
 INITIAL_GROUP_NBITS = 3
+DataForGather = Any
 logger = get_logger(__name__)
 
 
@@ -69,6 +70,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     """
     _matchmaking: Matchmaking
     _pending_group_assembled: asyncio.Event
+    serializer = MSGPackSerializer
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
                  prefix: str, target_group_size: int, min_group_size: int = 2, initial_group_bits: Optional[str] = None,
@@ -194,7 +196,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return future.result() if wait else future
 
     async def _step(self, *, future: MPFuture, gather: DataForGather, allow_retries: bool, timeout: Optional[float]):
-        #TODO gather
         loop = asyncio.get_event_loop()
         start_time = get_dht_time()
         group_id = None
@@ -202,7 +203,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         while not future.done():
             try:
                 self._pending_group_assembled.clear()
-                allreduce_group = await self._matchmaking.look_for_group(timeout=timeout)
+                gather_binary = self.serializer.dumps(gather)
+                allreduce_group = await self._matchmaking.look_for_group(timeout=timeout, data_for_gather=gather_binary)
                 if allreduce_group is None:
                     raise AllreduceException("Averaging step failed: could not find a group.")
 
@@ -213,7 +215,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 await loop.run_in_executor(None, self.update_tensors, allreduce_group)
 
                 # averaging is finished, exit the loop
-                future.set_result(allreduce_group.averaged_tensor_parts)#allreduce_group.gathered TODO
+                gathered_items = map(self.serializer.loads, allreduce_group.gathered)
+                gathered_data_by_peer = dict(zip(allreduce_group.ordered_group_endpoints, gathered_items))
+                future.set_result(gathered_data_by_peer)
 
             except AllreduceException:
                 time_elapsed = get_dht_time() - start_time
