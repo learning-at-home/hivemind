@@ -48,7 +48,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         super().__init__()
         self.endpoint, self.averaged_tensors, self.dht_handler = endpoint, tuple(averaged_tensors), DHTHandler(dht)
-        self.group_key_manager = GroupKeyManager(self.dht_handler, prefix, initial_group_bits)
+        self.group_key_manager = GroupKeyManager(self.dht_handler, prefix, initial_group_bits, target_group_size)
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.request_timeout = averaging_expiration, request_timeout
         self.throughput, self.min_vector_size, self.allreduce_kwargs = throughput, min_vector_size, allreduce_kwargs
