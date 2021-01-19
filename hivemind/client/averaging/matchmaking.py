@@ -140,7 +140,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             # the time is up, we have a *good enough* group. run allreduce as is.
                             return await self.leader_assemble_group()
                         elif len(self.current_followers) > 0:
-                            await self.leader_disband_group(update_key=True)
+                            await self.leader_disband_group(matchmaking_failed=True)
                         continue
                 except Exception as e:
                     if not self.assembled_group.done():
@@ -238,7 +238,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         # outcome 2: the time is up, run allreduce with what we have or disband
                         await self.leader_assemble_group()
                     else:
-                        await self.leader_disband_group(update_key=True)
+                        await self.leader_disband_group(matchmaking_failed=True)
 
             if self.was_accepted_to_group.is_set() or not self.assembled_group.done() \
                     or self.assembled_group.cancelled() or request.endpoint not in self.assembled_group.result():
@@ -317,8 +317,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
                                           ordered_group_endpoints=ordered_group_endpoints, part_sizes=part_sizes,
                                           gathered=gathered, group_key_seed=group_key_seed, **self.allreduce_kwargs)
-        self.group_key_manager.update_key_on_success(allreduce_group, is_leader=True)
         self.assembled_group.set_result(allreduce_group)
+        asyncio.create_task(self.group_key_manager.update_key_on_success(allreduce_group, is_leader=True))
         return allreduce_group
 
     async def follower_assemble_group(self, leader: Endpoint, msg: averaging_pb2.MessageFromLeader) -> AllReduceRunner:
@@ -336,16 +336,16 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                                           ordered_group_endpoints=tuple(ordered_group_endpoints),
                                           part_sizes=tuple(part_sizes), gathered=msg.gathered,
                                           group_key_seed=int(msg.group_key_seed), **self.allreduce_kwargs)
-        self.group_key_manager.update_key_on_success(allreduce_group)
+        asyncio.create_task(self.group_key_manager.update_key_on_success(allreduce_group))
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 
-    async def leader_disband_group(self, update_key=False):
+    async def leader_disband_group(self, matchmaking_failed=False):
         """ Kick out all followers immediately, optionally direct them to our new leader (if we found one) """
         assert self.lock_request_join_group.locked()
         self.current_followers.clear()  # this will cause rpc_join_group to kick all followers out
-        if update_key:
-            self.group_key_manager.update_key_on_failure()
+        if matchmaking_failed:
+            asyncio.create_task(self.group_key_manager.update_key_on_failure())
 
 
 def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:

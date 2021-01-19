@@ -21,8 +21,8 @@ class GroupKeyManager:
     def current_key(self) -> GroupKey:
         return f"{self.prefix}.0b{self.group_bits}"
 
-    def update_key_on_success(self, allreduce_group: AllReduceRunner, is_leader=True):
+    async def update_key_on_success(self, allreduce_group: AllReduceRunner, is_leader=True):
         pass #TODO
 
-    def update_key_on_failure(self):
+    async def update_key_on_failure(self):
         pass #TODO
