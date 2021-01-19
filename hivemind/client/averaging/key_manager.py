@@ -1,9 +1,12 @@
+import random
 import re
-from typing import List, Tuple
+from typing import Optional, List, Tuple
+
+from numpy.core._multiarray_umath import nextafter
 
 from hivemind.dht import DHT
-from hivemind.utils import Endpoint, DHTExpiration, get_logger
-from numpy import nextafter
+from hivemind.client.averaging.allreduce import AllReduceRunner
+from hivemind.utils import get_logger, Endpoint, DHTExpiration
 
 GroupKey = str
 GROUP_PATTERN = re.compile('^(([^.])+)[.]0b[01]*$')  # e.g. bert_exp4_averaging.0b01001101
@@ -15,15 +18,39 @@ def is_valid_group(maybe_group: str) -> bool:
     return bool(GROUP_PATTERN.fullmatch(maybe_group))
 
 
-class DHTHandler:
-    """ Utility class that implements basic DHT interactions required by DecentralizedAverager """
+class GroupKeyManager:
+    """
+    Utility class that declares and retrieves averaging-related keys
+    """
     RESERVED_KEY_FOR_NBITS = '::NBITS'
 
-    def __init__(self, dht: DHT):
-        self.dht = dht
+    def __init__(self, dht: DHT, endpoint: Endpoint, prefix: str, initial_group_bits: Optional[str],
+                 target_group_size: int, insufficient_size: Optional[int] = None, excessive_size: Optional[int] = None,
+                 max_consecutive_fails: int = 3, redirect_expiration: float = 600):
+        assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
+        self.dht, self.endpoint, self.prefix, self.group_bits = dht, endpoint, prefix, initial_group_bits or ''
+        self.target_group_size = target_group_size
+        self.insufficient_size = insufficient_size or max(1, target_group_size // 2)
+        self.excessive_size = excessive_size or target_group_size * 3
+        self.max_consecutive_fails = max_consecutive_fails
+        self.redirect_expiration = redirect_expiration
 
-    async def declare_averager(self, group_key: GroupKey, endpoint: Endpoint, expiration_time: float, *,
-                               looking_for_group: bool = True) -> bool:
+    @property
+    def current_key(self) -> GroupKey:
+        return f"{self.prefix}.0b{self.group_bits}"
+
+    async def update_key_on_success(self, allreduce_group: AllReduceRunner, is_leader=True):
+        pass #TODO
+
+    async def update_key_on_failure(self):
+        pass #TODO
+
+    async def publish_current_key(self, expiration_time: float, looking_for_group: bool = True) -> bool:
+        """ A shortcut function for declare_group_key with averager's current active key and endpoint """
+        return await self.declare_group_key(self.current_key, self.endpoint, expiration_time, looking_for_group)
+
+    async def declare_group_key(self, group_key: GroupKey, endpoint: Endpoint, expiration_time: float,
+                                looking_for_group: bool = True) -> bool:
         """
         Add (or remove) the averager to a given allreduce bucket
 
@@ -36,7 +63,6 @@ class DHTHandler:
         :note: when leaving (i.e. is_active=False), please specify the same expiration_time as when entering the group
         :note: setting is_active=False does *not* guarantee that others will immediately stop to query you.
         """
-        assert is_valid_group(group_key), f"Group key {group_key} is invalid, must follow {GROUP_PATTERN}"
         expiration_time = expiration_time if looking_for_group else float(nextafter(expiration_time, float('inf')))
         return await self.dht.store(key=group_key, subkey=endpoint, value=looking_for_group,
                                     expiration_time=expiration_time, return_future=True)

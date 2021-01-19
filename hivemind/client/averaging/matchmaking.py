@@ -12,10 +12,9 @@ import grpc
 import torch
 
 from hivemind.client.averaging.allreduce import AllReduceRunner
-from hivemind.client.averaging.dht_handler import DHTHandler
 from hivemind.client.averaging.potential_leaders import PotentialLeaders
 from hivemind.client.averaging.load_balancing import load_balance_peers
-from hivemind.client.averaging.group_key import GroupKeyManager
+from hivemind.client.averaging.key_manager import GroupKeyManager
 from hivemind.dht import DHT, DHTID, DHTExpiration, get_dht_time
 from hivemind.utils import get_logger, Endpoint, TensorDescriptor, MSGPackSerializer
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
@@ -47,8 +46,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                            "matchmaking can cause deadlocks in some rare cases. Please see Matchmaking docstring.")
 
         super().__init__()
-        self.endpoint, self.averaged_tensors, self.dht_handler = endpoint, tuple(averaged_tensors), DHTHandler(dht)
-        self.group_key_manager = GroupKeyManager(self.dht_handler, prefix, initial_group_bits, target_group_size)
+        self.endpoint, self.averaged_tensors = endpoint, tuple(averaged_tensors)
+        self.group_key_manager = GroupKeyManager(dht, endpoint, prefix, initial_group_bits, target_group_size)
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.request_timeout = averaging_expiration, request_timeout
         self.throughput, self.min_vector_size, self.allreduce_kwargs = throughput, min_vector_size, allreduce_kwargs
@@ -63,7 +62,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         self.current_leader: Optional[Endpoint] = None  # iff i am a follower, this is a link to my current leader
         self.current_followers: Dict[Endpoint, averaging_pb2.JoinRequest] = {}  # my current followers excluding myself
-        self.potential_leaders = PotentialLeaders(endpoint, self.dht_handler, averaging_expiration, target_group_size)
+        self.potential_leaders = PotentialLeaders(endpoint, averaging_expiration, target_group_size)
         self.data_for_gather: Optional[bytes] = None
 
     @property
@@ -84,7 +83,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     async def look_for_group(self, *, data_for_gather: bytes = b'', timeout: Optional[float] = None
                              ) -> Optional[AllReduceRunner]:
         """
-        :param data_for_gather: optionally send this data to all peers in the next group and gather it from every groupmate
+        :param data_for_gather: optionally send this data to all peers in the next group and gather it from groupmates
         :param timeout: maximum time that may be spent looking for group (does not include allreduce itself)
         :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
         Iterate over the averagers from a given group_identifier that have higher leadership priority than yourself.
@@ -123,7 +122,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     async def _request_join_potential_leaders(self, timeout: Optional[float]) -> AllReduceRunner:
         """ Request leaders from queue until we find the first runner. This coroutine is meant to run in background. """
-        async with self.potential_leaders.begin_search(self.group_key_manager.current_key, timeout):
+        async with self.potential_leaders.begin_search(self.group_key_manager, timeout):
             while True:
                 try:
                     next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration

@@ -7,28 +7,34 @@ import pytest
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts
 from hivemind.client.averaging.load_balancing import load_balance_peers
-from hivemind.client.averaging.dht_handler import DHTHandler
+from hivemind.client.averaging.key_manager import GroupKeyManager
 from hivemind.utils import Endpoint
 
 
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_getset_averagers():
-    dht_handler = DHTHandler(hivemind.DHT(start=True))
+    dht = hivemind.DHT(start=True)
+    key_manager = GroupKeyManager(dht, endpoint='localhvost',
+                                  prefix='test_averaging', initial_group_bits='10110',
+                                  target_group_size=2)
+    key_manager2 = GroupKeyManager(dht, endpoint='localhvost2',
+                                   prefix='test_averaging', initial_group_bits='10110',
+                                   target_group_size=2)
 
     t = hivemind.get_dht_time()
-    await dht_handler.declare_averager(group_key='bucket.0b10110', endpoint='localhvost', expiration_time=t + 60)
-    await dht_handler.declare_averager(group_key='bucket.0b10110', endpoint='localhvost2', expiration_time=t + 61)
+    await key_manager.publish_current_key(expiration_time=t + 60)
+    await key_manager2.publish_current_key(expiration_time=t + 61)
 
-    q1 = await dht_handler.get_averagers('bucket.0b10110', only_active=True)
+    q1 = await key_manager.get_averagers(key_manager.current_key, only_active=True)
 
-    await dht_handler.declare_averager(group_key='bucket.0b10110', endpoint='localhvost', expiration_time=t + 66)
-    q2 = await dht_handler.get_averagers('bucket.0b10110', only_active=True)
+    await key_manager.publish_current_key(expiration_time=t + 66)
+    q2 = await key_manager2.get_averagers('test_averaging.0b10110', only_active=True)
 
-    await dht_handler.declare_averager(group_key='bucket.0b10110', endpoint='localhvost2', looking_for_group=False,
-                                       expiration_time=t + 61)
-    q3 = await dht_handler.get_averagers('bucket.0b10110', only_active=True)
-    q4 = await dht_handler.get_averagers('bucket.0b10110', only_active=False)
+    await key_manager2.publish_current_key(expiration_time=t + 61, looking_for_group=False)
+    q3 = await key_manager.get_averagers('test_averaging.0b10110', only_active=True)
+    q4 = await key_manager2.get_averagers('test_averaging.0b10110', only_active=False)
+    print('!!', q1, q2, q3, q4)
 
     assert len(q1) == 2 and ('localhvost', t + 60) in q1 and ('localhvost2', t + 61) in q1
     assert len(q2) == 2 and ('localhvost', t + 66) in q2 and ('localhvost2', t + 61) in q2

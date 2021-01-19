@@ -4,7 +4,7 @@ from math import isfinite
 from typing import Optional, Set, Tuple
 
 import hivemind
-from hivemind.client.averaging.dht_handler import GroupKey, DHTHandler
+from hivemind.client.averaging.key_manager import GroupKey, GroupKeyManager
 from hivemind.utils import Endpoint, DHTExpiration, TimedStorage, get_dht_time, get_logger
 
 logger = get_logger(__name__)
@@ -13,9 +13,8 @@ logger = get_logger(__name__)
 class PotentialLeaders:
     """ An utility class that searches for averagers that could become our leaders """
 
-    def __init__(self, endpoint: Endpoint, dht_handler: DHTHandler, averaging_expiration: DHTExpiration,
-                 target_group_size: Optional[int]):
-        self.endpoint, self.dht_handler, self.averaging_expiration = endpoint, dht_handler, averaging_expiration
+    def __init__(self, endpoint: Endpoint, averaging_expiration: DHTExpiration, target_group_size: Optional[int]):
+        self.endpoint, self.averaging_expiration = endpoint, averaging_expiration
         self.target_group_size = target_group_size
         self.running, self.update_triggered, self.update_finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
         self.declared_expiration, self.lock_search, self.lock_declare = asyncio.Event(), asyncio.Lock(), asyncio.Lock()
@@ -27,12 +26,12 @@ class PotentialLeaders:
         self.search_end_time = float('inf')
 
     @contextlib.asynccontextmanager
-    async def begin_search(self, group_key: GroupKey, timeout: Optional[float]):
+    async def begin_search(self, key_manager: GroupKeyManager, timeout: Optional[float]):
         async with self.lock_search:
             self.running.set()
             self.search_end_time = get_dht_time() + timeout if timeout is not None else float('inf')
-            update_queue_task = asyncio.create_task(self._update_queue_periodically(group_key))
-            declare_averager_task = asyncio.create_task(self._declare_averager_periodically(group_key))
+            update_queue_task = asyncio.create_task(self._update_queue_periodically(key_manager))
+            declare_averager_task = asyncio.create_task(self._declare_averager_periodically(key_manager))
             try:
                 yield self
             finally:
@@ -89,10 +88,10 @@ class PotentialLeaders:
         else:
             return min(get_dht_time() + self.averaging_expiration, self.search_end_time)
 
-    async def _update_queue_periodically(self, group_key: GroupKey):
+    async def _update_queue_periodically(self, key_manager: GroupKeyManager):
         DISCREPANCY = hivemind.utils.timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
         while get_dht_time() < self.search_end_time:
-            new_peers = await self.dht_handler.get_averagers(group_key, only_active=True)
+            new_peers = await key_manager.get_averagers(key_manager.current_key, only_active=True)
             self.max_assured_time = max(self.max_assured_time, get_dht_time() + self.averaging_expiration - DISCREPANCY)
 
             self.leader_queue.clear()
@@ -109,17 +108,17 @@ class PotentialLeaders:
                 timeout=self.search_end_time - get_dht_time() if isfinite(self.search_end_time) else None)
             self.update_triggered.clear()
 
-    async def _declare_averager_periodically(self, group_key: GroupKey):
+    async def _declare_averager_periodically(self, key_manager: GroupKeyManager):
         async with self.lock_declare:
             try:
                 while True:
                     await self.running.wait()
 
                     new_expiration_time = min(get_dht_time() + self.averaging_expiration, self.search_end_time)
-                    self.declared_group_key, self.declared_expiration_time = group_key, new_expiration_time
+                    self.declared_group_key = group_key = key_manager.current_key
+                    self.declared_expiration_time = new_expiration_time
                     self.declared_expiration.set()
-                    await self.dht_handler.declare_averager(group_key, self.endpoint, new_expiration_time,
-                                                            looking_for_group=True)
+                    await key_manager.publish_current_key(looking_for_group=True, expiration_time=new_expiration_time)
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
             except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
                 logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
@@ -128,5 +127,5 @@ class PotentialLeaders:
                     prev_declared_key, prev_expiration_time = self.declared_group_key, self.declared_expiration_time
                     self.declared_group_key, self.declared_expiration_time = None, float('inf')
                     self.leader_queue, self.max_assured_time = TimedStorage[Endpoint, DHTExpiration](), float('-inf')
-                    await self.dht_handler.declare_averager(prev_declared_key, self.endpoint, prev_expiration_time,
-                                                            looking_for_group=False)
+                    await key_manager.declare_group_key(prev_declared_key, self.endpoint, prev_expiration_time,
+                                                        looking_for_group=False)
