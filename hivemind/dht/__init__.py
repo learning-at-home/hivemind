@@ -25,8 +25,8 @@ from numpy import nextafter
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
-from hivemind.dht.routing import get_dht_time, DHTValue
-from hivemind.utils import MPFuture, Endpoint, Hostname, get_logger, switch_to_uvloop, strip_port
+from hivemind.dht.routing import get_dht_time, DHTValue, DHTKey, Subkey
+from hivemind.utils import MPFuture, Endpoint, Hostname, get_logger, switch_to_uvloop, strip_port, ValueWithExpiration
 
 logger = get_logger(__name__)
 
@@ -179,6 +179,54 @@ class DHT(mp.Process):
     @property
     def port(self) -> Optional[int]:
         return self._port.value if self._port.value != 0 else None
+
+    def get(self, key: DHTKey, latest: bool = False, return_future: bool = False, **kwargs
+            ) -> Optional[ValueWithExpiration[DHTValue]]:
+        """
+        Search for a key across DHT and return either first or latest entry (if found).
+        :param key: same key as in node.store(...)
+        :param latest: if True, finds the latest value, otherwise finds any non-expired value (which is much faster)
+        :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
+        :param kwargs: parameters forwarded to DHTNode.get_many_by_id
+        :returns: (value, expiration time); if value was not found, returns None
+        """
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_get', [], dict(key=key, latest=latest, future=_future, **kwargs)))
+        return future if return_future else future.result()
+
+    async def _get(self, node: DHTNode, key: DHTKey, latest: bool, future: MPFuture, **kwargs):
+        try:
+            result = await node.get(key, latest=latest, **kwargs)
+            if not future.done():
+                future.set_result(result)
+        except BaseException as e:
+            if not future.done():
+                future.set_exception(e)
+            raise
+
+    def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
+              subkey: Optional[Subkey] = None, return_future: bool = False, **kwargs) -> bool:
+        """
+        Find num_replicas best nodes to store (key, value) and store it there until expiration time.
+        :note: store is a simplified interface to store_many, all kwargs are be forwarded there
+        :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
+        :returns: True if store succeeds, False if it fails (due to no response or newer value)
+        """
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_store', [], dict(key=key, value=value, expiration_time=expiration_time, subkey=subkey,
+                                           future=_future, **kwargs)))
+        return future if return_future else future.result()
+
+    async def _store(self, node: DHTNode, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
+                     subkey: Optional[Subkey], future: MPFuture, **kwargs):
+        try:
+            result = await node.store(key, value, expiration_time, subkey=subkey, **kwargs)
+            if not future.done():
+                future.set_result(result)
+        except BaseException as e:
+            if not future.done():
+                future.set_exception(e)
+            raise
 
     def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
         """
