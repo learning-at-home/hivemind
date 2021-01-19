@@ -1,8 +1,8 @@
-import random
 import re
+import random
 from typing import Optional, List, Tuple
 
-from numpy.core._multiarray_umath import nextafter
+import numpy as np
 
 from hivemind.dht import DHT
 from hivemind.client.averaging.allreduce import AllReduceRunner
@@ -39,10 +39,20 @@ class GroupKeyManager:
     def current_key(self) -> GroupKey:
         return f"{self.prefix}.0b{self.group_bits}"
 
-    async def update_key_on_success(self, allreduce_group: AllReduceRunner, is_leader=True):
+    async def update_key_on_success(self, allreduce_group: AllReduceRunner, is_leader: bool = True):
+        """ this function is triggered every time an averager finds an allreduce group """
+        rng = random.Random(allreduce_group.group_key_seed)
+        index = allreduce_group.ordered_group_endpoints.index(self.endpoint)
+        generalized_index = rng.sample(range(self.target_group_size), allreduce_group.group_size)[index]
+        nbits = int(np.ceil(np.log2(self.target_group_size)))
+        new_bits = bin(generalized_index)[2:].rjust(nbits, '0')
+        self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits):]
+
+        print(end=f"{self.endpoint}-{self.group_bits}\n")
         pass #TODO
 
     async def update_key_on_failure(self):
+        """ this function is triggered whenever averager fails to assemble group within timeout """
         pass #TODO
 
     async def publish_current_key(self, expiration_time: float, looking_for_group: bool = True) -> bool:
@@ -63,7 +73,7 @@ class GroupKeyManager:
         :note: when leaving (i.e. is_active=False), please specify the same expiration_time as when entering the group
         :note: setting is_active=False does *not* guarantee that others will immediately stop to query you.
         """
-        expiration_time = expiration_time if looking_for_group else float(nextafter(expiration_time, float('inf')))
+        expiration_time = expiration_time if looking_for_group else float(np.nextafter(expiration_time, float('inf')))
         return await self.dht.store(key=group_key, subkey=endpoint, value=looking_for_group,
                                     expiration_time=expiration_time, return_future=True)
 

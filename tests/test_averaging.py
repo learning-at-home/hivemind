@@ -54,7 +54,7 @@ def test_allreduce_once():
     reference = [(tensors1[i] + tensors2[i] + tensors3[i] + tensors4[i]) / 4 for i in range(len(tensors1))]
 
     averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
-                                                prefix='mygroup', initial_group_bits='0110', listen_on='127.0.0.1:*',
+                                                prefix='mygroup', listen_on='127.0.0.1:*',
                                                 start=True)
                  for tensors in [tensors1, tensors2, tensors3, tensors4]]
 
@@ -70,6 +70,45 @@ def test_allreduce_once():
         with averager.get_tensors() as averaged_tensors:
             for ref, our in zip(reference, averaged_tensors):
                 assert torch.allclose(ref, our, atol=1e-6)
+
+
+def compute_mean_std(averagers, unbiased=True):
+    results = []
+    for averager in averagers:
+        with averager.get_tensors() as tensors:
+            results.append([tensor.clone() for tensor in tensors])
+
+    results_stacked_per_tensor = list(map(torch.stack, zip(*results)))
+    means = [stack.mean(dim=0) for stack in results_stacked_per_tensor]
+    stds = [stack.std(dim=0, unbiased=unbiased) for stack in results_stacked_per_tensor]
+    return means, stds
+
+
+@pytest.mark.forked
+def test_averaging_grid():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averagers = [hivemind.DecentralizedAverager(
+        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2, averaging_expiration=15,
+        prefix='mygroup', initial_group_bits=bin(i // 2)[2:].rjust(2, '0'), start=True)
+        for i in range(8)]
+
+    [means0], [stds0] = compute_mean_std(averagers)
+    assert not torch.allclose(stds0, torch.zeros_like(stds0))
+
+    prev_means, prev_stds = means0, stds0
+
+    for i in range(5):
+        step_futures = [averager.step(wait=False) for averager in averagers]
+        groups = [future.result() for future in step_futures]
+        [means], [stds] = compute_mean_std(averagers)
+        assert torch.allclose(means, prev_means, atol=1e-6, rtol=0)
+        assert all(len(group) == 2 for group in groups)
+
+        if i <= 2:
+            assert torch.all(torch.le(stds, prev_stds))
+        else:
+            assert torch.allclose(stds, torch.zeros_like(stds), atol=1e-6, rtol=0)
+
 
 
 @pytest.mark.forked
