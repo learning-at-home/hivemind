@@ -13,7 +13,7 @@ import torch
 
 from hivemind.client.averaging.allreduce import AllReduceRunner
 from hivemind.client.averaging.dht_handler import DHTHandler
-from hivemind.client.averaging.leaders_queue import PotentialLeaders
+from hivemind.client.averaging.potential_leaders import PotentialLeaders
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.group_key import GroupKeyManager
 from hivemind.dht import DHT, DHTID, DHTExpiration, get_dht_time
