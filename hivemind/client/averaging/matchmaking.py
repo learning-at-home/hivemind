@@ -317,7 +317,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
                                           ordered_group_endpoints=ordered_group_endpoints, part_sizes=part_sizes,
                                           gathered=gathered, group_key_seed=group_key_seed, **self.allreduce_kwargs)
-        self.group_key_manager.update_key_on_success(allreduce_group)
+        self.group_key_manager.update_key_on_success(allreduce_group, is_leader=True)
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 

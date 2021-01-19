@@ -6,7 +6,7 @@ from hivemind.utils import Endpoint, DHTExpiration, get_logger
 from numpy import nextafter
 
 GroupKey = str
-GROUP_PATTERN = re.compile('^(([^.])+)[.]0b[01]+$')  # e.g. bert_exp4_averaging.0b01001101
+GROUP_PATTERN = re.compile('^(([^.])+)[.]0b[01]*$')  # e.g. bert_exp4_averaging.0b01001101
 logger = get_logger(__name__)
 
 
@@ -17,6 +17,8 @@ def is_valid_group(maybe_group: str) -> bool:
 
 class DHTHandler:
     """ Utility class that implements basic DHT interactions required by DecentralizedAverager """
+    RESERVED_KEY_FOR_NBITS = '::NBITS'
+
     def __init__(self, dht: DHT):
         self.dht = dht
 
@@ -56,3 +58,13 @@ class DHTHandler:
         averagers = [(endpoint, entry.expiration_time) for endpoint, entry in result.value.items()
                      if not only_active or entry.value is True]
         return averagers
+
+    async def declare_nbits(self, group_key: GroupKey, nbits: int, expiration_time: DHTExpiration) -> bool:
+        """ notify other peers that they can run averaging at this depth """
+        return await self.dht.store(key=group_key, subkey=self.RESERVED_KEY_FOR_NBITS, value=nbits,
+                                    expiration_time=expiration_time, return_future=True)
+
+    async def get_nbits(self, group_key: GroupKey) -> int:
+        """ notify other peers that they can run averaging at this depth. If not found, return 0. """
+        result = await self.dht.get(key=group_key, return_future=True)
+        return result.get(self.RESERVED_KEY_FOR_NBITS, 0) if isinstance(result, dict) else 0

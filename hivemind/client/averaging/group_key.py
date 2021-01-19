@@ -19,11 +19,8 @@ class GroupKeyManager:
         """ Infer the current depth from the existing DHT keys """
         raise NotImplementedError()
 
-    def update_key_on_success(self, allreduce_group: AllReduceRunner):
+    def update_key_on_success(self, allreduce_group: AllReduceRunner, is_leader=True):
         pass #TODO
 
     def update_key_on_failure(self):
-        pass #TODO
-
-    async def update_dht_on_success(self):
         pass #TODO
