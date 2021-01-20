@@ -6,7 +6,6 @@ import asyncio
 import contextlib
 import ctypes
 import multiprocessing as mp
-import random
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 
@@ -16,7 +15,7 @@ import numpy as np
 
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
-from hivemind.client.averaging.matchmaking import Matchmaking
+from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, GRPC_KEEPALIVE_OPTIONS, get_dht_time, MSGPackSerializer
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
@@ -24,7 +23,6 @@ from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 # flavour types
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
 
-INITIAL_GROUP_NBITS = 3
 DataForGather = Any
 logger = get_logger(__name__)
 
@@ -43,8 +41,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     :param prefix: a shared prefix for all group keys
     :param target_group_size: attempts to form groups with up to this many peers (recommended: a power of 2, e.g. 16)
-    :param initial_group_bits: a string of bits ('0' and '1') that define initial group key (bucket index)
-      by default, sample a random bit sequence of length {INITIAL_GROUP_NBITS}
+    :param initial_group_bits: a string of bits ('0' and '1') that define the initial group key (bucket index)
     :param averaging_expiration: attempt to find a group for this many seconds, otherwise try again
       note - this expiration time only applies to looking for group, passing tensors in allreduce may take more time
     :param compression_type: optionally compress tensors with this compression algorithm before sending them to peers
@@ -56,7 +53,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param chunk_size_bytes: tensors for AllReduce will be divided into chunks of this size (to improve gRPC throughput)
     :param throughput: if specified, this value represents the network bandwidth available to averager.
           By default, the averager is assumed to have the average bandwidth of his group.
-          If throughput == 0, averager will run in client-only mode (TODO not implemented yet!)
+          If throughput == 0, averager will rely on its groupmates to do all the averaging.
     :param listen: if True (default), this averager will accept incoming requests from other peers and perform allreduce
             if False, the averager will register as a freeloader and attempt to fetch vectors from other averagers
     :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
@@ -64,9 +61,18 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
     :param kwargs: extra parameters forwarded to grpc.aio.server
-    You can perform averaging using DecentralizedOptimizer (see below) or by manually running each step as such:
 
-    >> TODO add a working example here
+    Example:
+
+    >>> averager = DecentralizedAverager(...)
+    >>> with averager.get_tensors() as tensors:
+    >>>     # run some code, modify tensors if necessary
+    >>>     tensors[0] += 1
+    >>> # do not use tensors after the lock is released
+    >>> metadata = averager.step(gather=dict(my_batch_size=32))
+    >>> # run averaging once (in-place), gather metadata from groupmates
+    >>> with averager.get_tensors() as tensors_after_averaging:
+    >>>     pass # use the averaged tensors
     """
     _matchmaking: Matchmaking
     _pending_group_assembled: asyncio.Event
@@ -81,16 +87,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', receiver_threads: int = 1, daemon: bool = True,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
-        assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), "throughput must be a" \
-                                                                                                " nonnegative float32"
+        assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
+            "throughput must be a non-negative float32"
         if not listen:
             raise NotImplementedError("Client-only averaging is not implemented yet.")
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
-        if initial_group_bits is None:
-            initial_group_bits = ''.join(random.choices('01', k=INITIAL_GROUP_NBITS))
-            logger.debug(f"Initializing with random {INITIAL_GROUP_NBITS}-bit group index: {initial_group_bits}")
-        assert len(initial_group_bits) >= INITIAL_GROUP_NBITS and all(bit in '01' for bit in initial_group_bits)
+        assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
 
         super().__init__()
         self.dht = dht
@@ -178,7 +181,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
-    def step(self, allow_retries: bool = True, gather: Optional[DataForGather] = None, timeout: Optional[float] = None,
+    def step(self, gather: Optional[DataForGather] = None, allow_retries: bool = True, timeout: Optional[float] = None,
              wait=True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
@@ -219,7 +222,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 gathered_data_by_peer = dict(zip(allreduce_group.ordered_group_endpoints, gathered_items))
                 future.set_result(gathered_data_by_peer)
 
-            except AllreduceException:
+            except (AllreduceException, MatchmakingException):
                 time_elapsed = get_dht_time() - start_time
                 if not allow_retries or (timeout is not None and timeout < time_elapsed):
                     future.set_result(None)
@@ -248,12 +251,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """
         A contextmanager that gives user access to averaged tensors.
         It is guaranteed that the averager will not modify tensors while this context is active.
-
-        Example:
-              >>> with averager.get_tensors() as tensors:
-              >>>     update_model(tensors)
-              >>>     tensors[0] += 1
-              >>> # do not use tensors after the lock is acquired
+        Please do not modify the yielded tensors in-place after the context is released.
         """
         with self.lock_averaged_tensors:
             yield self._averaged_tensors

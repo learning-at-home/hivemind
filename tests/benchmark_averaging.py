@@ -1,3 +1,4 @@
+import math
 import time
 import threading
 import argparse
@@ -31,6 +32,8 @@ def benchmark_averaging(num_peers: int, target_group_size: int, num_rounds: int,
                         averaging_expiration: float, request_timeout: float, round_timeout: float,
                         hid_size: int, num_layers: int, spawn_dtime: float):
     dht_root = hivemind.DHT(listen_on=f'{LOCALHOST}:*', start=True)
+    num_groups = 2 ** int(round(math.log2(num_peers / target_group_size)))
+    nbits = int(round(math.log2(num_groups)))
     peer_tensors = [sample_tensors(hid_size, num_layers)
                     for _ in range(num_peers)]
     processes = {dht_root}
@@ -39,8 +42,9 @@ def benchmark_averaging(num_peers: int, target_group_size: int, num_rounds: int,
         dht = hivemind.DHT(listen_on=f'{LOCALHOST}:*',
                            initial_peers=[f"{LOCALHOST}:{dht_root.port}"],
                            start=True)
+        initial_bits = bin(index % num_groups)[2:].rjust(nbits, '0')
         averager = hivemind.DecentralizedAverager(
-            peer_tensors[i], dht, prefix='my_tensor', initial_group_bits='0110', listen_on=f"{LOCALHOST}:*",
+            peer_tensors[i], dht, prefix='my_tensor', initial_group_bits=initial_bits, listen_on=f"{LOCALHOST}:*",
             compression_type=runtime_pb2.CompressionType.FLOAT16, target_group_size=target_group_size,
             averaging_expiration=averaging_expiration, request_timeout=request_timeout, start=True)
         processes.update({dht, averager})

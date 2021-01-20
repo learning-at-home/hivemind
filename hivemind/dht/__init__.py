@@ -12,6 +12,7 @@ The code is organized as follows:
 - [1] Maymounkov P., Mazieres D. (2002) Kademlia: A Peer-to-Peer Information System Based on the XOR Metric.
 - [2] https://github.com/bmuller/kademlia , Brian, if you're reading this: THANK YOU! you're awesome :)
 """
+from __future__ import annotations
 import asyncio
 import ctypes
 import heapq
@@ -21,12 +22,11 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set
 
-from numpy import nextafter
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
-from hivemind.dht.routing import get_dht_time, DHTValue
-from hivemind.utils import MPFuture, Endpoint, Hostname, get_logger, switch_to_uvloop, strip_port
+from hivemind.dht.routing import get_dht_time, DHTValue, DHTKey, Subkey
+from hivemind.utils import MPFuture, Endpoint, Hostname, get_logger, switch_to_uvloop, strip_port, ValueWithExpiration
 
 logger = get_logger(__name__)
 
@@ -37,8 +37,6 @@ FLAT_EXPERT = -1  # grid prefix reserved for storing 1d expert uids. Used to spe
 UID_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+$')  # e.g. ffn_expert.98.76.54 - prefix + some dims
 PREFIX_PATTERN = re.compile('^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))*[.]$')  # e.g. expert. or ffn.45. (ends with ".")
 #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
-GroupKey = str
-GROUP_PATTERN = re.compile('^(([^.])+)[.]0b[01]+$')  # e.g. bert_exp4_averaging.0b01001101
 
 
 def is_valid_uid(maybe_uid: str) -> bool:
@@ -49,12 +47,6 @@ def is_valid_uid(maybe_uid: str) -> bool:
 def is_valid_prefix(maybe_prefix: str) -> bool:
     """ An uid prefix must contain a string expert type, followed by optional numeric indices and a trailing period """
     return bool(PREFIX_PATTERN.fullmatch(maybe_prefix))
-
-
-def is_valid_group(maybe_group: str) -> bool:
-    """ A group identifier must contain group type, followed by one or more .-separated indices, and any ?metadata"""
-    return bool(GROUP_PATTERN.fullmatch(maybe_group))
-
 
 def split_uid(uid_or_prefix: Union[ExpertUID, ExpertPrefix]) -> Tuple[ExpertPrefix, Coordinate]:
     """ Separate an expert UID or prefix into a new ExpertPrefix and integer for the last coordinate """
@@ -179,6 +171,54 @@ class DHT(mp.Process):
     @property
     def port(self) -> Optional[int]:
         return self._port.value if self._port.value != 0 else None
+
+    def get(self, key: DHTKey, latest: bool = False, return_future: bool = False, **kwargs
+            ) -> Union[Optional[ValueWithExpiration[DHTValue]], MPFuture]:
+        """
+        Search for a key across DHT and return either first or latest entry (if found).
+        :param key: same key as in node.store(...)
+        :param latest: if True, finds the latest value, otherwise finds any non-expired value (which is much faster)
+        :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
+        :param kwargs: parameters forwarded to DHTNode.get_many_by_id
+        :returns: (value, expiration time); if value was not found, returns None
+        """
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_get', [], dict(key=key, latest=latest, future=_future, **kwargs)))
+        return future if return_future else future.result()
+
+    async def _get(self, node: DHTNode, key: DHTKey, latest: bool, future: MPFuture, **kwargs):
+        try:
+            result = await node.get(key, latest=latest, **kwargs)
+            if not future.done():
+                future.set_result(result)
+        except BaseException as e:
+            if not future.done():
+                future.set_exception(e)
+            raise
+
+    def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
+              subkey: Optional[Subkey] = None, return_future: bool = False, **kwargs) -> Union[bool, MPFuture]:
+        """
+        Find num_replicas best nodes to store (key, value) and store it there until expiration time.
+        :note: store is a simplified interface to store_many, all kwargs are be forwarded there
+        :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
+        :returns: True if store succeeds, False if it fails (due to no response or newer value)
+        """
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_store', [], dict(key=key, value=value, expiration_time=expiration_time, subkey=subkey,
+                                           future=_future, **kwargs)))
+        return future if return_future else future.result()
+
+    async def _store(self, node: DHTNode, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
+                     subkey: Optional[Subkey], future: MPFuture, **kwargs):
+        try:
+            result = await node.store(key, value, expiration_time, subkey=subkey, **kwargs)
+            if not future.done():
+                future.set_result(result)
+        except BaseException as e:
+            if not future.done():
+                future.set_exception(e)
+            raise
 
     def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
         """
@@ -519,69 +559,3 @@ class DHT(mp.Process):
         if future is not None:
             future.set_result(best_experts_batch)
         return best_experts_batch
-
-    def declare_averager(self, group_key: GroupKey, endpoint: Endpoint, expiration_time: float, *,
-                         looking_for_group: bool = True, return_future: bool = False) -> Union[bool, MPFuture]:
-        """
-        Add (or remove) the averager to a given allreduce bucket
-
-        :param group_key: allreduce group key, e.g. my_averager.0b011011101
-        :param endpoint: averager public endpoint for incoming requests
-        :param expiration_time: intent to run allreduce before this timestamp
-        :param looking_for_group: by default (True), declare the averager as "looking for group" in a given group;
-          If False, this will instead mark that the averager as no longer looking for group, (e.g. it already finished)
-        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
-        :return: True if declared, False if declaration was rejected by DHT peers
-        :note: when leaving (i.e. is_active=False), please specify the same expiration_time as when entering the group
-        :note: setting is_active=False does *not* guarantee that others will immediately stop to query you.
-        """
-        assert is_valid_group(group_key), f"Group key {group_key} is invalid, must follow {GROUP_PATTERN}"
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_declare_averager', [],
-                        dict(group_key=group_key, endpoint=endpoint, expiration_time=expiration_time,
-                             looking_for_group=looking_for_group, future=_future)))
-        return future if return_future else future.result()
-
-    async def _declare_averager(self, node: DHTNode, *, group_key: str, endpoint: Endpoint,
-                                expiration_time: DHTExpiration, looking_for_group: bool, future: MPFuture):
-        try:
-            expiration_time = expiration_time if looking_for_group else float(nextafter(expiration_time, float('inf')))
-            # ^-- when declaring averager inactive, we increment expiration time to overwrite the pre-existing entry
-            store_ok = await node.store(
-                key=group_key, subkey=endpoint, value=looking_for_group, expiration_time=expiration_time)
-            future.set_result(store_ok)
-        except Exception as e:
-            if not future.done():
-                future.set_exception(e)
-
-    def get_averagers(self, group_key: GroupKey, *, only_active: bool = True, return_future: bool = False
-                      ) -> Union[List[Tuple[Endpoint, DHTExpiration]], MPFuture]:
-        """
-        Find and return averagers in a specified all-reduce bucket
-
-        :param group_key: finds averagers that have the this group key, e.g. my_averager.0b011011101
-        :param only_active: if True, return only active averagers that are looking for group (i.e. with value = True)
-            if False, return all averagers under a given group_key regardless of value
-        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
-        :return: endpoints and expirations of every matching averager
-        """
-        assert is_valid_group(group_key), f"Group key {group_key} is invalid, must follow {GROUP_PATTERN}"
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_averagers', [], dict(group_key=group_key, only_active=only_active, future=_future)))
-        return future if return_future else future.result()
-
-    async def _get_averagers(self, node: DHTNode, *, group_key: str, only_active: bool, future: MPFuture):
-        try:
-            result = await node.get(group_key, latest=True)
-            if result is None:
-                logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
-                future.set_result([])
-                return
-            assert isinstance(result.value, dict), f"expected {group_key} to be a Dict[Endpoint, is_active], " \
-                                                   f"but got {result.value} of type {type(result.value)}."
-            averagers = [(endpoint, entry.expiration_time) for endpoint, entry in result.value.items()
-                         if not only_active or entry.value is True]
-            future.set_result(averagers)
-        except Exception as e:
-            if not future.done():
-                future.set_exception(e)

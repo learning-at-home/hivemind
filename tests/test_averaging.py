@@ -7,31 +7,38 @@ import pytest
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts
 from hivemind.client.averaging.load_balancing import load_balance_peers
+from hivemind.client.averaging.key_manager import GroupKeyManager
 from hivemind.utils import Endpoint
 
 
 @pytest.mark.forked
-def test_getset_averagers():
-    dht = hivemind.DHT(start=True)
+@pytest.mark.asyncio
+async def test_key_manager():
+    key_manager = GroupKeyManager(hivemind.DHT(start=True), endpoint='localhvost',
+                                  prefix='test_averaging', initial_group_bits='10110',
+                                  target_group_size=2)
 
     t = hivemind.get_dht_time()
-    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost', expiration_time=t + 60)
-    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost2', expiration_time=t + 61)
+    key = key_manager.current_key
+    await key_manager.declare_averager(key, 'localhvost', expiration_time=t + 60)
+    await key_manager.declare_averager(key, 'localhvost2', expiration_time=t + 61)
 
-    q1 = dht.get_averagers('bucket.0b10110', only_active=True)
+    q1 = await key_manager.get_averagers(key, only_active=True)
 
-    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost', expiration_time=t + 66)
-    q2 = dht.get_averagers('bucket.0b10110', only_active=True)
+    await key_manager.declare_averager(key, 'localhvost', expiration_time=t + 66)
+    q2 = await key_manager.get_averagers(key, only_active=True)
 
-    dht.declare_averager(group_key='bucket.0b10110', endpoint='localhvost2', looking_for_group=False,
-                         expiration_time=t + 61)
-    q3 = dht.get_averagers('bucket.0b10110', only_active=True)
-    q4 = dht.get_averagers('bucket.0b10110', only_active=False)
+    await key_manager.declare_averager(key, 'localhvost2', expiration_time=t + 61, looking_for_group=False)
+    q3 = await key_manager.get_averagers(key, only_active=True)
+    q4 = await key_manager.get_averagers(key, only_active=False)
+
+    q5 = await key_manager.get_averagers('nonexistent_key.0b0101', only_active=False)
 
     assert len(q1) == 2 and ('localhvost', t + 60) in q1 and ('localhvost2', t + 61) in q1
     assert len(q2) == 2 and ('localhvost', t + 66) in q2 and ('localhvost2', t + 61) in q2
     assert len(q3) == 1 and ('localhvost', t + 66) in q3
     assert len(q4) == 2 and ('localhvost', t + 66) in q4 and ('localhvost2', t + 61) in q2
+    assert len(q5) == 0
 
 
 @pytest.mark.forked
@@ -46,7 +53,7 @@ def test_allreduce_once():
     reference = [(tensors1[i] + tensors2[i] + tensors3[i] + tensors4[i]) / 4 for i in range(len(tensors1))]
 
     averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
-                                                prefix='mygroup', initial_group_bits='0110', listen_on='127.0.0.1:*',
+                                                prefix='mygroup', listen_on='127.0.0.1:*',
                                                 start=True)
                  for tensors in [tensors1, tensors2, tensors3, tensors4]]
 
@@ -62,6 +69,44 @@ def test_allreduce_once():
         with averager.get_tensors() as averaged_tensors:
             for ref, our in zip(reference, averaged_tensors):
                 assert torch.allclose(ref, our, atol=1e-6)
+
+
+def compute_mean_std(averagers, unbiased=True):
+    results = []
+    for averager in averagers:
+        with averager.get_tensors() as tensors:
+            results.append([tensor.clone() for tensor in tensors])
+
+    results_stacked_per_tensor = list(map(torch.stack, zip(*results)))
+    means = [stack.mean(dim=0) for stack in results_stacked_per_tensor]
+    stds = [stack.std(dim=0, unbiased=unbiased) for stack in results_stacked_per_tensor]
+    return means, stds
+
+
+@pytest.mark.forked
+def test_allreduce_grid():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averagers = [hivemind.DecentralizedAverager(
+        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
+        prefix='mygroup', initial_group_bits=bin(i // 2)[2:].rjust(2, '0'), start=True)
+        for i in range(8)]
+
+    [means0], [stds0] = compute_mean_std(averagers)
+    assert not torch.allclose(stds0, torch.zeros_like(stds0))
+
+    prev_means, prev_stds = means0, stds0
+
+    for i in range(5):
+        step_futures = [averager.step(wait=False) for averager in averagers]
+        groups = [future.result() for future in step_futures]
+        [means], [stds] = compute_mean_std(averagers)
+        assert torch.allclose(means, prev_means, atol=1e-6, rtol=0)
+        assert all(len(group) == 2 for group in groups)
+
+        if i <= 2:
+            assert torch.all(torch.le(stds, prev_stds))
+        else:
+            assert torch.allclose(stds, torch.zeros_like(stds), atol=1e-6, rtol=0)
 
 
 @pytest.mark.forked
@@ -190,3 +235,29 @@ def test_load_balancing():
         assignment = load_balance_peers(vector_size, throughputs, min_size)
         assert np.sum(assignment) == vector_size
         assert np.min(assignment) >= 0
+
+
+@pytest.mark.forked
+def test_too_few_peers():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averagers = [hivemind.DecentralizedAverager(
+        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
+        averaging_expiration=1, request_timeout=0.5,
+        prefix='mygroup', initial_group_bits=bin(i)[2:].rjust(3, '0'), start=True)
+        for i in range(4)]
+    step_futures = [averager.step(wait=False) for averager in averagers]
+    for future in step_futures:
+        assert len(future.result()) == 2
+
+
+@pytest.mark.forked
+def test_overcrowded():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averagers = [hivemind.DecentralizedAverager(
+        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
+        averaging_expiration=1, request_timeout=0.5,
+        prefix='mygroup', initial_group_bits='', start=True)
+        for _ in range(32)]
+    for t in range(5):
+        step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
+        assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1

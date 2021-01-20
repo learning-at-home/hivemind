@@ -44,6 +44,7 @@ message MessageFromLeader {
   repeated string ordered_group_endpoints = 4;  // a sequence of peers, each responsible for one shard during averaging
   repeated int32 part_sizes = 5;  // a sequence of tensor parts assigned to each peer, same order as endpoints
   repeated bytes gathered = 6;  // metadata (gather) from all groupmates in the same order as their endoints
+  int32 group_key_seed = 7;  // a random seed used by peers to update their group keys
 }
 
 message AveragingData {
