@@ -68,7 +68,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     >>> with averager.get_tensors() as tensors:
     >>>     # run some code, modify tensors if necessary
     >>>     tensors[0] += 1
-    >>> # do not use tensors after the lock is acquired
+    >>> # do not use tensors after the lock is released
     >>> metadata = averager.step(gather=dict(my_batch_size=32))
     >>> # run averaging once (in-place), gather metadata from groupmates
     >>> with averager.get_tensors() as tensors_after_averaging:
