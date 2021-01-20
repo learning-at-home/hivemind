@@ -7,7 +7,7 @@ import numpy as np
 
 from hivemind.dht import DHT
 from hivemind.client.averaging.allreduce import AllReduceRunner
-from hivemind.utils import get_logger, Endpoint, DHTExpiration
+from hivemind.utils import get_logger, Endpoint, DHTExpiration, get_dht_time, ValueWithExpiration
 
 GroupKey = str
 GROUP_PATTERN = re.compile('^(([^.])+)[.]0b[01]*$')  # e.g. bert_exp4_averaging.0b01001101
@@ -27,38 +27,21 @@ class GroupKeyManager:
 
     def __init__(self, dht: DHT, endpoint: Endpoint, prefix: str, initial_group_bits: Optional[str],
                  target_group_size: int, insufficient_size: Optional[int] = None, excessive_size: Optional[int] = None,
-                 nbits_expiration: float = 600):
+                 nbits_expiration: float = 60):
         assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
-        self.dht, self.endpoint, self.prefix, self.group_bits = dht, endpoint, prefix, initial_group_bits or ''
+        if initial_group_bits is None:
+            search_result = dht.get(f"{prefix}.0b", latest=True)
+            initial_group_bits = self.get_suggested_nbits(search_result) or ''
+        self.dht, self.endpoint, self.prefix, self.group_bits = dht, endpoint, prefix, initial_group_bits
         self.target_group_size = target_group_size
         self.insufficient_size = insufficient_size or max(1, target_group_size // 2)
         self.excessive_size = excessive_size or target_group_size * 3
         self.nbits_expiration = nbits_expiration
+        self.suggested_nbits: Optional[int] = None
 
     @property
     def current_key(self) -> GroupKey:
         return f"{self.prefix}.0b{self.group_bits}"
-
-    async def update_key_on_success(self, allreduce_group: AllReduceRunner, is_leader: bool = True):
-        """ this function is triggered every time an averager finds an allreduce group """
-        rng = random.Random(allreduce_group.group_key_seed)
-        index = allreduce_group.ordered_group_endpoints.index(self.endpoint)
-        generalized_index = rng.sample(range(self.target_group_size), allreduce_group.group_size)[index]
-        nbits = int(np.ceil(np.log2(self.target_group_size)))
-        new_bits = bin(generalized_index)[2:].rjust(nbits, '0')
-        self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits):]
-        logger.debug(f"{self.endpoint} - updated group key to {self.group_bits}")
-
-        if is_leader and self.insufficient_size < allreduce_group.group_size < self.excessive_size:
-            asyncio.create_task(self.declare_nbits(self.prefix, len(self.group_bits), self.nbits_expiration))
-
-    async def update_key_on_group_not_found(self):
-        """ this function is triggered whenever averager fails to assemble group within timeout """
-        self.group_bits = self.group_bits[1:]
-
-    async def update_key_on_overcrowded(self):
-        """ this function is triggered if averager encounters an overcrowded group """
-        self.group_bits = random.choice('01') + self.group_bits
 
     async def declare_averager(self, group_key: GroupKey, endpoint: Endpoint, expiration_time: float,
                                looking_for_group: bool = True) -> bool:
@@ -89,11 +72,20 @@ class GroupKeyManager:
         """
         assert is_valid_group(group_key), f"Group key {group_key} is invalid, must follow {GROUP_PATTERN}"
         result = await self.dht.get(group_key, latest=True, return_future=True)
-        if result is None:
+        if result is None or not isinstance(result.value, dict):
             logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
             return []
-        averagers = [(endpoint, entry.expiration_time) for endpoint, entry in result.value.items()
-                     if not only_active or entry.value is True]
+        averagers = [(key, entry.expiration_time) for key, entry in result.value.items()
+                     if key != self.RESERVED_KEY_FOR_NBITS and (not only_active or entry.value is True)]
+        num_active_averagers = len([key for key, entry in result.value.items() if entry.value is True])
+
+        suggested_nbits = self.get_suggested_nbits(result)
+        if suggested_nbits is not None and suggested_nbits != self.suggested_nbits:
+            self.suggested_nbits = suggested_nbits
+            logger.warning(f"{self.endpoint} - another averager suggested {self.suggested_nbits}-bit keys")
+        elif num_active_averagers >= self.excessive_size:
+            self.suggested_nbits = max(suggested_nbits or 0, len(self.group_bits) + 1)
+            logger.warning(f"{self.endpoint} - too many peers in bucket, switching to {self.suggested_nbits}-bit keys")
         return averagers
 
     async def declare_nbits(self, group_key: GroupKey, nbits: int, expiration_time: DHTExpiration) -> bool:
@@ -101,7 +93,50 @@ class GroupKeyManager:
         return await self.dht.store(key=group_key, subkey=self.RESERVED_KEY_FOR_NBITS, value=nbits,
                                     expiration_time=expiration_time, return_future=True)
 
-    async def get_nbits(self, group_key: GroupKey) -> int:
-        """ notify other peers that they can run averaging at this depth. If not found, return 0. """
-        result = await self.dht.get(key=group_key, return_future=True)
-        return result.get(self.RESERVED_KEY_FOR_NBITS, 0) if isinstance(result, dict) else 0
+    @classmethod
+    def get_suggested_nbits(cls, search_result: Optional[ValueWithExpiration]) -> Optional[int]:
+        if isinstance(search_result, ValueWithExpiration) and cls.RESERVED_KEY_FOR_NBITS in search_result.value \
+                and isinstance(search_result.value[cls.RESERVED_KEY_FOR_NBITS].value, int):
+            return search_result.value[cls.RESERVED_KEY_FOR_NBITS].value
+        else:
+            return None
+
+    async def update_key_on_group_assembled(self, allreduce_group: AllReduceRunner, is_leader: bool = True):
+        """ this function is triggered every time an averager finds an allreduce group """
+        rng = random.Random(allreduce_group.group_key_seed)
+        index = allreduce_group.ordered_group_endpoints.index(self.endpoint)
+        generalized_index = rng.sample(range(self.target_group_size), allreduce_group.group_size)[index]
+        nbits = int(np.ceil(np.log2(self.target_group_size)))
+        new_bits = bin(generalized_index)[2:].rjust(nbits, '0')
+        self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits):]
+        logger.debug(f"{self.endpoint} - updated group key to {self.group_bits}")
+
+        if is_leader and self.insufficient_size < allreduce_group.group_size < self.excessive_size:
+            asyncio.create_task(self.notify_stragglers_on_success())
+        if self.suggested_nbits is not None and self.suggested_nbits != len(self.group_bits):
+            num_extra_bits = max(0, self.suggested_nbits - len(self.group_bits))
+            self.group_bits = ''.join((random.choice('01') for _ in range(num_extra_bits))) + self.group_bits
+            self.group_bits = self.group_bits[-self.suggested_nbits:]
+        self.suggested_nbits = None
+
+    async def update_key_on_not_enough_peers(self):
+        """ this function is triggered whenever averager fails to assemble group within timeout """
+        new_nbits = self.suggested_nbits if self.suggested_nbits is not None else len(self.group_bits) - 1
+        prev_nbits, self.group_bits = self.group_bits, self.group_bits[-new_nbits:]
+        if self.group_bits != prev_nbits:
+            logger.warning(f'{self.endpoint} - switching to {len(self.group_bits)}-bit keys')
+        self.suggested_nbits = None
+
+    async def notify_stragglers_on_success(self):
+        """ Find averagers that have fewer nbits and redirect them to your current nbits """
+        for nbits in reversed(range(1, len(self.group_bits) - 1)):
+            preceding_key = f"{self.prefix}.0b{self.group_bits[-nbits:] if nbits else ''}"
+            preceding_data, _ = await self.dht.get(preceding_key, latest=False, return_future=True) or ({}, None)
+
+            if len(preceding_data) > 0 and self.RESERVED_KEY_FOR_NBITS not in preceding_data:
+                await self.declare_nbits(preceding_key, len(self.group_bits), get_dht_time() + self.nbits_expiration)
+                break
+
+        root_data = await self.dht.get(f"{self.prefix}.0b", latest=False, return_future=True)
+        if root_data is None or self.RESERVED_KEY_FOR_NBITS not in root_data.value:
+            await self.declare_nbits(f"{self.prefix}.0b", len(self.group_bits), get_dht_time() + self.nbits_expiration)

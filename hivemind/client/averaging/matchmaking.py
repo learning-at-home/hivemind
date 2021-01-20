@@ -140,7 +140,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                             # the time is up, we have a *good enough* group. run allreduce as is.
                             return await self.leader_assemble_group()
                         elif len(self.current_followers) > 0:
-                            await self.leader_disband_group(matchmaking_failed=True)
+                            await self.leader_disband_group()
                         continue
                 except Exception as e:
                     if not self.assembled_group.done():
@@ -238,7 +238,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         # outcome 2: the time is up, run allreduce with what we have or disband
                         await self.leader_assemble_group()
                     else:
-                        await self.leader_disband_group(matchmaking_failed=True)
+                        await self.leader_disband_group()
 
             if self.was_accepted_to_group.is_set() or not self.assembled_group.done() \
                     or self.assembled_group.cancelled() or request.endpoint not in self.assembled_group.result():
@@ -317,7 +317,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
                                           ordered_group_endpoints=ordered_group_endpoints, part_sizes=part_sizes,
                                           gathered=gathered, group_key_seed=group_key_seed, **self.allreduce_kwargs)
-        await self.group_key_manager.update_key_on_success(allreduce_group, is_leader=True)
+        await self.group_key_manager.update_key_on_group_assembled(allreduce_group, is_leader=True)
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 
@@ -336,16 +336,14 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                                           ordered_group_endpoints=tuple(ordered_group_endpoints),
                                           part_sizes=tuple(part_sizes), gathered=msg.gathered,
                                           group_key_seed=int(msg.group_key_seed), **self.allreduce_kwargs)
-        await self.group_key_manager.update_key_on_success(allreduce_group)
+        await self.group_key_manager.update_key_on_group_assembled(allreduce_group)
         self.assembled_group.set_result(allreduce_group)
         return allreduce_group
 
-    async def leader_disband_group(self, matchmaking_failed=False):
+    async def leader_disband_group(self):
         """ Kick out all followers immediately, optionally direct them to our new leader (if we found one) """
         assert self.lock_request_join_group.locked()
         self.current_followers.clear()  # this will cause rpc_join_group to kick all followers out
-        if matchmaking_failed:
-            await self.group_key_manager.update_key_on_group_not_found()
 
 
 class PotentialLeaders:
@@ -427,24 +425,29 @@ class PotentialLeaders:
             return min(get_dht_time() + self.averaging_expiration, self.search_end_time)
 
     async def _update_queue_periodically(self, key_manager: GroupKeyManager):
-        DISCREPANCY = timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
-        while get_dht_time() < self.search_end_time:
-            new_peers = await key_manager.get_averagers(key_manager.current_key, only_active=True)
-            self.max_assured_time = max(self.max_assured_time, get_dht_time() + self.averaging_expiration - DISCREPANCY)
+        try:
+            DISCREPANCY = timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
+            while get_dht_time() < self.search_end_time:
+                new_peers = await key_manager.get_averagers(key_manager.current_key, only_active=True)
+                self.max_assured_time = max(self.max_assured_time,
+                                            get_dht_time() + self.averaging_expiration - DISCREPANCY)
 
-            self.leader_queue.clear()
-            for peer, peer_expiration_time in new_peers:
-                if peer == self.endpoint or (peer, peer_expiration_time) in self.past_attempts:
-                    continue
-                self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
-                self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
+                self.leader_queue.clear()
+                for peer, peer_expiration_time in new_peers:
+                    if peer == self.endpoint or (peer, peer_expiration_time) in self.past_attempts:
+                        continue
+                    self.leader_queue.store(peer, peer_expiration_time, peer_expiration_time)
+                    self.max_assured_time = max(self.max_assured_time, peer_expiration_time - DISCREPANCY)
 
-            self.update_finished.set()
+                self.update_finished.set()
 
-            await asyncio.wait(
-                {self.running.wait(), self.update_triggered.wait()}, return_when=asyncio.ALL_COMPLETED,
-                timeout=self.search_end_time - get_dht_time() if isfinite(self.search_end_time) else None)
-            self.update_triggered.clear()
+                await asyncio.wait(
+                    {self.running.wait(), self.update_triggered.wait()}, return_when=asyncio.ALL_COMPLETED,
+                    timeout=self.search_end_time - get_dht_time() if isfinite(self.search_end_time) else None)
+                self.update_triggered.clear()
+        except Exception as e:
+            logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
+            raise
 
     async def _declare_averager_periodically(self, key_manager: GroupKeyManager):
         async with self.lock_declare:
@@ -458,6 +461,9 @@ class PotentialLeaders:
                     self.declared_expiration.set()
                     await key_manager.declare_averager(group_key, self.endpoint, expiration_time=new_expiration_time)
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
+                    if self.running.is_set() and len(self.leader_queue) == 0:
+                        await key_manager.update_key_on_not_enough_peers()
+
             except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
                 logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
             finally:
@@ -475,3 +481,7 @@ def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
                      for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
                     for tensor in tensors]
     return DHTID.generate(source=MSGPackSerializer.dumps(schema_dicts)).to_bytes()
+
+
+class MatchmakingException(Exception):
+    """ An internal exception that marks undesired edge cases during averaging """

@@ -84,7 +84,7 @@ def compute_mean_std(averagers, unbiased=True):
 
 
 @pytest.mark.forked
-def test_averaging_grid():
+def test_allreduce_grid():
     dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
     averagers = [hivemind.DecentralizedAverager(
         averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
@@ -107,7 +107,6 @@ def test_averaging_grid():
             assert torch.all(torch.le(stds, prev_stds))
         else:
             assert torch.allclose(stds, torch.zeros_like(stds), atol=1e-6, rtol=0)
-
 
 
 @pytest.mark.forked
@@ -236,3 +235,29 @@ def test_load_balancing():
         assignment = load_balance_peers(vector_size, throughputs, min_size)
         assert np.sum(assignment) == vector_size
         assert np.min(assignment) >= 0
+
+
+@pytest.mark.forked
+def test_too_few_peers():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averagers = [hivemind.DecentralizedAverager(
+        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
+        averaging_expiration=1, request_timeout=0.5,
+        prefix='mygroup', initial_group_bits=bin(i)[2:].rjust(3, '0'), start=True)
+        for i in range(4)]
+    step_futures = [averager.step(wait=False) for averager in averagers]
+    for future in step_futures:
+        assert len(future.result()) == 2
+
+
+@pytest.mark.forked
+def test_overcrowded():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averagers = [hivemind.DecentralizedAverager(
+        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
+        averaging_expiration=1, request_timeout=0.5,
+        prefix='mygroup', initial_group_bits='', start=True)
+        for _ in range(32)]
+    for t in range(5):
+        step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
+        assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
