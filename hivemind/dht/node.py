@@ -155,7 +155,7 @@ class DHTNode:
                     straggler.cancel()
                 finished_pings |= finished_in_time
 
-            if not finished_pings:
+            if not finished_pings or all(ping.result() is None for ping in finished_pings):
                 logger.warning("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
 
             if strict:
