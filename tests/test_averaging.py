@@ -13,33 +13,32 @@ from hivemind.utils import Endpoint
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_getset_averagers():
-    dht = hivemind.DHT(start=True)
-    key_manager = GroupKeyManager(dht, endpoint='localhvost',
+async def test_key_manager():
+    key_manager = GroupKeyManager(hivemind.DHT(start=True), endpoint='localhvost',
                                   prefix='test_averaging', initial_group_bits='10110',
                                   target_group_size=2)
-    key_manager2 = GroupKeyManager(dht, endpoint='localhvost2',
-                                   prefix='test_averaging', initial_group_bits='10110',
-                                   target_group_size=2)
 
     t = hivemind.get_dht_time()
-    await key_manager.publish_current_key(expiration_time=t + 60)
-    await key_manager2.publish_current_key(expiration_time=t + 61)
+    key = key_manager.current_key
+    await key_manager.declare_averager(key, 'localhvost', expiration_time=t + 60)
+    await key_manager.declare_averager(key, 'localhvost2', expiration_time=t + 61)
 
-    q1 = await key_manager.get_averagers(key_manager.current_key, only_active=True)
+    q1 = await key_manager.get_averagers(key, only_active=True)
 
-    await key_manager.publish_current_key(expiration_time=t + 66)
-    q2 = await key_manager2.get_averagers('test_averaging.0b10110', only_active=True)
+    await key_manager.declare_averager(key, 'localhvost', expiration_time=t + 66)
+    q2 = await key_manager.get_averagers(key, only_active=True)
 
-    await key_manager2.publish_current_key(expiration_time=t + 61, looking_for_group=False)
-    q3 = await key_manager.get_averagers('test_averaging.0b10110', only_active=True)
-    q4 = await key_manager2.get_averagers('test_averaging.0b10110', only_active=False)
-    print('!!', q1, q2, q3, q4)
+    await key_manager.declare_averager(key, 'localhvost2', expiration_time=t + 61, looking_for_group=False)
+    q3 = await key_manager.get_averagers(key, only_active=True)
+    q4 = await key_manager.get_averagers(key, only_active=False)
+
+    q5 = await key_manager.get_averagers('nonexistent_key.0b0101', only_active=False)
 
     assert len(q1) == 2 and ('localhvost', t + 60) in q1 and ('localhvost2', t + 61) in q1
     assert len(q2) == 2 and ('localhvost', t + 66) in q2 and ('localhvost2', t + 61) in q2
     assert len(q3) == 1 and ('localhvost', t + 66) in q3
     assert len(q4) == 2 and ('localhvost', t + 66) in q4 and ('localhvost2', t + 61) in q2
+    assert len(q5) == 0
 
 
 @pytest.mark.forked

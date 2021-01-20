@@ -62,10 +62,10 @@ class GroupKeyManager:
 
     async def publish_current_key(self, expiration_time: float, looking_for_group: bool = True) -> bool:
         """ A shortcut function for declare_group_key with averager's current active key and endpoint """
-        return await self.declare_group_key(self.current_key, self.endpoint, expiration_time, looking_for_group)
+        return await self.declare_averager(self.current_key, self.endpoint, expiration_time, looking_for_group)
 
-    async def declare_group_key(self, group_key: GroupKey, endpoint: Endpoint, expiration_time: float,
-                                looking_for_group: bool = True) -> bool:
+    async def declare_averager(self, group_key: GroupKey, endpoint: Endpoint, expiration_time: float,
+                               looking_for_group: bool = True) -> bool:
         """
         Add (or remove) the averager to a given allreduce bucket
 

@@ -127,5 +127,5 @@ class PotentialLeaders:
                     prev_declared_key, prev_expiration_time = self.declared_group_key, self.declared_expiration_time
                     self.declared_group_key, self.declared_expiration_time = None, float('inf')
                     self.leader_queue, self.max_assured_time = TimedStorage[Endpoint, DHTExpiration](), float('-inf')
-                    await key_manager.declare_group_key(prev_declared_key, self.endpoint, prev_expiration_time,
-                                                        looking_for_group=False)
+                    await key_manager.declare_averager(prev_declared_key, self.endpoint, prev_expiration_time,
+                                                       looking_for_group=False)
