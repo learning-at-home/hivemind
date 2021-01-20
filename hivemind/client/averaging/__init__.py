@@ -251,6 +251,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """
         A contextmanager that gives user access to averaged tensors.
         It is guaranteed that the averager will not modify tensors while this context is active.
+        Please do not modify the yielded tensors in-place after the context is released.
         """
         with self.lock_averaged_tensors:
             yield self._averaged_tensors
