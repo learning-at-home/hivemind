@@ -456,7 +456,7 @@ class PotentialLeaders:
                     self.declared_group_key = group_key = key_manager.current_key
                     self.declared_expiration_time = new_expiration_time
                     self.declared_expiration.set()
-                    await key_manager.publish_current_key(looking_for_group=True, expiration_time=new_expiration_time)
+                    await key_manager.declare_averager(group_key, self.endpoint, expiration_time=new_expiration_time)
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
             except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
                 logger.error(f"{self.endpoint} - caught {type(e)}: {e}")

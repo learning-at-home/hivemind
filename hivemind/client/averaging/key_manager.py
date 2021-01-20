@@ -21,7 +21,7 @@ def is_valid_group(maybe_group: str) -> bool:
 
 class GroupKeyManager:
     """
-    Utility class that declares and retrieves averaging-related keys
+    Utility class that declares and fetches averaging-related keys using a DHT
     """
     RESERVED_KEY_FOR_NBITS = '::NBITS'
 
@@ -59,10 +59,6 @@ class GroupKeyManager:
     async def update_key_on_overcrowded(self):
         """ this function is triggered if averager encounters an overcrowded group """
         self.group_bits = random.choice('01') + self.group_bits
-
-    async def publish_current_key(self, expiration_time: float, looking_for_group: bool = True) -> bool:
-        """ A shortcut function for declare_group_key with averager's current active key and endpoint """
-        return await self.declare_averager(self.current_key, self.endpoint, expiration_time, looking_for_group)
 
     async def declare_averager(self, group_key: GroupKey, endpoint: Endpoint, expiration_time: float,
                                looking_for_group: bool = True) -> bool:
