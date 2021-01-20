@@ -6,7 +6,6 @@ import asyncio
 import contextlib
 import ctypes
 import multiprocessing as mp
-import random
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 
@@ -54,7 +53,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param chunk_size_bytes: tensors for AllReduce will be divided into chunks of this size (to improve gRPC throughput)
     :param throughput: if specified, this value represents the network bandwidth available to averager.
           By default, the averager is assumed to have the average bandwidth of his group.
-          If throughput == 0, averager will run in client-only mode (TODO not implemented yet!)
+          If throughput == 0, averager will rely on its groupmates to do all the averaging.
     :param listen: if True (default), this averager will accept incoming requests from other peers and perform allreduce
             if False, the averager will register as a freeloader and attempt to fetch vectors from other averagers
     :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
@@ -63,7 +62,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
     :param kwargs: extra parameters forwarded to grpc.aio.server
 
-    :example:
+    Example:
+
     >>> averager = DecentralizedAverager(...)
     >>> with averager.get_tensors() as tensors:
     >>>     # run some code, modify tensors if necessary
@@ -73,7 +73,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     >>> # run averaging once (in-place), gather metadata from groupmates
     >>> with averager.get_tensors() as tensors_after_averaging:
     >>>     pass # use the averaged tensors
-
     """
     _matchmaking: Matchmaking
     _pending_group_assembled: asyncio.Event
