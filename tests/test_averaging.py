@@ -88,7 +88,7 @@ def compute_mean_std(averagers, unbiased=True):
 def test_averaging_grid():
     dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
     averagers = [hivemind.DecentralizedAverager(
-        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2, averaging_expiration=15,
+        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
         prefix='mygroup', initial_group_bits=bin(i // 2)[2:].rjust(2, '0'), start=True)
         for i in range(8)]
 

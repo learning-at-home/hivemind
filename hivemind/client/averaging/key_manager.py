@@ -1,3 +1,4 @@
+import asyncio
 import re
 import random
 from typing import Optional, List, Tuple
@@ -26,14 +27,13 @@ class GroupKeyManager:
 
     def __init__(self, dht: DHT, endpoint: Endpoint, prefix: str, initial_group_bits: Optional[str],
                  target_group_size: int, insufficient_size: Optional[int] = None, excessive_size: Optional[int] = None,
-                 max_consecutive_fails: int = 3, redirect_expiration: float = 600):
+                 nbits_expiration: float = 600):
         assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
         self.dht, self.endpoint, self.prefix, self.group_bits = dht, endpoint, prefix, initial_group_bits or ''
         self.target_group_size = target_group_size
         self.insufficient_size = insufficient_size or max(1, target_group_size // 2)
         self.excessive_size = excessive_size or target_group_size * 3
-        self.max_consecutive_fails = max_consecutive_fails
-        self.redirect_expiration = redirect_expiration
+        self.nbits_expiration = nbits_expiration
 
     @property
     def current_key(self) -> GroupKey:
@@ -47,13 +47,18 @@ class GroupKeyManager:
         nbits = int(np.ceil(np.log2(self.target_group_size)))
         new_bits = bin(generalized_index)[2:].rjust(nbits, '0')
         self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits):]
+        logger.debug(f"{self.endpoint} - updated group key to {self.group_bits}")
 
-        print(end=f"{self.endpoint}-{self.group_bits}\n")
-        pass #TODO
+        if is_leader and self.insufficient_size < allreduce_group.group_size < self.excessive_size:
+            asyncio.create_task(self.declare_nbits(self.prefix, len(self.group_bits), self.nbits_expiration))
 
-    async def update_key_on_failure(self):
+    async def update_key_on_group_not_found(self):
         """ this function is triggered whenever averager fails to assemble group within timeout """
-        pass #TODO
+        self.group_bits = self.group_bits[1:]
+
+    async def update_key_on_overcrowded(self):
+        """ this function is triggered if averager encounters an overcrowded group """
+        self.group_bits = random.choice('01') + self.group_bits
 
     async def publish_current_key(self, expiration_time: float, looking_for_group: bool = True) -> bool:
         """ A shortcut function for declare_group_key with averager's current active key and endpoint """

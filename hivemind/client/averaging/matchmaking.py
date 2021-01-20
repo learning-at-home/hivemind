@@ -344,7 +344,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         assert self.lock_request_join_group.locked()
         self.current_followers.clear()  # this will cause rpc_join_group to kick all followers out
         if matchmaking_failed:
-            await self.group_key_manager.update_key_on_failure()
+            await self.group_key_manager.update_key_on_group_not_found()
 
 
 def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
