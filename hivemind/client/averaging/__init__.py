@@ -290,7 +290,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         chunk_size_bytes = self.matchmaking_kwargs.get('chunk_size_bytes', 2 ** 16)
 
         for tensor in self._averaged_tensors:
-            for part in split_for_streaming(serialize_torch_tensor(tensor), chunk_size_bytes)
+            for part in split_for_streaming(serialize_torch_tensor(tensor), chunk_size_bytes):
                 yield averaging_pb2.DownloadData(tensor_part=part)
 
     def try_load_parameters(self):
