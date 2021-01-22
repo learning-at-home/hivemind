@@ -14,10 +14,11 @@ import torch
 import numpy as np
 
 import hivemind
-from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID
+from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, split_into_parts
 from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, GRPC_KEEPALIVE_OPTIONS, get_dht_time, MSGPackSerializer
+from hivemind.utils import serialize_torch_tensor, split_for_streaming
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 
 # flavour types
@@ -278,6 +279,25 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         async for message in group.rpc_aggregate_part(achain(aiter(request), stream), context):
             yield message
+
+    async def rpc_download_state(self, request: averaging_pb2.DownloadRequest, context: grpc.ServicerContext
+                                 ) -> AsyncIterator[averaging_pb2.DownloadData]:
+        """ a newcomer requests us to send over our current trainer state for his initialization """
+        import pickle
+        from hivemind.utils.tensor_descr import TensorDescriptor
+        tensor_proto = pickle.dumps([TensorDescriptor.from_tensor(tensor) for tensor in self._averaged_tensors])
+        yield averaging_pb2.DownloadData(metadata=b'test', tensor_proto=tensor_proto)
+        chunk_size_bytes = self.matchmaking_kwargs.get('chunk_size_bytes', 2 ** 16)
+
+        for tensor in self._averaged_tensors:
+            for part in split_for_streaming(serialize_torch_tensor(tensor), chunk_size_bytes)
+                yield averaging_pb2.DownloadData(tensor_part=part)
+
+    def try_load_parameters(self):
+        """
+        TODO implement a function that queries the DHT, finds some averager and downloads parameters.
+        If there aren't any, skip this step
+        """
 
 
 def is_power_of_two(n):
