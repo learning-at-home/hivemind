@@ -109,7 +109,7 @@ class GroupKeyManager:
         generalized_index = rng.sample(range(self.target_group_size), allreduce_group.group_size)[index]
         nbits = int(np.ceil(np.log2(self.target_group_size)))
         new_bits = bin(generalized_index)[2:].rjust(nbits, '0')
-        self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits):]
+        self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits):] if self.group_bits else ''
         logger.debug(f"{self.endpoint} - updated group key to {self.group_bits}")
 
         if is_leader and self.insufficient_size < allreduce_group.group_size < self.excessive_size:
@@ -123,7 +123,7 @@ class GroupKeyManager:
     async def update_key_on_not_enough_peers(self):
         """ this function is triggered whenever averager fails to assemble group within timeout """
         new_nbits = self.suggested_nbits if self.suggested_nbits is not None else len(self.group_bits) - 1
-        prev_nbits, self.group_bits = self.group_bits, self.group_bits[-new_nbits:]
+        prev_nbits, self.group_bits = self.group_bits, self.group_bits[-new_nbits:] if new_nbits else ''
         if self.group_bits != prev_nbits:
             logger.warning(f'{self.endpoint} - switching to {len(self.group_bits)}-bit keys')
         self.suggested_nbits = None
