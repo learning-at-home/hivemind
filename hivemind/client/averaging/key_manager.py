@@ -37,7 +37,7 @@ class GroupKeyManager:
         self.target_group_size = target_group_size
         self.insufficient_size = insufficient_size or max(1, target_group_size // 2)
         self.excessive_size = excessive_size or target_group_size * 3
-        self.nbits_expiration, self.nbits_rewrite_grace_period = nbits_expiration, nbits_rewrite_grace_period
+        self.nbits_expiration, self.nbits_grace_period = nbits_expiration, nbits_rewrite_grace_period
         self.suggested_nbits: Optional[int] = None
 
     @property
@@ -140,6 +140,6 @@ class GroupKeyManager:
 
         root_data, _ = await self.dht.get(f"{self.prefix}.0b", latest=False, return_future=True) or ({}, None)
         if isinstance(root_data, dict) and root_data.get(
-                self.RESERVED_KEY_FOR_NBITS, (None, -float('inf'))) > get_dht_time() + self.nbits_rewrite_grace_period:
+                self.RESERVED_KEY_FOR_NBITS, (None, -float('inf')))[1] > get_dht_time() + self.nbits_grace_period:
             return
         await self.declare_nbits(f"{self.prefix}.0b", len(self.group_bits), get_dht_time() + self.nbits_expiration)

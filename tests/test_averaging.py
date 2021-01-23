@@ -285,13 +285,13 @@ def test_get_state():
     dht1 = hivemind.DHT(initial_peers=initial_peers, start=True)
     averager1 = TestAverager([torch.randn(3), torch.rand(5)],
                              dht=dht1, start=True,
-                             prefix='demo-run', target_group_size=8)
+                             prefix='demo-run', target_group_size=2)
 
     dht2 = hivemind.DHT(initial_peers=initial_peers, start=True)
     dht2.get('demo-run.all_averagers')
     averager2 = TestAverager([torch.randn(3), torch.rand(5)],
                              dht=dht2, start=True,
-                             prefix='demo-run', target_group_size=8)
+                             prefix='demo-run', target_group_size=2)
 
     assert num_calls == 0
     got_metadata, got_tensors = averager2.load_state_from_peers()
@@ -308,3 +308,8 @@ def test_get_state():
     assert num_calls == 2
     assert got_metadata == super_metadata
     assert all(map(torch.allclose, got_tensors, super_tensors))
+
+    # check that normal averaging still works
+    futures = [averager.step(wait=False) for averager in [averager1, averager2]]
+    for future in futures:
+        future.result()
