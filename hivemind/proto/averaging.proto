@@ -6,7 +6,7 @@ import "runtime.proto";
 service DecentralizedAveraging {
   rpc rpc_join_group(JoinRequest) returns (stream MessageFromLeader);  // assemble a group for allreduce
   rpc rpc_aggregate_part(stream AveragingData) returns (stream AveragingData);  // send local part => get average part
-  rpc rpc_download_state(DownloadRequest) returns (DownloadData);
+  rpc rpc_download_state(DownloadRequest) returns (stream DownloadData);
 }
 
 enum MessageCode {
@@ -59,6 +59,5 @@ message DownloadRequest {}
 
 message DownloadData {
   bytes metadata = 1;
-  bytes tensor_proto = 2;
   Tensor tensor_part = 3;
 }

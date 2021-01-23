@@ -261,3 +261,50 @@ def test_overcrowded():
     for t in range(5):
         step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
         assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
+
+
+@pytest.mark.forked
+def test_get_state():
+    num_calls = 0
+    super_metadata = dict(x=123)
+    super_tensors = (torch.randn(3), torch.randint(0, 5, (3,)))
+
+    class TestAverager(hivemind.DecentralizedAverager):
+        def get_current_state(self):
+            """
+            Get current state and send it to a peer. executed in the host process. Meant to be overriden.
+            :returns: a tuple of (serializable_small_metadata, sequence of torch tensors)
+            """
+            nonlocal num_calls, super_metadata, super_tensors
+            num_calls += 1
+            return super_metadata, super_tensors
+
+
+    dht_root = hivemind.DHT(start=True)
+    initial_peers = [f'{hivemind.LOCALHOST}:{dht_root.port}']
+    dht1 = hivemind.DHT(initial_peers=initial_peers, start=True)
+    averager1 = TestAverager([torch.randn(3), torch.rand(5)],
+                             dht=dht1, start=True,
+                             prefix='demo-run', target_group_size=8)
+
+    dht2 = hivemind.DHT(initial_peers=initial_peers, start=True)
+    dht2.get('demo-run.all_averagers')
+    averager2 = TestAverager([torch.randn(3), torch.rand(5)],
+                             dht=dht2, start=True,
+                             prefix='demo-run', target_group_size=8)
+
+    assert num_calls == 0
+    got_metadata, got_tensors = averager2.load_state_from_peers()
+    assert num_calls == 1
+    assert got_metadata == super_metadata
+    assert all(map(torch.allclose, got_tensors, super_tensors))
+
+    super_metadata['y'] = 123
+    super_tensors[1][2] = 9
+    assert num_calls == 1
+    assert got_metadata != super_metadata
+    assert not all(map(torch.allclose, got_tensors, super_tensors))
+    got_metadata, got_tensors = averager2.load_state_from_peers()
+    assert num_calls == 2
+    assert got_metadata == super_metadata
+    assert all(map(torch.allclose, got_tensors, super_tensors))

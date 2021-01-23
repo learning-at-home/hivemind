@@ -19,7 +19,8 @@ from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceExcept
 from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils import get_logger, Endpoint, Port, MPFuture, GRPC_KEEPALIVE_OPTIONS, get_dht_time, \
-    MSGPackSerializer, DHTExpiration, ValueWithExpiration, ChannelCache
+    MSGPackSerializer, DHTExpiration, ValueWithExpiration, ChannelCache, combine_from_streaming, \
+    deserialize_torch_tensor
 from hivemind.utils import serialize_torch_tensor, split_for_streaming
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 from hivemind.utils.tensor_descr import TensorDescriptor
@@ -127,6 +128,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         if start:
             self.run_in_background(await_ready=True)
+            hivemind.run_in_background(self._background_thread_fetch_current_state_if_asked)
+
 
     @property
     def port(self) -> Optional[Port]:
@@ -188,7 +191,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
     def step(self, gather: Optional[DataForGather] = None, allow_retries: bool = True, timeout: Optional[float] = None,
-             wait=True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
+             group_bits: Optional[str] = None, wait=True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
 
@@ -201,10 +204,15 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :returns: on success, update averaged_tensors and return group info; on failure, return None
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_step', [], dict(future=_future, gather=gather, allow_retries=allow_retries, timeout=timeout)))
+        self.pipe.send(('_step', [], dict(future=_future, gather=gather, allow_retries=allow_retries,
+                                          timeout=timeout, group_bits=group_bits)))
         return future.result() if wait else future
 
-    async def _step(self, *, future: MPFuture, gather: DataForGather, allow_retries: bool, timeout: Optional[float]):
+    async def _step(self, *, future: MPFuture, gather: DataForGather, allow_retries: bool,
+                    timeout: Optional[float], group_bits: Optional[str]):
+        if group_bits is not None:
+            assert all(bit in '01' for bit in group_bits)
+            self._matchmaking.group_key_manager.group_bits = group_bits
         loop = asyncio.get_event_loop()
         start_time = get_dht_time()
         group_id = None
@@ -298,16 +306,45 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def rpc_download_state(self, request: averaging_pb2.DownloadRequest, context: grpc.ServicerContext
                                  ) -> AsyncIterator[averaging_pb2.DownloadData]:
         """ a newcomer requests us to send over our current trainer state for his initialization """
-        tensor_proto = pickle.dumps([TensorDescriptor.from_tensor(tensor) for tensor in self._averaged_tensors])
-        yield averaging_pb2.DownloadData(metadata=b'test', tensor_proto=tensor_proto)
         chunk_size_bytes = self.matchmaking_kwargs.get('chunk_size_bytes', 2 ** 16)
+        metadata, tensors = await self._get_current_state_from_host_process()
+        metadata_to_send = pickle.dumps(metadata)
 
-        for tensor in self._averaged_tensors:
+        for tensor in tensors:
             for part in split_for_streaming(serialize_torch_tensor(tensor), chunk_size_bytes):
-                yield averaging_pb2.DownloadData(tensor_part=part)
+                if metadata_to_send is not None:
+                    yield averaging_pb2.DownloadData(tensor_part=part, metadata=metadata_to_send)
+                    metadata_to_send = None
+                else:
+                    yield averaging_pb2.DownloadData(tensor_part=part)
 
-    def load_state_from_peers(self, wait=True):
-        """ Try to download the latest averaged_tensors from a random peer """
+    def get_current_state(self) -> Tuple[Any, Sequence[torch.Tensor]]:
+        """
+        Get current state and send it to a peer. executed in the host process. Meant to be overriden.
+        :returns: a tuple of (serializable_small_metadata, sequence of torch tensors)
+        """
+        with self.get_tensors() as tensors:
+            return dict(group_key=self.get_current_group_key()), tensors
+
+    async def _get_current_state_from_host_process(self):
+        """ Executed in the averager process inside rpc_download_state """
+        future, _future = MPFuture.make_pair()
+        self._pipe.send(('_TRIGGER_GET_CURRENT_STATE', _future))
+        return await future
+
+    def _background_thread_fetch_current_state_if_asked(self):
+        """ Executed in the host process as a background thread. """
+        while True:
+            trigger, future = self.pipe.recv()
+            assert trigger == '_TRIGGER_GET_CURRENT_STATE'
+            try:
+                future.set_result(self.get_current_state())
+            except BaseException as e:
+                future.set_exception(e)
+                raise
+
+    def load_state_from_peers(self, wait=True) -> Optional[Any]:
+        """ Try to download the latest optimizer state one of the existing peer """
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_load_state_from_peers', [], dict(future=_future)))
         return future.result() if wait else future
@@ -315,8 +352,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def _load_state_from_peers(self, future: MPFuture):
         key_manager = self._matchmaking.group_key_manager
         peers_info, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
+        metadata = None
         if not isinstance(peers_info, dict):
-            logger.warning("Averager could not load state from peers: failed to detect peers.")
+            logger.info("Averager could not load state from peers: peer dict is corrupted.")
+            future.set_result(None)
+            return
 
         def get_priority(peer):
             info = peers_info[peer]
@@ -327,20 +367,40 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         for peer in sorted(peers_info.keys(), key=get_priority, reverse=True):
             if peer != self.endpoint:
-                logger.debug(f"Downloading parameters from peer {peer}")
-                leader_stub = ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
-                call = leader_stub.rpc_join_group(averaging_pb2.DownloadRequest())
+                logger.info(f"Downloading parameters from peer {peer}")
+                stream = None
                 try:
-                    tensors = []
-                    message = await asyncio.wait_for(call.read(), timeout=self._matchmaking.request_timeout)
-                    #TODO read tensors one by one
+                    leader_stub = ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
+                    stream = leader_stub.rpc_download_state(averaging_pb2.DownloadRequest())
+                    current_tensor_parts, tensors = [], []
+                    async for message in stream:
+                        if message.metadata:
+                            metadata = pickle.loads(message.metadata)
+                        if message.tensor_part.dtype and current_tensor_parts:
+                            tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
+                            current_tensor_parts = []
+                        current_tensor_parts.append(message.tensor_part)
+                    if current_tensor_parts:
+                        tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
+                    future.set_result((metadata, tensors))
+                    break
+                except grpc.aio.AioRpcError as e:
+                    logger.info(f"Failed to download state from {peer} - {e}")
                 finally:
-                    await call.code()
+                    if stream is not None:
+                        await stream.code()
 
         else:
             logger.warning("Averager could not load state from peers: found no active peers.")
+            future.set_result(None)
 
-        future.set_result(peers_info)
+    def get_current_group_key(self, wait: bool = True):
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_get_current_group_key', [], dict(future=_future)))
+        return future.result() if wait else future
+
+    async def _get_current_group_key(self, future: MPFuture):
+        future.set_result(self._matchmaking.group_key_manager.group_bits)
 
 
 def is_power_of_two(n):
