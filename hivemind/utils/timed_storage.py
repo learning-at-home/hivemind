@@ -3,7 +3,8 @@ from __future__ import annotations
 import heapq
 import time
 from contextlib import contextmanager
-from typing import TypeVar, NamedTuple, Generic, Optional, Dict, List, Iterator, Tuple
+from typing import TypeVar, Generic, Optional, Dict, List, Iterator, Tuple
+from dataclasses import dataclass
 
 KeyType = TypeVar('KeyType')
 ValueType = TypeVar('ValueType')
@@ -12,13 +13,13 @@ MAX_DHT_TIME_DISCREPANCY_SECONDS = 3  # max allowed difference between get_dht_t
 DHTExpiration = float
 ROOT = 0
 
-
-class ValueWithExpiration(NamedTuple, Generic[ValueType]):
+@dataclass
+class ValueWithExpiration(Generic[ValueType]):
     value: ValueType
     expiration_time: DHTExpiration
 
-
-class HeapEntry(NamedTuple, Generic[KeyType]):
+@dataclass(order=True)
+class HeapEntry(Generic[KeyType]):
     expiration_time: DHTExpiration
     key: KeyType
 
