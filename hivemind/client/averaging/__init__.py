@@ -270,6 +270,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """
         with self.lock_averaged_tensors:
             yield self._averaged_tensors
+        self.last_updated = get_dht_time()
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
@@ -383,6 +384,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     if current_tensor_parts:
                         tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
                     future.set_result((metadata, tensors))
+                    self.last_updated = get_dht_time()
                     break
                 except grpc.aio.AioRpcError as e:
                     logger.info(f"Failed to download state from {peer} - {e}")

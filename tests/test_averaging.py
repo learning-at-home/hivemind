@@ -279,7 +279,6 @@ def test_get_state():
             num_calls += 1
             return super_metadata, super_tensors
 
-
     dht_root = hivemind.DHT(start=True)
     initial_peers = [f'{hivemind.LOCALHOST}:{dht_root.port}']
     dht1 = hivemind.DHT(initial_peers=initial_peers, start=True)
