@@ -130,7 +130,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self.run_in_background(await_ready=True)
             hivemind.run_in_background(self._background_thread_fetch_current_state_if_asked)
 
-
     @property
     def port(self) -> Optional[Port]:
         return self._port.value if self._port.value != 0 else None
