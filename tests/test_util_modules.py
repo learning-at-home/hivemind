@@ -191,3 +191,16 @@ def test_serialize_tensor():
     assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
     restored = hivemind.combine_from_streaming(chunks)
     assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor)
+
+def test_generic_data_classes():
+    from hivemind.utils import ValueWithExpiration, HeapEntry, DHTExpiration
+
+    value_with_exp = ValueWithExpiration(value="string_value", expiration_time=DHTExpiration(10))
+    assert value_with_exp.value == "string_value" and value_with_exp.expiration_time == DHTExpiration(10)
+
+    heap_entry = HeapEntry(expiration_time=DHTExpiration(10), key="string_value")
+    assert heap_entry.key == "string_value" and heap_entry.expiration_time == DHTExpiration(10)
+
+    sorted_expirations = sorted([DHTExpiration(value) for value in range(1, 1000)])
+    sorted_heap_entry = sorted([HeapEntry(expiration_time=DHTExpiration(value), key="any") for value in range(1, 1000)[::-1]])
+    assert all([heap_entry.expiration_time == value for heap_entry, value in zip(sorted_heap_entry, sorted_expirations)])

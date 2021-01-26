@@ -3,7 +3,8 @@ from __future__ import annotations
 import heapq
 import time
 from contextlib import contextmanager
-from typing import TypeVar, NamedTuple, Generic, Optional, Dict, List, Iterator, Tuple
+from typing import TypeVar, Generic, Optional, Dict, List, Iterator, Tuple
+from dataclasses import dataclass
 
 KeyType = TypeVar('KeyType')
 ValueType = TypeVar('ValueType')
@@ -12,16 +13,34 @@ MAX_DHT_TIME_DISCREPANCY_SECONDS = 3  # max allowed difference between get_dht_t
 DHTExpiration = float
 ROOT = 0
 
-
-class ValueWithExpiration(NamedTuple, Generic[ValueType]):
+@dataclass(init=True, repr=True, frozen=True)
+class ValueWithExpiration(Generic[ValueType]):
     value: ValueType
     expiration_time: DHTExpiration
 
+    def __iter__(self):
+        return iter((self.value, self.expiration_time))
 
-class HeapEntry(NamedTuple, Generic[KeyType]):
+    def __getitem__(self, item):
+        if item == 0:
+            return self.value
+        elif item == 1:
+            return self.expiration_time
+        else:
+            return getattr(self, item)
+
+    def __eq__(self, item):
+        if isinstance(item, ValueWithExpiration):
+            return self.value == item.value and self.expiration_time == item.expiration_time
+        elif isinstance(item, tuple):
+            return tuple.__eq__((self.value, self.expiration_time), item)
+        else:
+            return False
+
+@dataclass(init=True, repr=True, order=True, frozen=True)
+class HeapEntry(Generic[KeyType]):
     expiration_time: DHTExpiration
     key: KeyType
-
 
 class TimedStorage(Generic[KeyType, ValueType]):
     """ A dictionary that maintains up to :maxsize: key-value-expiration tuples until their expiration_time """
