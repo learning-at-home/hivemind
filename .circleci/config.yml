@@ -1,9 +1,32 @@
 version: 2.1
 
 jobs:
-  build-and-test:
+  build-and-test-py3.8.1:
     docker:
       - image: circleci/python:3.8.1
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.txt
+      - save_cache:
+          key: v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          paths:
+            - '~/.cache/pip'
+      - run:
+          command: pip install -e .
+          name: setup
+      - run:
+          command: pytest ./tests
+          name: tests
+      - run:
+          command: codecov
+          name: codecov
+  build-and-test-py3.9.1:
+    docker:
+      - image: circleci/python:3.9.1
     steps:
       - checkout
       - restore_cache:
@@ -28,4 +51,5 @@ jobs:
 workflows:
   main:
     jobs:
-      - build-and-test
+      - build-and-test-py3.8.1
+      - build-and-test-py3.9.1
