@@ -1,7 +1,7 @@
 version: 2.1
 
 jobs:
-  build-and-test-py3.8.1:
+  build-and-test-py3_8_1:
     docker:
       - image: circleci/python:3.8.1
     steps:
@@ -24,7 +24,7 @@ jobs:
       - run:
           command: codecov
           name: codecov
-  build-and-test-py3.9.1:
+  build-and-test-py3_9_1:
     docker:
       - image: circleci/python:3.9.1
     steps:
@@ -51,5 +51,5 @@ jobs:
 workflows:
   main:
     jobs:
-      - build-and-test-py3.8.1
-      - build-and-test-py3.9.1
+      - build-and-test-py3_8_1
+      - build-and-test-py3_9_1
