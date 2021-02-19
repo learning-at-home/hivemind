@@ -125,7 +125,6 @@ def test_beam_search_correctness():
         assert np.allclose(true_best_scores, our_best_scores)
 
 
-
 @pytest.mark.forked
 def test_determinism():
     atol = 1e-5
