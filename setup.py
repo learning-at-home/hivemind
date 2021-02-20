@@ -3,7 +3,6 @@ import glob
 import os
 import re
 
-import grpc_tools.protoc
 from pkg_resources import parse_requirements
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
@@ -11,6 +10,8 @@ from setuptools.command.install import install
 
 
 def proto_compile(output_path):
+    import grpc_tools.protoc
+
     cli_args = ['grpc_tools.protoc',
                 '--proto_path=hivemind/proto', f'--python_out={output_path}',
                 f'--grpc_python_out={output_path}'] + glob.glob('hivemind/proto/*.proto')
@@ -73,6 +74,7 @@ setup(
     package_data={'hivemind': ['proto/*']},
     include_package_data=True,
     license='MIT',
+    setup_requires=['grpcio-tools'],
     install_requires=install_requires,
     extras_require=extras,
     classifiers=[
