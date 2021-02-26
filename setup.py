@@ -3,6 +3,9 @@ import glob
 import os
 import re
 import subprocess
+import urllib.request
+import tarfile
+import tempfile
 
 from pkg_resources import parse_requirements
 from setuptools import setup, find_packages
@@ -58,13 +61,20 @@ def install_libp2p_daemon():
     except FileNotFoundError:
         raise FileNotFoundError('could not find golang installation')
 
-    os.system('curl -L'\
-            ' https://github.com/libp2p/go-libp2p-daemon/archive/master.tar.gz'\
-            \' --output /tmp/libp2p-daemon.tar.gz')
-    os.system('tar -xf /tmp/libp2p-daemon.tar.gz -C /tmp')
-    
-    with cd("/tmp/go-libp2p-daemon-master/"):
-        os.system("go install ./...")
+    with tempfile.TemporaryDirectory() as tempdir:
+        url = 'https://github.com/libp2p/go-libp2p-daemon/archive/master.tar.gz'
+        dest = os.path.join(tempdir, 'libp2p-daemin.tar.gz')   
+        urllib.request.urlretrieve(url, os.path.join(tempdir, dest))
+            
+        tar = tarfile.open(dest, 'r:gz')
+        tar.extractall(tempdir)
+        tar.close()
+            
+        with cd(os.path.join(tempdir, 'go-libp2p-daemon-master')):
+            status = os.system('go install ./...')
+            if status:
+                raise RuntimeError('Failed to build or install libp2p-daemon:'\
+                                   f' exited with status code :{status}')
 
 
 class ProtoCompileInstall(install):
