@@ -81,7 +81,8 @@ class GroupKeyManager:
         num_active_averagers = len([key for key, entry in result.value.items() if entry.value is True])
 
         suggested_nbits = self.get_suggested_nbits(result)
-        if suggested_nbits is not None and suggested_nbits != self.suggested_nbits:
+        if suggested_nbits is not None and suggested_nbits != len(self.group_bits) and \
+                suggested_nbits != self.suggested_nbits:
             self.suggested_nbits = suggested_nbits
             logger.warning(f"{self.endpoint} - another averager suggested {self.suggested_nbits}-bit keys")
         elif num_active_averagers >= self.excessive_size:
