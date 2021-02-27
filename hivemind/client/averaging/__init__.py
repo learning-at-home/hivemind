@@ -299,7 +299,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     async def rpc_download_state(self, request: averaging_pb2.DownloadRequest, context: grpc.ServicerContext
                                  ) -> AsyncIterator[averaging_pb2.DownloadData]:
-        """ a newcomer requests us to send over our current trainer state for his initialization """
+        """
+        Get the up-to-date trainer state from a peer.
+        The state consists of two parts: (metadata, tensors)
+         - metadata is a small pickle-serialized entry meant to store scalars and hyperparameters
+         - tensors is a sequence of pytorch tensors that represent model parameters or optimizer statistics
+        """
         chunk_size_bytes = self.matchmaking_kwargs.get('chunk_size_bytes', DEFAULT_CHUNK_SIZE_BYTES)
         metadata, tensors = await self._get_current_state_from_host_process()
 
