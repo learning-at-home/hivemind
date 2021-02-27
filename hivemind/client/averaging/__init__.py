@@ -320,7 +320,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :returns: a tuple of (serializable_small_metadata, sequence of torch tensors)
         """
         with self.get_tensors() as tensors:
-            return dict(group_key=self.get_current_group_key()), tensors
+            return dict(group_key=self.get_group_bits()), tensors
 
     async def _get_current_state_from_host_process(self):
         """ Executed in the averager process inside rpc_download_state """
