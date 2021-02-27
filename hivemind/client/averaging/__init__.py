@@ -350,21 +350,17 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     async def _load_state_from_peers(self, future: MPFuture):
         key_manager = self._matchmaking.group_key_manager
-        peers_info, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
-        metadata = None
-        if not isinstance(peers_info, dict):
-            logger.info("Averager could not load state from peers: peer dict is corrupted.")
+        peer_priority, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
+        peer_priority = {peer: float(info.value) for peer, info in peer_priority.items()
+                         if isinstance(info, ValueWithExpiration) and isinstance(info.value, (float, int))}
+
+        if not isinstance(peer_priority, dict) or len(peer_priority) == 0:
+            logger.info(f"Averager could not load state from peers: peer dict is absent or corrupted {peer_priority}.")
             future.set_result(None)
             return
 
-        def get_priority(peer):
-            info = peers_info[peer]
-            if not isinstance(info, ValueWithExpiration) or not isinstance(info.value, (float, int)):
-                logger.warning(f"Skipping averager {peer} - bad peer info {info.value} (expected a number).")
-                return -float('inf')
-            return float(info.value)  # prefer peers with latest update time
-
-        for peer in sorted(peers_info.keys(), key=get_priority, reverse=True):
+        metadata = None
+        for peer in sorted(peer_priority.keys(), key=peer_priority.get, reverse=True):
             if peer != self.endpoint:
                 logger.info(f"Downloading parameters from peer {peer}")
                 stream = None
