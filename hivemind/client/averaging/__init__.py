@@ -203,11 +203,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :returns: on success, update averaged_tensors and return group info; on failure, return None
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_step', [], dict(future=_future, gather=gather, allow_retries=allow_retries,
-                                          timeout=timeout)))
+        gather_binary = self.serializer.dumps(gather)  # serialize here to avoid loading modules in the averager process
+        self.pipe.send(('_step', [], dict(future=_future, gather_binary=gather_binary,
+                                          allow_retries=allow_retries, timeout=timeout)))
         return future.result() if wait else future
 
-    async def _step(self, *, future: MPFuture, gather: DataForGather, allow_retries: bool, timeout: Optional[float]):
+    async def _step(self, *, future: MPFuture, gather_binary: bytes, allow_retries: bool, timeout: Optional[float]):
         loop = asyncio.get_event_loop()
         start_time = get_dht_time()
         group_id = None
@@ -215,7 +216,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         while not future.done():
             try:
                 self._pending_group_assembled.clear()
-                gather_binary = self.serializer.dumps(gather)
                 allreduce_group = await self._matchmaking.look_for_group(timeout=timeout, data_for_gather=gather_binary)
                 if allreduce_group is None:
                     raise AllreduceException("Averaging step failed: could not find a group.")
