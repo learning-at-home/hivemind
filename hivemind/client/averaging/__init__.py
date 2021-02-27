@@ -34,7 +34,6 @@ logger = get_logger(__name__)
 
 class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragingServicer):
     """
-    **Warning!** Decentralized averager is in active development, some critical functionality is still underway
 
     Parameter averaging service. A trainer can run this service in background to periodically average his parameters
     with other trainers. The averaging pattern is chosen so that (1) you only need to average with a small
