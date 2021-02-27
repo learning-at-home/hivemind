@@ -190,7 +190,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
     def step(self, gather: Optional[DataForGather] = None, allow_retries: bool = True, timeout: Optional[float] = None,
-             group_bits: Optional[str] = None, wait=True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
+             wait=True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
 
@@ -204,14 +204,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_step', [], dict(future=_future, gather=gather, allow_retries=allow_retries,
-                                          timeout=timeout, group_bits=group_bits)))
+                                          timeout=timeout)))
         return future.result() if wait else future
 
-    async def _step(self, *, future: MPFuture, gather: DataForGather, allow_retries: bool,
-                    timeout: Optional[float], group_bits: Optional[str]):
-        if group_bits is not None:
-            assert all(bit in '01' for bit in group_bits)
-            self._matchmaking.group_key_manager.group_bits = group_bits
+    async def _step(self, *, future: MPFuture, gather: DataForGather, allow_retries: bool, timeout: Optional[float]):
         loop = asyncio.get_event_loop()
         start_time = get_dht_time()
         group_id = None
