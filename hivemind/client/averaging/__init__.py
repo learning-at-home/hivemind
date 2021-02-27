@@ -302,6 +302,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """
         Get the up-to-date trainer state from a peer.
         The state consists of two parts: (metadata, tensors)
+
          - metadata is a small pickle-serialized entry meant to store scalars and hyperparameters
          - tensors is a sequence of pytorch tensors that represent model parameters or optimizer statistics
         """
