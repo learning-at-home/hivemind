@@ -264,7 +264,7 @@ def test_overcrowded():
 
 
 @pytest.mark.forked
-def test_get_state():
+def test_load_state_from_peers():
     num_calls = 0
     super_metadata = dict(x=123)
     super_tensors = (torch.randn(3), torch.randint(0, 5, (3,)))
@@ -312,3 +312,12 @@ def test_get_state():
     futures = [averager.step(wait=False) for averager in [averager1, averager2]]
     for future in futures:
         future.result()
+
+
+@pytest.mark.forked
+def test_getset_bits():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averager = hivemind.DecentralizedAverager([torch.randn(3)], dht=dht, start=True,
+                                              prefix='test_prefix', target_group_size=2)
+    averager.set_group_bits('00101011101010')
+    assert averager.get_group_bits() == '00101011101010'

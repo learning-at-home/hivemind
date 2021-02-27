@@ -391,13 +391,27 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             logger.warning("Averager could not load state from peers: found no active peers.")
             future.set_result(None)
 
-    def get_current_group_key(self, wait: bool = True):
+    def get_group_bits(self, wait: bool = True):
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_current_group_key', [], dict(future=_future)))
+        self.pipe.send(('_get_group_bits', [], dict(future=_future)))
         return future.result() if wait else future
 
-    async def _get_current_group_key(self, future: MPFuture):
+    async def _get_group_bits(self, future: MPFuture):
         future.set_result(self._matchmaking.group_key_manager.group_bits)
+
+    def set_group_bits(self, group_bits: str, wait: bool = True):
+        future, _future = MPFuture.make_pair()
+        assert all(bit in '01' for bit in group_bits)
+        self.pipe.send(('_set_group_bits', [], dict(group_bits=group_bits, future=_future)))
+        return future.result() if wait else future
+
+    async def _set_group_bits(self, group_bits: str, future: MPFuture):
+        try:
+            self._matchmaking.group_key_manager.group_bits = group_bits
+            return future.set_result(None)
+        except Exception as e:
+            if not future.done():
+                future.set_exception(e)
 
 
 def is_power_of_two(n):
