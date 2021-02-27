@@ -12,24 +12,23 @@ from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 import grpc
 import torch
 import numpy as np
-import pickle
 
 import hivemind
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, split_into_parts
 from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
-from hivemind.utils import get_logger, Endpoint, Port, MPFuture, GRPC_KEEPALIVE_OPTIONS, get_dht_time, \
-    MSGPackSerializer, DHTExpiration, ValueWithExpiration, ChannelCache, combine_from_streaming, \
-    deserialize_torch_tensor
-from hivemind.utils import serialize_torch_tensor, split_for_streaming
+from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, \
+    serialize_torch_tensor, deserialize_torch_tensor, split_for_streaming, combine_from_streaming
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
-from hivemind.utils.tensor_descr import TensorDescriptor
+from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
+from hivemind.utils.serializer import PickleSerializer, MSGPackSerializer
+from hivemind.utils import Endpoint, Port, MPFuture, get_logger
 
 # flavour types
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
-
 DataForGather = Any
 logger = get_logger(__name__)
+DEFAULT_CHUNK_SIZE_BYTES = 2 ** 16
 
 
 class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragingServicer):
@@ -301,7 +300,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def rpc_download_state(self, request: averaging_pb2.DownloadRequest, context: grpc.ServicerContext
                                  ) -> AsyncIterator[averaging_pb2.DownloadData]:
         """ a newcomer requests us to send over our current trainer state for his initialization """
-        chunk_size_bytes = self.matchmaking_kwargs.get('chunk_size_bytes', 2 ** 16)
+        chunk_size_bytes = self.matchmaking_kwargs.get('chunk_size_bytes', DEFAULT_CHUNK_SIZE_BYTES)
         metadata, tensors = await self._get_current_state_from_host_process()
 
         for tensor in tensors:
@@ -334,7 +333,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             try:
                 state_metadata, state_tensors = self.get_current_state()
                 # note: serialize here to avoid initializing cuda in the guest process
-                state_metadata = pickle.dumps(state_metadata)
+                state_metadata = PickleSerializer.dumps(state_metadata)
                 state_tensors = tuple(tensor.cpu().detach().requires_grad_(tensor.requires_grad)
                                       for tensor in state_tensors)
                 future.set_result((state_metadata, state_tensors))
@@ -375,8 +374,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     current_tensor_parts, tensors = [], []
                     async for message in stream:
                         if message.metadata:
-                            metadata = pickle.loads(message.metadata)
+                            metadata = PickleSerializer.loads(message.metadata)
                         if message.tensor_part.dtype and current_tensor_parts:
+                            # tensor_part.dtype indicates the start of the new tensor, so we should wrap up this one
                             tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
                             current_tensor_parts = []
                         current_tensor_parts.append(message.tensor_part)
@@ -384,7 +384,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                         tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
                     future.set_result((metadata, tensors))
                     self.last_updated = get_dht_time()
-                    break
+                    return
                 except grpc.aio.AioRpcError as e:
                     logger.info(f"Failed to download state from {peer} - {e}")
                 finally:
