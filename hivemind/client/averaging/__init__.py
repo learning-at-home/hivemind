@@ -304,13 +304,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """ a newcomer requests us to send over our current trainer state for his initialization """
         chunk_size_bytes = self.matchmaking_kwargs.get('chunk_size_bytes', 2 ** 16)
         metadata, tensors = await self._get_current_state_from_host_process()
-        metadata_to_send = pickle.dumps(metadata)
 
         for tensor in tensors:
             for part in split_for_streaming(serialize_torch_tensor(tensor), chunk_size_bytes):
-                if metadata_to_send is not None:
-                    yield averaging_pb2.DownloadData(tensor_part=part, metadata=metadata_to_send)
-                    metadata_to_send = None
+                if metadata is not None:
+                    yield averaging_pb2.DownloadData(tensor_part=part, metadata=metadata)
+                    metadata = None
                 else:
                     yield averaging_pb2.DownloadData(tensor_part=part)
 
@@ -334,10 +333,16 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             trigger, future = self.pipe.recv()
             assert trigger == '_TRIGGER_GET_CURRENT_STATE'
             try:
-                future.set_result(self.get_current_state())
+                state_metadata, state_tensors = self.get_current_state()
+                # note: serialize here to avoid initializing cuda in the guest process
+                state_metadata = pickle.dumps(state_metadata)
+                state_tensors = tuple(tensor.cpu().detach().requires_grad_(tensor.requires_grad)
+                                      for tensor in state_tensors)
+                future.set_result((state_metadata, state_tensors))
             except BaseException as e:
                 future.set_exception(e)
-                raise
+                logger.warning(e)
+                continue
 
     def load_state_from_peers(self, wait=True) -> Optional[Any]:
         """ Try to download the latest optimizer state one of the existing peer """
