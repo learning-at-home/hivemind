@@ -21,7 +21,7 @@ from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, \
     serialize_torch_tensor, deserialize_torch_tensor, split_for_streaming, combine_from_streaming
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
-from hivemind.utils.serializer import PickleSerializer, MSGPackSerializer
+from hivemind.utils.serializer import MSGPackSerializer
 from hivemind.utils import Endpoint, Port, MPFuture, get_logger
 
 # flavour types
