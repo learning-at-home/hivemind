@@ -68,7 +68,7 @@ setup(
     long_description='Decentralized deep learning in PyTorch. Built to train giant models on '
                      'thousands of volunteers across the world.',
     author='Learning@home & contributors',
-    author_email='mryabinin@hse.ru',
+    author_email='mryabinin0@gmail.com',
     url="https://github.com/learning-at-home/hivemind",
     packages=find_packages(exclude=['tests']),
     package_data={'hivemind': ['proto/*']},
@@ -84,6 +84,7 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Topic :: Scientific/Engineering',
         'Topic :: Scientific/Engineering :: Mathematics',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',

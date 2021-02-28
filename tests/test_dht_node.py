@@ -108,7 +108,6 @@ def test_dht_protocol():
 
         if listen:
             loop.run_until_complete(protocol.shutdown())
-        print("DHTProtocol test finished successfully!")
 
     peer1_proc.terminate()
     peer2_proc.terminate()
@@ -193,9 +192,9 @@ def test_dht_node():
     jaccard_numerator = jaccard_denominator = 0  # jaccard similarity aka intersection over union
     all_node_ids = list(dht.values())
 
-    for i in range(100):
+    for i in range(10):
         query_id = DHTID.generate()
-        k_nearest = random.randint(1, 20)
+        k_nearest = random.randint(1, 10)
         exclude_self = random.random() > 0.5
         nearest = loop.run_until_complete(
             me.find_nearest_nodes([query_id], k_nearest=k_nearest, exclude_self=exclude_self))[query_id]

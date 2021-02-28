@@ -53,7 +53,7 @@ def test_dht_get_address(addr=LOCALHOST, dummy_endpoint='123.45.67.89:*'):
 
 
 @pytest.mark.forked
-def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peers=3, beam_size=4, parallel_rpc=256,
+def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peers=3, beam_size=4, parallel_rpc=16,
                      grid_dims=(32, 32, 32)):
     dht = []
     for i in range(dht_size):
