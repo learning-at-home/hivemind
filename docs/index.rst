@@ -22,6 +22,7 @@ documentation below.
   user/quickstart
   modules/index
   user/contributing
+  user/benchmarks
   user/acknowledgements
 
 Indices and tables
