@@ -277,7 +277,7 @@ def test_load_state_from_peers():
             """
             nonlocal num_calls, super_metadata, super_tensors
             num_calls += 1
-            return super_metadata, super_tensors
+            return self.serializer.dumps(super_metadata), super_tensors
 
     dht_root = hivemind.DHT(start=True)
     initial_peers = [f'{hivemind.LOCALHOST}:{dht_root.port}']
@@ -307,11 +307,6 @@ def test_load_state_from_peers():
     assert num_calls == 2
     assert got_metadata == super_metadata
     assert all(map(torch.allclose, got_tensors, super_tensors))
-
-    # check that normal averaging still works
-    # futures = [averager.step(wait=False) for averager in [averager1, averager2]]
-    # for future in futures:
-    #     future.result()
 
 
 @pytest.mark.forked
