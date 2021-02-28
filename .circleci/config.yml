@@ -65,5 +65,6 @@ jobs:
 workflows:
   main:
     jobs:
+      - build-and-test-py37
       - build-and-test-py38
       - build-and-test-py39
