@@ -320,7 +320,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def get_current_state(self) -> Tuple[bytes, Sequence[torch.Tensor]]:
         """
         Get current state and send it to a peer. executed in the host process. Meant to be overriden.
-        :returns: a tuple of (serialized_medatada, sequence of torch tensors)
+        :returns: a tuple of (serialized_metadata, sequence of torch tensors)
         """
         with self.get_tensors() as tensors:
             return self.serializer.dumps(dict(group_key=self.get_group_bits())), tensors
