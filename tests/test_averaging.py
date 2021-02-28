@@ -309,11 +309,6 @@ def test_load_state_from_peers():
     assert got_metadata == super_metadata
     assert all(map(torch.allclose, got_tensors, super_tensors))
 
-    # check that normal averaging still works
-    futures = [averager.step(wait=False) for averager in [averager1, averager2]]
-    for future in futures:
-        future.result()
-
 
 @pytest.mark.forked
 def test_getset_bits():
