@@ -1,13 +1,13 @@
-# Quickstart
+# Quick Start
 
 This tutorial will teach you how to install `hivemind`, host your own experts and train them remotely.
 
+## Installation
 
-#### Installation
+Just `pip install hivemind` to get the latest release.
 
-Just `pip install hivemind` to get the latest release. 
+You can also install the bleeding edge version from GitHub:
 
-You can also install the bleeding edge version from github:
 ```
 git clone https://github.com/learning-at-home/hivemind
 cd hivemind
@@ -16,26 +16,29 @@ pip install .
 
 You can also install it in the editable mode with `pip install -e .`.
 
-* __Dependencies:__ Hivemind requires python 3.7+ (3.8 is recommended), it will install [requirements](https://github.com/learning-at-home/hivemind/blob/master/requirements.txt) automatically; 
-* __OS support:__ Linux and macOS should [just work](https://github.com/learning-at-home/hivemind/issues).
-We do not officially support Windows, but you are welcome to contribute your windows build :)
+* __Dependencies:__ Hivemind requires Python 3.8+.
+  The [requirements](https://github.com/learning-at-home/hivemind/blob/master/requirements.txt) are installed
+  automatically.
+* __OS support:__ Linux and macOS should just work. We do not officially support Windows, but you are welcome to
+  contribute your windows build :)
 
+## Host a server
 
-#### Host a server
+`hivemind.Server` hosts one or several experts (PyTorch modules) for remote access. These experts are responsible for
+most of the model parameters and computation. The server can be started using either Python or
+[a shell script](https://github.com/learning-at-home/hivemind/blob/master/scripts/run_server.py). We'll use the shell
+for now. To host a server with default experts, run this in your shell:
 
-Hivemind.Server hosts one or several experts (torch modules) for remote access. These experts are responsible for 
-most of the model parameters and computation. The server can be started using either python or 
-[a shell script](https://github.com/learning-at-home/hivemind/blob/master/scripts/run_server.py). We'll use the shell for now. 
-To host a server with default experts, run this in your shell:
 ```sh
 python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_pattern expert.[0:5] \
                              --listen_on 0.0.0.0:1337 --dht_port 1338
 # note: if you omit listen_on and/or dht_port, they will be chosen automatically and printed to stdout.
 ```
+
 <details style="margin-top:-24px; margin-bottom: 16px;">
   <summary><i>Console outputs</i></summary>
-  
-  ```sh
+
+```sh
 [2020/08/26 11:54:52.645][INFO][server.create:101] Bootstrapping DHT node, initial peers = []
 [2020/08/26 11:54:52.660][INFO][server.create:105] Running dht node on port 1338
 [2020/08/26 11:54:53.182][INFO][server.task_pool.run:130] expert.0_forward starting, pid=19382
@@ -62,23 +65,28 @@ python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 -
 [2020/08/26 11:54:53.244][INFO][server.runtime.run:60] Started
 [2020/08/26 11:54:53.245][INFO][server.create:136] Server started at 0.0.0.0:1337
 [2020/08/26 11:54:53.245][INFO][server.create:137] Got 5 active experts of type ffn: ['expert.0', 'expert.1', 'expert.2', 'expert.3', 'expert.4']
-  ```
+```
+
 </details>
 
 
-This server accepts requests to experts on port 1337 and start a DHT peer on port 1338.
-In total, it serves 5 feedforward experts with ReLU and LayerNorm
- (see architecture [here](https://github.com/learning-at-home/hivemind/blob/master/hivemind/server/layers/__init__.py#L7-L21)).
+This server accepts requests to experts on port 1337 and start a DHT peer on port 1338. In total, it serves 5
+feedforward experts with ReLU and LayerNorm
+(see
+architecture [here](https://github.com/learning-at-home/hivemind/blob/master/hivemind/server/layers/__init__.py#L7-L21))
+.
 
 You can create additional servers in the same decentralized network using `--initial_peers` argument:
+
 ```sh
 python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_pattern "expert.[5:250]" \
                               --initial_peers localhost:1338
 ```
+
 <details style="margin-top:-24px; margin-bottom: 16px;">
   <summary>Console outputs</summary>
-  
-  ```sh
+
+```sh
 [2020/08/26 13:15:05.078][INFO][server.create:103] Bootstrapping DHT node, initial peers = ['localhost:1338']
 [2020/08/26 13:15:05.101][INFO][server.create:107] Running dht node on port 44291
 expert.[5:250]
@@ -127,15 +135,17 @@ expert.[5:250]
 [2020/08/26 13:15:06.510][INFO][server.create:166] Server started at 0.0.0.0:40089
 [2020/08/26 13:15:06.510][INFO][server.create:167] Got 10 active experts of type ffn: ['expert.113', 'expert.149', 'expert.185', 'expert.189', 'expert.191', 'expert.196', 'expert.225', 'expert.227', 'expert.36', 'expert.58']
 ```
+
 </details>
 
-Here and below, if you are running on a different machine, replace `localhost:1338` with your original server's
-public IP address (e.g. `12.34.56.78:1338`). Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
+Here and below, if you are running on a different machine, replace `localhost:1338` with your original server's public
+IP address (e.g. `12.34.56.78:1338`). Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
 as [gRPC](https://grpc.io/docs/languages/python/basics/#starting-the-server).
 
-#### Run the experts
+## Train the experts
 
-Now let's put these experts to work. Create a python console (or a jupyter) and run: 
+Now let's put these experts to work. Create a python console (or a jupyter) and run:
+
 ```python
 import torch
 import hivemind
@@ -149,18 +159,20 @@ assert expert1 is not None and expert4 is not None, "server hasn't declared expe
 ```
 
 The experts (e.g. `expert1`) can be used as a pytorch module with autograd support:
+
 ```python
 dummy = torch.randn(3, 512)
 out = expert1(dummy)  # forward pass
 out.sum().backward()  # backward pass
 ```
 
-When called, expert1 will submit a request to the corresponding server (which you created above) and return
- the output tensor(s) or raise an exception. During backward, pytorch will submit the backward requests
- for the experts as they appear in the computation graph.
- 
-By default, the experts will automatically update their parameters with one step of SGD after each backward pass.
-This allows you to quickly run training using both local and remote layers:
+When called, expert1 will submit a request to the corresponding server (which you created above) and return the output
+tensor(s) or raise an exception. During backward, pytorch will submit the backward requests for the experts as they
+appear in the computation graph.
+
+By default, the experts will automatically update their parameters with one step of SGD after each backward pass. This
+allows you to quickly run training using both local and remote layers:
+
 ```python
 # generate dummy data
 x = torch.randn(3, 512)
@@ -181,9 +193,12 @@ for i in range(100):
     opt.step()
 ```
 
-Finally, you can create a Mixture-of-Experts layer over our humble band of experts:
+Finally, you can create a Mixture-of-Experts layer over these experts:
+
 ```python
-import nest_asyncio;  nest_asyncio.apply()  # asyncio patch for jupyter. for now, we recommend using MoE from console
+import nest_asyncio
+
+nest_asyncio.apply()  # asyncio patch for jupyter. for now, we recommend using MoE from console
 dmoe = hivemind.RemoteMixtureOfExperts(in_features=512, uid_prefix="expert", grid_size=(5,),
                                        dht=dht, k_best=2)
 
@@ -192,8 +207,8 @@ out.sum().backward()
 ```
 
 The `dmoe` layer dynamically selects the right experts using a linear gating function. It will then dispatch parallel
-forward (and backward) requests to those experts and collect results.
-You can find more details on how MoE works in Section 2.3 of the [paper](https://arxiv.org/abs/2002.04013)
+forward (and backward) requests to those experts and collect results. You can find more details on how DMoE works in
+Section 2.3 of the [paper](https://arxiv.org/abs/2002.04013)
 
 Congratulations, you've made it through the basic tutorial. Give yourself a pat on the back :)
 

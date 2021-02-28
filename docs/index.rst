@@ -5,7 +5,7 @@
   :scale: 48
 
 Hivemind is a library for decentralized deep learning computations. It allows you to train large neural networks using vast numbers
-of computers, whether you're running a very capable computer or less reliable one.
+of computers, whether you're running a very capable computer or a less reliable one.
 Learn how to create or join a Hivemind run in the `quickstart tutorial <./user/quickstart.html>`__ or browse the API
 documentation below.
 
