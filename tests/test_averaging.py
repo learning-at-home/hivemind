@@ -294,8 +294,7 @@ def test_load_state_from_peers():
                              prefix='demo-run', target_group_size=2)
 
     assert num_calls == 0
-    got_metadata_bytes, got_tensors = averager2.load_state_from_peers()
-    got_metadata = serializer.loads(got_metadata_bytes)
+    got_metadata, got_tensors = averager2.load_state_from_peers()
     assert num_calls == 1
     assert got_metadata == super_metadata
     assert all(map(torch.allclose, got_tensors, super_tensors))
@@ -305,8 +304,7 @@ def test_load_state_from_peers():
     assert num_calls == 1
     assert got_metadata != super_metadata
     assert not all(map(torch.allclose, got_tensors, super_tensors))
-    got_metadata_bytes, got_tensors = averager2.load_state_from_peers()
-    got_metadata = serializer.loads(got_metadata_bytes)
+    got_metadata, got_tensors = averager2.load_state_from_peers()
     assert num_calls == 2
     assert got_metadata == super_metadata
     assert all(map(torch.allclose, got_tensors, super_tensors))
