@@ -16,7 +16,7 @@ pip install .
 
 You can also install it in the editable mode with `pip install -e .`.
 
-* __Dependencies:__ Hivemind requires Python 3.8+.
+* __Dependencies:__ Hivemind requires Python 3.7+.
   The [requirements](https://github.com/learning-at-home/hivemind/blob/master/requirements.txt) are installed
   automatically.
 * __OS support:__ Linux and macOS should just work. We do not officially support Windows, but you are welcome to
