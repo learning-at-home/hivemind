@@ -110,7 +110,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         if responded and validate:
             try:
                 if self.server is not None and not response.available:
-                    raise ValidationError(f"peer {peer} couldn't access this node at {response.sender_endpoint} .")
+                    raise ValidationError(f"Peer {peer} couldn't access this node at {response.sender_endpoint} . "
+                                          f"Make sure that this port is open for incoming requests.")
 
                 if response.dht_time != dht_pb2.PingResponse.dht_time.DESCRIPTOR.default_value:
                     if response.dht_time < time_requested - MAX_DHT_TIME_DISCREPANCY_SECONDS or \

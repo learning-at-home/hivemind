@@ -161,4 +161,5 @@ class MPFuture(base.Future):
 
     def __del__(self):
         self._shutdown_trigger.set_result(True)
-        self.connection.close()
+        if hasattr(self, 'connection'):
+            self.connection.close()

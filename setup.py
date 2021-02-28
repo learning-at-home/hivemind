@@ -3,7 +3,6 @@ import glob
 import os
 import re
 
-import grpc_tools.protoc
 from pkg_resources import parse_requirements
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
@@ -11,6 +10,8 @@ from setuptools.command.install import install
 
 
 def proto_compile(output_path):
+    import grpc_tools.protoc
+
     cli_args = ['grpc_tools.protoc',
                 '--proto_path=hivemind/proto', f'--python_out={output_path}',
                 f'--grpc_python_out={output_path}'] + glob.glob('hivemind/proto/*.proto')
@@ -67,12 +68,13 @@ setup(
     long_description='Decentralized deep learning in PyTorch. Built to train giant models on '
                      'thousands of volunteers across the world.',
     author='Learning@home & contributors',
-    author_email='mryabinin@hse.ru',
+    author_email='mryabinin0@gmail.com',
     url="https://github.com/learning-at-home/hivemind",
     packages=find_packages(exclude=['tests']),
     package_data={'hivemind': ['proto/*']},
     include_package_data=True,
     license='MIT',
+    setup_requires=['grpcio-tools'],
     install_requires=install_requires,
     extras_require=extras,
     classifiers=[
@@ -82,6 +84,7 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Topic :: Scientific/Engineering',
         'Topic :: Scientific/Engineering :: Mathematics',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',

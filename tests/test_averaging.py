@@ -185,7 +185,7 @@ def test_partitioning():
         total_size = sum(map(torch.Tensor.numel, tensors))
         if total_size == 0:
             continue
-        num_chunks = random.randint(1, min(1000, sum(x.numel() for x in tensors)))
+        num_chunks = random.randint(1, min(100, sum(x.numel() for x in tensors)))
         part_sizes = load_balance_peers(total_size, [None] * num_chunks)
         chunks = split_into_parts(tensors, part_sizes)
         assert len(chunks) == num_chunks
@@ -261,3 +261,63 @@ def test_overcrowded():
     for t in range(5):
         step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
         assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
+
+
+@pytest.mark.forked
+def test_load_state_from_peers():
+    num_calls = 0
+    super_metadata = dict(x=123)
+    super_tensors = (torch.randn(3), torch.randint(0, 5, (3,)))
+
+    class TestAverager(hivemind.DecentralizedAverager):
+        def get_current_state(self):
+            """
+            Get current state and send it to a peer. executed in the host process. Meant to be overriden.
+            :returns: a tuple of (serializable_small_metadata, sequence of torch tensors)
+            """
+            nonlocal num_calls, super_metadata, super_tensors
+            num_calls += 1
+            return super_metadata, super_tensors
+
+    dht_root = hivemind.DHT(start=True)
+    initial_peers = [f'{hivemind.LOCALHOST}:{dht_root.port}']
+    dht1 = hivemind.DHT(initial_peers=initial_peers, start=True)
+    averager1 = TestAverager([torch.randn(3), torch.rand(5)],
+                             dht=dht1, start=True,
+                             prefix='demo-run', target_group_size=2)
+
+    dht2 = hivemind.DHT(initial_peers=initial_peers, start=True)
+    dht2.get('demo-run.all_averagers')
+    averager2 = TestAverager([torch.randn(3), torch.rand(5)],
+                             dht=dht2, start=True,
+                             prefix='demo-run', target_group_size=2)
+
+    assert num_calls == 0
+    got_metadata, got_tensors = averager2.load_state_from_peers()
+    assert num_calls == 1
+    assert got_metadata == super_metadata
+    assert all(map(torch.allclose, got_tensors, super_tensors))
+
+    super_metadata['y'] = 123
+    super_tensors[1][2] = 9
+    assert num_calls == 1
+    assert got_metadata != super_metadata
+    assert not all(map(torch.allclose, got_tensors, super_tensors))
+    got_metadata, got_tensors = averager2.load_state_from_peers()
+    assert num_calls == 2
+    assert got_metadata == super_metadata
+    assert all(map(torch.allclose, got_tensors, super_tensors))
+
+    # check that normal averaging still works
+    # futures = [averager.step(wait=False) for averager in [averager1, averager2]]
+    # for future in futures:
+    #     future.result()
+
+
+@pytest.mark.forked
+def test_getset_bits():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averager = hivemind.DecentralizedAverager([torch.randn(3)], dht=dht, start=True,
+                                              prefix='test_prefix', target_group_size=2)
+    averager.set_group_bits('00101011101010')
+    assert averager.get_group_bits() == '00101011101010'

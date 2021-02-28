@@ -4,4 +4,4 @@ from hivemind.p2p import *
 from hivemind.server import *
 from hivemind.utils import *
 
-__version__ = '0.8.28'
+__version__ = '0.9.0'

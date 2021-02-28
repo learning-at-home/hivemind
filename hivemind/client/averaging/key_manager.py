@@ -27,16 +27,17 @@ class GroupKeyManager:
 
     def __init__(self, dht: DHT, endpoint: Endpoint, prefix: str, initial_group_bits: Optional[str],
                  target_group_size: int, insufficient_size: Optional[int] = None, excessive_size: Optional[int] = None,
-                 nbits_expiration: float = 60):
+                 nbits_expiration: float = 60, nbits_rewrite_grace_period: float = 15):
         assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
         if initial_group_bits is None:
             search_result = dht.get(f"{prefix}.0b", latest=True)
-            initial_group_bits = self.get_suggested_nbits(search_result) or ''
+            initial_group_nbits = self.get_suggested_nbits(search_result) or 0
+            initial_group_bits = ''.join(random.choice('01') for _ in range(initial_group_nbits))
         self.dht, self.endpoint, self.prefix, self.group_bits = dht, endpoint, prefix, initial_group_bits
         self.target_group_size = target_group_size
         self.insufficient_size = insufficient_size or max(1, target_group_size // 2)
         self.excessive_size = excessive_size or target_group_size * 3
-        self.nbits_expiration = nbits_expiration
+        self.nbits_expiration, self.nbits_grace_period = nbits_expiration, nbits_rewrite_grace_period
         self.suggested_nbits: Optional[int] = None
 
     @property
@@ -80,7 +81,8 @@ class GroupKeyManager:
         num_active_averagers = len([key for key, entry in result.value.items() if entry.value is True])
 
         suggested_nbits = self.get_suggested_nbits(result)
-        if suggested_nbits is not None and suggested_nbits != self.suggested_nbits:
+        if suggested_nbits is not None and suggested_nbits != len(self.group_bits) and \
+                suggested_nbits != self.suggested_nbits:
             self.suggested_nbits = suggested_nbits
             logger.warning(f"{self.endpoint} - another averager suggested {self.suggested_nbits}-bit keys")
         elif num_active_averagers >= self.excessive_size:
@@ -108,11 +110,11 @@ class GroupKeyManager:
         generalized_index = rng.sample(range(self.target_group_size), allreduce_group.group_size)[index]
         nbits = int(np.ceil(np.log2(self.target_group_size)))
         new_bits = bin(generalized_index)[2:].rjust(nbits, '0')
-        self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits):]
+        self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits):] if self.group_bits else ''
         logger.debug(f"{self.endpoint} - updated group key to {self.group_bits}")
 
         if is_leader and self.insufficient_size < allreduce_group.group_size < self.excessive_size:
-            asyncio.create_task(self.notify_stragglers_on_success())
+            asyncio.create_task(self.notify_stragglers())
         if self.suggested_nbits is not None and self.suggested_nbits != len(self.group_bits):
             num_extra_bits = max(0, self.suggested_nbits - len(self.group_bits))
             self.group_bits = ''.join((random.choice('01') for _ in range(num_extra_bits))) + self.group_bits
@@ -122,12 +124,12 @@ class GroupKeyManager:
     async def update_key_on_not_enough_peers(self):
         """ this function is triggered whenever averager fails to assemble group within timeout """
         new_nbits = self.suggested_nbits if self.suggested_nbits is not None else len(self.group_bits) - 1
-        prev_nbits, self.group_bits = self.group_bits, self.group_bits[-new_nbits:]
+        prev_nbits, self.group_bits = self.group_bits, self.group_bits[-new_nbits:] if new_nbits else ''
         if self.group_bits != prev_nbits:
             logger.warning(f'{self.endpoint} - switching to {len(self.group_bits)}-bit keys')
         self.suggested_nbits = None
 
-    async def notify_stragglers_on_success(self):
+    async def notify_stragglers(self):
         """ Find averagers that have fewer nbits and redirect them to your current nbits """
         for nbits in reversed(range(1, len(self.group_bits) - 1)):
             preceding_key = f"{self.prefix}.0b{self.group_bits[-nbits:] if nbits else ''}"
@@ -137,6 +139,8 @@ class GroupKeyManager:
                 await self.declare_nbits(preceding_key, len(self.group_bits), get_dht_time() + self.nbits_expiration)
                 break
 
-        root_data = await self.dht.get(f"{self.prefix}.0b", latest=False, return_future=True)
-        if root_data is None or self.RESERVED_KEY_FOR_NBITS not in root_data.value:
-            await self.declare_nbits(f"{self.prefix}.0b", len(self.group_bits), get_dht_time() + self.nbits_expiration)
+        root_data, _ = await self.dht.get(f"{self.prefix}.0b", latest=False, return_future=True) or ({}, None)
+        if isinstance(root_data, dict) and root_data.get(
+                self.RESERVED_KEY_FOR_NBITS, (None, -float('inf')))[1] > get_dht_time() + self.nbits_grace_period:
+            return
+        await self.declare_nbits(f"{self.prefix}.0b", len(self.group_bits), get_dht_time() + self.nbits_expiration)
