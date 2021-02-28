@@ -384,7 +384,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     current_tensor_parts, tensors = [], []
                     async for message in stream:
                         if message.metadata:
-                            metadata = message.metadata
+                            metadata = self.serializer.loads(message.metadata)
                         if message.tensor_part.dtype and current_tensor_parts:
                             # tensor_part.dtype indicates the start of the new tensor, so we should wrap up this one
                             tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
