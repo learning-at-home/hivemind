@@ -268,7 +268,6 @@ def test_load_state_from_peers():
     num_calls = 0
     super_metadata = dict(x=123)
     super_tensors = (torch.randn(3), torch.randint(0, 5, (3,)))
-    serializer = hivemind.MSGPackSerializer
 
     class TestAverager(hivemind.DecentralizedAverager):
         def get_current_state(self):
@@ -278,7 +277,7 @@ def test_load_state_from_peers():
             """
             nonlocal num_calls, super_metadata, super_tensors
             num_calls += 1
-            return serializer.dumps(super_metadata), super_tensors
+            return self.serializer.dumps(super_metadata), super_tensors
 
     dht_root = hivemind.DHT(start=True)
     initial_peers = [f'{hivemind.LOCALHOST}:{dht_root.port}']
