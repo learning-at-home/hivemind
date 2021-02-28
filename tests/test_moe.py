@@ -26,7 +26,7 @@ def test_moe():
 
 
 @pytest.mark.forked
-def test_call_many():
+def test_call_many(hidden_dim=16):
     k_min = 1
     timeout_after_k_min = None
     backward_k_min = 1
@@ -35,9 +35,9 @@ def test_call_many():
     detect_anomalies = False
     atol = 1e-5
 
-    with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=64,
+    with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=hidden_dim,
                            optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
-        inputs = torch.randn(4, 64, requires_grad=True)
+        inputs = torch.randn(4, hidden_dim, requires_grad=True)
         inputs_clone = inputs.clone().detach().requires_grad_(True)
         e0, e1, e2, e3, e4 = [hivemind.RemoteExpert(f'expert.{i}', server_endpoint) for i in range(5)]
         e5 = hivemind.RemoteExpert(f'thisshouldnotexist', '127.0.0.1:80')
@@ -47,7 +47,7 @@ def test_call_many():
             forward_timeout, backward_timeout, detect_anomalies, e1.info, inputs
         )
         assert mask.shape == (4, 3)
-        assert expert_outputs.shape == (4, 3, 64)
+        assert expert_outputs.shape == (4, 3, hidden_dim)
 
         assert np.all(mask.data.numpy() == np.array([[True, True, True],
                                                      [True, True, False],
@@ -64,7 +64,7 @@ def test_call_many():
         reference_outputs[2, 2] = e3(inputs_clone[2:3])
 
         assert torch.allclose(expert_outputs, reference_outputs, atol=atol, rtol=0)
-        proj = torch.randn(4, 64)
+        proj = torch.randn(4, hidden_dim)
         loss = (expert_outputs[(0, 1, 1, 2), (0, 2, 1, 0)] * proj).sum()
         loss.backward()
         our_grad = inputs.grad.data.cpu().clone()
@@ -76,17 +76,17 @@ def test_call_many():
 
 
 @pytest.mark.forked
-def test_remote_module_call():
-    with background_server(num_experts=1, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=1024,
+def test_remote_module_call(hidden_dim=16):
+    with background_server(num_experts=1, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=hidden_dim,
                            optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
         real_expert = hivemind.RemoteExpert('expert.0', server_endpoint)
         fake_expert = hivemind.RemoteExpert('oiasfjiasjf', server_endpoint)
 
-        out1 = real_expert(torch.randn(1, 1024))
-        assert out1.shape == (1, 1024)
-        dummy_x = torch.randn(3, 1024, requires_grad=True)
+        out1 = real_expert(torch.randn(1, hidden_dim))
+        assert out1.shape == (1, hidden_dim)
+        dummy_x = torch.randn(3, hidden_dim, requires_grad=True)
         out3 = real_expert(dummy_x)
-        assert out3.shape == (3, 1024)
+        assert out3.shape == (3, hidden_dim)
         out3_again = real_expert(dummy_x[1:])
         assert torch.allclose(out3_again, out3[1:], atol=1e-5, rtol=0)
         out3_again.norm().backward()
@@ -126,13 +126,13 @@ def test_beam_search_correctness():
 
 
 @pytest.mark.forked
-def test_determinism():
+def test_determinism(hidden_dim=16):
     atol = 1e-5
 
-    xx = torch.randn(32, 1024, requires_grad=True)
-    mask = torch.randint(0, 1, (32, 1024))
+    xx = torch.randn(32, hidden_dim, requires_grad=True)
+    mask = torch.randint(0, 1, (32, hidden_dim))
 
-    with background_server(num_experts=1, device='cpu', expert_cls='det_dropout', num_handlers=1,
+    with background_server(num_experts=1, device='cpu', expert_cls='det_dropout', num_handlers=1, hidden_dim=hidden_dim,
                            optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
         expert = hivemind.RemoteExpert(uid=f'expert.0', endpoint=server_endpoint)
 
@@ -151,7 +151,7 @@ def test_compute_expert_scores():
     try:
         dht = hivemind.DHT(start=True)
         moe = hivemind.client.moe.RemoteMixtureOfExperts(
-            dht=dht, in_features=1024, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1,
+            dht=dht, in_features=16, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1,
             uid_prefix='expert.')
         gx, gy = torch.randn(4, 5, requires_grad=True), torch.randn(4, 3, requires_grad=True)
         ii = [[4, 0, 2], [3, 1, 1, 1, 3], [0], [3, 2]]
