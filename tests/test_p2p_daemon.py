@@ -1,4 +1,5 @@
 import subprocess
+from time import perf_counter
 
 import pytest
 
@@ -28,6 +29,7 @@ def mock_p2p_class():
 
 
 def test_daemon_killed_on_del(mock_p2p_class):
+    start = perf_counter()
     p2p_daemon = P2P('10s')
 
     child_pid = p2p_daemon._child.pid
@@ -35,14 +37,17 @@ def test_daemon_killed_on_del(mock_p2p_class):
 
     del p2p_daemon
     assert not is_process_running(child_pid)
+    assert perf_counter() - start < 1
 
 
 def test_daemon_killed_on_exit(mock_p2p_class):
+    start = perf_counter()
     with P2P('10s') as daemon:
         child_pid = daemon.pid
         assert is_process_running(child_pid)
 
     assert not is_process_running(child_pid)
+    assert perf_counter() - start < 1
 
 
 def test_daemon_raises_on_faulty_args():
