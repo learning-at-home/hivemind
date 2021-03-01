@@ -75,3 +75,6 @@ debian/reproducible-experiment-platform
 debian/files
 *.substvars
 *.debhelper.log
+
+# protobuf stuff
+hivemind/proto/*_pb2*
