@@ -19,7 +19,7 @@ jobs:
           command: pip install -e .
           name: setup
       - run:
-          command: pytest ./tests/test_training.py
+          command: pytest ./tests
           name: tests
   build-and-test-py38:
     docker:
