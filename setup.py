@@ -2,11 +2,28 @@ import codecs
 import glob
 import os
 import re
+import subprocess
+import urllib.request
+import tarfile
+import tempfile
 
 from pkg_resources import parse_requirements
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
 from setuptools.command.install import install
+
+
+class cd:
+    """Context manager for changing the current working directory"""
+    def __init__(self, newPath):
+        self.newPath = os.path.expanduser(newPath)
+
+    def __enter__(self):
+        self.savedPath = os.getcwd()
+        os.chdir(self.newPath)
+
+    def __exit__(self, etype, value, traceback):
+        os.chdir(self.savedPath)
 
 
 def proto_compile(output_path):
@@ -28,6 +45,38 @@ def proto_compile(output_path):
             file.truncate()
 
 
+def install_libp2p_daemon():
+    # check go version:
+    try:
+        proc = subprocess.Popen(['go', 'version'],
+                                stdout=subprocess.PIPE)
+        result, _ = proc.communicate()
+        result = result.decode('ascii', 'replace')
+        _, _, version, _ = result.split(' ')
+        version = version.lstrip('go')
+    
+        if version < "1.13":
+            raise EnvironmentError(f'newer version of go required: must be >= 1.13, found {version}')
+
+    except FileNotFoundError:
+        raise FileNotFoundError('could not find golang installation')
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        url = 'https://github.com/libp2p/go-libp2p-daemon/archive/master.tar.gz'
+        dest = os.path.join(tempdir, 'libp2p-daemin.tar.gz')   
+        urllib.request.urlretrieve(url, os.path.join(tempdir, dest))
+            
+        tar = tarfile.open(dest, 'r:gz')
+        tar.extractall(tempdir)
+        tar.close()
+            
+        with cd(os.path.join(tempdir, 'go-libp2p-daemon-master')):
+            status = os.system('go install ./...')
+            if status:
+                raise RuntimeError('Failed to build or install libp2p-daemon:'\
+                                   f' exited with status code :{status}')
+
+
 class ProtoCompileInstall(install):
     def run(self):
         proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
@@ -38,6 +87,11 @@ class ProtoCompileDevelop(develop):
     def run(self):
         proto_compile(os.path.join('hivemind', 'proto'))
         super().run()
+
+
+class LibP2PInstall(install):
+    def run(self):
+        install_libp2p_daemon()
 
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -63,7 +117,7 @@ extras['all'] = extras['dev'] + extras['docs']
 setup(
     name='hivemind',
     version=version_string,
-    cmdclass={'install': ProtoCompileInstall, 'develop': ProtoCompileDevelop},
+    cmdclass={'install': ProtoCompileInstall, 'develop': ProtoCompileDevelop, 'libp2p': LibP2PInstall},
     description='Decentralized deep learning in PyTorch',
     long_description='Decentralized deep learning in PyTorch. Built to train giant models on '
                      'thousands of volunteers across the world.',
