@@ -70,6 +70,10 @@ def test_allreduce_once():
             for ref, our in zip(reference, averaged_tensors):
                 assert torch.allclose(ref, our, atol=1e-6)
 
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
+
 
 def compute_mean_std(averagers, unbiased=True):
     results = []
@@ -108,6 +112,10 @@ def test_allreduce_grid():
         else:
             assert torch.allclose(stds, torch.zeros_like(stds), atol=1e-6, rtol=0)
 
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
+
 
 @pytest.mark.forked
 def test_allgather():
@@ -132,6 +140,10 @@ def test_allgather():
 
         for endpoint in gathered:
             assert gathered[endpoint] == reference_metadata[endpoint]
+
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
 
 
 @pytest.mark.forked
@@ -249,6 +261,10 @@ def test_too_few_peers():
     for future in step_futures:
         assert len(future.result()) == 2
 
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
+
 
 @pytest.mark.forked
 def test_overcrowded():
@@ -261,6 +277,10 @@ def test_overcrowded():
     for t in range(5):
         step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
         assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
+
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
 
 
 @pytest.mark.forked
