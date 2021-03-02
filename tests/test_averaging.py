@@ -257,7 +257,7 @@ def test_overcrowded():
         averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
         averaging_expiration=1, request_timeout=0.5,
         prefix='mygroup', initial_group_bits='', start=True)
-        for _ in range(32)]
+        for _ in range(16)]
     for t in range(5):
         step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
         assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
