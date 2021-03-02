@@ -5,6 +5,7 @@ import heapq
 from typing import Optional
 import numpy as np
 import pytest
+from itertools import product
 
 import hivemind
 from typing import List, Dict
@@ -433,3 +434,24 @@ async def test_dhtnode_validate(fake_endpoint='127.0.0.721:*'):
     with pytest.raises(ValidationError):
         node2 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"],
                                               endpoint=fake_endpoint)
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_dhtnode_edge_cases():
+    peers = []
+    for i in range(5):
+        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
+        peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
+
+    subkeys = [0, '', False, True, 'abyrvalg', 4555]
+    keys = subkeys + [()]
+    values = subkeys + [[]]
+    for key, subkey, value in product(keys, subkeys, values):
+        await random.choice(peers).store(key=key, subkey=subkey, value=value,
+                                         expiration_time=hivemind.get_dht_time() + 999),
+
+        stored = await random.choice(peers).get(key=key, latest=True)
+        assert stored is not None
+        assert subkey in stored.value
+        assert stored.value[subkey].value == value
