@@ -338,7 +338,7 @@ class DHTNode:
             queries=set(unfinished_key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
             found_callback=on_found, exclude_self=exclude_self, **kwargs))
         try:
-            await asyncio.wait([evt.wait() for evt in store_finished_events.values()])  # wait for items to be stored
+            await asyncio.gather(store_task, *(evt.wait() for evt in store_finished_events.values()))
             assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
             return {(key, subkey) if subkey is not None else key: status or False for (key, subkey), status in store_ok.items()}
         except asyncio.CancelledError as e:
