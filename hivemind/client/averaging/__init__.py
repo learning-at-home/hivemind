@@ -432,8 +432,12 @@ def is_power_of_two(n):
     return (n != 0) and (n & (n - 1) == 0)
 
 
-def _background_thread_fetch_current_state(pipe: mp.connection.Connection, get_current_state_weakref):
-    """ Executed in the host process as a background thread. Fetches the averager state when asked by peers. """
+def _background_thread_fetch_current_state(pipe: mp.connection.Connection, get_current_state_ref: weakref.WeakMethod):
+    """
+    Executed in the host process as a background thread. Fetches the averager state when asked by peers.
+    :param pipe: DecentralizedAverager's control pipe (from host process side)
+    :param get_current_state_ref: a WeakMethod wrapped around DecentraliedAverager.get_current_state (instance-bound)
+    """
     while True:
         trigger, future = pipe.recv()
         if trigger == '_SHUTDOWN':
@@ -441,7 +445,7 @@ def _background_thread_fetch_current_state(pipe: mp.connection.Connection, get_c
 
         assert trigger == '_TRIGGER_GET_CURRENT_STATE'
         try:
-            get_current_state = get_current_state_weakref()
+            get_current_state = get_current_state_ref()
             if get_current_state is None:
                 break
             state_metadata, state_tensors = get_current_state()
