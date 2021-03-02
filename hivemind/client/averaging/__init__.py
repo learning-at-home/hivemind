@@ -125,9 +125,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
         self._averager_endpoint: Optional[Endpoint] = None
         self.ready = mp.Event()  # whether the averager process has started (and ready for incoming requests)
+        # note: we create a background thread weakref and with daemon=True to ensure garbage collection
         background_fetcher = threading.Thread(daemon=True, target=_background_thread_fetch_current_state,
                                               args=[self.pipe, weakref.WeakMethod(self.get_current_state)])
-        background_fetcher.start()  # note: this thread is daemon to avoid cyclic references
+        background_fetcher.start()
         if start:
             self.run_in_background(await_ready=True)
 
