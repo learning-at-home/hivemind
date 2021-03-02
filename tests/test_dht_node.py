@@ -438,7 +438,7 @@ async def test_dhtnode_validate(fake_endpoint='127.0.0.721:*'):
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_dhtnode_store_get():
+async def test_dhtnode_edge_cases():
     peers = []
     for i in range(5):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
