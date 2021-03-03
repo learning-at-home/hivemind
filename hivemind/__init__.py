@@ -1,5 +1,6 @@
 from hivemind.client import *
 from hivemind.dht import *
+from hivemind.p2p import *
 from hivemind.server import *
 from hivemind.utils import *
 
