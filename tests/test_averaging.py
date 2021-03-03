@@ -297,7 +297,7 @@ def test_load_state_from_peers():
             """
             nonlocal num_calls, super_metadata, super_tensors
             num_calls += 1
-            return self.serializer.dumps(super_metadata), super_tensors
+            return super_metadata, super_tensors
 
     dht_root = hivemind.DHT(start=True)
     initial_peers = [f'{hivemind.LOCALHOST}:{dht_root.port}']
