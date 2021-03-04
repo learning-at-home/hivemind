@@ -1,5 +1,6 @@
 import asyncio
 import torch
+import numpy as np
 
 import pytest
 import hivemind
@@ -57,7 +58,7 @@ def test_mpfuture_cancel():
         with pytest.raises(RuntimeError):
             future.set_result(123)
         with pytest.raises(RuntimeError):
-            future.set_exception(NotImplementedError)
+            future.set_exception(NotImplementedError())
         assert future.cancelled() and future.done() and not future.running()
 
 
@@ -191,6 +192,42 @@ def test_serialize_tensor():
     assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
     restored = hivemind.combine_from_streaming(chunks)
     assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor)
+
+
+def test_split_parts():
+    tensor = torch.randn(910, 512)
+    serialized_tensor_part = hivemind.utils.serialize_torch_tensor(tensor, allow_inplace=False)
+    chunks1 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 16384))
+    assert len(chunks1) == int(np.ceil(tensor.numel() * tensor.element_size() / 16384))
+
+    chunks2 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10_000))
+    assert len(chunks2) == int(np.ceil(tensor.numel() * tensor.element_size() / 10_000))
+
+    chunks3 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10 ** 9))
+    assert len(chunks3) == 1
+
+    compressed_tensor_part = hivemind.utils.serialize_torch_tensor(tensor, hivemind.CompressionType.FLOAT16,
+                                                                   allow_inplace=False)
+    chunks4 = list(hivemind.utils.split_for_streaming(compressed_tensor_part, 16384))
+    assert len(chunks4) == int(np.ceil(tensor.numel() * 2 / 16384))
+
+    combined1 = hivemind.utils.combine_from_streaming(chunks1)
+    combined2 = hivemind.utils.combine_from_streaming(iter(chunks2))
+    combined3 = hivemind.utils.combine_from_streaming(chunks3)
+    combined4 = hivemind.utils.combine_from_streaming(chunks4)
+    for combined in combined1, combined2, combined3:
+        assert torch.allclose(tensor, hivemind.deserialize_torch_tensor(combined), rtol=1e-5, atol=1e-8)
+
+    assert torch.allclose(tensor, hivemind.deserialize_torch_tensor(combined4), rtol=1e-3, atol=1e-3)
+
+    combined_incomplete = hivemind.utils.combine_from_streaming(chunks4[:5])
+    combined_incomplete2 = hivemind.utils.combine_from_streaming(chunks4[:1])
+    combined_incomplete3 = hivemind.utils.combine_from_streaming(chunks4[:-1])
+    for combined in combined_incomplete, combined_incomplete2, combined_incomplete3:
+        with pytest.raises(RuntimeError):
+            hivemind.deserialize_torch_tensor(combined)
+            # note: we rely on this being RuntimeError in hivemind.client.averager.allreduce.AllreduceProtocol
+
 
 def test_generic_data_classes():
     from hivemind.utils import ValueWithExpiration, HeapEntry, DHTExpiration
