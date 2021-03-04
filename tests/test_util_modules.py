@@ -201,7 +201,7 @@ def test_split_parts():
     assert len(chunks1) == int(np.ceil(tensor.numel() * 4 / 16384))
 
     chunks2 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10_000))
-    assert len(chunks2) == int(np.ceil(tensor.numel() * 4 / 10_000))
+    assert len(chunks2) == int(np.ceil(tensor.numel() * tensor.element_size() / 10_000))
 
     chunks3 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10 ** 9))
     assert len(chunks3) == 1
