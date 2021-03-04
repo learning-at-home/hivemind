@@ -1,5 +1,6 @@
 import asyncio
 import torch
+import numpy as np
 
 import pytest
 import hivemind
@@ -197,10 +198,10 @@ def test_split_parts():
     tensor = torch.randn(910, 512)
     serialized_tensor_part = hivemind.utils.serialize_torch_tensor(tensor, allow_inplace=False)
     chunks1 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 16384))
-    assert len(chunks1) == 114
+    assert len(chunks1) == int(np.ceil(tensor.numel() * 4 / 16384))
 
     chunks2 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10_000))
-    assert len(chunks2) == 187
+    assert len(chunks2) == int(np.ceil(tensor.numel() * 4 / 16384))
 
     chunks3 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10 ** 9))
     assert len(chunks3) == 1
@@ -208,7 +209,7 @@ def test_split_parts():
     compressed_tensor_part = hivemind.utils.serialize_torch_tensor(tensor, hivemind.CompressionType.FLOAT16,
                                                                    allow_inplace=False)
     chunks4 = list(hivemind.utils.split_for_streaming(compressed_tensor_part, 16384))
-    assert len(chunks4) == 57
+    assert len(chunks4) == int(np.ceil(tensor.numel() * 2 / 16384))
 
     combined1 = hivemind.utils.combine_from_streaming(chunks1)
     combined2 = hivemind.utils.combine_from_streaming(iter(chunks2))

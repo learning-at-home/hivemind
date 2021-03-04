@@ -188,7 +188,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                                         ) -> Iterable[runtime_pb2.Tensor]:
         """ accumulate_part using streams of serialized tensors. Used to prevent duplicate work in serialization """
         try:
-            tensor_part: torch.Tensor = deserialize_torch_tensor(combine_from_streaming(stream_messages))
+            tensor_part = deserialize_torch_tensor(combine_from_streaming(stream_messages))
         except RuntimeError as e:
             raise AllreduceException(f"Could not deserialize tensor part from {source} for streaming {e}")
 
