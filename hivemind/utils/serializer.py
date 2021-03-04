@@ -22,6 +22,7 @@ class SerializerBase:
 class MSGPackSerializer(SerializerBase):
     _ExtTypes: Dict[Any, int] = {}
     _ExtTypeCodes: Dict[int, Any] = {}
+    _MsgpackExtTypeCodeTuple = 0x40
 
     @classmethod
     def ext_serializable(cls, type_code: int):
@@ -41,12 +42,18 @@ class MSGPackSerializer(SerializerBase):
         type_code = cls._ExtTypes.get(type(obj))
         if type_code is not None:
             return msgpack.ExtType(type_code, obj.packb())
+        elif isinstance(obj, tuple):
+            data = msgpack.packb(list(obj), strict_types=True, use_bin_type=True, default=cls._encode_ext_types)
+            return msgpack.ExtType(cls._MsgpackExtTypeCodeTuple, data)
         return obj
 
     @classmethod
     def _decode_ext_types(cls, type_code: int, data: bytes):
         if type_code in cls._ExtTypeCodes:
             return cls._ExtTypeCodes[type_code].unpackb(data)
+        elif type_code == cls._MsgpackExtTypeCodeTuple:
+            return tuple(msgpack.unpackb(data, ext_hook=cls._decode_ext_types, raw=False))
+
         logger.warning(f"Unknown ExtType code: {type_code}, leaving it as is.")
         return data
 
