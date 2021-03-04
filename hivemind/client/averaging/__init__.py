@@ -246,7 +246,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 if not allow_retries or (timeout is not None and timeout < time_elapsed):
                     future.set_result(None)
                 else:
-                    logger.debug("caught {e}, retrying")
+                    logger.debug(f"caught {e}, retrying")
 
             except Exception as e:
                 future.set_exception(e)
