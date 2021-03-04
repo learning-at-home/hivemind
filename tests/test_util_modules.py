@@ -198,7 +198,7 @@ def test_split_parts():
     tensor = torch.randn(910, 512)
     serialized_tensor_part = hivemind.utils.serialize_torch_tensor(tensor, allow_inplace=False)
     chunks1 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 16384))
-    assert len(chunks1) == int(np.ceil(tensor.numel() * 4 / 16384))
+    assert len(chunks1) == int(np.ceil(tensor.numel() * tensor.element_size() / 16384))
 
     chunks2 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10_000))
     assert len(chunks2) == int(np.ceil(tensor.numel() * tensor.element_size() / 10_000))
