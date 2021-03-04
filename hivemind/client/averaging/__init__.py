@@ -239,10 +239,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 gathered_data_by_peer = dict(zip(allreduce_group.ordered_group_endpoints, gathered_items))
                 future.set_result(gathered_data_by_peer)
 
-            except (AllreduceException, MatchmakingException):
+            except (AllreduceException, MatchmakingException, grpc.aio.AioRpcError) as e:
                 time_elapsed = get_dht_time() - start_time
                 if not allow_retries or (timeout is not None and timeout < time_elapsed):
                     future.set_result(None)
+                else:
+                    logger.info("caught {e}, retrying")
 
             except Exception as e:
                 future.set_exception(e)
