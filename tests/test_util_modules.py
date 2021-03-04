@@ -225,7 +225,7 @@ def test_split_parts():
     combined_incomplete3 = hivemind.utils.combine_from_streaming(chunks4[:-1])
     for combined in combined_incomplete, combined_incomplete2, combined_incomplete3:
         with pytest.raises(RuntimeError):
-            _ = hivemind.deserialize_torch_tensor(combined)
+            hivemind.deserialize_torch_tensor(combined)
             # note: we rely on this being RuntimeError in hivemind.client.averager.allreduce.AllreduceProtocol
 
 
