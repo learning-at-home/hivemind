@@ -43,6 +43,8 @@ class MSGPackSerializer(SerializerBase):
         if type_code is not None:
             return msgpack.ExtType(type_code, obj.packb())
         elif isinstance(obj, tuple):
+            # Tuples need to be handled separately to ensure that
+            # 1. tuple serialization works and 2. tuples serialized not as lists
             data = msgpack.packb(list(obj), strict_types=True, use_bin_type=True, default=cls._encode_ext_types)
             return msgpack.ExtType(cls._MsgpackExtTypeCodeTuple, data)
         return obj
