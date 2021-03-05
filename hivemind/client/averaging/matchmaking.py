@@ -487,7 +487,7 @@ def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
     schema_dicts = [{field_name: str(field_value)
                      for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
                     for tensor in tensors]
-    return DHTID.generate(source=MSGPackSerializer.dumps(schema_dicts)).to_bytes()
+    return DHTID.generate(source=schema_dicts).to_bytes()
 
 
 class MatchmakingException(Exception):

@@ -6,6 +6,7 @@ import pytest
 import hivemind
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
+from hivemind.utils import MSGPackSerializer
 from concurrent.futures import CancelledError
 
 
@@ -192,6 +193,20 @@ def test_serialize_tensor():
     assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
     restored = hivemind.combine_from_streaming(chunks)
     assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor)
+
+
+def test_serialize_tuple():
+    test_pairs = (
+        ((1, 2, 3), [1, 2, 3]),
+        (('1', False, 0), ['1', False, 0]),
+        (('1', False, 0), ('1', 0, 0)),
+        (('1', b'qq', (2, 5, '0')), ['1', b'qq', (2, 5, '0')]),
+    )
+
+    for first, second in test_pairs:
+        assert MSGPackSerializer.loads(MSGPackSerializer.dumps(first)) == first
+        assert MSGPackSerializer.loads(MSGPackSerializer.dumps(second)) == second
+        assert MSGPackSerializer.dumps(first) != MSGPackSerializer.dumps(second)
 
 
 def test_split_parts():
