@@ -26,11 +26,11 @@ You can also install it in the editable mode with `pip install -e .`.
 
 `hivemind.Server` hosts one or several experts (PyTorch modules) for remote access. These experts are responsible for
 most of the model parameters and computation. The server can be started using either Python or
-[a shell script](https://github.com/learning-at-home/hivemind/blob/master/scripts/run_server.py). We'll use the shell
+[a shell script](https://github.com/learning-at-home/hivemind/blob/master/hivemind/hivemind_cli/run_server.py). We'll use the shell
 for now. To host a server with default experts, run this in your shell:
 
 ```sh
-python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_pattern "expert.[0:5]" \
+python hivemind/hivemind_cli/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_pattern "expert.[0:5]" \
                              --listen_on 0.0.0.0:1337 --dht_port 1338
 # note: if you omit listen_on and/or dht_port, they will be chosen automatically and printed to stdout.
 ```
@@ -79,7 +79,7 @@ architecture [here](https://github.com/learning-at-home/hivemind/blob/master/hiv
 You can create additional servers in the same decentralized network using `--initial_peers` argument:
 
 ```sh
-python scripts/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_pattern "expert.[5:250]" \
+python hivemind/hivemind_cli/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_pattern "expert.[5:250]" \
                               --initial_peers localhost:1338
 ```
 
