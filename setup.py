@@ -7,6 +7,7 @@ import urllib.request
 import tarfile
 import tempfile
 
+from packaging import version
 from pkg_resources import parse_requirements
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
@@ -52,10 +53,10 @@ def install_libp2p_daemon():
                                 stdout=subprocess.PIPE)
         result, _ = proc.communicate()
         result = result.decode('ascii', 'replace')
-        _, _, version, _ = result.split(' ')
-        version = version.lstrip('go')
+        _, _, v, _ = result.split(' ')
+        v = v.lstrip('go')
     
-        if version < "1.13":
+        if version.parse(v) < version.parse("1.13"):
             raise EnvironmentError(f'newer version of go required: must be >= 1.13, found {version}')
 
     except FileNotFoundError:
