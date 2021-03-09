@@ -28,6 +28,9 @@ def md5(fname, chunk_size=4096):
     return hash_md5.hexdigest()
 
 
+here = os.path.abspath(os.path.dirname(__file__))
+
+
 class cd:
     """Context manager for changing the current working directory"""
     def __init__(self, newPath):
