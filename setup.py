@@ -14,6 +14,9 @@ from setuptools.command.develop import develop
 from setuptools.command.install import install
 
 
+here = os.path.abspath(os.path.dirname(__file__))
+
+
 class cd:
     """Context manager for changing the current working directory"""
     def __init__(self, newPath):
@@ -71,8 +74,8 @@ def install_libp2p_daemon():
         tar.extractall(tempdir)
         tar.close()
             
-        with cd(os.path.join(tempdir, 'go-libp2p-daemon-master')):
-            status = os.system('go install ./...')
+        with cd(os.path.join(tempdir, 'go-libp2p-daemon-master', 'p2pd')):
+            status = os.system(f'go build -o {os.path.join(here, "hivemind/hivemind_cli", "p2pd")}')
             if status:
                 raise RuntimeError('Failed to build or install libp2p-daemon:'\
                                    f' exited with status code :{status}')
@@ -95,7 +98,6 @@ class LibP2PInstall(install):
         install_libp2p_daemon()
 
 
-here = os.path.abspath(os.path.dirname(__file__))
 
 with open('requirements.txt') as requirements_file:
     install_requires = list(map(str, parse_requirements(requirements_file)))
