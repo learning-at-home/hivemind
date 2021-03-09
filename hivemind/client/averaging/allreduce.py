@@ -30,6 +30,7 @@ class AllReduceProtocol:
         assert endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
         self.group_id, self.endpoint = group_id, endpoint
         self.ordered_group_endpoints, self.part_sizes = ordered_group_endpoints, part_sizes
+        self.client_mode_endpoints = {endpoint for endpoint, size in zip(self.ordered_group_endpoints, part_sizes) if size == 0}
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
         self.return_deltas = return_deltas
@@ -39,6 +40,8 @@ class AllReduceProtocol:
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
+        for endpoint in self.client_mode_endpoints:
+            self.averaged_tensor_parts[endpoint] = torch.tensor([])
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.endpoint}, group_size={self.group_size})"
@@ -59,6 +62,7 @@ class AllReduceProtocol:
         assert not self.future.done(), f"already finished allreduce: {self.future}"
         assert source in self.local_tensor_parts, "unexpected source, not a part of current group"
         assert source not in self.accumulated_from, "duplicate source, already received that part"
+        assert not self.endpoint in self.client_mode_endpoints, f"{self.endpoint} is in client mode"
         logger.debug(f"{self} - accumulating tensor part from {source}")
 
         self.accumulator.add_(remote_part)
