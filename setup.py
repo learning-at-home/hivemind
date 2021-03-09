@@ -64,7 +64,7 @@ def install_libp2p_daemon():
 
     with tempfile.TemporaryDirectory() as tempdir:
         url = 'https://github.com/libp2p/go-libp2p-daemon/archive/master.tar.gz'
-        dest = os.path.join(tempdir, 'libp2p-daemin.tar.gz')   
+        dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')   
         urllib.request.urlretrieve(url, os.path.join(tempdir, dest))
             
         tar = tarfile.open(dest, 'r:gz')
