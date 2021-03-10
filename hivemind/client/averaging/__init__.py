@@ -6,10 +6,13 @@ import asyncio
 import contextlib
 import ctypes
 import multiprocessing as mp
+import threading
+import weakref
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 
 import grpc
+from grpc._cython.cygrpc import InternalError
 import torch
 import numpy as np
 
@@ -21,7 +24,7 @@ from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, \
     serialize_torch_tensor, deserialize_torch_tensor, split_for_streaming, combine_from_streaming
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
-from hivemind.utils.serializer import PickleSerializer, MSGPackSerializer
+from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils import Endpoint, Port, MPFuture, get_logger
 
 # flavour types
@@ -123,10 +126,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
         self._averager_endpoint: Optional[Endpoint] = None
         self.ready = mp.Event()  # whether the averager process has started (and ready for incoming requests)
-
+        # note: we create a background thread weakref and with daemon=True to ensure garbage collection
+        background_fetcher = threading.Thread(
+            daemon=True, target=_background_thread_fetch_current_state,
+            args=[self.serializer, self.pipe, weakref.WeakMethod(self.get_current_state)])
+        background_fetcher.start()
         if start:
             self.run_in_background(await_ready=True)
-            hivemind.run_in_background(self._background_thread_fetch_current_state_if_asked)
 
     @property
     def port(self) -> Optional[Port]:
@@ -183,9 +189,14 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """ Shut down the averager process """
         # TODO notify peers before terminating
         if self.is_alive():
+            self._pipe.send(('_SHUTDOWN', None))
             self.terminate()
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
+
+    def __del__(self):
+        if self.is_alive():
+            self.shutdown()
 
     def step(self, gather: Optional[DataForGather] = None, allow_retries: bool = True, timeout: Optional[float] = None,
              wait=True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
@@ -229,10 +240,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 gathered_data_by_peer = dict(zip(allreduce_group.ordered_group_endpoints, gathered_items))
                 future.set_result(gathered_data_by_peer)
 
-            except (AllreduceException, MatchmakingException):
+            except (AllreduceException, MatchmakingException, asyncio.exceptions.InvalidStateError,
+                    grpc.RpcError, grpc.aio.AioRpcError, InternalError) as e:
                 time_elapsed = get_dht_time() - start_time
                 if not allow_retries or (timeout is not None and timeout < time_elapsed):
                     future.set_result(None)
+                else:
+                    logger.debug(f"caught {e}, retrying")
 
             except Exception as e:
                 future.set_exception(e)
@@ -301,9 +315,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                                  ) -> AsyncIterator[averaging_pb2.DownloadData]:
         """
         Get the up-to-date trainer state from a peer.
-        The state consists of two parts: (metadata, tensors)
+        The state consists of two parts: (serialized_metadata, tensors)
 
-         - metadata is a small pickle-serialized entry meant to store scalars and hyperparameters
+         - serialized_metadata is a small serialized bytestring meant to store scalars and hyperparameters
          - tensors is a sequence of pytorch tensors that represent model parameters or optimizer statistics
         """
         chunk_size_bytes = self.matchmaking_kwargs.get('chunk_size_bytes', DEFAULT_CHUNK_SIZE_BYTES)
@@ -320,7 +334,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def get_current_state(self) -> Tuple[Any, Sequence[torch.Tensor]]:
         """
         Get current state and send it to a peer. executed in the host process. Meant to be overriden.
-        :returns: a tuple of (serializable_small_metadata, sequence of torch tensors)
+        :returns: a tuple of (small metadata, sequence of torch tensors)
+        :note: metadata must be seriablizable with self.serializer (default = MSGPackSerializer)
         """
         with self.get_tensors() as tensors:
             return dict(group_key=self.get_group_bits()), tensors
@@ -331,25 +346,16 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._pipe.send(('_TRIGGER_GET_CURRENT_STATE', _future))
         return await future
 
-    def _background_thread_fetch_current_state_if_asked(self):
-        """ Executed in the host process as a background thread. """
-        while True:
-            trigger, future = self.pipe.recv()
-            assert trigger == '_TRIGGER_GET_CURRENT_STATE'
-            try:
-                state_metadata, state_tensors = self.get_current_state()
-                # note: serialize here to avoid initializing cuda in the guest process
-                state_metadata = PickleSerializer.dumps(state_metadata)
-                state_tensors = tuple(tensor.cpu().detach().requires_grad_(tensor.requires_grad)
-                                      for tensor in state_tensors)
-                future.set_result((state_metadata, state_tensors))
-            except BaseException as e:
-                future.set_exception(e)
-                logger.warning(e)
-                continue
+    def load_state_from_peers(self, wait=True) -> Optional[Tuple[Any, Sequence[torch.Tensor]]]:
+        """
+        Try to download the latest optimizer state one of the existing peer.
+        :returns: on success, return a 2-tuple with (metadata, tensors), where
 
-    def load_state_from_peers(self, wait=True) -> Optional[Any]:
-        """ Try to download the latest optimizer state one of the existing peer """
+        - metadata is a small object containing metadata (e.g. hyperparameters, scalars, etc)
+        - tensors is a sequence of pytorch tensors meant to contain peer's model weights and optimizer statistics
+
+        The exact contents of both metadata and tensors are determined by get_current_state method
+        """
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_load_state_from_peers', [], dict(future=_future)))
         return future.result() if wait else future
@@ -376,7 +382,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     current_tensor_parts, tensors = [], []
                     async for message in stream:
                         if message.metadata:
-                            metadata = PickleSerializer.loads(message.metadata)
+                            metadata = self.serializer.loads(message.metadata)
                         if message.tensor_part.dtype and current_tensor_parts:
                             # tensor_part.dtype indicates the start of the new tensor, so we should wrap up this one
                             tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
@@ -398,6 +404,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             future.set_result(None)
 
     def get_group_bits(self, wait: bool = True):
+        """
+        :param wait: if True, return bits immediately. Otherwise return awaitable MPFuture
+        :returns: averager's current group key bits (without prefix)
+        """
         future, _future = MPFuture.make_pair()
         self.pipe.send(('_get_group_bits', [], dict(future=_future)))
         return future.result() if wait else future
@@ -406,6 +416,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         future.set_result(self._matchmaking.group_key_manager.group_bits)
 
     def set_group_bits(self, group_bits: str, wait: bool = True):
+        """
+        :param group_bits: group bits (string of '0' or '1') to be used in averager's group key
+        :param wait: if True, wait until the update is confirmed by the averager. Otherwise return immediately
+        """
         future, _future = MPFuture.make_pair()
         assert all(bit in '01' for bit in group_bits)
         self.pipe.send(('_set_group_bits', [], dict(group_bits=group_bits, future=_future)))
@@ -423,3 +437,35 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 def is_power_of_two(n):
     """ Check whether n is a power of 2 """
     return (n != 0) and (n & (n - 1) == 0)
+
+
+def _background_thread_fetch_current_state(serializer: SerializerBase, pipe: mp.connection.Connection,
+                                           get_current_state_ref: weakref.WeakMethod):
+    """
+    Executed in the host process as a background thread. Fetches the averager state when asked by peers.
+    :param serializer: a serializer with which to convert metadata into bytes
+    :param pipe: DecentralizedAverager's control pipe (from host process side)
+    :param get_current_state_ref: a WeakMethod wrapped around DecentralizedAverager.get_current_state (instance-bound)
+    """
+    while True:
+        trigger, future = pipe.recv()
+        if trigger == '_SHUTDOWN':
+            break
+
+        assert trigger == '_TRIGGER_GET_CURRENT_STATE'
+        try:
+            get_current_state = get_current_state_ref()
+            if get_current_state is None:
+                break
+            state_metadata, state_tensors = get_current_state()
+            del get_current_state
+
+            state_metadata = serializer.dumps(state_metadata)
+            state_tensors = tuple(tensor.cpu().detach().requires_grad_(tensor.requires_grad)
+                                  for tensor in state_tensors)
+            # note: we cast tensors to CPU on host side to avoid initializing cuda in the guest process
+            future.set_result((state_metadata, state_tensors))
+        except BaseException as e:
+            future.set_exception(e)
+            logger.warning(e)
+            continue

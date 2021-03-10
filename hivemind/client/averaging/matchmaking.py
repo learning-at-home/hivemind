@@ -7,6 +7,7 @@ import random
 from dataclasses import asdict
 from math import isfinite
 from typing import Sequence, Optional, AsyncIterator, Set, Tuple, Dict
+import concurrent.futures
 import asyncio
 
 import grpc
@@ -142,6 +143,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         elif len(self.current_followers) > 0:
                             await self.leader_disband_group()
                         continue
+                except (concurrent.futures.CancelledError, asyncio.CancelledError):
+                    break  # note: this is a compatibility layer for python3.7
                 except Exception as e:
                     if not self.assembled_group.done():
                         self.assembled_group.set_exception(e)
@@ -256,7 +259,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
                 ordered_group_endpoints=allreduce_group.ordered_group_endpoints, part_sizes=allreduce_group.part_sizes,
                 gathered=allreduce_group.gathered, group_key_seed=allreduce_group.group_key_seed)
-
+        except (concurrent.futures.CancelledError, asyncio.CancelledError):
+            return  # note: this is a compatibility layer for python3.7
         except Exception as e:
             logger.exception(e)
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
@@ -445,6 +449,8 @@ class PotentialLeaders:
                     {self.running.wait(), self.update_triggered.wait()}, return_when=asyncio.ALL_COMPLETED,
                     timeout=self.search_end_time - get_dht_time() if isfinite(self.search_end_time) else None)
                 self.update_triggered.clear()
+        except (concurrent.futures.CancelledError, asyncio.CancelledError):
+            return  # note: this is a compatibility layer for python3.7
         except Exception as e:
             logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
             raise
@@ -463,7 +469,8 @@ class PotentialLeaders:
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
                     if self.running.is_set() and len(self.leader_queue) == 0:
                         await key_manager.update_key_on_not_enough_peers()
-
+            except (concurrent.futures.CancelledError, asyncio.CancelledError):
+                pass  # note: this is a compatibility layer for python3.7
             except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
                 logger.error(f"{self.endpoint} - caught {type(e)}: {e}")
             finally:
@@ -480,7 +487,7 @@ def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
     schema_dicts = [{field_name: str(field_value)
                      for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
                     for tensor in tensors]
-    return DHTID.generate(source=MSGPackSerializer.dumps(schema_dicts)).to_bytes()
+    return DHTID.generate(source=schema_dicts).to_bytes()
 
 
 class MatchmakingException(Exception):

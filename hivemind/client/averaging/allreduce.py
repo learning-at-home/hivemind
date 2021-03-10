@@ -153,7 +153,12 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                                      f" instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)},"
                                      f" allreduce failed")
 
-        averaged_part = deserialize_torch_tensor(combine_from_streaming([message.tensor_part for message in outputs]))
+        try:
+            averaged_part = deserialize_torch_tensor(combine_from_streaming(
+                [message.tensor_part for message in outputs]))
+        except RuntimeError as e:
+            raise AllreduceException(f"Could not deserialize averaged part from {peer_endpoint}: {e}")
+
         self.register_averaged_part(peer_endpoint, averaged_part)
         return averaged_part
 
@@ -182,7 +187,11 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
     async def accumulate_part_streaming(self, source: Endpoint, stream_messages: Iterable[runtime_pb2.Tensor]
                                         ) -> Iterable[runtime_pb2.Tensor]:
         """ accumulate_part using streams of serialized tensors. Used to prevent duplicate work in serialization """
-        tensor_part: torch.Tensor = deserialize_torch_tensor(combine_from_streaming(stream_messages))
+        try:
+            tensor_part = deserialize_torch_tensor(combine_from_streaming(stream_messages))
+        except RuntimeError as e:
+            raise AllreduceException(f"Could not deserialize tensor part from {source} for streaming {e}")
+
         averaged_part = await self.accumulate_part(source, tensor_part)
         if not self.averaged_part_stream.done():
             serialized_tensor = serialize_torch_tensor(averaged_part, self.compression_type, allow_inplace=False)

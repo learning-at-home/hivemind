@@ -5,7 +5,6 @@ from itertools import chain, zip_longest
 
 from hivemind import LOCALHOST
 from hivemind.dht.routing import RoutingTable, DHTID
-from hivemind.utils.serializer import PickleSerializer
 
 
 def test_ids_basic():
@@ -15,7 +14,6 @@ def test_ids_basic():
         assert DHTID.MIN <= id1 < DHTID.MAX and DHTID.MIN <= id2 <= DHTID.MAX
         assert DHTID.xor_distance(id1, id1) == DHTID.xor_distance(id2, id2) == 0
         assert DHTID.xor_distance(id1, id2) > 0 or (id1 == id2)
-        assert len(PickleSerializer.dumps(id1)) - len(PickleSerializer.dumps(int(id1))) < 40
         assert DHTID.from_bytes(bytes(id1)) == id1 and DHTID.from_bytes(id2.to_bytes()) == id2
 
 

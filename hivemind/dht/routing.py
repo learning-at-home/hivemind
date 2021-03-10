@@ -8,7 +8,7 @@ import random
 from collections.abc import Iterable
 from itertools import chain
 from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
-from hivemind.utils import Endpoint, PickleSerializer, get_dht_time, DHTExpiration
+from hivemind.utils import Endpoint, MSGPackSerializer, get_dht_time, DHTExpiration
 
 DHTKey, Subkey, DHTValue, BinaryDHTID, BinaryDHTValue, = Any, Any, Any, bytes, bytes
 
@@ -255,7 +255,7 @@ class DHTID(int):
             by default, generates a random dhtid from :nbits: random bits
         """
         source = random.getrandbits(nbits).to_bytes(nbits, byteorder='big') if source is None else source
-        source = PickleSerializer.dumps(source) if not isinstance(source, bytes) else source
+        source = MSGPackSerializer.dumps(source) if not isinstance(source, bytes) else source
         raw_uid = cls.HASH_FUNC(source).digest()
         return cls(int(raw_uid.hex(), 16))
 

@@ -70,6 +70,10 @@ def test_allreduce_once():
             for ref, our in zip(reference, averaged_tensors):
                 assert torch.allclose(ref, our, atol=1e-6)
 
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
+
 
 def compute_mean_std(averagers, unbiased=True):
     results = []
@@ -108,6 +112,10 @@ def test_allreduce_grid():
         else:
             assert torch.allclose(stds, torch.zeros_like(stds), atol=1e-6, rtol=0)
 
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
+
 
 @pytest.mark.forked
 def test_allgather():
@@ -132,6 +140,10 @@ def test_allgather():
 
         for endpoint in gathered:
             assert gathered[endpoint] == reference_metadata[endpoint]
+
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
 
 
 @pytest.mark.forked
@@ -249,18 +261,26 @@ def test_too_few_peers():
     for future in step_futures:
         assert len(future.result()) == 2
 
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
+
 
 @pytest.mark.forked
-def test_overcrowded():
+def test_overcrowded(num_peers=16):
     dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
     averagers = [hivemind.DecentralizedAverager(
         averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
         averaging_expiration=1, request_timeout=0.5,
         prefix='mygroup', initial_group_bits='', start=True)
-        for _ in range(32)]
+        for _ in range(num_peers)]
     for t in range(5):
         step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
         assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
+
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
 
 
 @pytest.mark.forked
@@ -307,11 +327,6 @@ def test_load_state_from_peers():
     assert num_calls == 2
     assert got_metadata == super_metadata
     assert all(map(torch.allclose, got_tensors, super_tensors))
-
-    # check that normal averaging still works
-    # futures = [averager.step(wait=False) for averager in [averager1, averager2]]
-    # for future in futures:
-    #     future.result()
 
 
 @pytest.mark.forked
