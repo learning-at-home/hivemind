@@ -176,8 +176,9 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         send allreduce requests to all peers and collect results, return the averaged tensor (or deltas)
         """
         try:
-            await asyncio.gather(self, *(self._communicate_with_peer(peer, part)
-                                         for peer, part in self.local_tensor_parts.items() if peer != self.endpoint))
+            await asyncio.gather(self, *(self._communicate_with_peer(peer, self.local_tensor_parts[peer])
+                                         for i, peer in enumerate(self.ordered_group_endpoints)
+                                         if peer != self.endpoint and self.part_sizes[i] > 0))
             return await self
         except BaseException as e:
             code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR

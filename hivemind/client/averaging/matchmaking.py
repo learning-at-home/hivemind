@@ -220,6 +220,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             async with self.lock_request_join_group:
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
+                    print('REJECT', request.endpoint, reason_to_reject)
                     yield reason_to_reject
                     return
 
@@ -332,7 +333,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         assert not self.assembled_group.done()
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
 
-        group_id, ordered_group_endpoints, part_sizes = msg.group_id, msg.ordered_group_endpoints, msg.part_sizes
+        group_id, ordered_group_endpoints, part_sizes = msg.group_id, tuple(msg.ordered_group_endpoints), msg.part_sizes
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
         assert len(ordered_group_endpoints) == len(part_sizes) == len(msg.gathered)
         my_part_size = part_sizes[ordered_group_endpoints.index(self.endpoint)]
@@ -340,7 +341,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-                                          ordered_group_endpoints=tuple(ordered_group_endpoints),
+                                          ordered_group_endpoints=ordered_group_endpoints,
                                           part_sizes=tuple(part_sizes), gathered=msg.gathered,
                                           group_key_seed=int(msg.group_key_seed), **self.allreduce_kwargs)
         await self.group_key_manager.update_key_on_group_assembled(allreduce_group)
@@ -376,6 +377,7 @@ class PotentialLeaders:
             update_queue_task = asyncio.create_task(self._update_queue_periodically(key_manager))
             if declare:
                 declare_averager_task = asyncio.create_task(self._declare_averager_periodically(key_manager))
+
             try:
                 yield self
             finally:
@@ -383,6 +385,7 @@ class PotentialLeaders:
                     update_queue_task.cancel()
                 if declare and not declare_averager_task.done():
                     declare_averager_task.cancel()
+
                 for field in (self.past_attempts, self.leader_queue, self.running,
                               self.update_finished, self.update_triggered, self.declared_expiration):
                     field.clear()

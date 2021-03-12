@@ -7,6 +7,7 @@ import contextlib
 import ctypes
 import multiprocessing as mp
 import threading
+import uuid
 import weakref
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
@@ -138,10 +139,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     @property
     def endpoint(self) -> Endpoint:
-        assert self.port is not None, "Averager is not running yet"
         if self._averager_endpoint is None:
-            self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
-            logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
+            if self.listen:
+                assert self.port is not None, "Averager is not running yet"
+                self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
+                logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
+            else:
+                self._averager_endpoint = f'client::{uuid.uuid4()}'
         return self._averager_endpoint
 
     def __repr__(self):
@@ -155,12 +159,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         async def _run():
             grpc.aio.init_grpc_aio()
-            self._matchmaking = Matchmaking(self.endpoint, self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
-                                            client_mode=not self.listen, return_deltas=True)
-            self._pending_group_assembled = asyncio.Event()
-            self._pending_group_assembled.set()
 
-            if self.listen:
+            if self.listen or True:
                 server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
                 averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
                 found_port = server.add_insecure_port(self.listen_on)
@@ -169,8 +169,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 await server.start()
                 asyncio.create_task(self._declare_for_download_periodically())
             else:
-                logger.info("[experimental] The averager running in client mode, please report any bugs.")
+                logger.info(f"[experimental] The averager running in client mode, please report any bugs.")
 
+            self._matchmaking = Matchmaking(self.endpoint,
+                                            self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
+                                            client_mode=not self.listen, return_deltas=True)
+            self._pending_group_assembled = asyncio.Event()
+            self._pending_group_assembled.set()
             self.ready.set()
 
             while True:
