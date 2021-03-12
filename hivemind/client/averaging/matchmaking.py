@@ -335,6 +335,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         group_id, ordered_group_endpoints, part_sizes = msg.group_id, msg.ordered_group_endpoints, msg.part_sizes
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
         assert len(ordered_group_endpoints) == len(part_sizes) == len(msg.gathered)
+        my_part_size = part_sizes[ordered_group_endpoints.index(self.endpoint)]
+        assert my_part_size == 0 or not self.client_mode, "Averager with client_mode=True cannot accept incoming data."
 
         logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
         allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
