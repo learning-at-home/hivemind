@@ -1,6 +1,7 @@
+import asyncio
 import subprocess
-from time import perf_counter
 
+import numpy as np
 import pytest
 
 import hivemind.p2p
@@ -23,33 +24,85 @@ def is_process_running(pid: int) -> bool:
     return subprocess.check_output(cmd, shell=True).decode('utf-8').strip() == RUNNING
 
 
-@pytest.fixture()
-def mock_p2p_class():
-    P2P.LIBP2P_CMD = "sleep"
-
-
-def test_daemon_killed_on_del(mock_p2p_class):
-    start = perf_counter()
-    p2p_daemon = P2P('10s')
+@pytest.mark.asyncio
+async def test_daemon_killed_on_del():
+    p2p_daemon = await P2P.create()
 
     child_pid = p2p_daemon._child.pid
     assert is_process_running(child_pid)
 
     del p2p_daemon
     assert not is_process_running(child_pid)
-    assert perf_counter() - start < 1
 
 
-def test_daemon_killed_on_exit(mock_p2p_class):
-    start = perf_counter()
-    with P2P('10s') as daemon:
-        child_pid = daemon.pid
-        assert is_process_running(child_pid)
-
-    assert not is_process_running(child_pid)
-    assert perf_counter() - start < 1
+def handle_square(x):
+    return x ** 2
 
 
-def test_daemon_raises_on_faulty_args():
-    with pytest.raises(RuntimeError):
-        P2P(faulty='argument')
+def handle_add(args):
+    result = args[0]
+    for i in range(1, len(args)):
+        result = result + args[i]
+    return result
+
+
+@pytest.mark.parametrize(
+    "test_input,handle",
+    [
+        pytest.param(10, handle_square, id="square_integer"),
+        pytest.param((1, 2), handle_add, id="add_integers"),
+        pytest.param(([1, 2, 3], [12, 13]), handle_add, id="add_lists"),
+        pytest.param(2, lambda x: x ** 3, id="lambda")
+    ]
+)
+@pytest.mark.asyncio
+async def test_call_peer_handler(test_input, handle, handler_name="handle"):
+    server = await P2P.create()
+    server_pid = server._child.pid
+    await server.add_stream_handler(handler_name, handle)
+    assert is_process_running(server_pid)
+
+    client = await P2P.create()
+    client_pid = client._child.pid
+    assert is_process_running(client_pid)
+
+    await asyncio.sleep(1)
+    result = await client.call_peer_handler(server.id, handler_name, test_input)
+    assert result == handle(test_input)
+
+    await server.stop_listening()
+    del server
+    assert not is_process_running(server_pid)
+
+    del client
+    assert not is_process_running(client_pid)
+
+
+@pytest.mark.parametrize(
+    "test_input,handle",
+    [
+        pytest.param(np.random.randn(2, 3), handle_square, id="square"),
+        pytest.param([np.random.randn(2, 3), np.random.randn(2, 3)], handle_add, id="add"),
+    ]
+)
+@pytest.mark.asyncio
+async def test_call_peer_numpy(test_input, handle, handler_name="handle"):
+    server = await P2P.create()
+    await server.add_stream_handler(handler_name, handle)
+    client = await P2P.create()
+
+    await asyncio.sleep(1)
+    result = await client.call_peer_handler(server.id, handler_name, test_input)
+    assert np.allclose(result, handle(test_input))
+
+
+@pytest.mark.asyncio
+async def test_call_peer_error(handler_name="handle"):
+    server = await P2P.create()
+    await server.add_stream_handler(handler_name, handle_add)
+    client = await P2P.create()
+
+    await asyncio.sleep(1)
+    result = await client.call_peer_handler(server.id, handler_name,
+                                            [np.zeros((2, 3)), np.zeros((3, 2))])
+    assert type(result) == ValueError
