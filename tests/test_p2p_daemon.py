@@ -1,6 +1,7 @@
 import asyncio
+import multiprocessing as mp
 import subprocess
-
+import sys
 import numpy as np
 import pytest
 
@@ -56,7 +57,7 @@ def handle_add(args):
     ]
 )
 @pytest.mark.asyncio
-async def test_call_peer_handler(test_input, handle, handler_name="handle"):
+async def test_call_peer_sigle_process(test_input, handle, handler_name="handle"):
     server = await P2P.create()
     server_pid = server._child.pid
     await server.add_stream_handler(handler_name, handle)
@@ -76,6 +77,52 @@ async def test_call_peer_handler(test_input, handle, handler_name="handle"):
 
     del client
     assert not is_process_running(client_pid)
+
+
+@pytest.mark.asyncio
+async def test_call_peer_different_prcoesses():
+    handler_name = "square"
+    test_input = np.random.randn(2, 3)
+
+    server_side, client_side = mp.Pipe()
+    response_received = mp.Value(np.ctypeslib.as_ctypes_type(np.int32))
+    response_received.value = 0
+
+    async def run_server():
+        server = await P2P.create()
+        server_pid = server._child.pid
+        await server.add_stream_handler(handler_name, handle_square)
+        assert is_process_running(server_pid)
+
+        server_side.send(server.id)
+        while response_received.value == 0:
+            await asyncio.sleep(0.5)
+
+        await server.stop_listening()
+        del server
+        assert not is_process_running(server_pid)
+
+    def server_target():
+        asyncio.run(run_server())
+
+    proc = mp.Process(target=server_target)
+    proc.start()
+
+    client = await P2P.create()
+    client_pid = client._child.pid
+    assert is_process_running(client_pid)
+
+    await asyncio.sleep(1)
+    peer_id = client_side.recv()
+
+    result = await client.call_peer_handler(peer_id, handler_name, test_input)
+    assert np.allclose(result, handle_square(test_input))
+    response_received.value = 1
+
+    del client
+    assert not is_process_running(client_pid)
+
+    proc.join()
 
 
 @pytest.mark.parametrize(
