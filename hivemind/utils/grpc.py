@@ -160,6 +160,45 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
         raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
 
+def quantile_encode_torch_qq(weight, n_bits: int):
+    n_bins = 2 ** n_bits
+    borders = torch.as_tensor(quantile_qq_approximation(weight.numpy(), n_bins + 1)[:-1])
+    quant_weight = torch.relu_(torch.bucketize(weight, borders) - 1)
+    _sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten(), weight.flatten())
+    lookup = _sums.mul_(n_bins / weight.numel())
+    return quant_weight, lookup
+
+
+def quantile_qq_approximation(array, n_quantiles, min_chunk_size: int = 10 ** 5, **kwargs):
+    """ Estimate uniform quantiles of data using quantile-of-quantiles. Runs in parallel. """
+    if not array.data.c_contiguous and array.data.f_contiguous:
+        array = array.T
+    array = np.ascontiguousarray(array.reshape(-1))
+    quantiles = np.linspace(0., 1., num=n_quantiles, dtype=array.dtype)
+    chunk_size = get_chunk_size(len(array), min_chunk_size)
+    num_chunks = (len(array) - 1) // chunk_size + 1
+    partition_quantiles = np.empty((num_chunks, len(quantiles)), dtype=array.dtype)
+
+    jobs = []
+    for i in range(num_chunks):
+        chunk = slice(chunk_size * i, chunk_size * (i + 1))
+        jobs.append(hivemind.run_in_background(
+            np.quantile, array[chunk], quantiles, out=partition_quantiles[i], **kwargs))
+
+    for job in jobs:
+        job.result()
+    return np.quantile(partition_quantiles, quantiles, **kwargs)
+
+
+def get_chunk_size(num_elements, min_chunk_size):
+    """ Adjust chunk_size to minimize imbalance between chunk sizes """
+    if min_chunk_size >= num_elements:
+        return min_chunk_size
+    leftover_elements = num_elements % min_chunk_size
+    num_chunks = num_elements // min_chunk_size
+    return min_chunk_size + (leftover_elements - 1) // num_chunks + 1
+
+
 FP16_MAX = 65_504
 
 
@@ -207,6 +246,18 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
             size=array.shape,
             dtype=array.dtype.name,
             requires_grad=tensor.requires_grad)
+    elif compression_type == CompressionType.QUANTILE_8BIT:
+        assert tensor.dtype == torch.float32
+
+        quantized, lookup = quantile_encode_torch_qq(tensor.detach(), 8)
+        data = b''.join((lookup.numpy().tobytes(), quantized.numpy().astype(np.uint8).tobytes))
+
+        proto = runtime_pb2.Tensor(
+            compression=compression_type,
+            buffer=data,
+            size=tensor.shape,
+            dtype='compressed_float32',
+            requires_grad=tensor.requires_grad)
     else:
         raise ValueError(f"Unknown compression type: {compression_type}")
 
@@ -231,6 +282,12 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
     elif serialized_tensor.compression == CompressionType.FLOAT16:
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.float16).copy()
         tensor = torch.as_tensor(array, dtype=torch.float32).view(*serialized_tensor.size)
+    elif serialized_tensor.compression == CompressionType.QUANTILE_8BIT:
+        lookup = serialized_tensor.buffer[:256*4]
+        quantized = serialized_tensor.buffer[256*4:]
+        lookup = torch.as_tensor(np.frombuffer(lookup, dtype=np.float32).copy())
+        quantized = torch.as_tensor(np.frombuffer(quantized, dtype=np.uint8).copy()).view(*serialized_tensor.size)
+        tensor = lookup[quantized]
     else:
         raise ValueError(f"Unknown compression type: {serialized_tensor.compression}")
 
