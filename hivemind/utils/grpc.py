@@ -287,7 +287,8 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
         lookup = serialized_tensor.buffer[:256*4]
         quantized = serialized_tensor.buffer[256*4:]
         lookup = torch.as_tensor(np.frombuffer(lookup, dtype=np.float32).copy())
-        quantized = torch.as_tensor(np.frombuffer(quantized, dtype=np.uint8).copy()).view(*serialized_tensor.size)
+        quantized = torch.as_tensor(np.frombuffer(quantized, dtype=np.uint8).copy(),
+                                    dtype=torch.int64).view(*serialized_tensor.size)
         tensor = lookup[quantized]
     else:
         raise ValueError(f"Unknown compression type: {serialized_tensor.compression}")
