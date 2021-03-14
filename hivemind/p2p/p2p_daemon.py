@@ -25,6 +25,11 @@ class P2P(object):
     HEADER_LEN = 8
     BYTEORDER = 'big'
 
+    def __init__(self):
+        self._child = None
+        self._listen_task = None
+        self._listen_event = asyncio.Event()
+
     @classmethod
     async def create(cls, *args, quic=1, tls=1, conn_manager=1, dht_client=1,
                      nat_port_map=True, auto_nat=True, bootstrap=True, **kwargs):
@@ -45,8 +50,6 @@ class P2P(object):
                     raise
                 continue
             break
-        self._listen_task = None
-        self._listen_event = asyncio.Event()
         return self
 
     def _initialize(self, proc_args: tp.List[str]) -> None:
@@ -145,7 +148,7 @@ class P2P(object):
         self._kill_child()
 
     def _kill_child(self):
-        if self._child.poll() is None:
+        if self._child is not None and self._child.poll() is None:
             self._child.kill()
             self._child.wait()
 
