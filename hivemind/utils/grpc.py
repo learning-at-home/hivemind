@@ -10,6 +10,7 @@ from typing import NamedTuple, Tuple, Optional, Union, Any, Dict, TypeVar, Type,
 import grpc
 import numpy as np
 import torch
+import hivemind
 from hivemind.proto.runtime_pb2 import CompressionType
 
 from hivemind.proto import runtime_pb2
@@ -250,7 +251,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
         assert tensor.dtype == torch.float32
 
         quantized, lookup = quantile_encode_torch_qq(tensor.detach(), 8)
-        data = b''.join((lookup.numpy().tobytes(), quantized.numpy().astype(np.uint8).tobytes))
+        data = b''.join((lookup.numpy().tobytes(), quantized.numpy().astype(np.uint8).tobytes()))
 
         proto = runtime_pb2.Tensor(
             compression=compression_type,
