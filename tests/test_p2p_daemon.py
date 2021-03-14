@@ -1,7 +1,7 @@
 import asyncio
 import multiprocessing as mp
 import subprocess
-import sys
+
 import numpy as np
 import pytest
 
@@ -57,7 +57,7 @@ def handle_add(args):
     ]
 )
 @pytest.mark.asyncio
-async def test_call_peer_sigle_process(test_input, handle, handler_name="handle"):
+async def test_call_peer_single_process(test_input, handle, handler_name="handle"):
     server = await P2P.create()
     server_pid = server._child.pid
     await server.add_stream_handler(handler_name, handle)
@@ -80,7 +80,7 @@ async def test_call_peer_sigle_process(test_input, handle, handler_name="handle"
 
 
 @pytest.mark.asyncio
-async def test_call_peer_different_prcoesses():
+async def test_call_peer_different_processes():
     handler_name = "square"
     test_input = np.random.randn(2, 3)
 
