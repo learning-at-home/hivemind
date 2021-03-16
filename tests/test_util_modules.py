@@ -132,7 +132,7 @@ def test_vector_compression(size=(128, 128, 64), alpha=5e-08):
     error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.FLOAT16)) - X
     assert error.square().mean() < alpha
     error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.QUANTILE_8BIT)) - X
-    assert error.square().mean() < 0.003
+    assert error.square().mean() < 0.0008
 
 
 @pytest.mark.forked
