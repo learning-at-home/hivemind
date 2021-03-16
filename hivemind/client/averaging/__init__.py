@@ -160,7 +160,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         async def _run():
             grpc.aio.init_grpc_aio()
 
-            if self.listen or True:
+            if self.listen:
                 server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
                 averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
                 found_port = server.add_insecure_port(self.listen_on)
