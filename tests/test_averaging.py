@@ -118,9 +118,27 @@ def test_allreduce_grid():
 
 
 @pytest.mark.forked
+def test_allreduce_client_ugly_please_replace():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averagers = [hivemind.DecentralizedAverager(
+        averaged_tensors=[torch.randn(10)], dht=dht, target_group_size=4,
+        listen=i % 3 != 0, prefix='mygroup', initial_group_bits='', averaging_expiration=5.0, start=True)
+        for i in range(4)]
+
+    for i in range(3):
+        step_futures = [averager.step(wait=False) for averager in averagers]
+        assert all(future.result() is not None for future in step_futures)
+        #TODO test correctness
+
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
+
+
+@pytest.mark.forked
 def test_allgather():
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
-    averagers = [hivemind.DecentralizedAverager(torch.ones(1), dht=dht, target_group_size=4, averaging_expiration=15,
+    averagers = [hivemind.DecentralizedAverager([torch.ones(100)], dht=dht, target_group_size=4, averaging_expiration=15,
                                                 prefix='mygroup', initial_group_bits='000', listen_on='127.0.0.1:*',
                                                 start=True)
                  for _ in range(8)]
@@ -150,7 +168,7 @@ def test_allgather():
 @pytest.mark.asyncio
 async def test_allreduce_protocol():
     """ Run group allreduce protocol manually without grpc, see if the internal logic is working as intended """
-    peers = "alice", "bob", "carol"
+    peers = "alice", "bob", "carol", "colab"
 
     tensors_by_peer = {peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
                        for i, peer in enumerate(peers)}
@@ -158,7 +176,7 @@ async def test_allreduce_protocol():
     group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
     allreduce_protocols = [AllReduceProtocol(
         group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer],
-        ordered_group_endpoints=peers, part_sizes=(150, 200, 67))
+        ordered_group_endpoints=peers, part_sizes=(150, 200, 67, 0))
         for peer in peers]
 
     async def _accumulate(sender: Endpoint, recipient: Endpoint):
@@ -169,7 +187,7 @@ async def test_allreduce_protocol():
         sender_allreduce.register_averaged_part(source=recipient, averaged_part=averaged_part)
 
     await asyncio.wait({_accumulate(sender, recipient) for sender in peers for recipient in peers
-                        if sender != recipient})
+                        if sender != recipient and recipient != "colab"})
 
     reference_tensors = [
         sum(tensors_by_peer[peer][i] for peer in peers) / len(peers)
