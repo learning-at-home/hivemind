@@ -7,6 +7,7 @@ import contextlib
 import ctypes
 import multiprocessing as mp
 import threading
+import uuid
 import weakref
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
@@ -95,15 +96,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
             "throughput must be a non-negative float32"
-        if not listen:
-            raise NotImplementedError("Client-only averaging is not implemented yet.")
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
 
         super().__init__()
         self.dht = dht
-        self.listen_on, self.receiver_threads, self.kwargs = listen_on, receiver_threads, kwargs
+        self.listen, self.listen_on, self.receiver_threads, self.kwargs = listen, listen_on, receiver_threads, kwargs
         self.channel_options = channel_options
         self.daemon = daemon
 
@@ -140,10 +139,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     @property
     def endpoint(self) -> Endpoint:
-        assert self.port is not None, "Averager is not running yet"
         if self._averager_endpoint is None:
-            self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
-            logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
+            if self.listen:
+                assert self.port is not None, "Averager is not running yet"
+                self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
+                logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
+            else:
+                self._averager_endpoint = f'client::{uuid.uuid4()}'
         return self._averager_endpoint
 
     def __repr__(self):
@@ -157,18 +159,24 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         async def _run():
             grpc.aio.init_grpc_aio()
-            server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
-            averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
-            found_port = server.add_insecure_port(self.listen_on)
-            assert found_port != 0, f"Failed to listen to {self.listen_on}"
-            self._port.value = found_port
-            self._matchmaking = Matchmaking(self.endpoint, self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
-                                            return_deltas=True)  # note: we need deltas to make allreduce lock-free
+
+            if self.listen or True:
+                server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
+                averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
+                found_port = server.add_insecure_port(self.listen_on)
+                assert found_port != 0, f"Failed to listen to {self.listen_on}"
+                self._port.value = found_port
+                await server.start()
+                asyncio.create_task(self._declare_for_download_periodically())
+            else:
+                logger.info(f"[experimental] The averager running in client mode, please report any bugs.")
+
+            self._matchmaking = Matchmaking(self.endpoint,
+                                            self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
+                                            client_mode=not self.listen, return_deltas=True)
             self._pending_group_assembled = asyncio.Event()
             self._pending_group_assembled.set()
-            await server.start()
             self.ready.set()
-            asyncio.create_task(self._declare_for_download_periodically())
 
             while True:
                 method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)

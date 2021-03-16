@@ -118,6 +118,24 @@ def test_allreduce_grid():
 
 
 @pytest.mark.forked
+def test_allreduce_client_ugly_please_replace():
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averagers = [hivemind.DecentralizedAverager(
+        averaged_tensors=[torch.randn(10)], dht=dht, target_group_size=4,
+        listen=i % 3 != 0, prefix='mygroup', initial_group_bits='', averaging_expiration=5.0, start=True)
+        for i in range(4)]
+
+    for i in range(3):
+        step_futures = [averager.step(wait=False) for averager in averagers]
+        assert all(future.result() is not None for future in step_futures)
+        #TODO test correctness
+
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
+
+
+@pytest.mark.forked
 def test_allgather():
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
     averagers = [hivemind.DecentralizedAverager([torch.ones(100)], dht=dht, target_group_size=4, averaging_expiration=15,
