@@ -164,10 +164,9 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
 def quantile_encode_torch_approx(weight, n_bits: int):
     n_bins = 2 ** n_bits
     borders = torch.as_tensor(quantile_qq_approximation(weight.numpy(), n_bins + 1)[:-1])
-    quant_weight = torch.relu_(torch.bucketize(weight, borders) - 1)
+    quant_weight = torch.clamp_(torch.bucketize(weight, borders) - 1, 0, n_bins - 1)
     bin_sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten(), weight.flatten())
-    ones = torch.ones_like(weight.flatten())
-    bin_counts = torch.clamp_min_(torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten(), ones), 1)
+    bin_counts = torch.clamp_min_(torch.bincount(weight.flatten(), minlength=n_bins), 1)
     lookup = bin_sums / bin_counts
     return quant_weight, lookup
 
