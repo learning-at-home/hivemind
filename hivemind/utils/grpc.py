@@ -161,12 +161,14 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
         raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
 
-def quantile_encode_torch_qq(weight, n_bits: int):
+def quantile_encode_torch_approx(weight, n_bits: int):
     n_bins = 2 ** n_bits
     borders = torch.as_tensor(quantile_qq_approximation(weight.numpy(), n_bins + 1)[:-1])
     quant_weight = torch.relu_(torch.bucketize(weight, borders) - 1)
-    _sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten(), weight.flatten())
-    lookup = _sums.mul_(n_bins / weight.numel())
+    bin_sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten(), weight.flatten())
+    ones = torch.ones_like(weight.flatten())
+    bin_counts = torch.clamp_min_(torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten(), ones), 1)
+    lookup = bin_sums / bin_counts
     return quant_weight, lookup
 
 
@@ -250,7 +252,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
     elif compression_type == CompressionType.QUANTILE_8BIT:
         assert tensor.dtype == torch.float32
 
-        quantized, lookup = quantile_encode_torch_qq(tensor.detach(), 8)
+        quantized, lookup = quantile_encode_torch_approx(tensor.detach(), 8)
         data = b''.join((lookup.numpy().tobytes(), quantized.numpy().astype(np.uint8).tobytes()))
 
         proto = runtime_pb2.Tensor(
