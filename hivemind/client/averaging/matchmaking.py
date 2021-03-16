@@ -220,7 +220,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             async with self.lock_request_join_group:
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
-                    print('REJECT', request.endpoint, reason_to_reject)
                     yield reason_to_reject
                     return
 
