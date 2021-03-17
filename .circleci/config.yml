@@ -11,9 +11,8 @@ jobs:
             - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: |
           wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz
-          rm -rf /usr/local/go
-          tar -C /usr/local -xzf go1.16.2.linux-amd64.tar.gz
-          export PATH=$PATH:/usr/local/go/bin
+          tar -C ~/ -xzf go1.16.2.linux-amd64.tar.gz
+          export PATH=$PATH:~/go/bin
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
@@ -36,9 +35,8 @@ jobs:
             - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: |
           wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz
-          rm -rf /usr/local/go
-          tar -C /usr/local -xzf go1.16.2.linux-amd64.tar.gz
-          export PATH=$PATH:/usr/local/go/bin
+          tar -C ~/ -xzf go1.16.2.linux-amd64.tar.gz
+          export PATH=$PATH:~/go/bin
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
@@ -61,9 +59,8 @@ jobs:
             - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: |
           wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz
-          rm -rf /usr/local/go
-          tar -C /usr/local -xzf go1.16.2.linux-amd64.tar.gz
-          export PATH=$PATH:/usr/local/go/bin
+          tar -C ~/ -xzf go1.16.2.linux-amd64.tar.gz
+          export PATH=$PATH:~/go/bin
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
