@@ -81,14 +81,14 @@ def install_libp2p_daemon():
                                    f' exited with status code :{status}')
 
 
-class ProtoCompileInstall(install):
+class Install(install):
     def run(self):
         install_libp2p_daemon()
         proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
 
-class ProtoCompileDevelop(develop):
+class Develop(develop):
     def run(self):
         install_libp2p_daemon()
         proto_compile(os.path.join('hivemind', 'proto'))
@@ -122,7 +122,7 @@ extras['all'] = extras['dev'] + extras['docs']
 setup(
     name='hivemind',
     version=version_string,
-    cmdclass={'install': ProtoCompileInstall, 'develop': ProtoCompileDevelop, 'libp2p': LibP2PInstall},
+    cmdclass={'install': Install, 'develop': Develop, 'libp2p': LibP2PInstall},
     description='Decentralized deep learning in PyTorch',
     long_description='Decentralized deep learning in PyTorch. Built to train giant models on '
                      'thousands of volunteers across the world.',
