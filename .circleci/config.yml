@@ -12,7 +12,7 @@ jobs:
       - run: |
           wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz
           tar -C ~/ -xzf go1.16.2.linux-amd64.tar.gz
-          export PATH=$PATH:~/go/bin
+          echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
@@ -36,7 +36,7 @@ jobs:
       - run: |
           wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz
           tar -C ~/ -xzf go1.16.2.linux-amd64.tar.gz
-          export PATH=$PATH:~/go/bin
+          echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
@@ -60,7 +60,7 @@ jobs:
       - run: |
           wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz
           tar -C ~/ -xzf go1.16.2.linux-amd64.tar.gz
-          export PATH=$PATH:~/go/bin
+          echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
