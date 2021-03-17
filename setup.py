@@ -79,6 +79,7 @@ def install_libp2p_daemon():
             if status:
                 raise RuntimeError('Failed to build or install libp2p-daemon:'\
                                    f' exited with status code :{status}')
+        raise ValueError(' '.join(os.listdir(os.path.join(here, 'hivemind/hivemind_cli'))))
 
 
 class ProtoCompileInstall(install):
