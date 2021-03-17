@@ -84,6 +84,7 @@ def install_libp2p_daemon():
 
 class ProtoCompileInstall(install):
     def run(self):
+        install_libp2p_daemon()
         proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
