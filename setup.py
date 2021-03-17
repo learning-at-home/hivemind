@@ -6,6 +6,7 @@ import subprocess
 import urllib.request
 import tarfile
 import tempfile
+import json
 
 from packaging import version
 from pkg_resources import parse_requirements
@@ -49,48 +50,54 @@ def proto_compile(output_path):
             file.truncate()
 
 
-def install_libp2p_daemon():
-    # check go version:
-    try:
-        proc = subprocess.Popen(['go', 'version'],
-                                stdout=subprocess.PIPE)
-        result, _ = proc.communicate()
-        result = result.decode('ascii', 'replace')
-        _, _, v, _ = result.split(' ')
-        v = v.lstrip('go')
-    
-        if version.parse(v) < version.parse("1.13"):
-            raise EnvironmentError(f'newer version of go required: must be >= 1.13, found {version}')
+def install_libp2p_daemon(build=False):
+    # verify golang installation if build flag is specified
+    if build:
+        try:
+            proc = subprocess.Popen(['go', 'version'],
+                                    stdout=subprocess.PIPE)
+            result, _ = proc.communicate()
+            result = result.decode('ascii', 'replace')
+            _, _, v, _ = result.split(' ')
+            v = v.lstrip('go')
 
-    except FileNotFoundError:
-        raise FileNotFoundError('could not find golang installation')
+            if version.parse(v) < version.parse("1.13"):
+                raise EnvironmentError(f'newer version of go required: must be >= 1.13, found {version}')
 
-    with tempfile.TemporaryDirectory() as tempdir:
-        url = 'https://github.com/libp2p/go-libp2p-daemon/archive/master.tar.gz'
-        dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')   
-        urllib.request.urlretrieve(url, os.path.join(tempdir, dest))
-            
-        tar = tarfile.open(dest, 'r:gz')
-        tar.extractall(tempdir)
-        tar.close()
-            
-        with cd(os.path.join(tempdir, 'go-libp2p-daemon-master', 'p2pd')):
-            status = os.system(f'go build -o {os.path.join(here, "hivemind/hivemind_cli", "p2pd")}')
-            if status:
-                raise RuntimeError('Failed to build or install libp2p-daemon:'\
-                                   f' exited with status code :{status}')
+        except FileNotFoundError:
+            raise FileNotFoundError('could not find golang installation')
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            url = 'https://github.com/libp2p/go-libp2p-daemon/archive/master.tar.gz'
+            dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')
+            urllib.request.urlretrieve(url, os.path.join(tempdir, dest))
+
+            tar = tarfile.open(dest, 'r:gz')
+            tar.extractall(tempdir)
+            tar.close()
+
+            with cd(os.path.join(tempdir, 'go-libp2p-daemon-master', 'p2pd')):
+                status = os.system(f'go build -o {os.path.join(here, "hivemind/hivemind_cli", "p2pd")}')
+                if status:
+                    raise RuntimeError('Failed to build or install libp2p-daemon:'\
+                                       f' exited with status code :{status}')
+    else:
+        latest_release_url = 'https://api.github.com/repos/learning-at-home/go-libp2p-daemon/releases/latest'
+        response = urllib.request.urlopen(latest_release_url)
+        tarball_url = json.load(response)['tarball_url']
+        urllib.request.urlretrieve(tarball_url, os.path.join(here, 'hivemind/hivemind_cli/p2pd'))
 
 
 class Install(install):
     def run(self):
-        install_libp2p_daemon()
+        install_libp2p_daemon(build=False)
         proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
 
 class Develop(develop):
     def run(self):
-        install_libp2p_daemon()
+        install_libp2p_daemon(build=True)
         proto_compile(os.path.join('hivemind', 'proto'))
         super().run()
 
