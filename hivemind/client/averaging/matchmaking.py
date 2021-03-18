@@ -17,7 +17,7 @@ from hivemind.client.averaging.allreduce import AllReduceRunner
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.key_manager import GroupKeyManager, GroupKey
 from hivemind.dht import DHT, DHTID, DHTExpiration, get_dht_time
-from hivemind.utils import get_logger, Endpoint, TensorDescriptor, MSGPackSerializer, timed_storage, TimedStorage
+from hivemind.utils import get_logger, Endpoint, TensorDescriptor, timed_storage, TimedStorage
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 from hivemind.utils.grpc import ChannelCache
 
