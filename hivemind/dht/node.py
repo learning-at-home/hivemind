@@ -13,7 +13,8 @@ from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.dht.traverse import traverse_dht
-from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase
+from hivemind.utils import (
+    Endpoint, LOCALHOST, MSGPackSerializer, RecordValidatorBase, SerializerBase, get_logger)
 from hivemind.utils.timed_storage import TimedStorage, ValueWithExpiration
 
 logger = get_logger(__name__)
@@ -80,6 +81,7 @@ class DHTNode:
             cache_on_store: bool = True, reuse_get_requests: bool = True, num_workers: int = 1, chunk_size: int = 16,
             blacklist_time: float = 5.0, backoff_rate: float = 2.0,
             listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", endpoint: Optional[Endpoint] = None,
+            record_validator: Optional[RecordValidatorBase] = None,
             validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
@@ -136,7 +138,8 @@ class DHTNode:
         self.cache_refresh_task = None
 
         self.protocol = await DHTProtocol.create(self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
-                                                 parallel_rpc, cache_size, listen, listen_on, endpoint, **kwargs)
+                                                 parallel_rpc, cache_size, listen, listen_on, endpoint, record_validator,
+                                                 **kwargs)
         self.port = self.protocol.port
 
         if initial_peers:

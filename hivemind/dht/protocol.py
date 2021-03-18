@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from itertools import zip_longest
 from typing import Optional, List, Tuple, Dict, Any, Sequence, Union, Collection
 
 import grpc
@@ -9,8 +10,10 @@ import grpc
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
-from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer, ChannelCache, ValueWithExpiration
-from hivemind.utils import get_dht_time, GRPC_KEEPALIVE_OPTIONS, MAX_DHT_TIME_DISCREPANCY_SECONDS
+from hivemind.utils import (
+    ChannelCache, Endpoint, GRPC_KEEPALIVE_OPTIONS, MAX_DHT_TIME_DISCREPANCY_SECONDS,
+    MSGPackSerializer, ProtectedRecord, RecordValidatorBase, ValueWithExpiration,
+    get_dht_time, get_logger, replace_port)
 
 logger = get_logger(__name__)
 
@@ -20,6 +23,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
     node_id: DHTID; port: int; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
     channel_options: Tuple[Tuple[str, Any]]; server: grpc.aio.Server
     storage: DHTLocalStorage; cache: DHTLocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
+    record_validator: Optional[RecordValidatorBase]
     # fmt:on
 
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
@@ -30,6 +34,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             cls, node_id: DHTID, bucket_size: int, depth_modulo: int, num_replicas: int, wait_timeout: float,
             parallel_rpc: Optional[int] = None, cache_size: Optional[int] = None,
             listen=True, listen_on='0.0.0.0:*', endpoint: Optional[Endpoint] = None,
+            record_validator: Optional[RecordValidatorBase] = None,
             channel_options: Sequence[Tuple[str, Any]] = (), **kwargs) -> DHTProtocol:
         """
         A protocol that allows DHT nodes to request keys/neighbors from other DHT nodes.
@@ -49,6 +54,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
         self.storage, self.cache = DHTLocalStorage(), DHTLocalStorage(maxsize=cache_size)
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.rpc_semaphore = asyncio.Semaphore(parallel_rpc if parallel_rpc is not None else float('inf'))
+        self.record_validator = record_validator
 
         if listen:  # set up server to process incoming rpc requests
             grpc.aio.init_grpc_aio()
@@ -190,7 +196,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
         in_cache = in_cache if in_cache is not None else [False] * len(keys)  # default value (None)
         in_cache = [in_cache] * len(keys) if isinstance(in_cache, bool) else in_cache  # single bool
-        keys, subkeys, values, expiration_time, in_cache = map(list, [keys, subkeys, values, expiration_time, in_cache])
+        keys = list(map(DHTID.to_bytes, keys))
+        subkeys, values, expiration_time, in_cache = map(list, [subkeys, values, expiration_time, in_cache])
         for i in range(len(keys)):
             if subkeys[i] is None:  # add default sub-key if not specified
                 subkeys[i] = self.IS_DICTIONARY if isinstance(values[i], DictionaryDHTValue) else self.IS_REGULAR_VALUE
@@ -199,10 +206,17 @@ class DHTProtocol(dht_grpc.DHTServicer):
             if isinstance(values[i], DictionaryDHTValue):
                 assert subkeys[i] == self.IS_DICTIONARY, "Please don't specify subkey when storing an entire dictionary"
                 values[i] = self.serializer.dumps(values[i])
-
         assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"
-        store_request = dht_pb2.StoreRequest(keys=list(map(DHTID.to_bytes, keys)), subkeys=subkeys, values=values,
-                                             expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info)
+
+        if self.record_validator is not None:
+            signatures = [self.record_validator.sign(ProtectedRecord(*record))
+                          for record in zip(keys, subkeys, values, expiration_time)]
+        else:
+            signatures = [None] * len(keys)
+
+        store_request = dht_pb2.StoreRequest(keys=keys, subkeys=subkeys, values=values,
+                                             expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info,
+                                             signatures=signatures)
         try:
             async with self.rpc_semaphore:
                 response = await self._get_dht_stub(peer).rpc_store(store_request, timeout=self.wait_timeout)
@@ -221,9 +235,16 @@ class DHTProtocol(dht_grpc.DHTServicer):
             asyncio.create_task(self.rpc_ping(dht_pb2.PingRequest(peer=request.peer), context))
         assert len(request.keys) == len(request.values) == len(request.expiration_time) == len(request.in_cache)
         response = dht_pb2.StoreResponse(store_ok=[], peer=self.node_info)
-        keys = map(DHTID.from_bytes, request.keys)
-        for key_id, tag, value_bytes, expiration_time, in_cache in zip(
+        for key, tag, value_bytes, expiration_time, in_cache in zip(
                 keys, request.subkeys, request.values, request.expiration_time, request.in_cache):
+            if self.record_validator is not None:
+                try:
+                    self.record_validator.validate(ProtectedRecord(*record), signature)
+                except InvalidSignature:
+                    response.store_ok.append(False)
+                    continue
+
+            key_id = DHTID.from_bytes(key)
             storage = self.cache if in_cache else self.storage
             if tag == self.IS_REGULAR_VALUE:  # store normal value without subkeys
                 response.store_ok.append(storage.store(key_id, value_bytes, expiration_time))
