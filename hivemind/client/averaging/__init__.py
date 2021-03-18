@@ -167,13 +167,14 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 assert found_port != 0, f"Failed to listen to {self.listen_on}"
                 self._port.value = found_port
                 await server.start()
-                asyncio.create_task(self._declare_for_download_periodically())
             else:
                 logger.info(f"[experimental] The averager running in client mode, please report any bugs.")
 
-            self._matchmaking = Matchmaking(self.endpoint,
-                                            self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
+            self._matchmaking = Matchmaking(self.endpoint, self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
                                             client_mode=not self.listen, return_deltas=True)
+            if self.listen:
+                asyncio.create_task(self._declare_for_download_periodically())
+
             self._pending_group_assembled = asyncio.Event()
             self._pending_group_assembled.set()
             self.ready.set()
