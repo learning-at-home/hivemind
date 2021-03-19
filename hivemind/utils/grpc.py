@@ -2,11 +2,6 @@
 Utilities for running GRPC services: compile protobuf, patch legacy versions, etc
 """
 
-SIZE_OF_FLOAT32 = 4
-SIZE_OF_FLOAT16 = 2
-NUM_BITS_QUANTILE_COMPRESSION = 8
-NUM_QUANTILES_QUANTILE_COMPRESSION = 2 ** NUM_BITS_QUANTILE_COMPRESSION
-
 from __future__ import annotations
 
 import os
@@ -36,6 +31,11 @@ GRPC_KEEPALIVE_OPTIONS = (
     ('grpc.http2.min_time_between_pings_ms', 30 * 1000),
     ('grpc.http2.min_ping_interval_without_data_ms', 10 * 1000),
 )
+
+SIZE_OF_FLOAT32 = 4
+SIZE_OF_FLOAT16 = 2
+NUM_BITS_QUANTILE_COMPRESSION = 8
+NUM_QUANTILES_QUANTILE_COMPRESSION = 2 ** NUM_BITS_QUANTILE_COMPRESSION
 
 
 class ChannelInfo(NamedTuple):
