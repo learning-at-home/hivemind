@@ -98,8 +98,8 @@ class Install(install):
 
 class Develop(develop):
     def run(self):
-        libp2p_build_install()
         proto_compile(os.path.join('hivemind', 'proto'))
+        libp2p_build_install()
         super().run()
 
 
