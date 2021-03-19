@@ -6,6 +6,7 @@ import subprocess
 import urllib.request
 import tarfile
 import tempfile
+import hashlib
 
 from packaging import version
 from pkg_resources import parse_requirements
@@ -13,21 +14,18 @@ from setuptools import setup, find_packages
 from setuptools.command.develop import develop
 from setuptools.command.install import install
 
+P2PD_VERSION = 'v0.3.1'
+P2PD_CHECKSUM = '5094d094740f4e375afe80a5683b1bb2'
 
 here = os.path.abspath(os.path.dirname(__file__))
 
 
-class cd:
-    """Context manager for changing the current working directory"""
-    def __init__(self, newPath):
-        self.newPath = os.path.expanduser(newPath)
-
-    def __enter__(self):
-        self.savedPath = os.getcwd()
-        os.chdir(self.newPath)
-
-    def __exit__(self, etype, value, traceback):
-        os.chdir(self.savedPath)
+def md5(fname, chunk_size=4096):
+    hash_md5 = hashlib.md5()
+    with open(fname, "rb") as f:
+        for chunk in iter(lambda: f.read(chunk_size), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
 
 
 def proto_compile(output_path):
@@ -49,8 +47,7 @@ def proto_compile(output_path):
             file.truncate()
 
 
-def install_libp2p_daemon():
-    # check go version:
+def libp2p_build_install():
     try:
         proc = subprocess.Popen(['go', 'version'],
                                 stdout=subprocess.PIPE)
@@ -58,7 +55,7 @@ def install_libp2p_daemon():
         result = result.decode('ascii', 'replace')
         _, _, v, _ = result.split(' ')
         v = v.lstrip('go')
-    
+
         if version.parse(v) < version.parse("1.13"):
             raise EnvironmentError(f'newer version of go required: must be >= 1.13, found {version}')
 
@@ -66,37 +63,43 @@ def install_libp2p_daemon():
         raise FileNotFoundError('could not find golang installation')
 
     with tempfile.TemporaryDirectory() as tempdir:
-        url = 'https://github.com/libp2p/go-libp2p-daemon/archive/master.tar.gz'
-        dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')   
+        url = f'https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz'
+        dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')
         urllib.request.urlretrieve(url, os.path.join(tempdir, dest))
-            
+
         tar = tarfile.open(dest, 'r:gz')
         tar.extractall(tempdir)
         tar.close()
-            
-        with cd(os.path.join(tempdir, 'go-libp2p-daemon-master', 'p2pd')):
-            status = os.system(f'go build -o {os.path.join(here, "hivemind/hivemind_cli", "p2pd")}')
-            if status:
-                raise RuntimeError('Failed to build or install libp2p-daemon:'\
-                                   f' exited with status code :{status}')
+
+        result = subprocess.run(['go', 'build', '-o', os.path.join(here, "hivemind/hivemind_cli", "p2pd")],
+                                cwd=os.path.join(tempdir, f'go-libp2p-daemon-{P2PD_VERSION[1:]}', 'p2pd'))
+        if result.returncode:
+            raise RuntimeError('Failed to build or install libp2p-daemon:'
+                               f' exited with status code :{result.returncode}')
 
 
-class ProtoCompileInstall(install):
+def libp2p_download_install():
+    install_path = os.path.join(here, 'hivemind/hivemind_cli/')
+    binary_path = os.path.join(install_path, 'p2pd')
+    if 'p2pd' not in os.listdir(install_path) or md5(binary_path) != P2PD_CHECKSUM:
+        print('Downloading Peer to Peer Daemon')
+        url = f'https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd'
+        urllib.request.urlretrieve(url, binary_path)
+        os.chmod(binary_path, 777)
+
+
+class Install(install):
     def run(self):
+        libp2p_download_install()
         proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
 
-class ProtoCompileDevelop(develop):
+class Develop(develop):
     def run(self):
+        libp2p_build_install()
         proto_compile(os.path.join('hivemind', 'proto'))
         super().run()
-
-
-class LibP2PInstall(install):
-    def run(self):
-        install_libp2p_daemon()
-
 
 
 with open('requirements.txt') as requirements_file:
@@ -120,7 +123,7 @@ extras['all'] = extras['dev'] + extras['docs']
 setup(
     name='hivemind',
     version=version_string,
-    cmdclass={'install': ProtoCompileInstall, 'develop': ProtoCompileDevelop, 'libp2p': LibP2PInstall},
+    cmdclass={'install': Install, 'develop': Develop},
     description='Decentralized deep learning in PyTorch',
     long_description='Decentralized deep learning in PyTorch. Built to train giant models on '
                      'thousands of volunteers across the world.',
