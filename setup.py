@@ -50,62 +50,55 @@ def proto_compile(output_path):
             file.truncate()
 
 
-def install_libp2p_daemon(build=False):
-    # verify golang installation if build flag is specified
-    if build:
-        try:
-            proc = subprocess.Popen(['go', 'version'],
-                                    stdout=subprocess.PIPE)
-            result, _ = proc.communicate()
-            result = result.decode('ascii', 'replace')
-            _, _, v, _ = result.split(' ')
-            v = v.lstrip('go')
+def libp2p_build_install():
+    try:
+        proc = subprocess.Popen(['go', 'version'],
+                                stdout=subprocess.PIPE)
+        result, _ = proc.communicate()
+        result = result.decode('ascii', 'replace')
+        _, _, v, _ = result.split(' ')
+        v = v.lstrip('go')
 
-            if version.parse(v) < version.parse("1.13"):
-                raise EnvironmentError(f'newer version of go required: must be >= 1.13, found {version}')
+        if version.parse(v) < version.parse("1.13"):
+            raise EnvironmentError(f'newer version of go required: must be >= 1.13, found {version}')
 
-        except FileNotFoundError:
-            raise FileNotFoundError('could not find golang installation')
+    except FileNotFoundError:
+        raise FileNotFoundError('could not find golang installation')
 
-        with tempfile.TemporaryDirectory() as tempdir:
-            url = 'https://github.com/libp2p/go-libp2p-daemon/archive/master.tar.gz'
-            dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')
-            urllib.request.urlretrieve(url, os.path.join(tempdir, dest))
+    with tempfile.TemporaryDirectory() as tempdir:
+        url = 'https://github.com/libp2p/go-libp2p-daemon/archive/master.tar.gz'
+        dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')
+        urllib.request.urlretrieve(url, os.path.join(tempdir, dest))
 
-            tar = tarfile.open(dest, 'r:gz')
-            tar.extractall(tempdir)
-            tar.close()
+        tar = tarfile.open(dest, 'r:gz')
+        tar.extractall(tempdir)
+        tar.close()
 
-            with cd(os.path.join(tempdir, 'go-libp2p-daemon-master', 'p2pd')):
-                status = os.system(f'go build -o {os.path.join(here, "hivemind/hivemind_cli", "p2pd")}')
-                if status:
-                    raise RuntimeError('Failed to build or install libp2p-daemon:'\
-                                       f' exited with status code :{status}')
-    else:
-        latest_release_url = 'https://api.github.com/repos/learning-at-home/go-libp2p-daemon/releases/latest'
-        response = urllib.request.urlopen(latest_release_url)
-        tarball_url = json.load(response)['tarball_url']
-        urllib.request.urlretrieve(tarball_url, os.path.join(here, 'hivemind/hivemind_cli/p2pd'))
+        with cd(os.path.join(tempdir, 'go-libp2p-daemon-master', 'p2pd')):
+            status = os.system(f'go build -o {os.path.join(here, "hivemind/hivemind_cli", "p2pd")}')
+            if status:
+                raise RuntimeError('Failed to build or install libp2p-daemon:'
+                                   f' exited with status code :{status}')
+
+def libp2p_download_install():
+    latest_release_url = 'https://api.github.com/repos/learning-at-home/go-libp2p-daemon/releases/latest'
+    response = urllib.request.urlopen(latest_release_url)
+    tarball_url = json.load(response)['tarball_url']
+    urllib.request.urlretrieve(tarball_url, os.path.join(here, 'hivemind/hivemind_cli/p2pd'))
 
 
 class Install(install):
     def run(self):
-        install_libp2p_daemon(build=False)
+        libp2p_download_install()
         proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
 
 class Develop(develop):
     def run(self):
-        install_libp2p_daemon(build=True)
+        libp2p_build_install()
         proto_compile(os.path.join('hivemind', 'proto'))
         super().run()
-
-
-class LibP2PInstall(install):
-    def run(self):
-        install_libp2p_daemon()
-
 
 
 with open('requirements.txt') as requirements_file:
@@ -129,7 +122,7 @@ extras['all'] = extras['dev'] + extras['docs']
 setup(
     name='hivemind',
     version=version_string,
-    cmdclass={'install': Install, 'develop': Develop, 'libp2p': LibP2PInstall},
+    cmdclass={'install': Install, 'develop': Develop},
     description='Decentralized deep learning in PyTorch',
     long_description='Decentralized deep learning in PyTorch. Built to train giant models on '
                      'thousands of volunteers across the world.',
