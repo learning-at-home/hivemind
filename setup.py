@@ -7,20 +7,17 @@ import urllib.request
 import tarfile
 import tempfile
 import hashlib
-import logging
 
 from packaging import version
 from pkg_resources import parse_requirements
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
 from setuptools.command.install import install
-from hivemind.utils.logging import get_logger
 
 P2PD_VERSION = 'v0.3.1'
 P2PD_CHECKSUM = '5094d094740f4e375afe80a5683b1bb2'
 
 here = os.path.abspath(os.path.dirname(__file__))
-logger = get_logger(__name__)
 
 
 def md5(fname, chunk_size=4096):
@@ -85,7 +82,7 @@ def libp2p_download_install():
     install_path = os.path.join(here, 'hivemind/hivemind_cli/')
     binary_path = os.path.join(install_path, 'p2pd')
     if 'p2pd' not in os.listdir(install_path) or md5(binary_path) != P2PD_CHECKSUM:
-        logger.log(logging.INFO, 'Downloading Peer to Peer Daemon')
+        print('Downloading Peer to Peer Daemon')
         url = f'https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd'
         urllib.request.urlretrieve(url, binary_path)
         os.chmod(binary_path, 777)
