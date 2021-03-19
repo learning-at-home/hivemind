@@ -12,11 +12,11 @@ import grpc
 import numpy as np
 import torch
 
-from hivemind import run_in_background
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto import runtime_pb2
 from hivemind.utils.logging import get_logger
 from hivemind.utils.networking import Endpoint
+from hivemind.utils.threading import run_in_background
 from hivemind.utils.timed_storage import TimedStorage, get_dht_time, ValueWithExpiration
 
 logger = get_logger(__name__)
