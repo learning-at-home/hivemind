@@ -167,17 +167,17 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
         raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
 
-def quantile_encode_torch_approx(weight, n_bits: int):
+def quantile_encode_torch_approx(tensor: torch.Tensor, n_bits: int) -> Tuple[torch.Tensor, torch.Tensor]:
     n_bins = 2 ** n_bits
-    borders = torch.as_tensor(quantile_qq_approximation(weight.numpy(), n_bins + 1)[:-1])
-    quant_weight = torch.clamp_(torch.bucketize(weight, borders) - 1, 0, n_bins - 1)
-    bin_sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten(), weight.flatten())
+    borders = torch.as_tensor(quantile_qq_approximation(tensor.numpy(), n_bins + 1)[:-1])
+    quant_weight = torch.clamp_(torch.bucketize(tensor, borders) - 1, 0, n_bins - 1)
+    bin_sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten(), tensor.flatten())
     bin_counts = torch.clamp_min_(torch.bincount(quant_weight.flatten(), minlength=n_bins), 1)
     lookup = bin_sums / bin_counts
     return quant_weight, lookup
 
 
-def quantile_qq_approximation(array, n_quantiles, min_chunk_size: int = 10 ** 5, **kwargs):
+def quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size: int = 10 ** 5, **kwargs) -> np.ndarray:
     """ Estimate uniform quantiles of data using quantile-of-quantiles. Runs in parallel. """
     if not array.data.c_contiguous and array.data.f_contiguous:
         array = array.T
@@ -198,7 +198,7 @@ def quantile_qq_approximation(array, n_quantiles, min_chunk_size: int = 10 ** 5,
     return np.quantile(partition_quantiles, quantiles, **kwargs)
 
 
-def get_chunk_size(num_elements, min_chunk_size):
+def get_chunk_size(num_elements: int, min_chunk_size: int) -> int:
     """ Adjust chunk_size to minimize imbalance between chunk sizes """
     if min_chunk_size >= num_elements:
         return min_chunk_size
