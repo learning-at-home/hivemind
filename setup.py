@@ -72,7 +72,7 @@ def libp2p_build_install():
         tar.close()
 
         result = subprocess.run(['go', 'build', '-o', os.path.join(here, "hivemind/hivemind_cli", "p2pd")],
-                                cwd=os.path.join(tempdir, 'go-libp2p-daemon-master', 'p2pd'))
+                                cwd=os.path.join(tempdir, f'go-libp2p-daemon-{P2PD_VERSION[1:]}', 'p2pd'))
         if result.returncode:
             raise RuntimeError('Failed to build or install libp2p-daemon:'
                                f' exited with status code :{result.returncode}')
@@ -97,8 +97,8 @@ class Install(install):
 
 class Develop(develop):
     def run(self):
-        proto_compile(os.path.join('hivemind', 'proto'))
         libp2p_build_install()
+        proto_compile(os.path.join('hivemind', 'proto'))
         super().run()
 
 
