@@ -1,6 +1,12 @@
 """
 Utilities for running GRPC services: compile protobuf, patch legacy versions, etc
 """
+
+SIZE_OF_FLOAT32 = 4
+SIZE_OF_FLOAT16 = 2
+NUM_BITS_QUANTILE_COMPRESSION = 8
+NUM_QUANTILES_QUANTILE_COMPRESSION = 2 ** NUM_BITS_QUANTILE_COMPRESSION
+
 from __future__ import annotations
 
 import os
@@ -10,9 +16,9 @@ from typing import NamedTuple, Tuple, Optional, Union, Any, Dict, TypeVar, Type,
 import grpc
 import numpy as np
 import torch
-import hivemind
-from hivemind.proto.runtime_pb2 import CompressionType
 
+from hivemind import run_in_background
+from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto import runtime_pb2
 from hivemind.utils.logging import get_logger
 from hivemind.utils.networking import Endpoint
@@ -184,7 +190,7 @@ def quantile_qq_approximation(array, n_quantiles, min_chunk_size: int = 10 ** 5,
     jobs = []
     for i in range(num_chunks):
         chunk = slice(chunk_size * i, chunk_size * (i + 1))
-        jobs.append(hivemind.run_in_background(
+        jobs.append(run_in_background(
             np.quantile, array[chunk], quantiles, out=partition_quantiles[i], **kwargs))
 
     for job in jobs:
@@ -251,7 +257,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
     elif compression_type == CompressionType.QUANTILE_8BIT:
         assert tensor.dtype == torch.float32
 
-        quantized, lookup = quantile_encode_torch_approx(tensor.detach(), 8)
+        quantized, lookup = quantile_encode_torch_approx(tensor.detach(), NUM_BITS_QUANTILE_COMPRESSION)
         data = b''.join((lookup.numpy().tobytes(), quantized.numpy().astype(np.uint8).tobytes()))
 
         proto = runtime_pb2.Tensor(
@@ -275,18 +281,18 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
         stats_size = list(serialized_tensor.size)
         stats_size[-1] = 1
         stats_count = np.prod(stats_size)
-        means = serialized_tensor.buffer[-8 * stats_count:-4 * stats_count]
-        stds = serialized_tensor.buffer[-4 * stats_count:]
+        means = serialized_tensor.buffer[-2 * SIZE_OF_FLOAT32 * stats_count: -SIZE_OF_FLOAT32 * stats_count]
+        stds = serialized_tensor.buffer[-SIZE_OF_FLOAT32 * stats_count:]
         means = torch.as_tensor(np.frombuffer(means, dtype=np.float32).copy()).view(*stats_size)
         stds = torch.as_tensor(np.frombuffer(stds, dtype=np.float32).copy()).view(*stats_size)
-        array = np.frombuffer(serialized_tensor.buffer[:-8 * stats_count], dtype=np.float16).copy()
+        array = np.frombuffer(serialized_tensor.buffer[:-2 * SIZE_OF_FLOAT32 * stats_count], dtype=np.float16).copy()
         tensor = torch.as_tensor(array, dtype=torch.float32).view(*serialized_tensor.size).mul_(stds).add_(means)
     elif serialized_tensor.compression == CompressionType.FLOAT16:
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.float16).copy()
         tensor = torch.as_tensor(array, dtype=torch.float32).view(*serialized_tensor.size)
     elif serialized_tensor.compression == CompressionType.QUANTILE_8BIT:
-        lookup = serialized_tensor.buffer[:256*4]
-        quantized = serialized_tensor.buffer[256*4:]
+        lookup = serialized_tensor.buffer[:NUM_QUANTILES_QUANTILE_COMPRESSION * SIZE_OF_FLOAT32]
+        quantized = serialized_tensor.buffer[NUM_QUANTILES_QUANTILE_COMPRESSION * SIZE_OF_FLOAT32:]
         lookup = torch.as_tensor(np.frombuffer(lookup, dtype=np.float32).copy())
         quantized = torch.as_tensor(np.frombuffer(quantized, dtype=np.uint8).copy(),
                                     dtype=torch.int64).view(*serialized_tensor.size)
