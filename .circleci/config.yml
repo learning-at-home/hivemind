@@ -1,5 +1,10 @@
 version: 2.1
 
+parameters:
+  go-version:
+    type: string
+    default: 1.16.2
+
 jobs:
   build-and-test-py37:
     docker:
@@ -10,8 +15,8 @@ jobs:
           keys:
             - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: |
-          wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz
-          tar -C ~/ -xzf go1.16.2.linux-amd64.tar.gz
+          wget https://golang.org/dl/go<< go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          tar -C ~/ -xzf go.tar.gz
           echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
@@ -34,8 +39,8 @@ jobs:
           keys:
             - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: |
-          wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz
-          tar -C ~/ -xzf go1.16.2.linux-amd64.tar.gz
+          wget https://golang.org/dl/go<< go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          tar -C ~/ -xzf go.tar.gz
           echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
@@ -58,8 +63,8 @@ jobs:
           keys:
             - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: |
-          wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz
-          tar -C ~/ -xzf go1.16.2.linux-amd64.tar.gz
+          wget https://golang.org/dl/go<< go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          tar -C ~/ -xzf go.tar.gz
           echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
