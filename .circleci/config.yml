@@ -15,7 +15,7 @@ jobs:
           keys:
             - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: |
-          wget https://golang.org/dl/go<< go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          wget https://golang.org/dl/go<< pipeline.parameters.go-version >>.linux-amd64.tar.gz -O go.tar.gz
           tar -C ~/ -xzf go.tar.gz
           echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
@@ -39,7 +39,7 @@ jobs:
           keys:
             - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: |
-          wget https://golang.org/dl/go<< go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          wget https://golang.org/dl/go<< pipeline.parameters.go-version >>.linux-amd64.tar.gz -O go.tar.gz
           tar -C ~/ -xzf go.tar.gz
           echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
@@ -63,7 +63,7 @@ jobs:
           keys:
             - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: |
-          wget https://golang.org/dl/go<< go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          wget https://golang.org/dl/go<< pipeline.parameters.go-version >>.linux-amd64.tar.gz -O go.tar.gz
           tar -C ~/ -xzf go.tar.gz
           echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
