@@ -1,8 +1,10 @@
 from functools import partial
 from pathlib import Path
 
+import os
 import configargparse
 import torch
+import importlib
 
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.server import Server
@@ -11,6 +13,11 @@ from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+def add_custom_models_from_file(path):
+    spec = importlib.util.spec_from_file_location(
+        "custm_module", os.path.abspath(path))
+    foo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(foo)
 
 def main():
     # fmt:off
@@ -47,6 +54,9 @@ def main():
     parser.add_argument('--checkpoint_dir', type=Path, required=False, help='Directory to store expert checkpoints')
     parser.add_argument('--load_experts', action='store_true', help='Load experts from the checkpoint directory')
 
+    parser.add_argument('--custom_module_path', type=str, default=None, required=False,
+                        help='Path of a file with cutom nn.modules, wrapped into special decorator')
+
     # fmt:on
     args = vars(parser.parse_args())
     args.pop('config', None)
@@ -68,6 +78,10 @@ def main():
         compression = CompressionType.MEANSTD_LAST_AXIS_FLOAT16
     else:
         compression = getattr(CompressionType, compression_type)
+
+    custom_module_path = args.pop('custom_module_path')
+    if custom_module_path is not None:
+        add_custom_models_from_file(custom_module_path)
 
     server = Server.create(**args, optim_cls=optim_cls, start=True, compression=compression)
 

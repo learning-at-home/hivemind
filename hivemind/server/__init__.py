@@ -103,7 +103,7 @@ class Server(threading.Thread):
         """
         if len(kwargs) != 0:
             logger.info("Ignored kwargs:", kwargs)
-        assert expert_cls in name_to_block
+        # assert expert_cls in name_to_block
 
         if no_dht:
             dht = None
