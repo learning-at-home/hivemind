@@ -32,7 +32,8 @@ class P2P(object):
 
     @classmethod
     async def create(cls, *args, quic=1, tls=1, conn_manager=1, dht_client=1,
-                     nat_port_map=True, auto_nat=True, bootstrap=True, **kwargs):
+                     nat_port_map=True, auto_nat=True, bootstrap=True,
+                     host_port=None, daemon_listen_port=None, **kwargs):
         self = cls()
         p2pd_path = Path(__file__).resolve().parents[1] / P2P.P2PD_RELATIVE_PATH
         proc_args = self._make_process_args(
@@ -40,6 +41,7 @@ class P2P(object):
             quic=quic, tls=tls, connManager=conn_manager,
             dhtClient=dht_client, natPortMap=nat_port_map,
             autonat=auto_nat, b=bootstrap, **kwargs)
+        self._assign_daemon_ports(host_port, daemon_listen_port)
         for try_count in range(self.NUM_RETRIES):
             try:
                 self._initialize(proc_args)
@@ -48,13 +50,12 @@ class P2P(object):
                 self._kill_child()
                 if try_count == P2P.NUM_RETRIES - 1:
                     raise
+                self._assign_daemon_ports()
                 continue
             break
         return self
 
     def _initialize(self, proc_args: tp.List[str]) -> None:
-        self._host_port = find_open_port()
-        self._daemon_listen_port = find_open_port()
         proc_args = copy.deepcopy(proc_args)
         proc_args.extend(self._make_process_args(
             hostAddrs=f'/ip4/0.0.0.0/tcp/{self._host_port},/ip4/0.0.0.0/udp/{self._host_port}/quic',
@@ -77,6 +78,17 @@ class P2P(object):
             self.id = encoded[0].to_base58()
         except Exception:
             raise
+
+    def _assign_daemon_ports(self, host_port=None, daemon_listen_port=None):
+        self._host_port, self._daemon_listen_port = host_port, daemon_listen_port
+        if host_port is None:
+            self._host_port = find_open_port()
+            if daemon_listen_port is None:
+                self._daemon_listen_port = find_open_port()
+                while self._daemon_listen_port == self._host_port:
+                    self._daemon_listen_port = find_open_port()
+        if daemon_listen_port is None:
+            self._daemon_listen_port = find_open_port()
 
     @staticmethod
     async def send_data(data, stream):
