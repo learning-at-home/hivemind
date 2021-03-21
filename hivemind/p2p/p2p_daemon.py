@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import copy
 from pathlib import Path
@@ -5,7 +6,7 @@ import pickle
 import socket
 import subprocess
 import typing as tp
-import asyncio
+import warnings
 
 from multiaddr import Multiaddr
 import p2pclient
@@ -28,12 +29,13 @@ class P2P(object):
     def __init__(self):
         self._child = None
         self._listen_task = None
-        self._listen_event = asyncio.Event()
+        self._server_stopped = asyncio.Event()
+        self._buffer = bytearray()
 
     @classmethod
     async def create(cls, *args, quic=1, tls=1, conn_manager=1, dht_client=1,
                      nat_port_map=True, auto_nat=True, bootstrap=True,
-                     host_port=None, daemon_listen_port=None, **kwargs):
+                     host_port: int = None, daemon_listen_port: int = None, **kwargs):
         self = cls()
         p2pd_path = Path(__file__).resolve().parents[1] / P2P.P2PD_RELATIVE_PATH
         proc_args = self._make_process_args(
@@ -46,7 +48,8 @@ class P2P(object):
             try:
                 self._initialize(proc_args)
                 await self._identify_client(P2P.RETRY_DELAY * (2 ** try_count))
-            except Exception:
+            except Exception as exc:
+                warnings.warn("Failed to initialize p2p daemon: " + str(exc), RuntimeWarning)
                 self._kill_child()
                 if try_count == P2P.NUM_RETRIES - 1:
                     raise
@@ -73,22 +76,17 @@ class P2P(object):
 
     async def _identify_client(self, delay):
         await asyncio.sleep(delay)
-        try:
-            encoded = await self._client.identify()
-            self.id = encoded[0].to_base58()
-        except Exception:
-            raise
+        encoded = await self._client.identify()
+        self.id = encoded[0].to_base58()
 
     def _assign_daemon_ports(self, host_port=None, daemon_listen_port=None):
         self._host_port, self._daemon_listen_port = host_port, daemon_listen_port
         if host_port is None:
             self._host_port = find_open_port()
-            if daemon_listen_port is None:
-                self._daemon_listen_port = find_open_port()
-                while self._daemon_listen_port == self._host_port:
-                    self._daemon_listen_port = find_open_port()
         if daemon_listen_port is None:
             self._daemon_listen_port = find_open_port()
+            while self._daemon_listen_port == self._host_port:
+                self._daemon_listen_port = find_open_port()
 
     @staticmethod
     async def send_data(data, stream):
@@ -96,23 +94,36 @@ class P2P(object):
         request = len(byte_str).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER) + byte_str
         await stream.send_all(request)
 
-    async def receive_data(self, stream, max_bytes=(1 << 16)):
-        data = await stream.receive_some(max_bytes)
-        content_length = int.from_bytes(data[:P2P.HEADER_LEN], P2P.BYTEORDER)
-        chunks = [data[P2P.HEADER_LEN:]]
-        curr_length = len(data) - P2P.HEADER_LEN
+    class IncompleteRead(Exception):
+        pass
 
-        while curr_length < content_length:
+    async def _receive_exactly(self, stream, n_bytes, max_bytes=1 << 16):
+        while len(self._buffer) < n_bytes:
             data = await stream.receive_some(max_bytes)
-            chunks.append(data)
-            curr_length += len(data)
+            if len(data) == 0:
+                raise P2P.IncompleteRead()
+            self._buffer.extend(data)
 
-        return pickle.loads(b''.join(chunks))
+        result = self._buffer[:n_bytes]
+        self._buffer = self._buffer[n_bytes:]
+        return bytes(result)
+
+    async def receive_data(self, stream, max_bytes=(1 < 16)):
+        header = await self._receive_exactly(stream, P2P.HEADER_LEN)
+        content_length = int.from_bytes(header, P2P.BYTEORDER)
+        data = await self._receive_exactly(stream, content_length)
+        return pickle.loads(data)
 
     def _handle_stream(self, handle):
         async def do_handle_stream(stream_info, stream):
             try:
                 request = await self.receive_data(stream)
+            except P2P.IncompleteRead:
+                warnings.warn("Incomplete read while receiving request from peer", RuntimeWarning)
+                return
+            finally:
+                stream.close()
+            try:
                 result = handle(request)
                 await self.send_data(result, stream)
             except Exception as exc:
@@ -125,19 +136,19 @@ class P2P(object):
     def start_listening(self):
         async def listen():
             async with self._client.listen():
-                await self._listen_event.wait()
+                await self._server_stopped.wait()
 
         self._listen_task = asyncio.create_task(listen())
 
     async def stop_listening(self):
         if self._listen_task is not None:
-            self._listen_event.set()
+            self._server_stopped.set()
             self._listen_task.cancel()
             try:
                 await self._listen_task
             except asyncio.CancelledError:
                 self._listen_task = None
-                self._listen_event.clear()
+                self._server_stopped.clear()
 
     async def add_stream_handler(self, name, handle):
         if self._listen_task is None:
@@ -168,7 +179,7 @@ class P2P(object):
             str(entry) for entry in args
         )
         proc_args.extend(
-            f'-{key}={str(value)}' if value is not None else f'-{key}'
+            f'-{key}={value}' if value is not None else f'-{key}'
             for key, value in kwargs.items()
         )
         return proc_args
