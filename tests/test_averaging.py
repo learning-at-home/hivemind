@@ -42,8 +42,13 @@ async def test_key_manager():
 
 
 @pytest.mark.forked
-def test_allreduce_once():
+@pytest.mark.parametrize("n_client_mode_peers", [0, 2])
+def test_allreduce_once(n_client_mode_peers):
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+
+    n_peers = 4
+    should_listen = [False] * n_client_mode_peers + [True] * (n_peers - n_client_mode_peers)
+    random.shuffle(should_listen)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
@@ -53,9 +58,9 @@ def test_allreduce_once():
     reference = [(tensors1[i] + tensors2[i] + tensors3[i] + tensors4[i]) / 4 for i in range(len(tensors1))]
 
     averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
-                                                prefix='mygroup', listen_on='127.0.0.1:*',
+                                                prefix='mygroup', listen=listen, listen_on='127.0.0.1:*',
                                                 start=True)
-                 for tensors in [tensors1, tensors2, tensors3, tensors4]]
+                 for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)]
 
     futures = []
     for averager in averagers:
@@ -111,25 +116,6 @@ def test_allreduce_grid():
             assert torch.all(torch.le(stds, prev_stds))
         else:
             assert torch.allclose(stds, torch.zeros_like(stds), atol=1e-6, rtol=0)
-
-    for averager in averagers:
-        averager.shutdown()
-    dht.shutdown()
-
-
-@pytest.mark.forked
-def test_allreduce_client_ugly_please_replace():
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
-    tensors = [torch.randn(10) for _ in range(4)]
-    averagers = [hivemind.DecentralizedAverager(
-        averaged_tensors=[tensors[i]], dht=dht, target_group_size=4,
-        listen=i % 3 != 0, prefix='mygroup', initial_group_bits='', averaging_expiration=5.0, start=True)
-        for i in range(4)]
-
-    for i in range(3):
-        step_futures = [averager.step(wait=False) for averager in averagers]
-        assert all(future.result() is not None for future in step_futures)
-        #TODO test correctness
 
     for averager in averagers:
         averager.shutdown()

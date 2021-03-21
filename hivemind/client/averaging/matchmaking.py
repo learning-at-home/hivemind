@@ -29,19 +29,19 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
     f"""
     An internal class that is used to form groups of averages for running allreduce
     See DecentralizedAverager docstring for the detailed description of all parameters
-    
+
     :note: on implementation: the current matchmaker protocol can encounter one type of (temporary) deadlock;
       This deadlock occurs when averager A requests averager B at the same time as averager B requests averager A.
       In that case, neither averager can process the other one's request because it is awaiting lock_request_join_group.
-      This deadlock only happens if averagers have outdated information on expirations (due to network delays). 
+      This deadlock only happens if averagers have outdated information on expirations (due to network delays).
       While A->B->A deadlock is easy to fix, it gets much harder with more peers (e.g. A -> B -> C -> D -> A).
       Hence, instead of accounting for such deadlocks, we simply break them with request_timeout.
     """
 
     def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: DHT, *,
-                 prefix: str, target_group_size: int, min_group_size: int, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, request_timeout: float, throughput: Optional[float] = None,
-                 client_mode: bool, min_vector_size: int, **allreduce_kwargs):
+                 prefix: str, target_group_size: int, min_group_size: int, min_vector_size: int,
+                 request_timeout: float, client_mode: bool, initial_group_bits: Optional[str] = None,
+                 averaging_expiration: float = 15, throughput: Optional[float] = None, **allreduce_kwargs):
         assert '.' not in prefix, "group prefix must be a string without ."
         if request_timeout is None or request_timeout >= averaging_expiration:
             logger.warning("It is recommended to use request_timeout smaller than averaging_expiration. Otherwise,"

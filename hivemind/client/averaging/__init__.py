@@ -124,6 +124,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
         self._averager_endpoint: Optional[Endpoint] = None
+        if not self.listen:
+            self._averager_endpoint = f'client::{uuid.uuid4()}'
+
         self.ready = mp.Event()  # whether the averager process has started (and ready for incoming requests)
         # note: we create a background thread weakref and with daemon=True to ensure garbage collection
         background_fetcher = threading.Thread(
@@ -138,14 +141,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return self._port.value if self._port.value != 0 else None
 
     @property
-    def endpoint(self) -> Endpoint:
-        if self._averager_endpoint is None:
-            if self.listen:
-                assert self.port is not None, "Averager is not running yet"
-                self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
-                logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
-            else:
-                self._averager_endpoint = f'client::{uuid.uuid4()}'
+    def endpoint(self) -> Optional[Endpoint]:
+        if self.listen and self._averager_endpoint is None:
+            assert self.port is not None, "Averager is not running yet"
+            self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
+            logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
         return self._averager_endpoint
 
     def __repr__(self):
@@ -168,7 +168,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 self._port.value = found_port
                 await server.start()
             else:
-                logger.info(f"[experimental] The averager running in client mode, please report any bugs.")
+                logger.info(f"The averager running in an experimental client mode, please report any bugs.")
 
             self._matchmaking = Matchmaking(self.endpoint, self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
                                             client_mode=not self.listen, return_deltas=True)
