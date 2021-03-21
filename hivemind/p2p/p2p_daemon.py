@@ -96,8 +96,7 @@ class P2P(object):
         request = len(byte_str).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER) + byte_str
         await stream.send_all(request)
 
-    @staticmethod
-    async def receive_data(stream, max_bytes=(1 << 16)):
+    async def receive_data(self, stream, max_bytes=(1 << 16)):
         data = await stream.receive_some(max_bytes)
         content_length = int.from_bytes(data[:P2P.HEADER_LEN], P2P.BYTEORDER)
         chunks = [data[P2P.HEADER_LEN:]]
@@ -110,15 +109,14 @@ class P2P(object):
 
         return pickle.loads(b''.join(chunks))
 
-    @staticmethod
-    def _handle_stream(handle):
+    def _handle_stream(self, handle):
         async def do_handle_stream(stream_info, stream):
             try:
-                request = await P2P.receive_data(stream)
+                request = await self.receive_data(stream)
                 result = handle(request)
-                await P2P.send_data(result, stream)
+                await self.send_data(result, stream)
             except Exception as exc:
-                await P2P.send_data(exc, stream)
+                await self.send_data(exc, stream)
             finally:
                 await stream.close()
 
@@ -145,14 +143,14 @@ class P2P(object):
         if self._listen_task is None:
             self.start_listening()
 
-        await self._client.stream_handler(name, P2P._handle_stream(handle))
+        await self._client.stream_handler(name, self._handle_stream(handle))
 
     async def call_peer_handler(self, peer_id, handler_name, input_data):
         libp2p_peer_id = ID.from_base58(peer_id)
         stream_info, stream = await self._client.stream_open(libp2p_peer_id, (handler_name,))
         try:
-            await P2P.send_data(input_data, stream)
-            return await P2P.receive_data(stream)
+            await self.send_data(input_data, stream)
+            return await self.receive_data(stream)
         finally:
             await stream.close()
 

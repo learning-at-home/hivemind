@@ -32,7 +32,7 @@ async def test_daemon_killed_on_del():
     child_pid = p2p_daemon._child.pid
     assert is_process_running(child_pid)
 
-    del p2p_daemon
+    p2p_daemon.__del__()
     assert not is_process_running(child_pid)
 
 
@@ -72,10 +72,10 @@ async def test_call_peer_single_process(test_input, handle, handler_name="handle
     assert result == handle(test_input)
 
     await server.stop_listening()
-    del server
+    server.__del__()
     assert not is_process_running(server_pid)
 
-    del client
+    client.__del__()
     assert not is_process_running(client_pid)
 
 
@@ -99,7 +99,7 @@ async def test_call_peer_different_processes():
             await asyncio.sleep(0.5)
 
         await server.stop_listening()
-        del server
+        server.__del__()
         assert not is_process_running(server_pid)
 
     def server_target():
@@ -119,7 +119,7 @@ async def test_call_peer_different_processes():
     assert np.allclose(result, handle_square(test_input))
     response_received.value = 1
 
-    del client
+    client.__del__()
     assert not is_process_running(client_pid)
 
     proc.join()
