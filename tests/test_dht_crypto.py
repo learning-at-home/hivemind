@@ -6,28 +6,31 @@ import pytest
 from hivemind.dht.crypto import ProtectedRecord, RSASignatureValidator
 
 
-def test_rsa_validator_on_correct_signature():
+def test_rsa_signature_validator():
     sender_validator = RSASignatureValidator()
     plain_record = ProtectedRecord(key=b'key', subkey=b'subkey', value=b'value',
                                    expiration_time=time.time())
-    protected_record = dataclasses.replace(
-        plain_record, key=plain_record.key + sender_validator.ownership_marker)
-    signature = sender_validator.sign(protected_record)
+    protected_records = [
+        dataclasses.replace(plain_record,
+                            key=plain_record.key + sender_validator.ownership_marker),
+        dataclasses.replace(plain_record,
+                            subkey=plain_record.subkey + sender_validator.ownership_marker),
+    ]
+    signatures = [sender_validator.sign(record) for record in protected_records]
 
     receiver_validator = RSASignatureValidator()
+
+    # test 1: Non-protected record
     receiver_validator.validate(plain_record, b'')
-    receiver_validator.validate(protected_record, signature)
 
+    # test 2: Correct signatures
+    for record, signature in zip(protected_records, signatures):
+        receiver_validator.validate(record, signature)
 
-def test_rsa_validator_on_fake_signatures():
-    sender_validator = RSASignatureValidator()
-    original_record = ProtectedRecord(key=b'key' + sender_validator.ownership_marker,
-                                      subkey=b'subkey', value=b'true_value',
-                                      expiration_time=time.time())
-    fake_record = dataclasses.replace(original_record, value=b'fake_value')
-    fake_signatures = [b'', b'arbitrary_bytes', sender_validator.sign(fake_record)]
+    # test 3: Invalid signatures
+    for record in protected_records:
+        record = dataclasses.replace(record, value=b'Mallory_changed_this_value')
 
-    receiver_validator = RSASignatureValidator()
-    for signature in fake_signatures:
-        with pytest.raises(ValueError):
-            receiver_validator.validate(original_record, signature)
+        for signature in signatures + [b'', b'arbitrary_bytes']:
+            with pytest.raises(ValueError):
+                receiver_validator.validate(record, signature)
