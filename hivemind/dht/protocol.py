@@ -211,7 +211,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             signatures = [self.record_validator.sign(ProtectedRecord(*record))
                           for record in zip(keys, subkeys, values, expiration_time)]
         else:
-            signatures = [None] * len(keys)
+            signatures = [b''] * len(keys)
 
         store_request = dht_pb2.StoreRequest(keys=keys, subkeys=subkeys, values=values,
                                              expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info,
@@ -234,8 +234,9 @@ class DHTProtocol(dht_grpc.DHTServicer):
             asyncio.create_task(self.rpc_ping(dht_pb2.PingRequest(peer=request.peer), context))
         assert len(request.keys) == len(request.values) == len(request.expiration_time) == len(request.in_cache)
         response = dht_pb2.StoreResponse(store_ok=[], peer=self.node_info)
-        for key, tag, value_bytes, expiration_time, in_cache in zip(
-                keys, request.subkeys, request.values, request.expiration_time, request.in_cache):
+        for key, tag, value_bytes, expiration_time, in_cache, signature in zip(
+                request.keys, request.subkeys, request.values, request.expiration_time,
+                request.in_cache, request.signatures):
             if self.record_validator is not None:
                 record = ProtectedRecord(key, tag, value_bytes, expiration_time)
                 try:
