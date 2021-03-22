@@ -7,13 +7,12 @@ from typing import Optional, List, Tuple, Dict, Any, Sequence, Union, Collection
 
 import grpc
 
+from hivemind.dht.crypto import ProtectedRecord, RecordValidatorBase
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
-from hivemind.utils import (
-    ChannelCache, Endpoint, GRPC_KEEPALIVE_OPTIONS, MAX_DHT_TIME_DISCREPANCY_SECONDS,
-    MSGPackSerializer, ProtectedRecord, RecordValidatorBase, ValueWithExpiration,
-    get_dht_time, get_logger, replace_port)
+from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer, ChannelCache, ValueWithExpiration
+from hivemind.utils import get_dht_time, GRPC_KEEPALIVE_OPTIONS, MAX_DHT_TIME_DISCREPANCY_SECONDS
 
 logger = get_logger(__name__)
 
@@ -238,9 +237,11 @@ class DHTProtocol(dht_grpc.DHTServicer):
         for key, tag, value_bytes, expiration_time, in_cache in zip(
                 keys, request.subkeys, request.values, request.expiration_time, request.in_cache):
             if self.record_validator is not None:
+                record = ProtectedRecord(key, tag, value_bytes, expiration_time)
                 try:
-                    self.record_validator.validate(ProtectedRecord(*record), signature)
-                except InvalidSignature:
+                    self.record_validator.validate(record, signature)
+                except ValueError as e:
+                    logger.warning(f'Validation failed with message "{e}" on {record}')
                     response.store_ok.append(False)
                     continue
 

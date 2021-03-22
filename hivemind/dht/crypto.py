@@ -12,13 +12,20 @@ from hivemind.utils.serializer import MSGPackSerializer
 @dataclass(init=True, repr=True, frozen=True)
 class ProtectedRecord:
     key: bytes
-    subkey: bytes
+    subkey: Optional[bytes]
     value: bytes
     expiration_time: float
 
 
 class RecordValidatorBase:
-    def validate(self, record: ProtectedRecord) -> bool:
+    def validate(self, record: ProtectedRecord) -> None:
+        """
+        If validation is successful, returns None.
+        If it is not, raises ValueError with the reason.
+
+        This method must not raise exceptions that are not inherited from ValueError for any input.
+        """
+
         raise NotImplementedError()
 
     def sign(self, record: ProtectedRecord) -> bytes:
@@ -62,16 +69,17 @@ class RSASignatureValidator(RecordValidatorBase):
             return
 
         if signature is None:
-            raise InvalidSignature('Signature is required but not present')
+            raise ValueError('Signature is required but not present')
         if len(set(public_keys)) > 1:
-            raise InvalidSignature("Key and subkey can't contain different public keys")
-        try:
-            public_key = serialization.load_ssh_public_key(public_keys[0])
-        except ValueError as e:
-            raise InvalidSignature(f'Failed to deserialize public key: {e}')
+            raise ValueError("Key and subkey can't contain different public keys")
+        public_key = serialization.load_ssh_public_key(public_keys[0])
 
-        public_key.verify(signature, self._serialize_record(record),
-                          self._padding, self._hash_algorithm)
+        try:
+            public_key.verify(signature, self._serialize_record(record),
+                              self._padding, self._hash_algorithm)
+            # verify() returns None iff the signature is correct
+        except InvalidSignature:
+            raise ValueError('Invalid signature')
 
     def sign(self, record: ProtectedRecord) -> Optional[bytes]:
         if self._our_marker not in record.key and self._our_marker not in record.subkey:

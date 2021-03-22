@@ -9,12 +9,12 @@ from typing import Optional, Tuple, List, Dict, DefaultDict, Collection, Union, 
 
 from sortedcontainers import SortedSet
 
+from hivemind.dht.crypto import RecordValidatorBase
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.dht.traverse import traverse_dht
-from hivemind.utils import (
-    Endpoint, LOCALHOST, MSGPackSerializer, RecordValidatorBase, SerializerBase, get_logger)
+from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase
 from hivemind.utils.timed_storage import TimedStorage, ValueWithExpiration
 
 logger = get_logger(__name__)
