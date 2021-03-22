@@ -18,7 +18,7 @@ class ProtectedRecord:
 
 
 class RecordValidatorBase:
-    def validate(self, record: ProtectedRecord) -> None:
+    def validate(self, record: ProtectedRecord, signature: bytes) -> None:
         """
         If validation is successful, returns None.
         If it is not, raises ValueError with the reason.
@@ -59,7 +59,7 @@ class RSASignatureValidator(RecordValidatorBase):
     def ownership_marker(self) -> bytes:
         return self._our_marker
 
-    def validate(self, record: ProtectedRecord, signature: Optional[bytes]) -> None:
+    def validate(self, record: ProtectedRecord, signature: bytes) -> None:
         self._marker_re.findall(record.key)
 
         public_keys = self._marker_re.findall(record.key)
