@@ -31,6 +31,12 @@ def test_get_store():
     assert node1.get('key1', latest=True).value == 123
     assert node1.get('key2').value == 456
 
+    assert node1.store('key2', subkey='subkey1', value=789, expiration_time=hivemind.get_dht_time() + 32)
+    assert node2.store('key2', subkey='subkey2', value='pew', expiration_time=hivemind.get_dht_time() + 32)
+    found_dict = node1.get('key2', latest=True).value
+    assert isinstance(found_dict, dict) and len(found_dict) == 2
+    assert found_dict['subkey1'].value == 789 and found_dict['subkey2'].value == 'pew'
+
     for peer in peers:
         peer.shutdown()
 
