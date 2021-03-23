@@ -36,6 +36,7 @@ message JoinRequest {
   double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time
   bytes gather = 4;             // optional metadata that is gathered from all peers (e.g. batch size or current loss)
   float throughput = 5;         // Follower has this bandwidth for averaging (0 = default, negative = client only)
+  bool client_mode = 6;         // if True, the incoming averager is a client with no capacity for averaging
 }
 
 message MessageFromLeader {
