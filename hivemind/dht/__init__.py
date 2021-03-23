@@ -20,15 +20,18 @@ import multiprocessing as mp
 import re
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set
-
+from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, NamedTuple, Iterator, Set, Callable, Awaitable, \
+    Any, TypeVar
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import get_dht_time, DHTValue, DHTKey, Subkey
-from hivemind.utils import MPFuture, Endpoint, Hostname, get_logger, switch_to_uvloop, strip_port, ValueWithExpiration
+from hivemind.utils import MPFuture, Endpoint, Hostname, get_logger, switch_to_uvloop, strip_port, ValueWithExpiration, \
+    await_cancelled
 
 logger = get_logger(__name__)
+
+ReturnType = TypeVar('ReturnType')
 
 ExpertUID, ExpertPrefix, Coordinate, Score = str, str, int, float
 UidEndpoint = NamedTuple("UidEndpoint", [('uid', ExpertUID), ('endpoint', Endpoint)])
@@ -220,6 +223,37 @@ class DHT(mp.Process):
             if not future.done():
                 future.set_exception(e)
             raise
+
+    def run_coroutine(self, coro: Callable[[DHT, DHTNode], Awaitable[ReturnType]],
+                      return_future: bool = False) -> Union[ReturnType, MPFuture[ReturnType]]:
+        """
+        Execute an asynchronous function on a DHT participant and return results. This is meant as a generic interface
+         for user-defined functions with DHT (e.g. batch store, beam search)
+
+        :param coro: async function to be executed. Receives 2 arguments: this DHT daemon and a running DHTNode
+        :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
+        :returns: coroutine outputs or MPFuture for these outputs
+        :note: the coroutine will be executed inside the DHT process. As such, any changes to global variables or
+          DHT fields made by this coroutine will not be accessible from the host process.
+        :note: when run_coroutine is called with wait=False, MPFuture can be cancelled to interrupt the task.
+        """
+        future, _future = MPFuture.make_pair()
+        self.pipe.send(('_run_coroutine', [], dict(coro=coro, future=_future)))
+        return future if return_future else future.result()
+
+    async def _run_coroutine(self, node: DHTNode, coro: Callable[[DHT, DHTNode], Awaitable[ReturnType]],
+                             future: MPFuture[ReturnType]):
+        main_task = asyncio.create_task(coro(self, node))
+        cancel_task = asyncio.create_task(await_cancelled(future))
+        try:
+            await asyncio.wait({main_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED)
+            if future.cancelled():
+                main_task.cancel()
+            else:
+                future.set_result(await main_task)
+        except BaseException as e:
+            if not future.done():
+                future.set_exception(e)
 
     def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
         """
