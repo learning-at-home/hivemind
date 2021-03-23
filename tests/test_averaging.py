@@ -42,8 +42,13 @@ async def test_key_manager():
 
 
 @pytest.mark.forked
-def test_allreduce_once():
+@pytest.mark.parametrize("n_client_mode_peers", [0, 2])
+def test_allreduce_once(n_client_mode_peers):
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+
+    n_peers = 4
+    should_listen = [False] * n_client_mode_peers + [True] * (n_peers - n_client_mode_peers)
+    random.shuffle(should_listen)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
@@ -53,9 +58,9 @@ def test_allreduce_once():
     reference = [(tensors1[i] + tensors2[i] + tensors3[i] + tensors4[i]) / 4 for i in range(len(tensors1))]
 
     averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
-                                                prefix='mygroup', listen_on='127.0.0.1:*',
+                                                prefix='mygroup', listen=listen, listen_on='127.0.0.1:*',
                                                 start=True)
-                 for tensors in [tensors1, tensors2, tensors3, tensors4]]
+                 for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)]
 
     futures = []
     for averager in averagers:
@@ -120,7 +125,7 @@ def test_allreduce_grid():
 @pytest.mark.forked
 def test_allgather():
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
-    averagers = [hivemind.DecentralizedAverager(torch.ones(1), dht=dht, target_group_size=4, averaging_expiration=15,
+    averagers = [hivemind.DecentralizedAverager([torch.ones(1)], dht=dht, target_group_size=4, averaging_expiration=15,
                                                 prefix='mygroup', initial_group_bits='000', listen_on='127.0.0.1:*',
                                                 start=True)
                  for _ in range(8)]
@@ -150,7 +155,7 @@ def test_allgather():
 @pytest.mark.asyncio
 async def test_allreduce_protocol():
     """ Run group allreduce protocol manually without grpc, see if the internal logic is working as intended """
-    peers = "alice", "bob", "carol"
+    peers = "alice", "bob", "carol", "colab"
 
     tensors_by_peer = {peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
                        for i, peer in enumerate(peers)}
@@ -158,7 +163,7 @@ async def test_allreduce_protocol():
     group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
     allreduce_protocols = [AllReduceProtocol(
         group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer],
-        ordered_group_endpoints=peers, part_sizes=(150, 200, 67))
+        ordered_group_endpoints=peers, part_sizes=(150, 200, 67, 0))
         for peer in peers]
 
     async def _accumulate(sender: Endpoint, recipient: Endpoint):
@@ -169,7 +174,7 @@ async def test_allreduce_protocol():
         sender_allreduce.register_averaged_part(source=recipient, averaged_part=averaged_part)
 
     await asyncio.wait({_accumulate(sender, recipient) for sender in peers for recipient in peers
-                        if sender != recipient})
+                        if sender != recipient and recipient != "colab"})
 
     reference_tensors = [
         sum(tensors_by_peer[peer][i] for peer in peers) / len(peers)
