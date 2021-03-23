@@ -16,14 +16,15 @@ def test_rsa_signature_validator():
         dataclasses.replace(plain_record,
                             subkey=plain_record.subkey + sender_validator.ownership_marker),
     ]
-    signatures = [sender_validator.sign(record) for record in protected_records]
 
     receiver_validator = RSASignatureValidator()
 
     # test 1: Non-protected record
+    assert sender_validator.sign(plain_record) == b''
     receiver_validator.validate(plain_record, b'')
 
     # test 2: Correct signatures
+    signatures = [sender_validator.sign(record) for record in protected_records]
     for record, signature in zip(protected_records, signatures):
         receiver_validator.validate(record, signature)
 

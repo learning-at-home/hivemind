@@ -12,7 +12,7 @@ from hivemind.utils.serializer import MSGPackSerializer
 @dataclass(init=True, repr=True, frozen=True)
 class ProtectedRecord:
     key: bytes
-    subkey: Optional[bytes]
+    subkey: bytes
     value: bytes
     expiration_time: float
 
@@ -60,8 +60,6 @@ class RSASignatureValidator(RecordValidatorBase):
         return self._our_marker
 
     def validate(self, record: ProtectedRecord, signature: bytes) -> None:
-        self._marker_re.findall(record.key)
-
         public_keys = self._marker_re.findall(record.key)
         if record.subkey is not None:
             public_keys += self._marker_re.findall(record.subkey)
@@ -81,9 +79,9 @@ class RSASignatureValidator(RecordValidatorBase):
         except InvalidSignature:
             raise ValueError('Invalid signature')
 
-    def sign(self, record: ProtectedRecord) -> Optional[bytes]:
+    def sign(self, record: ProtectedRecord) -> bytes:
         if self._our_marker not in record.key and self._our_marker not in record.subkey:
-            return None
+            return b''
 
         return self._private_key.sign(self._serialize_record(record),
                                       self._padding, self._hash_algorithm)
