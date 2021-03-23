@@ -35,7 +35,7 @@ message JoinRequest {
   bytes schema_hash = 2;        // A hash that describes follower's tensors (shapes, num tensors, etc)
   double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time
   bytes gather = 4;             // optional metadata that is gathered from all peers (e.g. batch size or current loss)
-  float throughput = 5;         // Follower has this bandwidth for averaging (0 = default, negative = client only)
+  float throughput = 5;         // Follower has this bandwidth for averaging (-1 = default, 0 = client only)
   bool client_mode = 6;         // if True, the incoming averager is a client with no capacity for averaging
 }
 
