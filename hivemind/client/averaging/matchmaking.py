@@ -166,8 +166,8 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time,
-                    throughput=0.0 if self.client_mode else (self.throughput if self.throughput is not None else -1.0),
-                    gather=self.data_for_gather))
+                    throughput=self.throughput if self.throughput is not None else -1.0,
+                    client_mode=self.client_mode, gather=self.data_for_gather))
                 message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
 
                 if message.code == averaging_pb2.ACCEPTED:
@@ -305,17 +305,19 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         ordered_group_endpoints.append(self.endpoint)
         random.shuffle(ordered_group_endpoints)
 
-        throughputs, gathered = [], []
+        averager_throughputs, gathered = [], []
         for endpoint in ordered_group_endpoints:
             if endpoint == self.endpoint:
-                throughputs.append(self.throughput)
+                averager_throughputs.append(self.throughput)
                 gathered.append(self.data_for_gather)
             else:
                 follower_info = self.current_followers[endpoint]
-                throughputs.append(follower_info.throughput if follower_info.throughput >= 0 else None)
+                throughput = follower_info.throughput if follower_info.throughput >= 0 else None
+                averager_throughput = throughput if not follower_info.client_mode else 0.0
+                averager_throughputs.append(averager_throughput)
                 gathered.append(follower_info.gather if follower_info.gather else None)
 
-        part_sizes = load_balance_peers(self.total_size, throughputs, self.min_vector_size)
+        part_sizes = load_balance_peers(self.total_size, averager_throughputs, self.min_vector_size)
         group_key_seed = random.randint(- 2 ** 31, 2 ** 31 - 1)
 
         logger.debug(f"{self.endpoint} - leader started allreduce for {len(ordered_group_endpoints)} peers.")
