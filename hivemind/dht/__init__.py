@@ -37,8 +37,8 @@ ReturnType = TypeVar('ReturnType')
 class DHT(mp.Process):
     """
     High-level interface to hivemind.dht that is designed to allow RemoteMixtureOfExperts to select best experts.
-    * hivemind servers periodically announce their experts via DHT.declare_experts
-    * trainers find most suitable experts via DHT.find_best_experts
+    * hivemind servers periodically announce their experts via declare_experts (dht_handler.py)
+    * trainers find most suitable experts via RemoteMixtureOfExperts (beam_saerch.py)
 
     :param initial_peers: one or multiple endpoints pointing to active DHT peers. Similar format to listen_on.
     :param listen_on: an interface for incoming connections, e.g. "127.0.0.1:*", "0.0.0.0:1234" or "ipv6:[::]:*"
@@ -178,7 +178,11 @@ class DHT(mp.Process):
               subkey: Optional[Subkey] = None, return_future: bool = False, **kwargs) -> Union[bool, MPFuture]:
         """
         Find num_replicas best nodes to store (key, value) and store it there until expiration time.
-        :note: store is a simplified interface to store_many, all kwargs are be forwarded there
+
+        :param key: msgpack-serializable key to be associated with value until expiration.
+        :param value: msgpack-serializable value to be stored under a given key until expiration.
+        :param expiration_time: absolute time when the entry should expire, based on hivemind.get_dht_time()
+        :param subkey: if specified, add a value under that subkey instead of overwriting key (see DHTNode.store_many)
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
@@ -201,14 +205,16 @@ class DHT(mp.Process):
     def run_coroutine(self, coro: Callable[[DHT, DHTNode], Awaitable[ReturnType]],
                       return_future: bool = False) -> Union[ReturnType, MPFuture[ReturnType]]:
         """
-        Execute an asynchronous function on a DHT participant and return results. This is meant as a generic interface
-         for user-defined functions with DHT (e.g. batch store, beam search)
+        Execute an asynchronous function on a DHT participant and return results. This is meant as an interface
+         for running custom functions DHT for special cases (e.g. declare experts, beam search)
 
         :param coro: async function to be executed. Receives 2 arguments: this DHT daemon and a running DHTNode
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         :returns: coroutine outputs or MPFuture for these outputs
         :note: the coroutine will be executed inside the DHT process. As such, any changes to global variables or
           DHT fields made by this coroutine will not be accessible from the host process.
+        :note: all time-consuming operations in coro should be asynchronous (e.g. asyncio.sleep instead of time.sleep)
+          or use asyncio.get_event_loop().run_in_executor(...) to prevent coroutine from blocking background DHT tasks
         :note: when run_coroutine is called with wait=False, MPFuture can be cancelled to interrupt the task.
         """
         future, _future = MPFuture.make_pair()
