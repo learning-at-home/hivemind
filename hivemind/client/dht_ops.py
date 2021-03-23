@@ -47,7 +47,7 @@ def get_experts(dht: DHT, uids: List[ExpertUID], expiration_time: Optional[DHTEx
     :returns: a list of [RemoteExpert if found else None]
     """
     assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
-    return dht.run_coroutine(partial(_declare_experts, uids=list(uids), expiration_time=expiration_time), return_future)
+    return dht.run_coroutine(partial(_get_experts, uids=list(uids), expiration_time=expiration_time), return_future)
 
 
 async def _get_experts(dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration]
