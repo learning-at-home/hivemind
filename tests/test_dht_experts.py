@@ -4,6 +4,8 @@ import pytest
 import asyncio
 
 import hivemind
+import hivemind.client.expert_uid
+import hivemind.client.dht_ops
 from hivemind import LOCALHOST, UidEndpoint
 
 
@@ -147,7 +149,7 @@ async def test_negative_caching():
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
     neg_caching_peer = hivemind.DHT(initial_peers=neighbors_i, negative_caching=True, cache_locally=False, start=True)
 
-    assert all(writer_peer.declare_experts(['ffn.1.2.3', 'ffn.3.4.5'], 'myaddr:1234').values())
+    assert all(hivemind.client.dht_ops.declare_experts(['ffn.1.2.3', 'ffn.3.4.5'], 'myaddr:1234').values())
     # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
     assert len(neg_caching_peer.get_initial_beam(prefix='ffn.', scores=[.1, .2, .3, .4, .5, .6], beam_size=3)) == 2
 

@@ -20,6 +20,7 @@ import multiprocessing as mp
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, Iterator, Set, Callable, Awaitable, TypeVar
+from deprecated import deprecated
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
@@ -36,7 +37,6 @@ ReturnType = TypeVar('ReturnType')
 class DHT(mp.Process):
     """
     High-level interface to hivemind.dht that is designed to allow RemoteMixtureOfExperts to select best experts.
-
     * hivemind servers periodically announce their experts via DHT.declare_experts
     * trainers find most suitable experts via DHT.find_best_experts
 
@@ -282,71 +282,16 @@ class DHT(mp.Process):
             future.set_exception(ValueError(f"Can't get address: DHT node has no peers and no public endpoint."
                                             f" Please ensure the node is connected or specify peers=... manually."))
 
-    def declare_experts(self, uids: Sequence[ExpertUID], endpoint: Endpoint, wait: bool = True,
-                        timeout: Optional[float] = None) -> Dict[ExpertUID, bool]:
-        """
-        Make experts visible to all DHT peers; update timestamps if declared previously.
+    @deprecated(version='0.9.5', reason="dht.declare_experts is deprecated, please use hivemind.declare_experts.")
+    def declare_experts(self, uids, endpoint, wait: bool = True):
+        from hivemind.client.dht_ops import declare_experts
+        return declare_experts(self, uids, endpoint, wait=wait)
 
-        :param uids: a list of expert ids to update
-        :param endpoint: endpoint that serves these experts, usually your server endpoint (e.g. "201.111.222.333:1337")
-        :param wait: if True, awaits for declaration to finish, otherwise runs in background
-        :param timeout: waits for the procedure to finish for up to this long, None means wait indefinitely
-        :returns: if wait, returns store status for every key (True = store succeeded, False = store rejected)
-        """
-        assert timeout is None
-        assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
-        for uid in uids:
-            assert is_valid_uid(uid), f"{uid} is not a valid expert uid. All uids must follow {UID_PATTERN.pattern}"
-        future, _future = MPFuture.make_pair() if wait else (None, None)
-        self.pipe.send(('_declare_experts', [], dict(uids=list(uids), endpoint=endpoint, future=_future)))
-        if wait:
-            return future.result(timeout)
-
-    async def _declare_experts(self, node: DHTNode, uids: List[ExpertUID], endpoint: Endpoint,
-                               future: Optional[MPFuture]) -> Dict[ExpertUID, bool]:
-        num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
-        expiration_time = get_dht_time() + self.expiration
-        data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
-        for uid in uids:
-            data_to_store[uid, None] = endpoint
-            prefix = uid if uid.count(UID_DELIMITER) > 1 else f'{uid}{UID_DELIMITER}{FLAT_EXPERT}'
-            for i in range(prefix.count(UID_DELIMITER) - 1):
-                prefix, last_coord = split_uid(prefix)
-                data_to_store[prefix, last_coord] = [uid, endpoint]
-
-        keys, maybe_subkeys, values = zip(*((key, subkey, value) for (key, subkey), value in data_to_store.items()))
-        store_ok = await node.store_many(keys, values, expiration_time, subkeys=maybe_subkeys, num_workers=num_workers)
-        if future is not None:
-            future.set_result(store_ok)
-        return store_ok
-
+    @deprecated(version='0.9.5', reason="dht.get_experts is deprecated, please use hivemind.get_experts.")
     def get_experts(self, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration] = None,
                     return_future: bool = False) -> List[Optional[RemoteExpert]]:
-        """
-        :param uids: find experts with these ids from across the DHT
-        :param expiration_time: if specified, return experts that expire no sooner than this (based on get_dht_time)
-        :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
-        :returns: a list of [RemoteExpert if found else None]
-        """
-        assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_experts', [], dict(uids=list(uids), expiration_time=expiration_time, future=_future)))
-        return future if return_future else future.result()
-
-    async def _get_experts(self, node: DHTNode, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration],
-                           future: Optional[MPFuture] = None) -> List[Optional[RemoteExpert]]:
-        if expiration_time is None:
-            expiration_time = get_dht_time()
-        num_workers = len(uids) if self.max_workers is None else min(len(uids), self.max_workers)
-        found: Dict[ExpertUID, DHTValue] = await node.get_many(uids, expiration_time, num_workers=num_workers)
-
-        experts: List[Optional[RemoteExpert]] = [None] * len(uids)
-        for i, uid in enumerate(uids):
-            if found[uid] is not None and isinstance(found[uid].value, Endpoint):
-                experts[i] = RemoteExpert(uid, found[uid].value)
-        if future:
-            future.set_result(experts)
-        return experts
+        from hivemind.client.dht_ops import get_experts
+        return get_experts(self, uids, expiration_time, return_future)
 
     def get_initial_beam(self, prefix: ExpertPrefix, scores: Sequence[float], beam_size: int,
                          num_workers: Optional[int] = None, return_future: bool = False

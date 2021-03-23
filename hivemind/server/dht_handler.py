@@ -1,11 +1,8 @@
 import threading
-from functools import partial
-from typing import Tuple, List, Sequence, Dict, Optional
 
-from hivemind.dht import DHT, DHTNode, DHTValue
-from hivemind.utils import Endpoint, get_port, get_dht_time, MPFuture
-from hivemind.client.expert_uid import (ExpertUID, ExpertPrefix, Coordinate, UID_DELIMITER, UID_PATTERN,
-                                        is_valid_uid, split_uid, FLAT_EXPERT)
+from hivemind.dht import DHT
+from hivemind.utils import Endpoint, get_port
+from hivemind.client.dht_ops import declare_experts
 
 
 class DHTHandlerThread(threading.Thread):
@@ -22,36 +19,3 @@ class DHTHandlerThread(threading.Thread):
         declare_experts(self.dht, self.experts.keys(), self.endpoint)
         while not self.stop.wait(self.update_period):
             declare_experts(self.dht, self.experts.keys(), self.endpoint)
-
-
-def declare_experts(dht: DHT, uids: Sequence[ExpertUID], endpoint: Endpoint,
-                    wait: bool = True) -> Dict[ExpertUID, bool]:
-    """
-    Make experts visible to all DHT peers; update timestamps if declared previously.
-
-    :param uids: a list of expert ids to update
-    :param endpoint: endpoint that serves these experts, usually your server endpoint (e.g. "201.111.222.333:1337")
-    :param wait: if True, awaits for declaration to finish, otherwise runs in background
-    :param timeout: waits for the procedure to finish for up to this long, None means wait indefinitely
-    :returns: if wait, returns store status for every key (True = store succeeded, False = store rejected)
-    """
-    assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
-    for uid in uids:
-        assert is_valid_uid(uid), f"{uid} is not a valid expert uid. All uids must follow {UID_PATTERN.pattern}"
-    return dht.run_coroutine(partial(_declare_experts, uids=list(uids), endpoint=endpoint), return_future=not wait)
-
-
-async def _declare_experts(dht: DHT, node: DHTNode, uids: List[ExpertUID], endpoint: Endpoint) -> Dict[ExpertUID, bool]:
-    num_workers = len(uids) if dht.max_workers is None else min(len(uids), dht.max_workers)
-    expiration_time = get_dht_time() + dht.expiration  # TODO use local expiration
-    data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
-    for uid in uids:
-        data_to_store[uid, None] = endpoint
-        prefix = uid if uid.count(UID_DELIMITER) > 1 else f'{uid}{UID_DELIMITER}{FLAT_EXPERT}'
-        for i in range(prefix.count(UID_DELIMITER) - 1):
-            prefix, last_coord = split_uid(prefix)
-            data_to_store[prefix, last_coord] = [uid, endpoint]
-
-    keys, maybe_subkeys, values = zip(*((key, subkey, value) for (key, subkey), value in data_to_store.items()))
-    store_ok = await node.store_many(keys, values, expiration_time, subkeys=maybe_subkeys, num_workers=num_workers)
-    return store_ok
