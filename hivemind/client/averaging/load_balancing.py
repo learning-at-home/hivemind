@@ -11,7 +11,8 @@ def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_
     """
     Find an optimal partitioning of weights for butterfly all-reduce given peer throughputs.
     :param vector_size: total size of the averaged vector (in elements, not bytes)
-    :param throughputs: 1d array of non-negative throughputs for each peer capable of averaging (and zeros for clients)
+    :param throughputs: 1d array of non-negative throughputs for each peer capable of averaging
+      zeros stand for client-only participants, None represents "not specified" (resolved as mean of other pears)
     :param min_size: peers that can aggregate less than this many elements will be assigned nothing
     :returns: an integer array where i-th element is the number of weights assigned to i-th peer
     """
