@@ -7,6 +7,7 @@ import contextlib
 import ctypes
 import multiprocessing as mp
 import threading
+import uuid
 import weakref
 from concurrent.futures.thread import ThreadPoolExecutor
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
@@ -95,15 +96,13 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
             "throughput must be a non-negative float32"
-        if not listen:
-            raise NotImplementedError("Client-only averaging is not implemented yet.")
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
 
         super().__init__()
         self.dht = dht
-        self.listen_on, self.receiver_threads, self.kwargs = listen_on, receiver_threads, kwargs
+        self.listen, self.listen_on, self.receiver_threads, self.kwargs = listen, listen_on, receiver_threads, kwargs
         self.channel_options = channel_options
         self.daemon = daemon
 
@@ -125,6 +124,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
         self._averager_endpoint: Optional[Endpoint] = None
+        if not self.listen:
+            self._averager_endpoint = f'client::{uuid.uuid4()}'
+
         self.ready = mp.Event()  # whether the averager process has started (and ready for incoming requests)
         # note: we create a background thread weakref and with daemon=True to ensure garbage collection
         background_fetcher = threading.Thread(
@@ -139,9 +141,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return self._port.value if self._port.value != 0 else None
 
     @property
-    def endpoint(self) -> Endpoint:
-        assert self.port is not None, "Averager is not running yet"
-        if self._averager_endpoint is None:
+    def endpoint(self) -> Optional[Endpoint]:
+        if self.listen and self._averager_endpoint is None:
+            assert self.port is not None, "Averager is not running yet"
             self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
             logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
         return self._averager_endpoint
@@ -157,18 +159,25 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         async def _run():
             grpc.aio.init_grpc_aio()
-            server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
-            averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
-            found_port = server.add_insecure_port(self.listen_on)
-            assert found_port != 0, f"Failed to listen to {self.listen_on}"
-            self._port.value = found_port
+
+            if self.listen:
+                server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
+                averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
+                found_port = server.add_insecure_port(self.listen_on)
+                assert found_port != 0, f"Failed to listen to {self.listen_on}"
+                self._port.value = found_port
+                await server.start()
+            else:
+                logger.info(f"The averager running in an experimental client mode, please report any bugs.")
+
             self._matchmaking = Matchmaking(self.endpoint, self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
-                                            return_deltas=True)  # note: we need deltas to make allreduce lock-free
+                                            client_mode=not self.listen, return_deltas=True)
+            if self.listen:
+                asyncio.create_task(self._declare_for_download_periodically())
+
             self._pending_group_assembled = asyncio.Event()
             self._pending_group_assembled.set()
-            await server.start()
             self.ready.set()
-            asyncio.create_task(self._declare_for_download_periodically())
 
             while True:
                 method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
@@ -240,7 +249,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 gathered_data_by_peer = dict(zip(allreduce_group.ordered_group_endpoints, gathered_items))
                 future.set_result(gathered_data_by_peer)
 
-            except (AllreduceException, MatchmakingException, asyncio.exceptions.InvalidStateError,
+            except (AllreduceException, MatchmakingException, asyncio.InvalidStateError,
                     grpc.RpcError, grpc.aio.AioRpcError, InternalError) as e:
                 time_elapsed = get_dht_time() - start_time
                 if not allow_retries or (timeout is not None and timeout < time_elapsed):
