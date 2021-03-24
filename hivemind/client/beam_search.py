@@ -8,7 +8,6 @@ from hivemind.dht import DHT, DHTNode, DHTExpiration
 from hivemind.client.expert import RemoteExpert
 from hivemind.client.expert_uid import (ExpertUID, ExpertPrefix, FLAT_EXPERT, UidEndpoint, Score, Coordinate,
                                         PREFIX_PATTERN, UID_DELIMITER, is_valid_prefix)
-
 from hivemind.utils import get_logger, get_dht_time, MPFuture
 
 logger = get_logger(__name__)
