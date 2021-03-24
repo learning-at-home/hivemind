@@ -6,7 +6,9 @@ import asyncio
 import hivemind
 import hivemind.client.expert_uid
 import hivemind.client.dht_ops
-from hivemind import LOCALHOST, UidEndpoint
+from hivemind import LOCALHOST
+from hivemind.client.beam_search import MoEBeamSearcher
+from hivemind.client.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefix, split_uid
 
 
 @pytest.mark.forked
@@ -57,15 +59,16 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
 
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
     you = hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
+    beam_saerch = MoEBeamSearcher(you)
 
     for i in range(50):
-        topk_experts = you.find_best_experts('expert.', [np.random.randn(dim) for dim in grid_dims], beam_size=beam_size)
+        topk_experts = beam_saerch.find_best_experts('expert.', [np.random.randn(dim) for dim in grid_dims], beam_size)
         assert all(isinstance(e, hivemind.RemoteExpert) for e in topk_experts)
         assert len(topk_experts) == beam_size
 
     for i in range(10):
-        batch_experts = you.batch_find_best_experts('expert.', [np.random.randn(batch_size, dim) for dim in grid_dims],
-                                                    beam_size=beam_size)
+        batch_experts = beam_saerch.batch_find_best_experts(
+            'expert.', [np.random.randn(batch_size, dim) for dim in grid_dims], beam_size=beam_size)
         assert isinstance(batch_experts, list) and len(batch_experts) == batch_size
         assert all(isinstance(e, hivemind.RemoteExpert) for experts in batch_experts for e in experts)
         assert all(len(experts) == beam_size for experts in batch_experts)
@@ -74,6 +77,7 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
 @pytest.mark.forked
 def test_dht_single_node():
     node = hivemind.DHT(start=True, expiration=999)
+    beam_search = MoEBeamSearcher(node)
 
     assert all(node.declare_experts(['expert.1', 'expert.2', 'expert.3'], f"{hivemind.LOCALHOST}:1337").values())
     assert len(node.declare_experts(["ffn.1", "ffn.2"], endpoint="that_place")) == 4
@@ -83,33 +87,33 @@ def test_dht_single_node():
         assert expert.endpoint == f"{hivemind.LOCALHOST}:1337"
 
     assert all(node.declare_experts(['expert.5', 'expert.2'], f"{hivemind.LOCALHOST}:1337").values())
-    found_experts = node.find_best_experts('expert.', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+    found_experts = beam_search.find_best_experts('expert.', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
     assert len(found_experts) == 2 and [expert.uid for expert in found_experts] == ['expert.5', 'expert.3']
 
-    successors = node.get_active_successors(['e.1.2.', 'e.2.', 'e.4.5.'])
+    successors = beam_search.get_active_successors(['e.1.2.', 'e.2.', 'e.4.5.'])
     assert len(successors['e.1.2.']) == 2
     assert successors['e.1.2.'][3] == UidEndpoint('e.1.2.3', f'{LOCALHOST}:42')
     assert successors['e.1.2.'][5] == UidEndpoint('e.1.2.5', f'{LOCALHOST}:42')
     assert len(successors['e.2.']) == 1 and successors['e.2.'][0] == UidEndpoint('e.2.0', f'{LOCALHOST}:42')
     assert successors['e.4.5.'] == {}
 
-    initial_beam = node.get_initial_beam('expert.', (3, 2, 1, 0, -1, -2, -3), beam_size=3)
+    initial_beam = beam_search.get_initial_beam('expert.', (3, 2, 1, 0, -1, -2, -3), beam_size=3)
     assert len(initial_beam) == 3
     assert initial_beam[0][:2] == (2.0, 'expert.1.')
     assert initial_beam[1][:2] == (1.0, 'expert.2.')
     assert initial_beam[2][:2] == (0.0, 'expert.3.')
 
     with pytest.raises(AssertionError):
-        node.find_best_experts('expert', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+        beam_search.find_best_experts('expert', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
 
     with pytest.raises(AssertionError):
-        node.find_best_experts('expert.1', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+        beam_search.find_best_experts('expert.1', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
 
     with pytest.raises(AssertionError):
-        node.get_active_successors(['e.1.2.', 'e.2', 'e.4.5.'])
+        beam_search.get_active_successors(['e.1.2.', 'e.2', 'e.4.5.'])
 
     with pytest.raises(AssertionError):
-        node.get_initial_beam('expert', (3, 2, 1, 0, -1, -2, -3), beam_size=3)
+        beam_search.get_initial_beam('expert', (3, 2, 1, 0, -1, -2, -3), beam_size=3)
 
 
 def test_uid_patterns():
@@ -118,11 +122,11 @@ def test_uid_patterns():
                      "🤗.321", "0.1.2", "00.1.2", "7070.3.2.1.0", "block2.1.23", "LAYER.1.0.1"]
     valid_prefixes = ["expert.", "e.1.", "e.2.", "e.1.2.3.", "ololo.123.456.789.10."]
     valid_prefixes.extend([f"{uid}." for uid in valid_experts])
-    valid_prefixes.extend([hivemind.split_uid(uid)[0] for uid in valid_experts])
+    valid_prefixes.extend([split_uid(uid)[0] for uid in valid_experts])
     for uid in valid_experts:
-        assert hivemind.is_valid_uid(uid), f"UID {uid} is valid, but was perceived as invalid"
+        assert is_valid_uid(uid), f"UID {uid} is valid, but was perceived as invalid"
     for pfx in valid_prefixes:
-        assert hivemind.is_valid_prefix(pfx), f"Prefix {pfx} is valid, but was perceived as invalid"
+        assert is_valid_prefix(pfx), f"Prefix {pfx} is valid, but was perceived as invalid"
 
     invalid = ["", ".", "expert.-1", "xxx.a", "expert.1x", "expert_ffn.1.abc1", "some.123.01", "expert.123.01",
                "e1", "e..1", "e", "e.1.2.3..4", "ffn.1..1", ".123", ".1.2.3.", ".expert", "transformer.encoder.2",
@@ -131,9 +135,9 @@ def test_uid_patterns():
     invalid_experts = invalid + valid_prefixes + ["0", "123456"]
     invalid_prefixes = invalid + valid_experts + ["expert", ".🤗", ".expert"]
     for uid in invalid_experts:
-        assert not hivemind.is_valid_uid(uid), f"UID {uid} is not valid, but was perceived as valid"
+        assert not is_valid_uid(uid), f"UID {uid} is not valid, but was perceived as valid"
     for pfx in invalid_prefixes:
-        assert not hivemind.is_valid_prefix(pfx), f"Prefix {pfx} is not valid, but was perceived as valid"
+        assert not is_valid_prefix(pfx), f"Prefix {pfx} is not valid, but was perceived as valid"
 
 
 @pytest.mark.forked
@@ -142,16 +146,16 @@ async def test_negative_caching():
     peers = []
     for i in range(10):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(hivemind.DHT(initial_peers=neighbors_i, negative_caching=False, cache_locally=False, start=True))
+        peers.append(hivemind.DHT(initial_peers=neighbors_i, cache_locally=False, start=True))
 
-    normal_peer, writer_peer = random.sample(peers, 2)
+    writer_peer = random.choice(peers)
+    assert all(hivemind.declare_experts(writer_peer, ['ffn.1.2.3', 'ffn.3.4.5'], 'myaddr:1234').values())
 
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-    neg_caching_peer = hivemind.DHT(initial_peers=neighbors_i, negative_caching=True, cache_locally=False, start=True)
-
-    assert all(hivemind.client.dht_ops.declare_experts(['ffn.1.2.3', 'ffn.3.4.5'], 'myaddr:1234').values())
+    neg_caching_peer = hivemind.DHT(initial_peers=neighbors_i, cache_locally=False, start=True)
+    beam_search = MoEBeamSearcher(neg_caching_peer, negative_caching=True)
     # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
-    assert len(neg_caching_peer.get_initial_beam(prefix='ffn.', scores=[.1, .2, .3, .4, .5, .6], beam_size=3)) == 2
+    assert len(beam_search.get_initial_beam(prefix='ffn.', scores=[.1, .2, .3, .4, .5, .6], beam_size=3)) == 2
 
     node = await hivemind.DHTNode.create(initial_peers=neighbors_i)
     fetched = await asyncio.gather(*(node.get(f'ffn.{i}.') for i in range(10)))

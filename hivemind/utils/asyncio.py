@@ -1,4 +1,4 @@
-from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable
+from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable, Callable, Any, Generic
 import asyncio
 import uvloop
 T = TypeVar('T')

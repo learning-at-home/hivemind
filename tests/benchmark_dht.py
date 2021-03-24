@@ -44,7 +44,8 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     for start in trange(0, num_experts, expert_batch_size):
         store_start = time.perf_counter()
         endpoints.append(random_endpoint())
-        successes = hivemind.client.dht_ops.declare_experts(expert_uids[start: start + expert_batch_size], endpoints[-1]).values()
+        store_ok = hivemind.declare_experts(store_peer, expert_uids[start: start + expert_batch_size], endpoints[-1])
+        successes = store_ok.values()
         total_store_time += time.perf_counter() - store_start
 
         total_stores += len(successes)
@@ -62,7 +63,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
 
     for start in trange(0, len(expert_uids), expert_batch_size):
         get_start = time.perf_counter()
-        get_result = hivemind.client.dht_ops.get_experts(expert_uids[start: start + expert_batch_size])
+        get_result = hivemind.get_experts(get_peer, expert_uids[start: start + expert_batch_size])
         total_get_time += time.perf_counter() - get_start
 
         for i, expert in enumerate(get_result):

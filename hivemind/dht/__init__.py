@@ -15,19 +15,16 @@ The code is organized as follows:
 from __future__ import annotations
 import asyncio
 import ctypes
-import heapq
 import multiprocessing as mp
-from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Tuple, Optional, Sequence, Union, Dict, Deque, Iterator, Set, Callable, Awaitable, TypeVar
+from typing import List, Optional, Sequence, Callable, Awaitable, TypeVar
 from deprecated import deprecated
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
-from hivemind.dht.routing import get_dht_time, DHTValue, DHTKey, Subkey
-from hivemind.utils.networking import Hostname, Endpoint, strip_port
-from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled
-from hivemind.client.expert_uid import * #TODO remove
+from hivemind.dht.routing import DHTValue, DHTKey, Subkey
+from hivemind.utils.networking import Hostname, strip_port
+from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, get_dht_time
 
 logger = get_logger(__name__)
 
@@ -48,22 +45,6 @@ class DHT(mp.Process):
         (but no more than one per key)
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
     :param receiver_threads: uses this many threads to await on input pipe. Default = 1 should be enough in most cases
-    :param negative_caching: if True, whenever DHT is unable to find an expert or prefix, it will cache the "no key"
-      result inside the DHT for :expiration: seconds. Caching only affects beam search and has three main effects:
-
-      1. Faster beam search under node failures: if there are inconsistencies in DHT keys, such as a prefix pointing to
-         a now-defunct expert, these inconsistencies will be overwritten by the first peer that stumbles upon them. As a
-         result, beam search will not have to wait for non-existent experts until the expiration of their DHT entries;
-      2. Delayed expert availability: Without negative cache, new experts are always immediately available for beam
-         search after they are published to the DHT. With negative cache, there are rare cases (e.g. when adding new
-         experts in place of recently defunct ones) when new experts will be initially invisible, but gradually become
-         visible to more peers as those peers refresh their cache. This process takes at most :expiration: seconds;
-      3. Faster beam search in very sparse grids: there is one edge case where negative cache will improve beam search
-         performance; If an expert grid is very sparse, there can be empty indices in the first grid dimension (i.e.
-         indices {i} such that _no_ experts that start with "{prefix}.{i}.*"). If so, the default beam search will
-         be very slow due to the way it forms initial beam. Beam search with negative cache enabled will run normally.
-         Though, this is a pathological case (e.g. only 90 experts in an oversized 100x100 grid) that should be avoided.
-
     :param kwargs: any other params will be forwarded to DHTNode upon creation
 
     Each expert has an identifier in the form of {prefix}.{i}.{j}.{...}, e.g. "ffn_expert.98.76.54.32.10"
@@ -95,12 +76,12 @@ class DHT(mp.Process):
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 receiver_threads: int = 1, negative_caching: bool = True, expiration: float = 300, **kwargs):
+                 receiver_threads: int = 1, expiration: float = 300, **kwargs):
         super().__init__()
         assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
-        self.expiration, self.negative_caching = expiration, negative_caching
+        self.default_expiration = expiration
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
@@ -298,225 +279,3 @@ class DHT(mp.Process):
                     return_future: bool = False) -> List[Optional[RemoteExpert]]:
         from hivemind.client.dht_ops import get_experts
         return get_experts(self, uids, expiration_time, return_future)
-
-    def get_initial_beam(self, prefix: ExpertPrefix, scores: Sequence[float], beam_size: int,
-                         num_workers: Optional[int] = None, return_future: bool = False
-                         ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
-        """
-        :param prefix: search for experts whose uids start with this prefix
-        :param scores: prefer suffix coordinates that have highest scores
-        :param beam_size: select this many active suffixes with highest scores
-        :param num_workers: maintain up to this many concurrent DHT searches
-        :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
-        :returns: a list of up to beam_size tuples of (prefix score, prefix itself, dict{suffix: example expert})
-        """
-        assert is_valid_prefix(prefix), f"prefix '{prefix}' is invalid, it must follow {PREFIX_PATTERN.pattern}"
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_initial_beam', [], dict(prefix=prefix, scores=tuple(scores), beam_size=beam_size,
-                                                      num_workers=num_workers, future=_future)))
-        return future if return_future else future.result()
-
-    async def _get_initial_beam(self, node, prefix: ExpertPrefix, beam_size: int, scores: Tuple[float, ...],
-                                num_workers: Optional[int] = None, future: Optional[MPFuture] = None
-                                ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
-        num_workers = num_workers or self.max_workers or beam_size
-        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = []
-        unattempted_indices: List[Coordinate] = sorted(range(len(scores)), key=scores.__getitem__)  # from worst to best
-        pending_tasks: Deque[Tuple[Coordinate, ExpertPrefix, asyncio.Task]] = deque()
-
-        while len(beam) < beam_size and (unattempted_indices or pending_tasks):
-            # dispatch additional tasks
-            while unattempted_indices and len(pending_tasks) < num_workers:
-                next_index = unattempted_indices.pop()  # note: this is best unattempted index because of sort order
-                next_best_prefix = f"{prefix}{next_index}{UID_DELIMITER}"
-                pending_tasks.append((next_index, next_best_prefix, asyncio.create_task(node.get(next_best_prefix))))
-
-            # await the next best prefix to be fetched
-            pending_best_index, pending_best_prefix, pending_task = pending_tasks.popleft()
-            try:
-                maybe_prefix_data = await pending_task
-                if maybe_prefix_data is not None and isinstance(maybe_prefix_data.value, dict):
-                    successors = {coord: UidEndpoint(*match.value) for coord, match in maybe_prefix_data.value.items()
-                                  if isinstance(coord, Coordinate) and isinstance(getattr(match, 'value', None), list)
-                                  and len(match.value) == 2}
-                    if successors:
-                        beam.append((scores[pending_best_index], pending_best_prefix, successors))
-                elif maybe_prefix_data is None and self.negative_caching:
-                    logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {pending_best_prefix}")
-                    asyncio.create_task(node.store(pending_best_prefix, subkey=-1, value=None,
-                                                   expiration_time=get_dht_time() + self.expiration))
-
-            except asyncio.CancelledError:
-                for _, pending_task in pending_tasks:
-                    pending_task.cancel()
-                raise
-        if future:
-            future.set_result(beam)
-        return beam
-
-    def get_active_successors(self, prefixes: List[ExpertPrefix], grid_size: Optional[int] = None,
-                              num_workers: Optional[int] = None, return_future: bool = False
-                              ) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
-        """
-        :param prefixes: a list of prefix for which to find active successor uids
-        :param grid_size: if specified, only return successors if ther are in range [0, grid_size)
-        :param num_workers: how many parallel workers to use for DHTNode.get_many
-        :param return_future: if False (default), find and return successors. Otherwise return MPFuture and fill later.
-        :returns: for every expert, return a dict{active_next_coordinate: (matching_expert_uid, matching_endpoint)}
-        :note: if a prefix is not found, get_active_successors will return an empty dictionary for that prefix
-        """
-        assert not isinstance(prefixes, str), "Please send a list / tuple of expert prefixes."
-        for prefix in prefixes:
-            assert is_valid_prefix(prefix), f"prefix '{prefix}' is invalid, it must follow {PREFIX_PATTERN.pattern}"
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_active_successors', [], dict(
-            prefixes=list(prefixes), grid_size=grid_size, num_workers=num_workers, future=_future)))
-        return future if return_future else future.result()
-
-    async def _get_active_successors(self, node: DHTNode, prefixes: List[ExpertPrefix], grid_size: Optional[int] = None,
-                                     num_workers: Optional[int] = None, future: Optional[MPFuture] = None
-                                     ) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
-        grid_size = grid_size or float('inf')
-        num_workers = num_workers or min(len(prefixes), self.max_workers or len(prefixes))
-        dht_responses = await node.get_many(keys=prefixes, num_workers=num_workers)
-        successors: Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]] = {}
-        for prefix, found in dht_responses.items():
-            if found and isinstance(found.value, dict):
-                successors[prefix] = {coord: UidEndpoint(*match.value) for coord, match in found.value.items()
-                                      if isinstance(coord, Coordinate) and 0 <= coord < grid_size
-                                      and isinstance(getattr(match, 'value', None), list) and len(match.value) == 2}
-            else:
-                successors[prefix] = {}
-                if found is None and self.negative_caching:
-                    logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {prefix}")
-                    asyncio.create_task(node.store(prefix, subkey=-1, value=None,
-                                                   expiration_time=get_dht_time() + self.expiration))
-        if future:
-            future.set_result(successors)
-        return successors
-
-    def find_best_experts(self, prefix: ExpertPrefix, grid_scores: Sequence[Sequence[float]], beam_size: int,
-                          num_workers: Optional[int] = None, return_future: bool = False
-                          ) -> Union[List[RemoteExpert], MPFuture]:
-        """
-        Find and return :beam_size: active experts with highest scores, use both local cache and DHT
-
-        :param prefix: common prefix for all expert uids in grid
-        :param grid_scores: scores predicted for each dimension in the grid,
-        :type grid_scores: model scores for each grid dimension, list of arrays of shape grid_size[i]
-        :param beam_size: how many best experts should beam search return
-         After time_budget is reached, beam search won't search for more experts and instead fall back on local cache
-         Please note that any queries that fall outside the budget will still be performed in background and cached
-         for subsequent iterations as long as DHTNode.cache_locally is True
-        :param num_workers: use up to this many concurrent workers to search DHT
-        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
-        :returns: a list that contains *up to* k_best RemoteExpert instances
-        """
-        assert len(grid_scores) > 0 and beam_size > 0
-        assert is_valid_prefix(prefix), f"prefix '{prefix}' is invalid, it must follow {PREFIX_PATTERN.pattern}"
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_find_best_experts', [], dict(prefix=prefix, grid_scores=list(map(tuple, grid_scores)),
-                                                       beam_size=beam_size, num_workers=num_workers, future=_future)))
-        return future if return_future else future.result()
-
-    async def _find_best_experts(
-            self, node: DHTNode, prefix: str, grid_scores: List[Tuple[float]], beam_size: int,
-            num_workers: Optional[int] = None, future: Optional[MPFuture] = None, **kwargs) -> List[RemoteExpert]:
-        num_workers = num_workers or min(beam_size, self.max_workers or beam_size)
-
-        # form initial beam from top-k active L1 prefixes, each row is (score, uid prefix, possible suffixes)
-        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = await self._get_initial_beam(
-            node, prefix, beam_size, grid_scores[0], min(beam_size, num_workers))
-
-        best_experts_heap: List[Tuple[Score, UidEndpoint]] = []  # max-heap of expert uids/endpoints ordered by scores
-        unique_experts: Set[ExpertUID] = set()
-
-        for dim_index in range(1, len(grid_scores) - 1):
-            for score, uid_endpoint in self._iterate_matching_experts(beam, grid_scores):
-                if uid_endpoint.uid not in unique_experts:
-                    push_and_maybe_pop = heapq.heappush if len(best_experts_heap) < beam_size else heapq.heappushpop
-                    push_and_maybe_pop(best_experts_heap, (score, uid_endpoint))
-                    unique_experts.add(uid_endpoint.uid)
-
-            # form new beam using successors from the current beam
-            dim_scores = grid_scores[dim_index]
-            best_active_pairs: List[Tuple[Score, ExpertPrefix]] = heapq.nlargest(beam_size, (
-                (prefix_score + dim_scores[next_coord], f"{prefix}{next_coord}{UID_DELIMITER}")
-                for prefix_score, prefix, suffixes in beam for next_coord in suffixes.keys()
-                if isinstance(next_coord, int) and 0 <= next_coord < len(dim_scores)))
-            _, best_uid_prefixes = zip(*best_active_pairs)
-
-            # search DHT for next step suffixes
-            successors = await self._get_active_successors(node, best_uid_prefixes, num_workers=num_workers)
-            beam = [(score, prefix, successors[prefix]) for score, prefix in best_active_pairs if successors[prefix]]
-            if not beam:
-                logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim 0)")
-                break
-
-        # add best experts from the final beam
-        for score, uid_endpoint in self._iterate_matching_experts(beam, grid_scores):
-            if uid_endpoint.uid not in unique_experts:
-                push_and_maybe_pop = heapq.heappush if len(best_experts_heap) < beam_size else heapq.heappushpop
-                push_and_maybe_pop(best_experts_heap, (score, uid_endpoint))
-                unique_experts.add(uid_endpoint.uid)
-
-        best_experts = [RemoteExpert(*uid_endpoint) for score, uid_endpoint in sorted(best_experts_heap, reverse=True)]
-        if future is not None:
-            future.set_result(best_experts)
-        return best_experts
-
-    @staticmethod
-    def _iterate_matching_experts(beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]],
-                                  grid_scores: Sequence[Sequence[float]]) -> Iterator[Tuple[Score, UidEndpoint]]:
-        """ iterate over all exemplar experts attached to current beam """
-        for score, prefix, suffixes in beam:
-            for next_coord, match in suffixes.items():
-                if len(grid_scores) == 1 and next_coord == FLAT_EXPERT:
-                    yield score, match
-                elif isinstance(match.uid, ExpertUID) and match.uid.count(UID_DELIMITER) == len(grid_scores):
-                    expert_coords = match.uid.split(UID_DELIMITER)[1:]
-                    if all(coord.isdigit() and 0 <= int(coord) < len(grid_scores[i])
-                           for i, coord in enumerate(expert_coords)):
-                        expert_score = sum(scores[coord] for scores, coord in zip(grid_scores, map(int, expert_coords)))
-                        yield expert_score, match
-                    else:
-                        logger.warning(f"Found incompatible expert coordinates: {expert_coords}")
-                else:
-                    logger.warning(f"Found incompatible expert UID: {match.uid}")
-
-    def batch_find_best_experts(
-            self, prefix: str, batch_grid_scores: Sequence[Sequence[Sequence[float]]], beam_size: int, *,
-            workers_per_sample: Optional[int] = None, return_future=False) -> Union[List[List[RemoteExpert]], MPFuture]:
-        """
-        Find and return :beam_size: active experts with highest scores, use both local cache and DHT
-
-        :param prefix: common prefix for all expert uids in grid
-        :param batch_grid_scores: scores predicted for each batch example and each dimension in the grid,
-        :type batch_grid_scores: list of arrays of shape (batch_size, grid_size[i])
-        :param beam_size: how many best experts should beam search return
-         After time_budget is reached, beam search won't search for more experts and instead fall back on local cache
-         Please note that any queries that fall outside the budget will still be performed in background and cached
-         for subsequent iterations as long as DHTNode.cache_locally is True
-        :param workers_per_sample: use up to this many concurrent workers for every sample in batch
-        :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
-        :returns: a list that contains *up to* k_best RemoteExpert instances
-        """
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_batch_find_best_experts', [], dict(prefix=prefix, batch_grid_scores=batch_grid_scores,
-                                                             beam_size=beam_size, workers_per_sample=workers_per_sample,
-                                                             future=_future)))
-        return future if return_future else future.result()
-
-    async def _batch_find_best_experts(
-            self, node: DHTNode, prefix: str, batch_grid_scores: Sequence[Sequence[Tuple[float]]], beam_size: int,
-            workers_per_sample: Optional[int] = None, future: Optional[MPFuture] = None) -> List[List[RemoteExpert]]:
-
-        batch_grid_scores = [[tuple(grid_score[i]) for grid_score in batch_grid_scores]
-                             for i in range(len(batch_grid_scores[0]))]
-        coros = [self._find_best_experts(node, prefix, grid_scores, beam_size, workers_per_sample)
-                 for grid_scores in batch_grid_scores]
-
-        best_experts_batch = await asyncio.gather(*coros)
-        if future is not None:
-            future.set_result(best_experts_batch)
-        return best_experts_batch

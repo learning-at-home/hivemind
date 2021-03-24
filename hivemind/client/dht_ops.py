@@ -1,8 +1,11 @@
 from functools import partial
 from typing import Sequence, Dict, List, Tuple, Optional
 
-from hivemind import DHT, ExpertUID, Endpoint, is_valid_uid, UID_PATTERN, DHTNode, get_dht_time, ExpertPrefix, \
-    Coordinate, DHTValue, UID_DELIMITER, FLAT_EXPERT, split_uid, DHTExpiration, RemoteExpert
+from hivemind.dht import DHT, DHTNode, DHTExpiration, DHTValue
+from hivemind.client.expert import RemoteExpert
+from hivemind.client.expert_uid import (ExpertUID, ExpertPrefix, FLAT_EXPERT, Coordinate,
+                                        UID_DELIMITER, UID_PATTERN, is_valid_uid, split_uid)
+from hivemind.utils import Endpoint, get_dht_time
 
 
 def declare_experts(dht: DHT, uids: Sequence[ExpertUID], endpoint: Endpoint,
@@ -24,7 +27,7 @@ def declare_experts(dht: DHT, uids: Sequence[ExpertUID], endpoint: Endpoint,
 
 async def _declare_experts(dht: DHT, node: DHTNode, uids: List[ExpertUID], endpoint: Endpoint) -> Dict[ExpertUID, bool]:
     num_workers = len(uids) if dht.max_workers is None else min(len(uids), dht.max_workers)
-    expiration_time = get_dht_time() + dht.expiration  # TODO use local expiration
+    expiration_time = get_dht_time() + dht.default_expiration  # TODO use local expiration
     data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
     for uid in uids:
         data_to_store[uid, None] = endpoint
