@@ -104,10 +104,7 @@ def test_dht_single_node():
     assert initial_beam[2][:2] == (0.0, 'expert.3.')
 
     with pytest.raises(AssertionError):
-        beam_search.find_best_experts([(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
-
-    with pytest.raises(AssertionError):
-        beam_search.find_best_experts([(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+        beam_search = MoEBeamSearcher(node, 'expert.1')
 
     with pytest.raises(AssertionError):
         beam_search.get_active_successors(['e.1.2.', 'e.2', 'e.4.5.'])
