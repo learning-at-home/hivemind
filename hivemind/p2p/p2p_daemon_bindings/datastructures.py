@@ -5,9 +5,9 @@ import base58
 import multihash
 
 from multiaddr import Multiaddr, protocols
-from pb import p2pd_pb2
+from hivemind.p2p.p2p_daemon_bindings.pb import p2pd_pb2
 
-from keys import PublicKey
+from hivemind.p2p.p2p_daemon_bindings.keys import PublicKey
 
 # NOTE: On inlining...
 # See: https://github.com/libp2p/specs/issues/138

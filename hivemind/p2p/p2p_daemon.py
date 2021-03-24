@@ -9,8 +9,8 @@ import typing as tp
 import warnings
 
 from multiaddr import Multiaddr
-import p2pclient
-from libp2p.peer.id import ID
+import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
+from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
 
 
 class P2P(object):

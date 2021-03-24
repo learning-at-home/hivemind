@@ -1,10 +1,10 @@
 from typing import AsyncIterator, Iterable, Sequence, Tuple
 
 import asyncio
-from control import ControlClient, DaemonConnector, StreamHandler
+from hivemind.p2p.p2p_daemon_bindings.control import ControlClient, DaemonConnector, StreamHandler
 from contextlib import asynccontextmanager
 from multiaddr import Multiaddr
-from datastructures import PeerInfo, StreamInfo, ID
+from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerInfo, StreamInfo, ID
 
 
 class Client:

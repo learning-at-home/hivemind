@@ -4,10 +4,10 @@ from typing import AsyncIterator, Awaitable, Callable, Dict, Iterable, Sequence,
 import asyncio
 from contextlib import asynccontextmanager
 from multiaddr import Multiaddr, protocols
-from datastructures import PeerInfo, StreamInfo, ID
-from pb import p2pd_pb2 as p2pd_pb
-import config
-from utils import DispatchFailure, ControlFailure, read_pbmsg_safe, write_pbmsg, raise_if_failed
+from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerInfo, StreamInfo, ID
+from hivemind.p2p.p2p_daemon_bindings.pb import p2pd_pb2 as p2pd_pb
+import hivemind.p2p.p2p_daemon_bindings.config as config
+from hivemind.p2p.p2p_daemon_bindings.utils import DispatchFailure, read_pbmsg_safe, write_pbmsg, raise_if_failed
 
 StreamHandler = Callable[[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
 
