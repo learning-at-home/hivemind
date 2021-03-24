@@ -33,7 +33,7 @@ ReturnType = TypeVar('ReturnType')
 
 class DHT(mp.Process):
     """
-    High-level interface to hivemind.dht that is designed to allow RemoteMixtureOfExperts to select best experts.
+    A high-level interface to a hivemind DHT that runs a single DHT node in a background process.
     * hivemind servers periodically announce their experts via declare_experts (dht_handler.py)
     * trainers find most suitable experts via RemoteMixtureOfExperts (beam_saerch.py)
 
