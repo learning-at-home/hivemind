@@ -73,6 +73,7 @@ def libp2p_build_install():
 
         result = subprocess.run(['go', 'build', '-o', os.path.join(here, "hivemind/hivemind_cli", "p2pd")],
                                 cwd=os.path.join(tempdir, f'go-libp2p-daemon-{P2PD_VERSION[1:]}', 'p2pd'))
+
         if result.returncode:
             raise RuntimeError('Failed to build or install libp2p-daemon:'
                                f' exited with status code :{result.returncode}')
@@ -85,7 +86,7 @@ def libp2p_download_install():
         print('Downloading Peer to Peer Daemon')
         url = f'https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd'
         urllib.request.urlretrieve(url, binary_path)
-        os.chmod(binary_path, 777)
+        os.chmod(binary_path, 0o777)
 
 
 class Install(install):
