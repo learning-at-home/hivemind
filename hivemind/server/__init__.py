@@ -13,7 +13,7 @@ import torch
 
 import hivemind
 from hivemind.dht import DHT
-from hivemind.client.expert_uid import UID_DELIMITER
+from hivemind.server.expert_uid import UID_DELIMITER
 from hivemind.server.checkpoints import CheckpointSaver, load_weights, dir_is_correct
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread, declare_experts, get_experts

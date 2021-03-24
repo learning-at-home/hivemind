@@ -5,7 +5,7 @@ import time
 from tqdm import trange
 
 import hivemind
-import hivemind.client.expert_uid
+import hivemind.server.expert_uid
 from hivemind.utils.threading import increase_file_limit
 
 logger = hivemind.get_logger(__name__)

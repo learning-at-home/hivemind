@@ -4,7 +4,7 @@ from typing import Sequence, Dict, List, Tuple, Optional
 
 from hivemind.dht import DHT, DHTNode, DHTExpiration, DHTValue
 from hivemind.client.expert import RemoteExpert
-from hivemind.client.expert_uid import (ExpertUID, ExpertPrefix, FLAT_EXPERT, Coordinate,
+from hivemind.server.expert_uid import (ExpertUID, ExpertPrefix, FLAT_EXPERT, Coordinate,
                                         UID_DELIMITER, UID_PATTERN, is_valid_uid, split_uid)
 from hivemind.utils import Endpoint, get_dht_time, get_port
 

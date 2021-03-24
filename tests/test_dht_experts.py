@@ -4,10 +4,10 @@ import pytest
 import asyncio
 
 import hivemind
-import hivemind.client.expert_uid
+import hivemind.server.expert_uid
 from hivemind import LOCALHOST
 from hivemind.client.beam_search import MoEBeamSearcher
-from hivemind.client.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefix, split_uid
+from hivemind.server.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefix, split_uid
 
 
 @pytest.mark.forked

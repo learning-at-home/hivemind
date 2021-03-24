@@ -12,7 +12,7 @@ from torch.autograd.function import once_differentiable
 
 import hivemind
 from hivemind.client.expert import RemoteExpert, DUMMY, _get_expert_stub
-from hivemind.client.expert_uid import is_valid_prefix, UID_DELIMITER
+from hivemind.server.expert_uid import UID_DELIMITER
 from hivemind.client.beam_search import MoEBeamSearcher
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
 from hivemind.utils import nested_pack, nested_flatten, serialize_torch_tensor, deserialize_torch_tensor
