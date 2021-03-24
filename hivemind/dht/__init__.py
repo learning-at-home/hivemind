@@ -249,7 +249,7 @@ class DHT(mp.Process):
         return declare_experts(self, uids, endpoint, wait=wait)
 
     @deprecated(version='0.9.5', reason="dht.get_experts is deprecated, please use hivemind.get_experts.")
-    def get_experts(self, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration] = None,
+    def get_experts(self, uids, expiration_time: Optional[DHTExpiration] = None,
                     return_future: bool = False) -> List[Optional[RemoteExpert]]:
         from hivemind.client.dht_ops import get_experts
         return get_experts(self, uids, expiration_time, return_future)
