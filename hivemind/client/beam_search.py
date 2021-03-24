@@ -16,7 +16,33 @@ logger = get_logger(__name__)
 
 class MoEBeamSearcher:
     """
-    Utility class that
+    Utility class that uses DHT to find most suitable experts for RemoteMixtureOfExperts.
+    Each expert has an identifier in the form of {prefix}.{i}.{j}.{...}, e.g. "ffn_expert.98.76.54.32.10"
+    An expert identifier consists of:
+
+        * optional prefix that determines expert role, experiment name, etc.
+        * one or more integers that determine that expert's position in an N-dimensional grid
+
+    A hivemind.Server can ``DHT.declare_experts(expert_uids: List[str])`` to make its experts visible to everyone.
+    When declaring experts, DHT will store each expert's uid and all its prefixes until :expiration: (specified at init)
+    For instance, declaring "ffn_expert.98.76.54.32.10" will store the following keys in a DHT:
+    ``"ffn_expert.98", "ffn_expert.98.76", "ffn_expert.98.76.54", ..., "ffn_expert.98.76.54.32.10"``
+
+    In order to enable fast beam search, DHT maintains dictionaries of all active suffixes for every prefix
+    (e.g. "ffn_expert.98": {76: ffn_expert.98.76...., 123: ffn_expert.98.123..., 225: ffn_expert.98.225....}))
+
+    RemoteMixtureOfExperts can use these prefixes to find top-k most suitable experts with a left-to-right beam search.
+    For instance, consider RemoteMixtureOfExperts with prefix "ffn_expert" and grid size [100, 100, 100, 100, 100].
+    This MoE can query all experts with that prefix and arbitrary indices in 0...99 along each dimension.
+    However, not every expert in such 100^5 grid can be alive at a given moment of time (the grid size is redundant).
+    In order to find k best "alive" experts, MoE first ranks indices along the first dimension with its gating function.
+    It can then check which of those indices correspond to "alive" experts by querying keys such as "ffn_expert.98".
+
+    After selecting k best indices along first dimension, MoE moves to the second dimension.
+    It can find top-k index pairs (e.g. "expert.98.76") that use one of k best indices from the previous step.
+    This beam search explores one additional dimension per step and finds k best experts from across the DHT
+    in O(k * num_dimensions * dimension_size) time depending on the chosen grid dimensions.
+
     :param dht: a running DHT daemon that is used for beam search AND local caching
     :param negative_caching: if True, whenever DHT is unable to find an expert or prefix, it will cache the "no key"
       result inside the DHT for :expiration: seconds. Caching only affects beam search and has three main effects:

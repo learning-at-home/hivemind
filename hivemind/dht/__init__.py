@@ -23,7 +23,7 @@ from deprecated import deprecated
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
-from hivemind.utils.networking import Hostname, strip_port
+from hivemind.utils.networking import Hostname, Endpoint, strip_port
 from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, get_dht_time
 
 logger = get_logger(__name__)
@@ -46,32 +46,6 @@ class DHT(mp.Process):
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
     :param receiver_threads: uses this many threads to await on input pipe. Default = 1 should be enough in most cases
     :param kwargs: any other params will be forwarded to DHTNode upon creation
-
-    Each expert has an identifier in the form of {prefix}.{i}.{j}.{...}, e.g. "ffn_expert.98.76.54.32.10"
-    An expert identifier consists of:
-
-        * optional prefix that determines expert role, experiment name, etc.
-        * one or more integers that determine that expert's position in an N-dimensional grid
-
-    A hivemind.Server can ``DHT.declare_experts(expert_uids: List[str])`` to make its experts visible to everyone.
-    When declaring experts, DHT will store each expert's uid and all its prefixes until :expiration: (specified at init)
-    For instance, declaring "ffn_expert.98.76.54.32.10" will store the following keys in a DHT:
-    ``"ffn_expert.98", "ffn_expert.98.76", "ffn_expert.98.76.54", ..., "ffn_expert.98.76.54.32.10"``
-
-    In order to enable fast beam search, DHT maintains dictionaries of all active suffixes for every prefix
-    (e.g. "ffn_expert.98": {76: ffn_expert.98.76...., 123: ffn_expert.98.123..., 225: ffn_expert.98.225....}))
-
-    RemoteMixtureOfExperts can use these prefixes to find top-k most suitable experts with a left-to-right beam search.
-    For instance, consider RemoteMixtureOfExperts with prefix "ffn_expert" and grid size [100, 100, 100, 100, 100].
-    This MoE can query all experts with that prefix and arbitrary indices in 0...99 along each dimension.
-    However, not every expert in such 100^5 grid can be alive at a given moment of time (the grid size is redundant).
-    In order to find k best "alive" experts, MoE first ranks indices along the first dimension with its gating function.
-    It can then check which of those indices correspond to "alive" experts by querying keys such as "ffn_expert.98".
-
-    After selecting k best indices along first dimension, MoE moves to the second dimension.
-    It can find top-k index pairs (e.g. "expert.98.76") that use one of k best indices from the previous step.
-    This beam search explores one additional dimension per step and finds k best experts from across the DHT
-    in O(k * num_dimensions * dimension_size) time depending on the chosen grid dimensions.
     """
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
