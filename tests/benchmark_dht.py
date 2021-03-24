@@ -6,7 +6,6 @@ from tqdm import trange
 
 import hivemind
 import hivemind.client.expert_uid
-import hivemind.client.dht_ops
 from hivemind.utils.threading import increase_file_limit
 
 logger = hivemind.get_logger(__name__)
