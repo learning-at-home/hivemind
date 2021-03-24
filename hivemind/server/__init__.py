@@ -16,7 +16,7 @@ from hivemind.dht import DHT
 from hivemind.client.expert_uid import UID_DELIMITER
 from hivemind.server.checkpoints import CheckpointSaver, load_weights, dir_is_correct
 from hivemind.server.connection_handler import ConnectionHandler
-from hivemind.server.dht_handler import DHTHandlerThread
+from hivemind.server.dht_handler import DHTHandlerThread, declare_experts, get_experts
 from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.layers import name_to_block, name_to_input
 from hivemind.server.runtime import Runtime
