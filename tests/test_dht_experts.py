@@ -59,16 +59,16 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
 
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
     you = hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
-    beam_saerch = MoEBeamSearcher(you)
+    beam_search = MoEBeamSearcher(you, 'expert.', grid_dims)
 
     for i in range(50):
-        topk_experts = beam_saerch.find_best_experts('expert.', [np.random.randn(dim) for dim in grid_dims], beam_size)
+        topk_experts = beam_search.find_best_experts([np.random.randn(dim) for dim in grid_dims], beam_size)
         assert all(isinstance(e, hivemind.RemoteExpert) for e in topk_experts)
         assert len(topk_experts) == beam_size
 
     for i in range(10):
-        batch_experts = beam_saerch.batch_find_best_experts(
-            'expert.', [np.random.randn(batch_size, dim) for dim in grid_dims], beam_size=beam_size)
+        batch_experts = beam_search.batch_find_best_experts([np.random.randn(batch_size, dim) for dim in grid_dims],
+                                                            beam_size=beam_size)
         assert isinstance(batch_experts, list) and len(batch_experts) == batch_size
         assert all(isinstance(e, hivemind.RemoteExpert) for experts in batch_experts for e in experts)
         assert all(len(experts) == beam_size for experts in batch_experts)
@@ -77,7 +77,7 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
 @pytest.mark.forked
 def test_dht_single_node():
     node = hivemind.DHT(start=True, expiration=999)
-    beam_search = MoEBeamSearcher(node)
+    beam_search = MoEBeamSearcher(node, 'expert.')
 
     assert all(node.declare_experts(['expert.1', 'expert.2', 'expert.3'], f"{hivemind.LOCALHOST}:1337").values())
     assert len(node.declare_experts(["ffn.1", "ffn.2"], endpoint="that_place")) == 4
@@ -87,7 +87,7 @@ def test_dht_single_node():
         assert expert.endpoint == f"{hivemind.LOCALHOST}:1337"
 
     assert all(node.declare_experts(['expert.5', 'expert.2'], f"{hivemind.LOCALHOST}:1337").values())
-    found_experts = beam_search.find_best_experts('expert.', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+    found_experts = beam_search.find_best_experts([(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
     assert len(found_experts) == 2 and [expert.uid for expert in found_experts] == ['expert.5', 'expert.3']
 
     successors = beam_search.get_active_successors(['e.1.2.', 'e.2.', 'e.4.5.'])
@@ -97,23 +97,20 @@ def test_dht_single_node():
     assert len(successors['e.2.']) == 1 and successors['e.2.'][0] == UidEndpoint('e.2.0', f'{LOCALHOST}:42')
     assert successors['e.4.5.'] == {}
 
-    initial_beam = beam_search.get_initial_beam('expert.', (3, 2, 1, 0, -1, -2, -3), beam_size=3)
+    initial_beam = beam_search.get_initial_beam((3, 2, 1, 0, -1, -2, -3), beam_size=3)
     assert len(initial_beam) == 3
     assert initial_beam[0][:2] == (2.0, 'expert.1.')
     assert initial_beam[1][:2] == (1.0, 'expert.2.')
     assert initial_beam[2][:2] == (0.0, 'expert.3.')
 
     with pytest.raises(AssertionError):
-        beam_search.find_best_experts('expert', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+        beam_search.find_best_experts([(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
 
     with pytest.raises(AssertionError):
-        beam_search.find_best_experts('expert.1', [(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
+        beam_search.find_best_experts([(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
 
     with pytest.raises(AssertionError):
         beam_search.get_active_successors(['e.1.2.', 'e.2', 'e.4.5.'])
-
-    with pytest.raises(AssertionError):
-        beam_search.get_initial_beam('expert', (3, 2, 1, 0, -1, -2, -3), beam_size=3)
 
 
 def test_uid_patterns():
@@ -153,9 +150,9 @@ async def test_negative_caching():
 
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
     neg_caching_peer = hivemind.DHT(initial_peers=neighbors_i, cache_locally=False, start=True)
-    beam_search = MoEBeamSearcher(neg_caching_peer, negative_caching=True)
+    beam_search = MoEBeamSearcher(neg_caching_peer, uid_prefix='ffn.', negative_caching=True)
     # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
-    assert len(beam_search.get_initial_beam(prefix='ffn.', scores=[.1, .2, .3, .4, .5, .6], beam_size=3)) == 2
+    assert len(beam_search.get_initial_beam(scores=[.1, .2, .3, .4, .5, .6], beam_size=3)) == 2
 
     node = await hivemind.DHTNode.create(initial_peers=neighbors_i)
     fetched = await asyncio.gather(*(node.get(f'ffn.{i}.') for i in range(10)))
