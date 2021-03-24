@@ -18,7 +18,6 @@ import ctypes
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Sequence, Union, Callable, Awaitable, TypeVar
-from deprecated import deprecated
 
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
@@ -44,17 +43,16 @@ class DHT(mp.Process):
     :param max_workers: declare_experts and get_experts will use up to this many parallel workers
         (but no more than one per key)
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
-    :param receiver_threads: uses this many threads to await on input pipe. Default = 1 should be enough in most cases
     :param kwargs: any other params will be forwarded to DHTNode upon creation
     """
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 receiver_threads: int = 1, expiration: float = 300, **kwargs):
+                 expiration: float = 300, **kwargs):
         super().__init__()
         assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
-        self.receiver_threads, self.max_workers, self.parallel_rpc = receiver_threads, max_workers, parallel_rpc
+        self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
         self.default_expiration = expiration
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
@@ -66,7 +64,7 @@ class DHT(mp.Process):
     def run(self) -> None:
         """ Serve DHT forever. This function will not return until DHT node is shut down """
         loop = switch_to_uvloop()
-        pipe_awaiter = ThreadPoolExecutor(self.receiver_threads)
+        pipe_awaiter = ThreadPoolExecutor(max_workers=1)
 
         async def _run():
             node = await DHTNode.create(
@@ -243,13 +241,15 @@ class DHT(mp.Process):
             future.set_exception(ValueError(f"Can't get address: DHT node has no peers and no public endpoint."
                                             f" Please ensure the node is connected or specify peers=... manually."))
 
-    @deprecated(version='0.9.5', reason="dht.declare_experts is deprecated, please use hivemind.declare_experts.")
     def declare_experts(self, uids, endpoint, wait: bool = True):
+        logger.warning("dht.declare_experts is scheduled for removal in 0.9.8, please use hivemind.declare_experts.",
+                       norepeat=True)
         from hivemind.client.dht_ops import declare_experts
         return declare_experts(self, uids, endpoint, wait=wait)
 
-    @deprecated(version='0.9.5', reason="dht.get_experts is deprecated, please use hivemind.get_experts.")
     def get_experts(self, uids, expiration_time: Optional[DHTExpiration] = None,
                     return_future: bool = False) -> List[Optional[RemoteExpert]]:
+        logger.warning("dht.get_experts is scheduled for removal in 0.9.8, please use hivemind.get_experts.",
+                       norepeat=True)
         from hivemind.client.dht_ops import get_experts
         return get_experts(self, uids, expiration_time, return_future)
