@@ -17,7 +17,7 @@ import asyncio
 import ctypes
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional, Sequence, Callable, Awaitable, TypeVar
+from typing import List, Optional, Sequence, Union, Callable, Awaitable, TypeVar
 from deprecated import deprecated
 
 from hivemind.client import RemoteExpert
