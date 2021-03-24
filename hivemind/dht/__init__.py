@@ -19,6 +19,7 @@ import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Sequence, Union, Callable, Awaitable, TypeVar
 
+import hivemind
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
@@ -242,14 +243,10 @@ class DHT(mp.Process):
                                             f" Please ensure the node is connected or specify peers=... manually."))
 
     def declare_experts(self, uids, endpoint, wait: bool = True):
-        logger.warning("dht.declare_experts is scheduled for removal in 0.9.8, please use hivemind.declare_experts.",
-                       norepeat=True)
-        from hivemind.client.dht_ops import declare_experts
-        return declare_experts(self, uids, endpoint, wait=wait)
+        logger.warning("dht.declare_experts is scheduled for removal in 0.9.8, please use hivemind.declare_experts.",)
+        return hivemind.declare_experts(self, uids, endpoint, wait=wait)
 
     def get_experts(self, uids, expiration_time: Optional[DHTExpiration] = None,
                     return_future: bool = False) -> List[Optional[RemoteExpert]]:
-        logger.warning("dht.get_experts is scheduled for removal in 0.9.8, please use hivemind.get_experts.",
-                       norepeat=True)
-        from hivemind.client.dht_ops import get_experts
-        return get_experts(self, uids, expiration_time, return_future)
+        logger.warning("dht.get_experts is scheduled for removal in 0.9.8, please use hivemind.get_experts.")
+        return hivemind.get_experts(self, uids, expiration_time, return_future)
