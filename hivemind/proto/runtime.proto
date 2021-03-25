@@ -30,6 +30,7 @@ enum CompressionType{
   NONE = 0;
   MEANSTD_LAST_AXIS_FLOAT16 = 1;
   FLOAT16 = 2;
+  QUANTILE_8BIT = 3;
 }
 
 message Tensor {
