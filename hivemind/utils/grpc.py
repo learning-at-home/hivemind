@@ -195,7 +195,7 @@ def quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size:
 
     for job in jobs:
         job.result()
-    return np.quantile(partition_quantiles, quantiles, **kwargs)
+    return np.quantile(partition_quantiles, quantiles)
 
 
 def get_chunk_size(num_elements: int, min_chunk_size: int) -> int:
