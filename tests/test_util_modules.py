@@ -127,12 +127,12 @@ def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     torch.manual_seed(0)
     X = torch.randn(*size)
     assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
-    serialized = serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16)
-    assert torch.allclose(deserialize_torch_tensor(serialized), X, alpha)
-    serialized = serialize_torch_tensor(X, CompressionType.FLOAT16)
-    assert torch.allclose(deserialize_torch_tensor(serialized), X, alpha)
-    serialized = serialize_torch_tensor(X, CompressionType.QUANTILE_8BIT)
-    assert torch.allclose(deserialize_torch_tensor(serialized), X, beta)
+    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16)) - X
+    assert error.square().mean() < alpha
+    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.FLOAT16)) - X
+    assert error.square().mean() < alpha
+    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.QUANTILE_8BIT)) - X
+    assert error.square().mean() < beta
 
 
 @pytest.mark.forked
