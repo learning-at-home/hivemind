@@ -8,6 +8,8 @@ from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 from hivemind.utils import MSGPackSerializer
 from concurrent.futures import CancelledError
+from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
 
 
 def test_mpfuture_result():
@@ -123,8 +125,6 @@ async def test_await_mpfuture():
 
 def test_vector_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     torch.manual_seed(0)
-    from hivemind.proto.runtime_pb2 import CompressionType
-    from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
     X = torch.randn(*size)
     assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
     serialized = serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16)
