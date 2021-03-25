@@ -17,8 +17,10 @@ if __name__ == "__main__":
     parser.add_argument('--size', type=int, default=50000000, required=False)
     parser.add_argument('--seed', type=int, default=7348, required=False)
 
-    torch.manual_seed(parser.seed)
-    X = torch.randn(parser.size)
+    args = parser.parse_args()
+
+    torch.manual_seed(args.seed)
+    X = torch.randn(args.size)
 
     for name, compression_type in CompressionType.items():
         print(f"compression type: {name}; time: {benchmark_compression(X, compression_type)}")
