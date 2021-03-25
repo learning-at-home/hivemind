@@ -121,19 +121,18 @@ async def test_await_mpfuture():
             await future
 
 
-
-def test_vector_compression(size=(128, 128, 64), alpha=5e-08):
+def test_vector_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     torch.manual_seed(0)
     from hivemind.proto.runtime_pb2 import CompressionType
     from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
     X = torch.randn(*size)
     assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16))-X
-    assert error.square().mean() < alpha
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.FLOAT16)) - X
-    assert error.square().mean() < alpha
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.QUANTILE_8BIT)) - X
-    assert error.square().mean() < 0.0008
+    serialized = serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16)
+    assert torch.allclose(deserialize_torch_tensor(serialized), X, alpha)
+    serialized = serialize_torch_tensor(X, CompressionType.FLOAT16)
+    assert torch.allclose(deserialize_torch_tensor(serialized), X, alpha)
+    serialized = serialize_torch_tensor(X, CompressionType.QUANTILE_8BIT)
+    assert torch.allclose(deserialize_torch_tensor(serialized), X, beta)
 
 
 @pytest.mark.forked

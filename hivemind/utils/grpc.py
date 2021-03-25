@@ -32,10 +32,10 @@ GRPC_KEEPALIVE_OPTIONS = (
     ('grpc.http2.min_ping_interval_without_data_ms', 10 * 1000),
 )
 
-SIZE_OF_FLOAT32 = 4
-SIZE_OF_FLOAT16 = 2
+NUM_BYTES_FLOAT32 = 4
+NUM_BYTES_FLOAT16 = 2
 NUM_BITS_QUANTILE_COMPRESSION = 8
-NUM_QUANTILES_QUANTILE_COMPRESSION = 2 ** NUM_BITS_QUANTILE_COMPRESSION
+NUM_COMPRESSION_QUANTILES = 2 ** NUM_BITS_QUANTILE_COMPRESSION
 
 
 class ChannelInfo(NamedTuple):
@@ -167,7 +167,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
         raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
 
-def quantile_encode_torch_approx(tensor: torch.Tensor, n_bits: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def quantile_encode_approx(tensor: torch.Tensor, n_bits: int) -> Tuple[torch.Tensor, torch.Tensor]:
     n_bins = 2 ** n_bits
     borders = torch.as_tensor(quantile_qq_approximation(tensor.numpy(), n_bins + 1)[1:-1])
     quant_weight = torch.clamp_(torch.bucketize(tensor, borders), 0, n_bins - 1)
@@ -177,7 +177,7 @@ def quantile_encode_torch_approx(tensor: torch.Tensor, n_bits: int) -> Tuple[tor
     return quant_weight, lookup
 
 
-def quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size: int = 10 ** 5, **kwargs) -> np.ndarray:
+def quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size: int = 10 ** 5) -> np.ndarray:
     """ Estimate uniform quantiles of data using quantile-of-quantiles. Runs in parallel. """
     if not array.data.c_contiguous and array.data.f_contiguous:
         array = array.T
@@ -191,7 +191,7 @@ def quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size:
     for i in range(num_chunks):
         chunk = slice(chunk_size * i, chunk_size * (i + 1))
         jobs.append(run_in_background(
-            np.quantile, array[chunk], quantiles, out=partition_quantiles[i], **kwargs))
+            np.quantile, array[chunk], quantiles, out=partition_quantiles[i]))
 
     for job in jobs:
         job.result()
@@ -257,7 +257,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
     elif compression_type == CompressionType.QUANTILE_8BIT:
         assert tensor.dtype == torch.float32
 
-        quantized, lookup = quantile_encode_torch_approx(tensor.detach(), NUM_BITS_QUANTILE_COMPRESSION)
+        quantized, lookup = quantile_encode_approx(tensor.detach(), NUM_BITS_QUANTILE_COMPRESSION)
         data = b''.join((lookup.numpy().tobytes(), quantized.numpy().astype(np.uint8).tobytes()))
 
         proto = runtime_pb2.Tensor(
@@ -289,8 +289,8 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
         stats_size = list(serialized_tensor.size)
         stats_size[-1] = 1
         stats_count = np.prod(stats_size)
-        means = serialized_tensor.buffer[-2 * SIZE_OF_FLOAT32 * stats_count: -SIZE_OF_FLOAT32 * stats_count]
-        stds = serialized_tensor.buffer[-SIZE_OF_FLOAT32 * stats_count:]
+        means = serialized_tensor.buffer[-2 * NUM_BYTES_FLOAT32 * stats_count: -NUM_BYTES_FLOAT32 * stats_count]
+        stds = serialized_tensor.buffer[-NUM_BYTES_FLOAT32 * stats_count:]
         means = torch.as_tensor(np.frombuffer(means, dtype=np.float32).copy()).view(*stats_size)
         stds = torch.as_tensor(np.frombuffer(stds, dtype=np.float32).copy()).view(*stats_size)
 
@@ -300,8 +300,8 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.float16).copy()
         tensor = construct_torch_tensor(array, serialized_tensor.size, torch.float32)
     elif serialized_tensor.compression == CompressionType.QUANTILE_8BIT:
-        lookup = serialized_tensor.buffer[:NUM_QUANTILES_QUANTILE_COMPRESSION * SIZE_OF_FLOAT32]
-        quantized = serialized_tensor.buffer[NUM_QUANTILES_QUANTILE_COMPRESSION * SIZE_OF_FLOAT32:]
+        lookup = serialized_tensor.buffer[:NUM_COMPRESSION_QUANTILES * NUM_BYTES_FLOAT32]
+        quantized = serialized_tensor.buffer[NUM_COMPRESSION_QUANTILES * NUM_BYTES_FLOAT32:]
         lookup = torch.as_tensor(np.frombuffer(lookup, dtype=np.float32).copy())
         quantized = np.frombuffer(quantized, dtype=np.uint8).copy()
         quantized = construct_torch_tensor(quantized, serialized_tensor.size, dtype=torch.int64)
