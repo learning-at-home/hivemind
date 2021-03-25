@@ -123,7 +123,7 @@ async def test_await_mpfuture():
             await future
 
 
-def test_vector_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
+def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     torch.manual_seed(0)
     X = torch.randn(*size)
     assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
