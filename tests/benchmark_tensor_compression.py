@@ -14,8 +14,9 @@ def benchmark_compression(tensor: torch.Tensor, compression_type: CompressionTyp
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--size', type=int, default=50000000, required=False)
+    parser.add_argument('--size', type=int, default=10000000, required=False)
     parser.add_argument('--seed', type=int, default=7348, required=False)
+    parser.add_argument('--num_iters', type=int, default=30, required=False)
 
     args = parser.parse_args()
 
@@ -23,4 +24,8 @@ if __name__ == "__main__":
     X = torch.randn(args.size)
 
     for name, compression_type in CompressionType.items():
-        print(f"compression type: {name}; time: {benchmark_compression(X, compression_type)}")
+        tm = 0
+        for i in range(args.num_iters):
+            tm += benchmark_compression(X, compression_type)
+        tm /= args.num_iters
+        print(f"Compression type: {name}, time: {tm}")
