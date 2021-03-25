@@ -5,7 +5,7 @@ import base58
 import multihash
 
 from multiaddr import Multiaddr, protocols
-from hivemind.p2p.p2p_daemon_bindings.pb import p2pd_pb2
+from hivemind.proto import p2pd_pb2
 
 from hivemind.p2p.p2p_daemon_bindings.keys import PublicKey
 

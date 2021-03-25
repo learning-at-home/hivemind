@@ -4,7 +4,7 @@ import asyncio
 
 from google.protobuf.message import Message as PBMessage
 
-from hivemind.p2p.p2p_daemon_bindings.pb import p2pd_pb2 as p2pd_pb
+from hivemind.proto import p2pd_pb2 as p2pd_pb
 
 
 DEFAULT_MAX_BITS: int = 64

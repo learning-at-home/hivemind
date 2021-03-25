@@ -18,7 +18,7 @@ from hivemind.p2p.p2p_daemon_bindings.control import parse_conn_protocol, Daemon
 from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
 from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure, raise_if_failed, write_unsigned_varint, \
     read_unsigned_varint, read_pbmsg_safe, write_pbmsg, get_unused_tcp_port
-from hivemind.p2p.p2p_daemon_bindings.pb import p2pd_pb2 as p2pd_pb
+from hivemind.proto import p2pd_pb2 as p2pd_pb
 from hivemind.p2p.p2p_daemon_bindings.datastructures import ID, StreamInfo, PeerInfo
 
 

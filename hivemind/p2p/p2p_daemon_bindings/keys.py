@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, unique
 
-from hivemind.p2p.p2p_daemon_bindings.pb import crypto_pb2 as protobuf
+from hivemind.proto import crypto_pb2 as protobuf
 
 
 @unique

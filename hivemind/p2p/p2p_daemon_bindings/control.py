@@ -5,7 +5,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from multiaddr import Multiaddr, protocols
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerInfo, StreamInfo, ID
-from hivemind.p2p.p2p_daemon_bindings.pb import p2pd_pb2 as p2pd_pb
+from hivemind.proto import p2pd_pb2 as p2pd_pb
 import hivemind.p2p.p2p_daemon_bindings.config as config
 from hivemind.p2p.p2p_daemon_bindings.utils import DispatchFailure, read_pbmsg_safe, write_pbmsg, raise_if_failed
 
