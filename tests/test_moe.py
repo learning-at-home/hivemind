@@ -109,10 +109,10 @@ def test_beam_search_correctness():
 
     for i in range(25):
         input = torch.randn(32)
-        grid_scores = dmoe.proj(input).split_with_sizes(dmoe.grid_size, dim=-1)
+        grid_scores = dmoe.proj(input).split_with_sizes(dmoe.beam_search.grid_size, dim=-1)
 
-        chosen_experts = dht.find_best_experts(dmoe.uid_prefix, [tensor.detach().numpy() for tensor in grid_scores],
-                                               beam_size=dmoe.k_best)
+        chosen_experts = dmoe.beam_search.find_best_experts([tensor.detach().numpy() for tensor in grid_scores],
+                                                            beam_size=dmoe.k_best)
         chosen_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
                                                    [chosen_experts])[0]
         our_best_scores = list(chosen_scores.cpu().detach().numpy())

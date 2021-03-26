@@ -12,6 +12,8 @@ from torch.autograd.function import once_differentiable
 
 import hivemind
 from hivemind.client.expert import RemoteExpert, DUMMY, _get_expert_stub
+from hivemind.server.expert_uid import UID_DELIMITER
+from hivemind.client.beam_search import MoEBeamSearcher
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
 from hivemind.utils import nested_pack, nested_flatten, serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.logging import get_logger
@@ -45,11 +47,8 @@ class RemoteMixtureOfExperts(nn.Module):
                  backward_k_min: int = 1, backward_timeout: Optional[float] = None, detect_anomalies: bool = False,
                  **dht_kwargs):
         super().__init__()
-        if not uid_prefix.endswith(hivemind.dht.UID_DELIMITER):
-            uid_prefix += hivemind.dht.UID_DELIMITER
-            logger.info(f"Prefix must end with '{hivemind.dht.UID_DELIMITER}'. New prefix: '{uid_prefix}' .")
-        assert hivemind.dht.is_valid_prefix(uid_prefix), f"Prefix '{uid_prefix}' is invalid."
-        self.dht, self.grid_size, self.uid_prefix, self.dht_kwargs = dht, grid_size, uid_prefix, dht_kwargs
+        self.dht = dht
+        self.beam_search = MoEBeamSearcher(dht, uid_prefix, grid_size, **dht_kwargs)
         self.k_best, self.k_min, self.backward_k_min = k_best, k_min, backward_k_min
         self.forward_timeout, self.backward_timeout = forward_timeout, backward_timeout
         self.timeout_after_k_min = timeout_after_k_min
@@ -75,10 +74,10 @@ class RemoteMixtureOfExperts(nn.Module):
             input_for_gating = input
 
         # 1. compute scores and find most appropriate experts with beam search
-        grid_scores = self.proj(input_for_gating).split_with_sizes(self.grid_size, dim=-1)
+        grid_scores = self.proj(input_for_gating).split_with_sizes(self.beam_search.grid_size, dim=-1)
 
-        chosen_experts: List[List[RemoteExpert]] = self.dht.batch_find_best_experts(
-            self.uid_prefix, [scores.detach().cpu().numpy() for scores in grid_scores], self.k_best, **self.dht_kwargs)
+        chosen_experts: List[List[RemoteExpert]] = self.beam_search.batch_find_best_experts(
+            [scores.detach().cpu().numpy() for scores in grid_scores], self.k_best)
 
         if self._expert_info is None:
             try:
@@ -121,8 +120,8 @@ class RemoteMixtureOfExperts(nn.Module):
 
         grid_indices = torch.zeros([len(flat_experts), len(grid_scores)], dtype=torch.int64)
         for i, expert in enumerate(flat_experts):
-            expert_indices = expert.uid[len(self.uid_prefix):]
-            expert_indices = list(map(int, expert_indices.split(hivemind.dht.UID_DELIMITER)))
+            expert_indices = expert.uid[len(self.beam_search.uid_prefix):]
+            expert_indices = list(map(int, expert_indices.split(UID_DELIMITER)))
             grid_indices[i] = torch.as_tensor(expert_indices, dtype=grid_indices.dtype)
 
         scores_per_dim = [
@@ -140,8 +139,8 @@ class RemoteMixtureOfExperts(nn.Module):
             # grab some expert to set ensemble output shape
             proj_device = self.proj.weight.device
             dummy_scores_concat = self.proj(torch.randn(1, self.proj.in_features, device=proj_device))
-            dummy_scores = dummy_scores_concat.cpu().split_with_sizes(self.grid_size, dim=-1)
-            dummy_experts = self.loop.run_until_complete(self.beam_search(dummy_scores, k_best=1))
+            dummy_scores = dummy_scores_concat.cpu().split_with_sizes(self.beam_search.grid_size, dim=-1)
+            dummy_experts = self.beam_search.find_best_experts(dummy_scores, beam_size=1)
             self._expert_info = dummy_experts[0].info
         return self._expert_info
 

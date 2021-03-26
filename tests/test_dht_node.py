@@ -1,15 +1,14 @@
 import asyncio
+import heapq
 import multiprocessing as mp
 import random
-import heapq
-from typing import Optional
+from itertools import product
+from typing import Optional, List, Dict
+
 import numpy as np
 import pytest
-from itertools import product
 
 import hivemind
-from typing import List, Dict
-
 from hivemind import get_dht_time, replace_port
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST
 from hivemind.dht.protocol import DHTProtocol, ValidationError
