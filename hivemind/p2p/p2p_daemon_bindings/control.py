@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from multiaddr import Multiaddr, protocols
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerInfo, StreamInfo, ID
 from hivemind.proto import p2pd_pb2 as p2pd_pb
-import hivemind.p2p.p2p_daemon_bindings.config as config
 from hivemind.p2p.p2p_daemon_bindings.utils import DispatchFailure, read_pbmsg_safe, write_pbmsg, raise_if_failed
 
 StreamHandler = Callable[[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
@@ -35,10 +34,11 @@ def parse_conn_protocol(maddr: Multiaddr) -> int:
 class DaemonConnector:
     control_maddr: Multiaddr
     logger = logging.getLogger("p2pclient.DaemonConnector")
+    DEFAULT_CONTROL_MADDR = "/unix/tmp/p2pd.sock"
 
     def __init__(self, control_maddr: Multiaddr = None) -> None:
         if control_maddr is None:
-            control_maddr = Multiaddr(config.control_maddr_str)
+            control_maddr = Multiaddr(self.DEFAULT_CONTROL_MADDR)
         self.control_maddr = control_maddr
 
     async def open_connection(self) -> (asyncio.StreamReader, asyncio.StreamWriter):
@@ -64,12 +64,13 @@ class ControlClient:
     daemon_connector: DaemonConnector
     handlers: Dict[str, StreamHandler]
     logger = logging.getLogger("p2pclient.ControlClient")
+    DEFAULT_LISTEN_MADDR = "/unix/tmp/p2pclient.sock"
 
     def __init__(
         self, daemon_connector: DaemonConnector, listen_maddr: Multiaddr = None
     ) -> None:
         if listen_maddr is None:
-            listen_maddr = Multiaddr(config.listen_maddr_str)
+            listen_maddr = Multiaddr(self.DEFAULT_LISTEN_MADDR)
         self.listen_maddr = listen_maddr
         self.daemon_connector = daemon_connector
         self.handlers = {}

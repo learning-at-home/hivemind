@@ -13,7 +13,6 @@ from multiaddr import Multiaddr, protocols
 
 import pytest
 
-from hivemind.p2p.p2p_daemon_bindings import config
 from hivemind.p2p.p2p_daemon_bindings.control import parse_conn_protocol, DaemonConnector, ControlClient
 from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
 from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure, raise_if_failed, write_unsigned_varint, \
@@ -217,7 +216,7 @@ def test_client_ctor_control_maddr(control_maddr_str):
 
 def test_client_ctor_default_control_maddr():
     c = DaemonConnector()
-    assert c.control_maddr == Multiaddr(config.control_maddr_str)
+    assert c.control_maddr == Multiaddr(DaemonConnector.DEFAULT_CONTROL_MADDR)
 
 
 @pytest.mark.parametrize("listen_maddr_str", ("/unix/123", "/ip4/127.0.0.1/tcp/6666"))
@@ -230,7 +229,7 @@ def test_control_client_ctor_listen_maddr(listen_maddr_str):
 
 def test_control_client_ctor_default_listen_maddr():
     c = ControlClient(daemon_connector=DaemonConnector())
-    assert c.listen_maddr == Multiaddr(config.listen_maddr_str)
+    assert c.listen_maddr == Multiaddr(ControlClient.DEFAULT_LISTEN_MADDR)
 
 
 @pytest.mark.parametrize(
