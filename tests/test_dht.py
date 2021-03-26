@@ -1,10 +1,10 @@
-import random
 import asyncio
+import random
 import time
 
 import pytest
-import hivemind
 
+import hivemind
 from hivemind import LOCALHOST, strip_port
 
 
