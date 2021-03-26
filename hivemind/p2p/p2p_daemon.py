@@ -89,17 +89,17 @@ class P2P(object):
                 self._daemon_listen_port = find_open_port()
 
     @staticmethod
-    async def send_data(data, stream):
+    async def send_data(data, writer):
         byte_str = pickle.dumps(data)
         request = len(byte_str).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER) + byte_str
-        await stream.send_all(request)
+        writer.write(request)
 
     class IncompleteRead(Exception):
         pass
 
-    async def _receive_exactly(self, stream, n_bytes, max_bytes=1 << 16):
+    async def _receive_exactly(self, reader, n_bytes, max_bytes=1 << 16):
         while len(self._buffer) < n_bytes:
-            data = await stream.receive_some(max_bytes)
+            data = await reader.read(max_bytes)
             if len(data) == 0:
                 raise P2P.IncompleteRead()
             self._buffer.extend(data)
@@ -108,28 +108,28 @@ class P2P(object):
         self._buffer = self._buffer[n_bytes:]
         return bytes(result)
 
-    async def receive_data(self, stream, max_bytes=(1 < 16)):
-        header = await self._receive_exactly(stream, P2P.HEADER_LEN)
+    async def receive_data(self, reader, max_bytes=(1 < 16)):
+        header = await self._receive_exactly(reader, P2P.HEADER_LEN)
         content_length = int.from_bytes(header, P2P.BYTEORDER)
-        data = await self._receive_exactly(stream, content_length)
+        data = await self._receive_exactly(reader, content_length)
         return pickle.loads(data)
 
     def _handle_stream(self, handle):
-        async def do_handle_stream(stream_info, stream):
+        async def do_handle_stream(stream_info, reader, writer):
             try:
-                request = await self.receive_data(stream)
+                request = await self.receive_data(reader)
             except P2P.IncompleteRead:
                 warnings.warn("Incomplete read while receiving request from peer", RuntimeWarning)
+                writer.close()
                 return
-            finally:
-                stream.close()
+
             try:
                 result = handle(request)
-                await self.send_data(result, stream)
+                await self.send_data(result, writer)
             except Exception as exc:
-                await self.send_data(exc, stream)
+                await self.send_data(exc, writer)
             finally:
-                await stream.close()
+                writer.close()
 
         return do_handle_stream
 
@@ -158,12 +158,12 @@ class P2P(object):
 
     async def call_peer_handler(self, peer_id, handler_name, input_data):
         libp2p_peer_id = ID.from_base58(peer_id)
-        stream_info, stream = await self._client.stream_open(libp2p_peer_id, (handler_name,))
+        stream_info, reader, writer = await self._client.stream_open(libp2p_peer_id, (handler_name,))
         try:
-            await self.send_data(input_data, stream)
-            return await self.receive_data(stream)
+            await self.send_data(input_data, writer)
+            return await self.receive_data(reader)
         finally:
-            await stream.close()
+            writer.close()
 
     def __del__(self):
         self._kill_child()
