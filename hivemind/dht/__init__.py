@@ -35,7 +35,7 @@ class DHT(mp.Process):
     """
     A high-level interface to a hivemind DHT that runs a single DHT node in a background process.
     * hivemind servers periodically announce their experts via declare_experts (dht_handler.py)
-    * trainers find most suitable experts via RemoteMixtureOfExperts (beam_saerch.py)
+    * trainers find most suitable experts via RemoteMixtureOfExperts (beam_search.py)
 
     :param initial_peers: one or multiple endpoints pointing to active DHT peers. Similar format to listen_on.
     :param listen_on: an interface for incoming connections, e.g. "127.0.0.1:*", "0.0.0.0:1234" or "ipv6:[::]:*"

@@ -67,7 +67,7 @@ class MoEBeamSearcher:
                  num_workers: Optional[int] = None, negative_caching: bool = True, **kwargs):
         if not uid_prefix.endswith(UID_DELIMITER):
             uid_prefix += UID_DELIMITER
-            logger.info(f"Prefix must end with '{UID_DELIMITER}'. Changing to '{uid_prefix}' .")
+            logger.info(f"Prefix must end with '{UID_DELIMITER}'. Changing to {uid_prefix}{UID_DELIMITER}")
         assert is_valid_prefix(uid_prefix), f"Prefix '{uid_prefix}' is invalid."
         self.dht = dht
         self.uid_prefix, self.grid_size = uid_prefix, grid_size
