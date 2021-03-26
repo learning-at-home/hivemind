@@ -8,6 +8,8 @@ from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 from hivemind.utils import MSGPackSerializer
 from concurrent.futures import CancelledError
+from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
 
 
 def test_mpfuture_result():
@@ -121,16 +123,16 @@ async def test_await_mpfuture():
             await future
 
 
-def test_vector_compression(size=(128, 128, 64), alpha=5e-08):
+def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     torch.manual_seed(0)
-    from hivemind.proto.runtime_pb2 import CompressionType
-    from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
     X = torch.randn(*size)
     assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16))-X
+    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16)) - X
     assert error.square().mean() < alpha
     error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.FLOAT16)) - X
     assert error.square().mean() < alpha
+    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.QUANTILE_8BIT)) - X
+    assert error.square().mean() < beta
 
 
 @pytest.mark.forked
@@ -193,6 +195,14 @@ def test_serialize_tensor():
     assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
     restored = hivemind.combine_from_streaming(chunks)
     assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor)
+
+    scalar = torch.tensor(1.)
+    serialized_scalar = hivemind.serialize_torch_tensor(scalar, hivemind.CompressionType.NONE)
+    assert torch.allclose(hivemind.deserialize_torch_tensor(serialized_scalar), scalar)
+
+    serialized_scalar = hivemind.serialize_torch_tensor(scalar, hivemind.CompressionType.FLOAT16)
+    assert torch.allclose(hivemind.deserialize_torch_tensor(serialized_scalar), scalar)
+
 
 
 def test_serialize_tuple():
