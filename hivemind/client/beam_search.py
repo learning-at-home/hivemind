@@ -86,8 +86,8 @@ class MoEBeamSearcher:
                                               num_workers=self.num_workers), return_future)
 
     @staticmethod
-    async def _get_initial_beam(dht, node, prefix: ExpertPrefix, beam_size: int, scores: Tuple[float, ...],
-                                negative_caching: bool, num_workers: Optional[int] = None
+    async def _get_initial_beam(dht: DHT, node: DHTNode, prefix: ExpertPrefix, beam_size: int,
+                                scores: Tuple[float, ...], negative_caching: bool, num_workers: Optional[int] = None
                                 ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
         num_workers = num_workers or dht.max_workers or beam_size
         beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = []
@@ -139,8 +139,8 @@ class MoEBeamSearcher:
             negative_caching=self.negative_caching, num_workers=self.num_workers), return_future=return_future)
 
     @staticmethod
-    async def _get_active_successors(dht, node: DHTNode, prefixes: List[ExpertPrefix], grid_size: Optional[int] = None,
-                                     negative_caching: bool = True, num_workers: Optional[int] = None,
+    async def _get_active_successors(dht: DHT, node: DHTNode, prefixes: List[ExpertPrefix], grid_size: Optional[int],
+                                     negative_caching: bool, num_workers: Optional[int] = None
                                      ) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
         grid_size = grid_size or float('inf')
         num_workers = num_workers or min(len(prefixes), dht.max_workers or len(prefixes))
@@ -159,8 +159,7 @@ class MoEBeamSearcher:
                                                    expiration_time=get_dht_time() + dht.default_expiration))
         return successors
 
-    def find_best_experts(self, grid_scores: Sequence[Sequence[float]], beam_size: int,
-                          num_workers: Optional[int] = None, return_future: bool = False
+    def find_best_experts(self, grid_scores: Sequence[Sequence[float]], beam_size: int, return_future: bool = False
                           ) -> Union[List[RemoteExpert], MPFuture[RemoteExpert]]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
@@ -183,7 +182,7 @@ class MoEBeamSearcher:
     @classmethod
     async def _find_best_experts(
             cls, dht: DHT, node: DHTNode, prefix: str, grid_scores: List[Tuple[float]], beam_size: int,
-            negative_caching: bool, num_workers: Optional[int] = None, **kwargs) -> List[RemoteExpert]:
+            negative_caching: bool, num_workers: Optional[int] = None) -> List[RemoteExpert]:
         num_workers = num_workers or min(beam_size, dht.max_workers or beam_size)
 
         # form initial beam from top-k active L1 prefixes, each row is (score, uid prefix, possible suffixes)
@@ -209,8 +208,8 @@ class MoEBeamSearcher:
             _, best_uid_prefixes = zip(*best_active_pairs)
 
             # search DHT for next step suffixes
-            successors = await cls._get_active_successors(
-                dht, node, best_uid_prefixes, negative_caching=negative_caching, num_workers=num_workers)
+            successors = await cls._get_active_successors(dht, node, best_uid_prefixes, grid_size=None,
+                                                          negative_caching=negative_caching, num_workers=num_workers)
             beam = [(score, prefix, successors[prefix]) for score, prefix in best_active_pairs if successors[prefix]]
             if not beam:
                 logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim 0)")
