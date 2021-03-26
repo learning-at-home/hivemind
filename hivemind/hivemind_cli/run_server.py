@@ -13,9 +13,9 @@ from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-def add_custom_models_from_file(path):
+def add_custom_models_from_file(path: str):
     spec = importlib.util.spec_from_file_location(
-        "custm_module", os.path.abspath(path))
+        "custom_module", os.path.abspath(path))
     foo = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(foo)
 
@@ -55,7 +55,7 @@ def main():
     parser.add_argument('--load_experts', action='store_true', help='Load experts from the checkpoint directory')
 
     parser.add_argument('--custom_module_path', type=str, default=None, required=False,
-                        help='Path of a file with cutom nn.modules, wrapped into special decorator')
+                        help='Path of a file with custom nn.modules, wrapped into special decorator')
 
     # fmt:on
     args = vars(parser.parse_args())

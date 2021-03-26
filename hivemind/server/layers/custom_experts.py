@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from hivemind.server.layers import name_to_block, name_to_input
 
-def register_expert(name: str, sample_input: tp.Callable[[int, int], torch.tensor]):
+def register_expert_class(name: str, sample_input: tp.Callable[[int, int], torch.tensor]):
     """
     Adds a custom user expert to hivemind server.
     :param name: the name of the expert. It shouldn't coincide with existing modules\
@@ -16,7 +16,7 @@ def register_expert(name: str, sample_input: tp.Callable[[int, int], torch.tenso
     """
     def registrator(custom_class: tp.Type[nn.Module]):
         if name in name_to_block or name in name_to_input:
-            raise RuntimeWarning("The class might already exist or be added twice")
+            raise RuntimeError("The class might already exist or be added twice")
         name_to_block[name] = custom_class
         name_to_input[name] = sample_input
 

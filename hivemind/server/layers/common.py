@@ -1,7 +1,10 @@
 import torch
 from torch import nn as nn
 
+from hivemind.server.layers.custom_experts import register_expert_class
 
+ffn_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
+@register_expert_class('ffn', ffn_sample_input)
 class FeedforwardBlock(nn.Module):
     def __init__(self, hid_dim):
         super().__init__()
@@ -17,7 +20,6 @@ class FeedforwardBlock(nn.Module):
 
     def forward(self, x):
         return x + self.layers(x)
-
 
 class TransformerEncoderLayer(nn.Module):
     """
@@ -54,7 +56,18 @@ class TransformerEncoderLayer(nn.Module):
         src = src.transpose(0, 1)
         return src
 
+transformer_sample_input = lambda batch_size, hid_dim: \
+    (torch.empty((batch_size, 128, hid_dim)), \
+    torch.empty((batch_size, hid_dim), dtype=torch.bool))
+# transformer_sample_input = lambda batch_size, hid_dim: \
+#     torch.empty((batch_size, 128, hid_dim))
+@register_expert_class('transformer', transformer_sample_input)
+class TunedTransformer(TransformerEncoderLayer):
+    def __init__(self, hid_dim):
+        super(TunedTransformer, self).__init__(hid_dim, dim_feedforward=4 * hid_dim, nhead=16)
 
+nop_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
+@register_expert_class('nop', nop_sample_input)
 class NopExpert(nn.Sequential):
     def __init__(self, hid_dim):
         super().__init__()
