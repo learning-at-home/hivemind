@@ -1,20 +1,26 @@
-import anyio
 import asyncio
-import contextlib
 import copy
 from pathlib import Path
 import pickle
-import socket
-import sys
 import subprocess
 import typing as tp
 import warnings
 
+import google.protobuf
 from multiaddr import Multiaddr
 import p2pclient
 from libp2p.peer.id import ID
 
 from hivemind.utils.networking import find_open_port
+
+
+class P2PContext(object):
+    def __init__(self, ours_id, ours_port, handle_name):
+        self.peer_id = None
+        self.peer_addr = None
+        self.ours_id = ours_id
+        self.ours_port = ours_port
+        self.handle_name = handle_name
 
 
 class P2P(object):
@@ -138,7 +144,7 @@ class P2P(object):
     @staticmethod
     async def receive_protobuf(in_proto_type, stream):
         protobuf = in_proto_type()
-        protobuf.ParseFromString(P2P.receive_raw_data(stream))
+        protobuf.ParseFromString(await P2P.receive_raw_data(stream))
         return protobuf
 
     @staticmethod
@@ -161,7 +167,7 @@ class P2P(object):
         return do_handle_stream
 
     @staticmethod
-    def _handle_unary_stream(handle, in_proto_type, out_proto_type):
+    def _handle_unary_stream(handle, context, in_proto_type, out_proto_type):
         async def watchdog(stream):
             await stream.receive_some(max_bytes=1)
             raise P2P.InterruptedError()
@@ -171,13 +177,14 @@ class P2P(object):
                 try:
                     request = await P2P.receive_protobuf(in_proto_type, stream)
                 except P2P.IncompleteRead:
-                    warnings.warn("Incomplete read while receiving request from peer", RuntimeWarning)
+                    warnings.warn("Incomplete read while receiving request from peer",
+                                  RuntimeWarning)
                     return
-                except Exception as exc:
-                    warnings.warn(repr(exc), RuntimeWarning)
+                except google.protobuf.message.DecodeError as error:
+                    warnings.warn(repr(error), RuntimeWarning)
                     return
 
-                context = {"peer_id": stream_info.peer_id, "addr": stream_info.addr}
+                context.peer_id, context.peer_addr = stream_info.peer_id, stream_info.addr
                 done, pending = await asyncio.wait([watchdog(stream), handle(request, context)],
                                                    return_when=asyncio.FIRST_COMPLETED)
                 try:
@@ -224,8 +231,9 @@ class P2P(object):
     async def add_unary_handler(self, name, handle, in_proto_type, out_proto_type):
         if self._listen_task is None:
             self.start_listening()
+        context = P2PContext(ours_id=self.id, ours_port=self._host_port, handle_name=name)
         await self._client.stream_handler(
-            name, P2P._handle_unary_stream(handle, in_proto_type, out_proto_type))
+            name, P2P._handle_unary_stream(handle, context, in_proto_type, out_proto_type))
 
     async def call_peer_handler(self, peer_id, handler_name, input_data):
         libp2p_peer_id = ID.from_base58(peer_id)
