@@ -23,7 +23,6 @@ multihead_sample_input = lambda batch_size, hidden_dim : \
     (torch.empty((batch_size, hidden_dim)),
     torch.empty((batch_size, 2 * hidden_dim)),
     torch.empty((batch_size, 3 * hidden_dim)),)
-
 @register_expert_class('multihead', multihead_sample_input)
 class MultiheadNetwork(nn.Module):
     def __init__(self, hidden_dim, num_classes=10):

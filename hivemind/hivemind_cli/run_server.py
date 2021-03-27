@@ -13,11 +13,6 @@ from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-def add_custom_models_from_file(path: str):
-    spec = importlib.util.spec_from_file_location(
-        "custom_module", os.path.abspath(path))
-    foo = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(foo)
 
 def main():
     # fmt:off
@@ -78,10 +73,6 @@ def main():
         compression = CompressionType.MEANSTD_LAST_AXIS_FLOAT16
     else:
         compression = getattr(CompressionType, compression_type)
-
-    custom_module_path = args.pop('custom_module_path')
-    if custom_module_path is not None:
-        add_custom_models_from_file(custom_module_path)
 
     server = Server.create(**args, optim_cls=optim_cls, start=True, compression=compression)
 

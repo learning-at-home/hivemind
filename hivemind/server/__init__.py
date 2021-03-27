@@ -17,7 +17,7 @@ from hivemind.server.checkpoints import CheckpointSaver, load_weights, dir_is_co
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread
 from hivemind.server.expert_backend import ExpertBackend
-from hivemind.server.layers import name_to_block, name_to_input
+from hivemind.server.layers import name_to_block, name_to_input, add_custom_models_from_file
 from hivemind.server.runtime import Runtime
 from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
 from hivemind.utils import Endpoint, get_port, replace_port, find_open_port, get_logger
@@ -71,7 +71,7 @@ class Server(threading.Thread):
     def create(listen_on='0.0.0.0:*', num_experts: int = None, expert_uids: str = None, expert_pattern: str = None,
                expert_cls='ffn', hidden_dim=1024, optim_cls=torch.optim.Adam, num_handlers=None, max_batch_size=4096,
                device=None, no_dht=False, initial_peers=(), dht_port=None, checkpoint_dir: Optional[Path] = None,
-               load_experts=False, compression=CompressionType.NONE, *, start: bool, **kwargs) -> Server:
+               load_experts=False, compression=CompressionType.NONE, custom_module_path=None, *, start: bool, **kwargs) -> Server:
         """
         Instantiate a server with several identical experts. See argparse comments below for details
         :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
@@ -101,6 +101,9 @@ class Server(threading.Thread):
 
         :param start: if True, starts server right away and returns when server is ready for requests
         """
+        if custom_module_path is not None:
+            add_custom_models_from_file(custom_module_path)
+
         if len(kwargs) != 0:
             logger.info("Ignored kwargs:", kwargs)
         assert expert_cls in name_to_block
@@ -140,7 +143,8 @@ class Server(threading.Thread):
             args_schema = tuple(hivemind.BatchTensorDescriptor.from_tensor(arg, compression) for arg in sample_input)
         else:
             args_schema = (hivemind.BatchTensorDescriptor.from_tensor(sample_input, compression),)
-
+        with open('debug_logs', 'a') as f:
+            print("8", file=f)
         # initialize experts
         experts = {}
         for expert_uid in expert_uids:

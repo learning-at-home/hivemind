@@ -58,9 +58,7 @@ class TransformerEncoderLayer(nn.Module):
 
 transformer_sample_input = lambda batch_size, hid_dim: \
     (torch.empty((batch_size, 128, hid_dim)), \
-    torch.empty((batch_size, hid_dim), dtype=torch.bool))
-# transformer_sample_input = lambda batch_size, hid_dim: \
-#     torch.empty((batch_size, 128, hid_dim))
+    torch.empty((batch_size, 128), dtype=torch.bool))
 @register_expert_class('transformer', transformer_sample_input)
 class TunedTransformer(TransformerEncoderLayer):
     def __init__(self, hid_dim):
