@@ -1,10 +1,10 @@
+import os
 import threading
 from datetime import datetime
 from pathlib import Path
 from shutil import copy2
 from tempfile import TemporaryDirectory
 from typing import Dict
-import os
 
 import torch
 
@@ -55,14 +55,14 @@ def store_experts(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
             expert_dir = Path(tmpdirname) / expert_name
             expert_dir.mkdir()
             checkpoint_name = expert_dir / f'checkpoint_{timestamp}.pt'
-            torch.save(expert_backend.state_dict(), checkpoint_name)
+            torch.save(expert_backend.get_full_state(), checkpoint_name)
             os.symlink(checkpoint_name, expert_dir / 'checkpoint_last.pt')
         copy_tree(tmpdirname, str(checkpoint_dir))
 
 
-def load_weights(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
+def load_experts(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
     assert dir_is_correct(checkpoint_dir)
     for expert_name, expert in experts.items():
         checkpoints_folder = checkpoint_dir / expert_name
         latest_checkpoint = checkpoints_folder / 'checkpoint_last.pt'
-        expert.load_state_dict(torch.load(latest_checkpoint))
+        expert.load_full_state(torch.load(latest_checkpoint))
