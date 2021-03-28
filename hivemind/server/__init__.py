@@ -152,7 +152,7 @@ class Server(threading.Thread):
         if scheduler_override is not None:
             scheduler = schedule_name_to_scheduler[scheduler_override]
         else:
-            scheduler = expert_name_to_scheduler[scheduler_override]
+            scheduler = expert_name_to_scheduler[expert_cls]
 
         # initialize experts
         experts = {}

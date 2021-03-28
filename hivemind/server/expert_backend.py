@@ -49,7 +49,7 @@ class ExpertBackend:
         if scheduler is None:
             self.scheduler = None
         else:
-            assert optimizer is not None, num_warmup_steps is not None and num_training_steps is not None
+            assert optimizer is not None and num_warmup_steps is not None and num_training_steps is not None
             self.scheduler = scheduler(self.optimizer, num_warmup_steps, num_training_steps)
 
         self.args_schema = args_schema = tuple(args_schema or ())
