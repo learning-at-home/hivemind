@@ -1,15 +1,18 @@
 import dataclasses
-import time
 
 import pytest
 
-from hivemind.dht.crypto import ProtectedRecord, RSASignatureValidator
+from hivemind.dht import get_dht_time
+from hivemind.dht.crypto import DHTRecord, RSASignatureValidator
 
 
 def test_rsa_signature_validator():
+    receiver_validator = RSASignatureValidator()
     sender_validator = RSASignatureValidator()
-    plain_record = ProtectedRecord(key=b'key', subkey=b'subkey', value=b'value',
-                                   expiration_time=time.time())
+    mallory_validator = RSASignatureValidator()
+
+    plain_record = DHTRecord(key=b'key', subkey=b'subkey', value=b'value',
+                             expiration_time=get_dht_time() + 10)
     protected_records = [
         dataclasses.replace(plain_record,
                             key=plain_record.key + sender_validator.ownership_marker),
@@ -17,21 +20,25 @@ def test_rsa_signature_validator():
                             subkey=plain_record.subkey + sender_validator.ownership_marker),
     ]
 
-    receiver_validator = RSASignatureValidator()
-
-    # test 1: Non-protected record
-    assert sender_validator.sign(plain_record) == b''
-    receiver_validator.validate(plain_record, b'')
+    # test 1: Non-protected record (no signature added)
+    assert sender_validator.sign_value(plain_record) == plain_record.value
+    receiver_validator.validate(plain_record)
 
     # test 2: Correct signatures
-    signatures = [sender_validator.sign(record) for record in protected_records]
-    for record, signature in zip(protected_records, signatures):
-        receiver_validator.validate(record, signature)
+    signed_records = [dataclasses.replace(record, value=sender_validator.sign_value(record))
+                      for record in protected_records]
+    for record in signed_records:
+        receiver_validator.validate(record)
+
+        assert receiver_validator.strip_value(record) == b'value'
 
     # test 3: Invalid signatures
-    for record in protected_records:
-        record = dataclasses.replace(record, value=b'Mallory_changed_this_value')
-
-        for signature in signatures + [b'', b'arbitrary_bytes']:
-            with pytest.raises(ValueError):
-                receiver_validator.validate(record, signature)
+    signed_records = protected_records  # Without signature
+    signed_records += [dataclasses.replace(record,
+                                           value=record.value + b'[signature:INVALID_BYTES]')
+                       for record in protected_records]  # With invalid signature
+    signed_records += [dataclasses.replace(record, value=mallory_validator.sign_value(record))
+                       for record in protected_records]  # With someone else's signature
+    for record in signed_records:
+        with pytest.raises(ValueError):
+            receiver_validator.validate(record)

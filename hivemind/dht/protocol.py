@@ -7,7 +7,7 @@ from typing import Optional, List, Tuple, Dict, Any, Sequence, Union, Collection
 
 import grpc
 
-from hivemind.dht.crypto import ProtectedRecord, RecordValidatorBase
+from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
@@ -208,14 +208,11 @@ class DHTProtocol(dht_grpc.DHTServicer):
         assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"
 
         if self.record_validator is not None:
-            signatures = [self.record_validator.sign(ProtectedRecord(*record))
-                          for record in zip(keys, subkeys, values, expiration_time)]
-        else:
-            signatures = [b''] * len(keys)
+            values = [self.record_validator.sign_value(DHTRecord(*record))
+                      for record in zip(keys, subkeys, values, expiration_time)]
 
         store_request = dht_pb2.StoreRequest(keys=keys, subkeys=subkeys, values=values,
-                                             expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info,
-                                             signatures=signatures)
+                                             expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info)
         try:
             async with self.rpc_semaphore:
                 response = await self._get_dht_stub(peer).rpc_store(store_request, timeout=self.wait_timeout)
@@ -234,17 +231,18 @@ class DHTProtocol(dht_grpc.DHTServicer):
             asyncio.create_task(self.rpc_ping(dht_pb2.PingRequest(peer=request.peer), context))
         assert len(request.keys) == len(request.values) == len(request.expiration_time) == len(request.in_cache)
         response = dht_pb2.StoreResponse(store_ok=[], peer=self.node_info)
-        for key, tag, value_bytes, expiration_time, in_cache, signature in zip(
-                request.keys, request.subkeys, request.values, request.expiration_time,
-                request.in_cache, request.signatures):
+        for key, tag, value_bytes, expiration_time, in_cache in zip(
+                request.keys, request.subkeys, request.values, request.expiration_time, request.in_cache):
             if self.record_validator is not None:
-                record = ProtectedRecord(key, tag, value_bytes, expiration_time)
+                record = DHTRecord(key, tag, value_bytes, expiration_time)
                 try:
-                    self.record_validator.validate(record, signature)
+                    self.record_validator.validate(record)
                 except ValueError as e:
                     logger.warning(f'Validation failed with message "{e}" on {record}')
                     response.store_ok.append(False)
                     continue
+
+                value_bytes = self.record_validator.strip_value(record)
 
             key_id = DHTID.from_bytes(key)
             storage = self.cache if in_cache else self.storage

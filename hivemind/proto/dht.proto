@@ -42,8 +42,6 @@ message StoreRequest {
   repeated double expiration_time = 4; // expirations for i-th key (type = DHTExpiration)
   repeated bool in_cache = 5;          // if in_cache[i], store i-th key in cache, else store normally
   NodeInfo peer = 6;                   // (optional) sender's own node info, same behavior as in DHT.rpc_ping
-  repeated bytes signatures = 7;       // signatures for each (key, subkey, value, expiration_time) tuple
-                                       // with protected key/subkey. None means not signed
 }
 
 message StoreResponse {
