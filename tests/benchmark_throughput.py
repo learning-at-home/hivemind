@@ -65,7 +65,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
         for i in range(num_experts):
             expert = torch.jit.script(layers.name_to_block[expert_cls](hid_dim))
             experts[f'expert{i}'] = hivemind.ExpertBackend(name=f'expert{i}',
-                                                           expert=expert, opt=torch.optim.Adam(expert.parameters()),
+                                                           expert=expert, optimizer=torch.optim.Adam(expert.parameters()),
                                                            args_schema=(hivemind.BatchTensorDescriptor(hid_dim),),
                                                            outputs_schema=hivemind.BatchTensorDescriptor(hid_dim),
                                                            max_batch_size=max_batch_size,

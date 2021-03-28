@@ -35,7 +35,7 @@ def test_call_many(hidden_dim=16):
     detect_anomalies = False
     atol = 1e-5
 
-    with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=hidden_dim,
+    with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=hidden_dim,
                            optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
         inputs = torch.randn(4, hidden_dim, requires_grad=True)
         inputs_clone = inputs.clone().detach().requires_grad_(True)
@@ -182,7 +182,7 @@ def test_client_anomaly_detection():
     for i in range(4):
         expert = layers.name_to_block['ffn'](HID_DIM)
         experts[f'expert.{i}'] = hivemind.ExpertBackend(name=f'expert.{i}',
-                                                        expert=expert, opt=torch.optim.Adam(expert.parameters()),
+                                                        expert=expert, optimizer=torch.optim.Adam(expert.parameters()),
                                                         args_schema=(hivemind.BatchTensorDescriptor(HID_DIM),),
                                                         outputs_schema=hivemind.BatchTensorDescriptor(HID_DIM),
                                                         max_batch_size=16,

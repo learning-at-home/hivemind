@@ -1,9 +1,8 @@
 """ A unified interface for several common serialization methods """
-from io import BytesIO
 from typing import Dict, Any
 
-import torch
 import msgpack
+
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
