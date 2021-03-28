@@ -14,11 +14,11 @@ import torch
 import hivemind
 from hivemind.dht import DHT
 from hivemind.server.expert_uid import UID_DELIMITER
-from hivemind.server.checkpoints import CheckpointSaver, load_weights, dir_is_correct
+from hivemind.server.checkpoints import CheckpointSaver, load_experts, dir_is_correct
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread, declare_experts, get_experts
 from hivemind.server.expert_backend import ExpertBackend
-from hivemind.server.layers import name_to_block, name_to_input
+from hivemind.server.layers import name_to_block, name_to_input, expert_name_to_scheduler, schedule_name_to_scheduler
 from hivemind.server.runtime import Runtime
 from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
 from hivemind.utils import Endpoint, get_port, replace_port, find_open_port, get_logger
@@ -70,9 +70,10 @@ class Server(threading.Thread):
 
     @staticmethod
     def create(listen_on='0.0.0.0:*', num_experts: int = None, expert_uids: str = None, expert_pattern: str = None,
-               expert_cls='ffn', hidden_dim=1024, optim_cls=torch.optim.Adam, num_handlers=None, max_batch_size=4096,
-               device=None, no_dht=False, initial_peers=(), dht_port=None, checkpoint_dir: Optional[Path] = None,
-               load_experts=False, compression=CompressionType.NONE, *, start: bool, **kwargs) -> Server:
+               expert_cls='ffn', hidden_dim=1024, optim_cls=torch.optim.Adam, scheduler_override: Optional[str] = None,
+               num_warmup_steps=None, num_training_steps=None, num_handlers=None, max_batch_size=4096, device=None,
+               no_dht=False, initial_peers=(), dht_port=None, checkpoint_dir: Optional[Path] = None,
+               load_expert_states=False, compression=CompressionType.NONE, *, start: bool, **kwargs) -> Server:
         """
         Instantiate a server with several identical experts. See argparse comments below for details
         :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
@@ -85,7 +86,13 @@ class Server(threading.Thread):
         :param num_handlers: server will use this many parallel processes to handle incoming requests
         :param max_batch_size: total num examples in the same batch will not exceed this value
         :param device: all experts will use this device in torch notation; default: cuda if available else cpu
+
         :param optim_cls: uses this optimizer to train all experts
+        :param scheduler_override: if not None, the name of the expert LR scheduler, otherwise use the schedule defined
+            for the expert type
+        :param num_warmup_steps: the number of warmup steps for LR schedule
+        :param num_training_steps: the number of total steps for LR schedule
+
         :param no_dht: if specified, the server will not be attached to a dht
         :param initial_peers: a list of peers that will introduce this node to the dht,\
            e.g. ('123.11.22.33:1337', '[fe80::abe2:db1c:be7d:5a85]:4567'), default = no peers
@@ -94,7 +101,7 @@ class Server(threading.Thread):
            You can then use this node as initial peer for subsequent servers.
 
         :param checkpoint_dir: directory to save expert checkpoints
-        :param load_experts: whether to load expert checkpoints from checkpoint_dir
+        :param load_expert_states: whether to load expert checkpoints from checkpoint_dir
 
         :param compression: if specified, use this compression to pack all inputs, outputs and gradients by all experts
             hosted on this server. For a more fine-grained compression, start server in python and specify compression
@@ -113,7 +120,7 @@ class Server(threading.Thread):
             dht = hivemind.DHT(initial_peers=initial_peers, start=True, listen_on=dht_endpoint)
             logger.info(f"Running DHT node on port {dht.port}, initial peers = {initial_peers}")
 
-        if load_experts:
+        if load_expert_states:
             assert dir_is_correct(checkpoint_dir)
             assert expert_uids is None, "Can't both load saved experts and create new ones from given UIDs"
             expert_uids = [child.name for child in checkpoint_dir.iterdir() if (child / 'checkpoint_last.pt').exists()]
@@ -142,6 +149,11 @@ class Server(threading.Thread):
         else:
             args_schema = (hivemind.BatchTensorDescriptor.from_tensor(sample_input, compression),)
 
+        if scheduler_override is not None:
+            scheduler = schedule_name_to_scheduler[scheduler_override]
+        else:
+            scheduler = expert_name_to_scheduler[scheduler_override]
+
         # initialize experts
         experts = {}
         for expert_uid in expert_uids:
@@ -150,11 +162,14 @@ class Server(threading.Thread):
                                                          args_schema=args_schema,
                                                          outputs_schema=hivemind.BatchTensorDescriptor(
                                                              hidden_dim, compression=compression),
-                                                         opt=optim_cls(expert.parameters()),
+                                                         optimizer=optim_cls(expert.parameters()),
+                                                         scheduler=scheduler,
+                                                         num_warmup_steps=num_warmup_steps,
+                                                         num_training_steps=num_training_steps,
                                                          max_batch_size=max_batch_size)
 
-        if load_experts:
-            load_weights(experts, checkpoint_dir)
+        if load_expert_states:
+            load_experts(experts, checkpoint_dir)
 
         server = Server(dht, experts, listen_on=listen_on, num_connection_handlers=num_handlers, device=device,
                         start=start)

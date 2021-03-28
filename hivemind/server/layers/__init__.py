@@ -2,6 +2,7 @@ import torch
 
 from hivemind.server.layers.common import FeedforwardBlock, TransformerEncoderLayer, NopExpert
 from hivemind.server.layers.dropout import DeterministicDropout, DeterministicDropoutNetwork
+from hivemind.server.layers.lr_schedule import get_linear_schedule_with_warmup
 
 name_to_block = {'ffn': lambda hid_dim: FeedforwardBlock(hid_dim),
                  'transformer': lambda hid_dim: TransformerEncoderLayer(hid_dim, dim_feedforward=4 * hid_dim, nhead=16),
@@ -10,7 +11,12 @@ name_to_block = {'ffn': lambda hid_dim: FeedforwardBlock(hid_dim),
 
 name_to_input = {'ffn': lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
                  'transformer': lambda batch_size, hid_dim:
-                 (torch.empty((batch_size, 128, hid_dim)), torch.empty((batch_size, hid_dim), dtype=torch.bool)),
+                 (torch.empty((batch_size, 128, hid_dim)), torch.empty((batch_size, 128), dtype=torch.bool)),
                  'nop': lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim)),
                  'det_dropout': lambda batch_size, hid_dim:
                  (torch.empty((batch_size, hid_dim)), torch.randint(0, 1, (batch_size, hid_dim)))}
+
+expert_name_to_scheduler = {'ffn': get_linear_schedule_with_warmup, 'transformer': get_linear_schedule_with_warmup,
+                            'nop': None, 'det_dropout': None}
+
+schedule_name_to_scheduler = {'linear': get_linear_schedule_with_warmup, 'none': None}
