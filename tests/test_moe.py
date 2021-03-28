@@ -12,7 +12,7 @@ from hivemind.server import layers
 @pytest.mark.forked
 def test_moe():
     all_expert_uids = [f'ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
-                       for _ in range(20)]
+                       for _ in range(10)]
     with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn', scheduler_override='none',
                            num_handlers=1, hidden_dim=16) as (server_endpoint, dht_endpoint):
         dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
@@ -20,7 +20,7 @@ def test_moe():
         dmoe = hivemind.RemoteMixtureOfExperts(
             in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn.')
 
-        for i in range(10):
+        for i in range(5):
             out = dmoe(torch.randn(10, 16))
             out.sum().backward()
 
