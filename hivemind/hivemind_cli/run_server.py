@@ -41,7 +41,7 @@ def main():
     parser.add_argument('--scheduler_override', type=str, choices=schedule_name_to_scheduler.keys(), required=False,
                         help='LR scheduler type to use instead of default one for expert_cls')
     parser.add_argument('--num-warmup-steps',type=int,required=False,help='the number of warmup steps for LR schedule')
-    parser.add_argument('--num-training-steps',type=int,required=False,help='the number of total steps for LR schedule')
+    parser.add_argument('--num-training-steps', type=int, required=False, help='the total number of steps for LR schedule')
 
     parser.add_argument('--no_dht', action='store_true', help='if specified, the server will not be attached to a dht')
     parser.add_argument('--initial_peers', type=str, nargs='*', required=False, default=[],
