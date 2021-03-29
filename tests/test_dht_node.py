@@ -467,16 +467,20 @@ async def test_dhtnode_signatures():
 
     key = b'key'
     subkey = b'protected_subkey' + bob.protocol.record_validator.ownership_marker
+
     assert await bob.store(key, b'true_value', hivemind.get_dht_time() + 10, subkey=subkey)
     assert (await alice.get(key, latest=True)).value[subkey].value == b'true_value'
 
     store_ok = await mallory.store(key, b'fake_value', hivemind.get_dht_time() + 10, subkey=subkey)
     assert not store_ok
-    await mallory.shutdown()  # So Alice won't ask the value from Mallory
     assert (await alice.get(key, latest=True)).value[subkey].value == b'true_value'
 
-    # TODO: Make Alice not believe Mallory even if Bob has shut down and
-    # Mallory is the single remaining peer
-
     assert await bob.store(key, b'updated_true_value', hivemind.get_dht_time() + 10, subkey=subkey)
+    assert (await alice.get(key, latest=True)).value[subkey].value == b'updated_true_value'
+
+    await bob.shutdown()  # Bob has shut down, now Mallory is the single peer of Alice
+
+    store_ok = await mallory.store(key, b'updated_fake_value',
+                                   hivemind.get_dht_time() + 10, subkey=subkey)
+    assert not store_ok
     assert (await alice.get(key, latest=True)).value[subkey].value == b'updated_true_value'

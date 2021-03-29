@@ -207,10 +207,6 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 values[i] = self.serializer.dumps(values[i])
         assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"
 
-        if self.record_validator is not None:
-            values = [self.record_validator.sign_value(DHTRecord(*record))
-                      for record in zip(keys, subkeys, values, expiration_time)]
-
         store_request = dht_pb2.StoreRequest(keys=keys, subkeys=subkeys, values=values,
                                              expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info)
         try:
@@ -233,26 +229,26 @@ class DHTProtocol(dht_grpc.DHTServicer):
         response = dht_pb2.StoreResponse(store_ok=[], peer=self.node_info)
         for key, tag, value_bytes, expiration_time, in_cache in zip(
                 request.keys, request.subkeys, request.values, request.expiration_time, request.in_cache):
-            if self.record_validator is not None:
-                record = DHTRecord(key, tag, value_bytes, expiration_time)
-                try:
-                    self.record_validator.validate(record)
-                except ValueError as e:
-                    logger.warning(f'Validation failed with message "{e}" on {record}')
+            key_id = DHTID.from_bytes(key)
+            storage = self.cache if in_cache else self.storage
+
+            if tag == self.IS_DICTIONARY:  # store an entire dictionary with several subkeys
+                value_dictionary = self.serializer.loads(value_bytes)
+                assert isinstance(value_dictionary, DictionaryDHTValue)
+                if not self._validate_dictionary(key, value_dictionary):
                     response.store_ok.append(False)
                     continue
 
-                value_bytes = self.record_validator.strip_value(record)
-
-            key_id = DHTID.from_bytes(key)
-            storage = self.cache if in_cache else self.storage
-            if tag == self.IS_REGULAR_VALUE:  # store normal value without subkeys
-                response.store_ok.append(storage.store(key_id, value_bytes, expiration_time))
-            elif tag == self.IS_DICTIONARY:  # store an entire dictionary with several subkeys
-                value_dictionary = self.serializer.loads(value_bytes)
-                assert isinstance(value_dictionary, DictionaryDHTValue)
                 response.store_ok.append(all(storage.store_subkey(key_id, subkey, item.value, item.expiration_time)
                                              for subkey, item in value_dictionary.items()))
+                continue
+
+            if not self._validate_record(key, tag, value_bytes, expiration_time):
+                response.store_ok.append(False)
+                continue
+
+            if tag == self.IS_REGULAR_VALUE:  # store normal value without subkeys
+                response.store_ok.append(storage.store(key_id, value_bytes, expiration_time))
             else:  # add a new entry into an existing dictionary value or create a new dictionary with one sub-key
                 subkey = self.serializer.loads(tag)
                 response.store_ok.append(storage.store_subkey(key_id, subkey, value_bytes, expiration_time))
@@ -282,15 +278,25 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
             output = {}  # unpack data depending on its type
             for key, result in zip(keys, response.results):
+                key_bytes = DHTID.to_bytes(key)
                 nearest = dict(zip(map(DHTID.from_bytes, result.nearest_node_ids), result.nearest_endpoints))
 
                 if result.type == dht_pb2.NOT_FOUND:
                     output[key] = None, nearest
                 elif result.type == dht_pb2.FOUND_REGULAR:
+                    if not self._validate_record(
+                            key_bytes, self.IS_REGULAR_VALUE, result.value, result.expiration_time):
+                        output[key] = None, nearest
+                        continue
+
                     output[key] = ValueWithExpiration(result.value, result.expiration_time), nearest
                 elif result.type == dht_pb2.FOUND_DICTIONARY:
-                    deserialized_dictionary = self.serializer.loads(result.value)
-                    output[key] = ValueWithExpiration(deserialized_dictionary, result.expiration_time), nearest
+                    value_dictionary = self.serializer.loads(result.value)
+                    if not self._validate_dictionary(key_bytes, value_dictionary):
+                        output[key] = None, nearest
+                        continue
+
+                    output[key] = ValueWithExpiration(value_dictionary, result.expiration_time), nearest
                 else:
                     logger.error(f"Unknown result type: {result.type}")
 
@@ -366,6 +372,35 @@ class DHTProtocol(dht_grpc.DHTServicer):
         else:  # we sent outgoing request and peer did not respond
             if node_id is not None and node_id in self.routing_table:
                 del self.routing_table[node_id]
+
+    def _validate_record(self, key_bytes: bytes, subkey_bytes: bytes, value_bytes: bytes,
+                         expiration_time: float) -> bool:
+        if self.record_validator is None:
+            return True
+
+        record = DHTRecord(key_bytes, subkey_bytes, value_bytes, expiration_time)
+        try:
+            self.record_validator.validate(record)
+            return True
+        except ValueError as e:
+            logger.warning(f'Validation failed with message "{e}" on {record}')
+            return False
+
+    def _validate_dictionary(self, key_bytes: bytes, dictionary: ...) -> bool:
+        if self.record_validator is None:
+            return True
+
+        with dictionary.freeze():
+            for subkey, value_and_expiration in dictionary.items():
+                subkey_bytes = self.serializer.dumps(subkey)
+                record = DHTRecord(key_bytes, subkey_bytes, value_and_expiration.value,
+                                   value_and_expiration.expiration_time)
+                try:
+                    self.record_validator.validate(record)
+                except ValueError as e:
+                    logger.warning(f'Validation failed with message "{e}" on {record}')
+                    return False
+        return True
 
 
 class ValidationError(Exception):
