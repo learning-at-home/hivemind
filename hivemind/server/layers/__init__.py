@@ -16,7 +16,4 @@ name_to_input = {'ffn': lambda batch_size, hid_dim: torch.empty((batch_size, hid
                  'det_dropout': lambda batch_size, hid_dim:
                  (torch.empty((batch_size, hid_dim)), torch.randint(0, 1, (batch_size, hid_dim)))}
 
-expert_name_to_scheduler = {'ffn': get_linear_schedule_with_warmup, 'transformer': get_linear_schedule_with_warmup,
-                            'nop': None, 'det_dropout': None}
-
 schedule_name_to_scheduler = {'linear': get_linear_schedule_with_warmup, 'none': None}

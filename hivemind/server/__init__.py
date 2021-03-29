@@ -18,7 +18,7 @@ from hivemind.server.checkpoints import CheckpointSaver, load_experts, dir_is_co
 from hivemind.server.connection_handler import ConnectionHandler
 from hivemind.server.dht_handler import DHTHandlerThread, declare_experts, get_experts
 from hivemind.server.expert_backend import ExpertBackend
-from hivemind.server.layers import name_to_block, name_to_input, expert_name_to_scheduler, schedule_name_to_scheduler
+from hivemind.server.layers import name_to_block, name_to_input, schedule_name_to_scheduler
 from hivemind.server.runtime import Runtime
 from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
 from hivemind.utils import Endpoint, get_port, replace_port, find_open_port, get_logger
@@ -70,7 +70,7 @@ class Server(threading.Thread):
 
     @staticmethod
     def create(listen_on='0.0.0.0:*', num_experts: int = None, expert_uids: str = None, expert_pattern: str = None,
-               expert_cls='ffn', hidden_dim=1024, optim_cls=torch.optim.Adam, scheduler_override: Optional[str] = None,
+               expert_cls='ffn', hidden_dim=1024, optim_cls=torch.optim.Adam, scheduler: str = 'none',
                num_warmup_steps=None, num_training_steps=None, num_handlers=None, max_batch_size=4096, device=None,
                no_dht=False, initial_peers=(), dht_port=None, checkpoint_dir: Optional[Path] = None,
                load_expert_states=False, compression=CompressionType.NONE, *, start: bool, **kwargs) -> Server:
@@ -88,10 +88,9 @@ class Server(threading.Thread):
         :param device: all experts will use this device in torch notation; default: cuda if available else cpu
 
         :param optim_cls: uses this optimizer to train all experts
-        :param scheduler_override: if not None, the name of the expert LR scheduler, otherwise use the schedule defined
-            for the expert type
+        :param scheduler: if not `none`, the name of the expert LR scheduler
         :param num_warmup_steps: the number of warmup steps for LR schedule
-        :param num_training_steps: the number of total steps for LR schedule
+        :param num_training_steps: the total number of steps for LR schedule
 
         :param no_dht: if specified, the server will not be attached to a dht
         :param initial_peers: a list of peers that will introduce this node to the dht,\
@@ -149,10 +148,7 @@ class Server(threading.Thread):
         else:
             args_schema = (hivemind.BatchTensorDescriptor.from_tensor(sample_input, compression),)
 
-        if scheduler_override is not None:
-            scheduler = schedule_name_to_scheduler[scheduler_override]
-        else:
-            scheduler = expert_name_to_scheduler[expert_cls]
+        scheduler = schedule_name_to_scheduler[scheduler]
 
         # initialize experts
         experts = {}

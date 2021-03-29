@@ -32,7 +32,7 @@ class ExpertBackend:
     :param kwargs_schema: description of keyword arguments to expert.forward, dict of BatchTensorProto
     :param outputs_schema: description of outputs from expert.forward, nested structure of BatchTensorProto
     :param num_warmup_steps: the number of warmup steps for LR schedule
-    :param num_training_steps: the number of total steps for LR schedule
+    :param num_training_steps: the total number of steps for LR schedule
     :param kwargs: extra parameters to be forwarded into TaskPool.__init__
     """
 
@@ -144,7 +144,6 @@ class ExpertBackend:
         """
         Train the expert for one step. This method is called by ``ExpertBackend.backward`` after computing gradients.
         """
-        # TODO support gradient accumulation
         self.optimizer.step()
         self.optimizer.zero_grad()
 
