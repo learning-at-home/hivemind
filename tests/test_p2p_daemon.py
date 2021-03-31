@@ -5,6 +5,8 @@ from functools import partial
 
 from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
 
+from libp2p.peer.id import ID
+
 import numpy as np
 import pytest
 

@@ -22,6 +22,17 @@ class P2PContext(object):
         self.ours_port = ours_port
         self.handle_name = handle_name
 
+from hivemind.utils.networking import find_open_port
+
+
+class P2PContext(object):
+    def __init__(self, ours_id, ours_port, handle_name):
+        self.peer_id = None
+        self.peer_addr = None
+        self.ours_id = ours_id
+        self.ours_port = ours_port
+        self.handle_name = handle_name
+
 
 class P2P(object):
     """
@@ -279,15 +290,3 @@ class P2P(object):
             for key, value in kwargs.items()
         )
         return proc_args
-
-
-def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM),
-                   opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):
-    """ Finds a tcp port that can be occupied with a socket with *params and use *opt options """
-    try:
-        with contextlib.closing(socket.socket(*params)) as sock:
-            sock.bind(('', 0))
-            sock.setsockopt(*opt)
-            return sock.getsockname()[1]
-    except Exception:
-        raise
