@@ -53,7 +53,6 @@ def main():
     parser.add_argument('--compression', type=str, default='NONE', required=False, help='Tensor compression '
                         'parameter for grpc. Can be NONE, MEANSTD or FLOAT16')
     parser.add_argument('--checkpoint_dir', type=Path, required=False, help='Directory to store expert checkpoints')
-    parser.add_argument('--load_expert_states', action='store_true', help='Load experts from the checkpoint directory')
 
     # fmt:on
     args = vars(parser.parse_args())
