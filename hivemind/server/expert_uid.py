@@ -2,8 +2,10 @@ import random
 import re
 from typing import NamedTuple, Union, Tuple, Optional, List
 
-from hivemind import DHT, logger
-from hivemind.utils.networking import Endpoint
+from hivemind.dht import DHT
+from hivemind.utils import Endpoint, get_logger
+
+logger = get_logger(__name__)
 
 ExpertUID, ExpertPrefix, Coordinate, Score = str, str, int, float
 UidEndpoint = NamedTuple("UidEndpoint", [('uid', ExpertUID), ('endpoint', Endpoint)])
