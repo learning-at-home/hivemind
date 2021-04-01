@@ -2,11 +2,13 @@ import asyncio
 import multiprocessing as mp
 import subprocess
 
+from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
+
 import numpy as np
 import pytest
 
-import hivemind.p2p
 from hivemind.p2p import P2P
+from hivemind.proto import dht_pb2
 
 RUNNING = 'running'
 NOT_RUNNING = 'not running'
@@ -45,6 +47,64 @@ def handle_add(args):
     for i in range(1, len(args)):
         result = result + args[i]
     return result
+
+
+@pytest.mark.parametrize(
+    'should_cancel', [True, False]
+)
+@pytest.mark.asyncio
+async def test_call_unary_handler(should_cancel, handle_name="handle"):
+    handler_cancelled = False
+
+    async def ping_handler(request, context):
+        try:
+            await asyncio.sleep(2)
+        except asyncio.CancelledError:
+            nonlocal handler_cancelled
+            handler_cancelled = True
+        return dht_pb2.PingResponse(
+            peer=dht_pb2.NodeInfo(
+                node_id=context.ours_id.encode(), rpc_port=context.ours_port),
+            sender_endpoint=context.handle_name, available=True)
+
+    server = await P2P.create()
+    server_pid = server._child.pid
+    await server.add_unary_handler(handle_name, ping_handler, dht_pb2.PingRequest,
+                                   dht_pb2.PingResponse)
+    assert is_process_running(server_pid)
+
+    client = await P2P.create()
+    client_pid = client._child.pid
+    assert is_process_running(client_pid)
+
+    ping_request = dht_pb2.PingRequest(
+        peer=dht_pb2.NodeInfo(node_id=client.id.encode(), rpc_port=client._host_port),
+        validate=True)
+    expected_response = dht_pb2.PingResponse(
+        peer=dht_pb2.NodeInfo(node_id=server.id.encode(), rpc_port=server._host_port),
+        sender_endpoint=handle_name, available=True)
+
+    await asyncio.sleep(1)
+    libp2p_server_id = ID.from_base58(server.id)
+    stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
+
+    await P2P.send_raw_data(ping_request.SerializeToString(), writer)
+
+    if should_cancel:
+        writer.close()
+        await asyncio.sleep(1)
+        assert handler_cancelled
+    else:
+        result = await P2P.receive_protobuf(dht_pb2.PingResponse, reader)
+        assert result == expected_response
+        assert not handler_cancelled
+
+    await server.stop_listening()
+    server.__del__()
+    assert not is_process_running(server_pid)
+
+    client.__del__()
+    assert not is_process_running(client_pid)
 
 
 @pytest.mark.parametrize(
