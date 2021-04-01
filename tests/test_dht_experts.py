@@ -21,7 +21,7 @@ def test_store_get_experts():
     first_peer = random.choice(peers)
     other_peer = random.choice(peers)
 
-    expert_uids = [f"my_expert.{i}" for i in range(110)]
+    expert_uids = [f"my_expert.{i}" for i in range(50)]
     batch_size = 10
     for batch_start in range(0, len(expert_uids), batch_size):
         hivemind.declare_experts(first_peer, expert_uids[batch_start: batch_start + batch_size], 'localhost:1234')
@@ -41,7 +41,7 @@ def test_store_get_experts():
 
 
 @pytest.mark.forked
-def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peers=3, beam_size=4, parallel_rpc=16,
+def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peers=3, beam_size=4, parallel_rpc=4,
                      grid_dims=(32, 32, 32)):
     dht = []
     for i in range(dht_size):
@@ -61,7 +61,7 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
     you = hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
     beam_search = MoEBeamSearcher(you, 'expert.', grid_dims)
 
-    for i in range(50):
+    for i in range(10):
         topk_experts = beam_search.find_best_experts([np.random.randn(dim) for dim in grid_dims], beam_size)
         assert all(isinstance(e, hivemind.RemoteExpert) for e in topk_experts)
         assert len(topk_experts) == beam_size

@@ -428,7 +428,6 @@ async def test_dhtnode_blacklist():
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_validate(fake_endpoint='127.0.0.721:*'):
-
     node1 = await hivemind.DHTNode.create(blacklist_time=999)
     with pytest.raises(ValidationError):
         node2 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"],
@@ -441,7 +440,7 @@ async def test_dhtnode_edge_cases():
     peers = []
     for i in range(5):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
+        peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=4))
 
     subkeys = [0, '', False, True, 'abyrvalg', 4555]
     keys = subkeys + [()]
