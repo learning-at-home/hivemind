@@ -38,7 +38,7 @@ def main():
                         help='all experts will use this device in torch notation; default: cuda if available else cpu')
 
     parser.add_argument('--optimizer', type=str, default='adam', required=False, help='adam, sgd or none')
-    parser.add_argument('--scheduler', type=str, choices=schedule_name_to_scheduler.keys(), required=False,
+    parser.add_argument('--scheduler', type=str, choices=schedule_name_to_scheduler.keys(), default='none',
                         help='LR scheduler type to use')
     parser.add_argument('--num-warmup-steps', type=int, required=False, help='the number of warmup steps for LR schedule')
     parser.add_argument('--num-training-steps', type=int, required=False, help='the total number of steps for LR schedule')
