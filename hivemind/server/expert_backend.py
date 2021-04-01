@@ -4,8 +4,11 @@ import torch
 from torch import nn
 
 from hivemind.server.task_pool import TaskPool
-from hivemind.utils import nested_flatten, nested_pack, nested_compare, nested_map, BatchTensorDescriptor, \
-    DUMMY_BATCH_SIZE
+from hivemind.utils import BatchTensorDescriptor, DUMMY_BATCH_SIZE
+from hivemind.utils.logging import get_logger
+from hivemind.utils.nested import nested_flatten, nested_pack, nested_compare, nested_map
+
+logger = get_logger(__name__)
 
 
 class ExpertBackend:
@@ -175,13 +178,23 @@ class ExpertBackend:
         return full_state
 
     def load_full_state(self, state_dict: Dict):
-        self.update_count = state_dict['stats']['updates']
-        self.examples_processed = state_dict['stats']['examples_processed']
+        if 'stats' in state_dict:
+            self.update_count = state_dict['stats']['updates']
+            self.examples_processed = state_dict['stats']['examples_processed']
+        else:
+            logger.warning(f'Batch processing stats missing for expert {self.name}')
 
         self.expert.load_state_dict(state_dict['model'])
-        self.optimizer.load_state_dict(state_dict['optimizer'])
-        if self.scheduler is not None:
+
+        if 'optimizer' in state_dict:
+            self.optimizer.load_state_dict(state_dict['optimizer'])
+        else:
+            logger.warning(f'Optimizer state missing for expert {self.name}')
+
+        if self.scheduler is not None and 'scheduler' in state_dict:
             self.scheduler.load_state_dict(state_dict['scheduler'])
+        else:
+            logger.warning(f'Learning rate scheduler state missing for expert {self.name}')
 
     def get_info(self) -> Dict[str, Any]:
         """ Get expert parameters and stats. Used by RemoteExpert to check shapes and for DMoE orchestration. """
