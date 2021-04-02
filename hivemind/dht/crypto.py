@@ -34,7 +34,7 @@ class RSASignatureValidator(RecordValidatorBase):
 
         serialized_public_key = self._private_key.public_key().public_bytes(
             encoding=serialization.Encoding.OpenSSH, format=serialization.PublicFormat.OpenSSH)
-        self._our_marker = marker_format.replace(b'_key_', serialized_public_key)
+        self._ownership_marker = marker_format.replace(b'_key_', serialized_public_key)
 
         self._padding = padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
                                     salt_length=padding.PSS.MAX_LENGTH)
@@ -42,7 +42,7 @@ class RSASignatureValidator(RecordValidatorBase):
 
     @property
     def ownership_marker(self) -> bytes:
-        return self._our_marker
+        return self._ownership_marker
 
     def validate(self, record: DHTRecord) -> bool:
         public_keys = self._marker_re.findall(record.key)
@@ -73,7 +73,7 @@ class RSASignatureValidator(RecordValidatorBase):
             return False
 
     def sign_value(self, record: DHTRecord) -> bytes:
-        if self._our_marker not in record.key and self._our_marker not in record.subkey:
+        if self._ownership_marker not in record.key and self._ownership_marker not in record.subkey:
             return record.value
 
         signature = self._private_key.sign(self._serialize_record(record),
