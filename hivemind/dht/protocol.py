@@ -378,14 +378,9 @@ class DHTProtocol(dht_grpc.DHTServicer):
             return True
 
         record = DHTRecord(key_bytes, subkey_bytes, value_bytes, expiration_time)
-        try:
-            self.record_validator.validate(record)
-            return True
-        except ValueError as e:
-            logger.warning(f'Validation failed with message "{e}" on {record}')
-            return False
+        return self.record_validator.validate(record)
 
-    def _validate_dictionary(self, key_bytes: bytes, dictionary: ...) -> bool:
+    def _validate_dictionary(self, key_bytes: bytes, dictionary: DictionaryDHTValue) -> bool:
         if self.record_validator is None:
             return True
 
@@ -394,10 +389,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 subkey_bytes = self.serializer.dumps(subkey)
                 record = DHTRecord(key_bytes, subkey_bytes, value_and_expiration.value,
                                    value_and_expiration.expiration_time)
-                try:
-                    self.record_validator.validate(record)
-                except ValueError as e:
-                    logger.warning(f'Validation failed with message "{e}" on {record}')
+                if not self.record_validator.validate(record):
                     return False
         return True
 

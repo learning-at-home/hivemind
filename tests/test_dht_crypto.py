@@ -23,14 +23,13 @@ def test_rsa_signature_validator():
 
     # test 1: Non-protected record (no signature added)
     assert sender_validator.sign_value(plain_record) == plain_record.value
-    receiver_validator.validate(plain_record)
+    assert receiver_validator.validate(plain_record)
 
     # test 2: Correct signatures
     signed_records = [dataclasses.replace(record, value=sender_validator.sign_value(record))
                       for record in protected_records]
     for record in signed_records:
-        receiver_validator.validate(record)
-
+        assert receiver_validator.validate(record)
         assert receiver_validator.strip_value(record) == b'value'
 
     # test 3: Invalid signatures
@@ -41,5 +40,4 @@ def test_rsa_signature_validator():
     signed_records += [dataclasses.replace(record, value=mallory_validator.sign_value(record))
                        for record in protected_records]  # With someone else's signature
     for record in signed_records:
-        with pytest.raises(ValueError):
-            receiver_validator.validate(record)
+        assert not receiver_validator.validate(record)

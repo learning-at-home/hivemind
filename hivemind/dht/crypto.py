@@ -7,7 +7,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
-from hivemind.utils.serializer import MSGPackSerializer
+from hivemind.utils import MSGPackSerializer, get_logger
+
+
+logger = get_logger(__name__)
 
 
 class RSASignatureValidator(RecordValidatorBase):
@@ -41,20 +44,22 @@ class RSASignatureValidator(RecordValidatorBase):
     def ownership_marker(self) -> bytes:
         return self._our_marker
 
-    def validate(self, record: DHTRecord) -> None:
+    def validate(self, record: DHTRecord) -> bool:
         public_keys = self._marker_re.findall(record.key)
         if record.subkey is not None:
             public_keys += self._marker_re.findall(record.subkey)
         if not public_keys:
-            return None  # Success (the record is not protected by a public key)
+            return True  # The record is not protected with a public key
 
         if len(set(public_keys)) > 1:
-            raise ValueError("Key and subkey can't contain different public keys")
+            logger.debug(f"Key and subkey can't contain different public keys in {record}")
+            return False
         public_key = serialization.load_ssh_public_key(public_keys[0])
 
         signatures = self._signature_re.findall(record.value)
         if len(signatures) != 1:
-            raise ValueError('Protected record should have exactly one signature')
+            logger.debug(f"Record should have exactly one signature in {record}")
+            return False
         signature = base64.b64decode(signatures[0])
 
         stripped_record = dataclasses.replace(record, value=self.strip_value(record))
@@ -62,9 +67,10 @@ class RSASignatureValidator(RecordValidatorBase):
             # verify() returns None iff the signature is correct
             public_key.verify(signature, self._serialize_record(stripped_record),
                               self._padding, self._hash_algorithm)
-            return None  # Success
+            return True
         except InvalidSignature:
-            raise ValueError('Invalid signature')
+            logger.debug(f'Signature is invalid in {record}')
+            return False
 
     def sign_value(self, record: DHTRecord) -> bytes:
         if self._our_marker not in record.key and self._our_marker not in record.subkey:

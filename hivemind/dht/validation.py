@@ -18,11 +18,10 @@ class RecordValidatorBase(ABC):
     """
 
     @abstractmethod
-    def validate(self, record: DHTRecord) -> None:
+    def validate(self, record: DHTRecord) -> bool:
         """
-        This method should:
-          - Return None if validation is successful
-          - Raise ValueError with the reason if it is not
+        Should return whether the `record` is valid.
+        The valid records should have been extended with sign_value().
 
         validate() is called when another DHT peer:
           - Asks us to store the record
