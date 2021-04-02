@@ -13,9 +13,10 @@ import torch
 
 import hivemind
 from hivemind.dht import DHT
+from hivemind.server.expert_uid import UID_DELIMITER
 from hivemind.server.checkpoints import CheckpointSaver, load_weights, dir_is_correct
 from hivemind.server.connection_handler import ConnectionHandler
-from hivemind.server.dht_handler import DHTHandlerThread
+from hivemind.server.dht_handler import DHTHandlerThread, declare_experts, get_experts
 from hivemind.server.expert_backend import ExpertBackend
 from hivemind.server.layers import name_to_block, name_to_input, add_custom_models_from_file
 from hivemind.server.runtime import Runtime
@@ -291,10 +292,10 @@ def generate_uids_from_pattern(num_experts: int, expert_pattern: Optional[str], 
 
     def _generate_uid():
         if expert_pattern is None:
-            return f"expert{hivemind.dht.UID_DELIMITER}{attempts_per_expert * num_experts - remaining_attempts}"
+            return f"expert{UID_DELIMITER}{attempts_per_expert * num_experts - remaining_attempts}"
 
         uid = []
-        for block in expert_pattern.split(hivemind.dht.UID_DELIMITER):
+        for block in expert_pattern.split(UID_DELIMITER):
             try:
                 if '[' not in block and ']' not in block:
                     uid.append(block)
@@ -307,7 +308,7 @@ def generate_uids_from_pattern(num_experts: int, expert_pattern: Optional[str], 
                 raise e
             except Exception as e:
                 raise ValueError(f"Expert pattern {expert_pattern} has invalid block {block}, {e}")
-        return hivemind.dht.UID_DELIMITER.join(uid)
+        return UID_DELIMITER.join(uid)
 
     while remaining_attempts > 0 and len(found_uids) < num_experts:
 

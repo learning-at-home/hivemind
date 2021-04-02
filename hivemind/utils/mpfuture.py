@@ -6,12 +6,14 @@ import concurrent.futures._base as base
 
 import asyncio
 from functools import lru_cache
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Generic, TypeVar
 
 from hivemind.utils.threading import run_in_background
 
+ResultType = TypeVar('ResultType')
 
-class MPFuture(base.Future):
+
+class MPFuture(base.Future, Generic[ResultType]):
     """ Multiprocessing version of concurrent.futures.Future. Can also be awaited like asyncio.Future """
 
     TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
@@ -74,7 +76,7 @@ class MPFuture(base.Future):
         except TimeoutError:
             pass
 
-    def set_result(self, result):
+    def set_result(self, result: ResultType):
         self._sync_updates()
         if self._state in self.TERMINAL_STATES:
             raise RuntimeError(f"Can't set_result to a future that is in {self._state}")
@@ -105,13 +107,13 @@ class MPFuture(base.Future):
         self._state, self._exception = base.CANCELLED, base.CancelledError()
         return self._send_updates()
 
-    def result(self, timeout: Optional[float] = None):
+    def result(self, timeout: Optional[float] = None) -> ResultType:
         self._await_terminal_state(timeout)
         if self._exception is not None:
             raise self._exception
         return self._result
 
-    def exception(self, timeout=None):
+    def exception(self, timeout=None) -> BaseException:
         self._await_terminal_state(timeout)
         if self._state == base.CANCELLED:
             raise base.CancelledError()
