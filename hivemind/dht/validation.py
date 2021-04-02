@@ -1,4 +1,5 @@
 import dataclasses
+from abc import ABC, abstractmethod
 
 
 @dataclasses.dataclass(init=True, repr=True, frozen=True)
@@ -9,13 +10,14 @@ class DHTRecord:
     expiration_time: float
 
 
-class RecordValidatorBase:
+class RecordValidatorBase(ABC):
     """
     Record validators are a generic mechanism for checking the DHT records including:
       - Enforcing a data schema (e.g. checking content types)
       - Enforcing security requirements (e.g. allowing only the owner to update the record)
     """
 
+    @abstractmethod
     def validate(self, record: DHTRecord) -> None:
         """
         This method should:
@@ -27,7 +29,7 @@ class RecordValidatorBase:
           - Returns the record by our request
         """
 
-        raise NotImplementedError()
+        pass
 
     def sign_value(self, record: DHTRecord) -> bytes:
         """
