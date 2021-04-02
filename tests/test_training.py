@@ -1,5 +1,4 @@
 from functools import partial
-from typing import Optional
 
 import pytest
 import torch
@@ -11,12 +10,13 @@ from hivemind import RemoteExpert, background_server
 
 
 @pytest.mark.forked
-def test_training(port: Optional[int] = None, max_steps: int = 100, threshold: float = 0.9):
+def test_training(max_steps: int = 100, threshold: float = 0.9):
     dataset = load_digits()
     X_train, y_train = torch.tensor(dataset['data'], dtype=torch.float), torch.tensor(dataset['target'])
     SGD = partial(torch.optim.SGD, lr=0.05)
 
-    with background_server(num_experts=2, device='cpu', optim_cls=SGD, hidden_dim=64) as (server_endpoint, _):
+    with background_server(num_experts=2, device='cpu', optim_cls=SGD, hidden_dim=64, num_handlers=1,
+                           no_dht=True) as (server_endpoint, dht_endpoint):
         expert1 = RemoteExpert('expert.0', server_endpoint)
         expert2 = RemoteExpert('expert.1', server_endpoint)
         model = nn.Sequential(expert2, nn.Tanh(), expert1, nn.Linear(64, 10))

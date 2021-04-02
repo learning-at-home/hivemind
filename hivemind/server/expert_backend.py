@@ -1,14 +1,17 @@
-from typing import Dict, Sequence, Any, Tuple, Union
+from typing import Dict, Sequence, Any, Tuple, Union, Callable
 
 import torch
 from torch import nn
 
 from hivemind.server.task_pool import TaskPool
-from hivemind.utils import nested_flatten, nested_pack, nested_compare, nested_map, \
-    BatchTensorDescriptor, DUMMY_BATCH_SIZE
+from hivemind.utils import BatchTensorDescriptor, DUMMY_BATCH_SIZE
+from hivemind.utils.logging import get_logger
+from hivemind.utils.nested import nested_flatten, nested_pack, nested_compare, nested_map
+
+logger = get_logger(__name__)
 
 
-class ExpertBackend(nn.Module):
+class ExpertBackend:
     """
     ExpertBackend is a wrapper around torch module that allows it to run tasks asynchronously with Runtime
     By default, ExpertBackend handles three types of requests:
@@ -26,20 +29,31 @@ class ExpertBackend(nn.Module):
         you should explicitly register these random variables as model inputs or outputs.
         See hivemind.utils.custom_layers.DeterministicDropout for an example
 
-    :param opt: torch optimizer to be applied on every backward call
+    :param optimizer: torch optimizer to be applied on every backward call
+    :param scheduler: a function to create the learning rate scheduler for the expert
     :param args_schema: description of positional arguments to expert.forward, list of BatchTensorProto
     :param kwargs_schema: description of keyword arguments to expert.forward, dict of BatchTensorProto
     :param outputs_schema: description of outputs from expert.forward, nested structure of BatchTensorProto
+    :param num_warmup_steps: the number of warmup steps for LR schedule
+    :param num_training_steps: the total number of steps for LR schedule
     :param kwargs: extra parameters to be forwarded into TaskPool.__init__
     """
 
-    def __init__(self, name: str, expert: nn.Module, opt: torch.optim.Optimizer, *,
+    def __init__(self, name: str, expert: nn.Module, optimizer: torch.optim.Optimizer, *,
+                 scheduler: Callable = None,
                  args_schema: Tuple[BatchTensorDescriptor, ...] = None,
                  kwargs_schema: Dict[str, BatchTensorDescriptor] = None,
                  outputs_schema: Union[BatchTensorDescriptor, Tuple[BatchTensorDescriptor, ...]] = None,
+                 num_warmup_steps: int = None, num_training_steps: int = None,
                  **kwargs):
         super().__init__()
-        self.expert, self.opt, self.name = expert, opt, name
+        self.expert, self.optimizer, self.name = expert, optimizer, name
+
+        if scheduler is None:
+            self.scheduler = None
+        else:
+            assert optimizer is not None and num_warmup_steps is not None and num_training_steps is not None
+            self.scheduler = scheduler(self.optimizer, num_warmup_steps, num_training_steps)
 
         self.args_schema = args_schema = tuple(args_schema or ())
         self.kwargs_schema = kwargs_schema = dict(kwargs_schema or {})
@@ -61,7 +75,8 @@ class ExpertBackend(nn.Module):
         self.forward_pool = TaskPool(self.forward, uid=f'{self.name}_forward', **kwargs)
         self.backward_pool = TaskPool(self.backward, uid=f'{self.name}_backward', **kwargs)
 
-        self.register_buffer('update_count', torch.zeros(1, dtype=torch.long))
+        self.update_count = 0
+        self.examples_processed = 0
 
     def forward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
@@ -111,6 +126,8 @@ class ExpertBackend(nn.Module):
                                   if tensor.is_floating_point() else tensor.detach())
                       for input_key, tensor in kwargs.items()}
 
+            batch_size = args[0].size(0)
+
             outputs = self.expert(*args, **kwargs)
             assert nested_compare(outputs, grad_outputs), "outputs and grad_outputs must have the same structure"
 
@@ -121,18 +138,63 @@ class ExpertBackend(nn.Module):
                 nested_flatten(grad_outputs), outputs_flat))
             torch.autograd.backward(outputs_flat, grad_tensors=grad_outputs_flat,
                                     create_graph=False, retain_graph=False)
-            self.apply_gradients()
+            self.apply_gradients(batch_size)
 
         return tuple(x.grad if isinstance(x.grad, torch.Tensor) else torch.zeros_like(x)
                      for x in nested_flatten((args, kwargs)))
 
-    def apply_gradients(self) -> None:
+    def apply_gradients(self, batch_size) -> None:
         """
         Train the expert for one step. This method is called by ``ExpertBackend.backward`` after computing gradients.
         """
-        self.opt.step()
-        self.opt.zero_grad()
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+        if self.scheduler is not None:
+            self.scheduler.step()
+
         self.update_count += 1
+        self.examples_processed += batch_size
+
+    def get_stats(self) -> Dict:
+        """
+        Return current expert training statistics (number of updates, number of processed examples after last optimizer step)
+        """
+        return {
+            'updates': self.update_count,
+            'examples_processed': self.examples_processed
+        }
+
+    def get_full_state(self) -> Dict:
+        """
+        Return the current state of the expert (including batch processing statistics)
+        """
+        full_state = {
+            'stats': self.get_stats(),
+            'model': self.expert.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'scheduler': {} if self.scheduler is None else self.scheduler.state_dict()
+        }
+        return full_state
+
+    def load_full_state(self, state_dict: Dict):
+        if 'stats' in state_dict:
+            self.update_count = state_dict['stats']['updates']
+            self.examples_processed = state_dict['stats']['examples_processed']
+        else:
+            logger.warning(f'Batch processing stats missing for expert {self.name}')
+
+        self.expert.load_state_dict(state_dict['model'])
+
+        if 'optimizer' in state_dict:
+            self.optimizer.load_state_dict(state_dict['optimizer'])
+        else:
+            logger.warning(f'Optimizer state missing for expert {self.name}')
+
+        if self.scheduler is not None and 'scheduler' in state_dict:
+            self.scheduler.load_state_dict(state_dict['scheduler'])
+        else:
+            logger.warning(f'Learning rate scheduler state missing for expert {self.name}')
 
     def get_info(self) -> Dict[str, Any]:
         """ Get expert parameters and stats. Used by RemoteExpert to check shapes and for DMoE orchestration. """

@@ -16,7 +16,7 @@ from hivemind.utils.grpc import GRPC_KEEPALIVE_OPTIONS
 logger = get_logger(__name__)
 
 
-class ConnectionHandler(mp.Process):
+class ConnectionHandler(mp.context.ForkProcess):
     """
     A process that accepts incoming requests to experts and submits them into the corresponding TaskPool.
 
