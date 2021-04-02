@@ -195,8 +195,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
         in_cache = in_cache if in_cache is not None else [False] * len(keys)  # default value (None)
         in_cache = [in_cache] * len(keys) if isinstance(in_cache, bool) else in_cache  # single bool
-        keys = list(map(DHTID.to_bytes, keys))
-        subkeys, values, expiration_time, in_cache = map(list, [subkeys, values, expiration_time, in_cache])
+        keys, subkeys, values, expiration_time, in_cache = map(list, [keys, subkeys, values, expiration_time, in_cache])
         for i in range(len(keys)):
             if subkeys[i] is None:  # add default sub-key if not specified
                 subkeys[i] = self.IS_DICTIONARY if isinstance(values[i], DictionaryDHTValue) else self.IS_REGULAR_VALUE
@@ -205,9 +204,9 @@ class DHTProtocol(dht_grpc.DHTServicer):
             if isinstance(values[i], DictionaryDHTValue):
                 assert subkeys[i] == self.IS_DICTIONARY, "Please don't specify subkey when storing an entire dictionary"
                 values[i] = self.serializer.dumps(values[i])
-        assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"
 
-        store_request = dht_pb2.StoreRequest(keys=keys, subkeys=subkeys, values=values,
+        assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"
+        store_request = dht_pb2.StoreRequest(keys=list(map(DHTID.to_bytes, keys)), subkeys=subkeys, values=values,
                                              expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info)
         try:
             async with self.rpc_semaphore:
