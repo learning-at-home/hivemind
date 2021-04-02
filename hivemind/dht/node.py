@@ -305,9 +305,9 @@ class DHTNode:
             binary_values = []
             for subkey, value, expiration_time in zip(
                     current_subkeys, current_values, current_expirations):
-                subkey_bytes = self.protocol.serializer.dumps(subkey)
                 value_bytes = self.protocol.serializer.dumps(value)
                 if self.protocol.record_validator is not None:
+                    subkey_bytes = self.protocol.serializer.dumps(subkey)
                     record = DHTRecord(key_bytes, subkey_bytes, value_bytes, expiration_time)
                     value_bytes = self.protocol.record_validator.sign_value(record)
                 binary_values.append(value_bytes)
@@ -655,21 +655,22 @@ class _SearchState:
         elif isinstance(self.binary_value, BinaryDHTValue):
             value_bytes = self.binary_value
             if self.record_validator is not None:
-                # FIXME: Fill other fields (some validators may need them)
-                record = DHTRecord(None, None, value_bytes, None)
+                record = DHTRecord(self.key_id.to_bytes(), DHTProtocol.IS_REGULAR_VALUE,
+                                   value_bytes, self.expiration_time)
                 value_bytes = self.record_validator.strip_value(record)
 
             self.future.set_result(
                 ValueWithExpiration(self.serializer.loads(value_bytes), self.expiration_time))
         elif isinstance(self.binary_value, DictionaryDHTValue):
             dict_with_subkeys = {}
-            for key, (value_bytes, item_expiration_time) in self.binary_value.items():
+            for subkey, (value_bytes, item_expiration_time) in self.binary_value.items():
                 if self.record_validator is not None:
-                    # FIXME: Fill other fields (some validators may need them)
-                    record = DHTRecord(None, None, value_bytes, None)
+                    subkey_bytes = self.serializer.dumps(subkey)
+                    record = DHTRecord(self.key_id.to_bytes(), subkey_bytes,
+                                       value_bytes, item_expiration_time)
                     value_bytes = self.record_validator.strip_value(record)
 
-                dict_with_subkeys[key] = ValueWithExpiration(
+                dict_with_subkeys[subkey] = ValueWithExpiration(
                     self.serializer.loads(value_bytes), item_expiration_time)
             self.future.set_result(ValueWithExpiration(dict_with_subkeys, self.expiration_time))
         else:

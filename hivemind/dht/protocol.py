@@ -385,10 +385,9 @@ class DHTProtocol(dht_grpc.DHTServicer):
             return True
 
         with dictionary.freeze():
-            for subkey, value_and_expiration in dictionary.items():
+            for subkey, (value_bytes, expiration_time) in dictionary.items():
                 subkey_bytes = self.serializer.dumps(subkey)
-                record = DHTRecord(key_bytes, subkey_bytes, value_and_expiration.value,
-                                   value_and_expiration.expiration_time)
+                record = DHTRecord(key_bytes, subkey_bytes, value_bytes, expiration_time)
                 if not self.record_validator.validate(record):
                     return False
         return True
