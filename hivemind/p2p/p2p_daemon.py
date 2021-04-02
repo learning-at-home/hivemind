@@ -8,8 +8,8 @@ import warnings
 
 import google.protobuf
 from multiaddr import Multiaddr
-import p2pclient
-from libp2p.peer.id import ID
+import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
+from hivemind.p2p.p2p_daemon_bindings.datastructures import ID, StreamInfo
 
 from hivemind.utils.networking import find_open_port
 
@@ -104,78 +104,81 @@ class P2P(object):
                 self._daemon_listen_port = find_open_port()
 
     @staticmethod
-    async def send_raw_data(byte_str, stream):
+    async def send_raw_data(byte_str, writer):
         request = len(byte_str).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER) + byte_str
-        await stream.send_all(request)
+        writer.write(request)
 
     @staticmethod
-    async def send_data(data, stream):
-        await P2P.send_raw_data(pickle.dumps(data), stream)
+    async def send_data(data, writer):
+        await P2P.send_raw_data(pickle.dumps(data), writer)
 
     @staticmethod
-    async def send_protobuf(protobuf, out_proto_type, stream):
+    async def send_protobuf(protobuf, out_proto_type, writer):
         if type(protobuf) != out_proto_type:
             error = TypeError('Unary handler returned protobuf of wrong type.')
-            await P2P.send_raw_data(pickle.dumps(error), stream)
+            await P2P.send_raw_data(pickle.dumps(error), writer)
             raise error
-        await P2P.send_raw_data(protobuf.SerializeToString(), stream)
+        await P2P.send_raw_data(protobuf.SerializeToString(), writer)
 
     @staticmethod
-    async def receive_exactly(stream, n_bytes, max_bytes=1 << 16):
+    async def receive_exactly(reader, n_bytes, max_bytes=1 << 16):
         buffer = bytearray()
         while len(buffer) < n_bytes:
-            data = await stream.receive_some(min(max_bytes, n_bytes - len(buffer)))
+            data = await reader.read(min(max_bytes, n_bytes - len(buffer)))
             if len(data) == 0:
                 raise P2P.IncompleteRead()
             buffer.extend(data)
         return bytes(buffer)
 
     @staticmethod
-    async def receive_raw_data(stream):
-        header = await P2P.receive_exactly(stream, P2P.HEADER_LEN)
+    async def receive_raw_data(reader):
+        header = await P2P.receive_exactly(reader, P2P.HEADER_LEN)
         content_length = int.from_bytes(header, P2P.BYTEORDER)
-        data = await P2P.receive_exactly(stream, content_length)
+        data = await P2P.receive_exactly(reader, content_length)
         return data
 
     @staticmethod
-    async def receive_data(stream):
-        return pickle.loads(await P2P.receive_raw_data(stream))
+    async def receive_data(reader):
+        return pickle.loads(await P2P.receive_raw_data(reader))
 
     @staticmethod
-    async def receive_protobuf(in_proto_type, stream):
+    async def receive_protobuf(in_proto_type, reader):
         protobuf = in_proto_type()
-        protobuf.ParseFromString(await P2P.receive_raw_data(stream))
+        protobuf.ParseFromString(await P2P.receive_raw_data(reader))
         return protobuf
 
     @staticmethod
     def _handle_stream(handle):
-        async def do_handle_stream(stream_info, stream):
+        async def do_handle_stream(stream_info, reader, writer):
             try:
-                request = await P2P.receive_data(stream)
+                request = await P2P.receive_data(reader)
             except P2P.IncompleteRead:
                 warnings.warn("Incomplete read while receiving request from peer", RuntimeWarning)
-                await stream.close()
+                writer.close()
                 return
             try:
                 result = handle(request)
-                await P2P.send_data(result, stream)
+                await P2P.send_data(result, writer)
             except Exception as exc:
-                await P2P.send_data(exc, stream)
+                await P2P.send_data(exc, writer)
             finally:
-                await stream.close()
+                writer.close()
 
         return do_handle_stream
 
     @staticmethod
     def _handle_unary_stream(handle, context, in_proto_type, out_proto_type):
-        async def watchdog(stream):
-            await stream.receive_some(max_bytes=1)
+        async def watchdog(reader: asyncio.StreamReader):
+            await reader.read(n=1)
             raise P2P.InterruptedError()
 
-        async def do_handle_unary_stream(stream_info, stream):
+        async def do_handle_unary_stream(
+                stream_info: StreamInfo,
+                reader: asyncio.StreamReader,
+                writer: asyncio.StreamWriter) -> None:
             try:
                 try:
-                    request = await P2P.receive_protobuf(in_proto_type, stream)
+                    request = await P2P.receive_protobuf(in_proto_type, reader)
                 except P2P.IncompleteRead:
                     warnings.warn("Incomplete read while receiving request from peer",
                                   RuntimeWarning)
@@ -185,15 +188,15 @@ class P2P(object):
                     return
 
                 context.peer_id, context.peer_addr = stream_info.peer_id, stream_info.addr
-                done, pending = await asyncio.wait([watchdog(stream), handle(request, context)],
+                done, pending = await asyncio.wait([watchdog(reader), handle(request, context)],
                                                    return_when=asyncio.FIRST_COMPLETED)
                 try:
                     result = done.pop().result()
-                    await P2P.send_protobuf(result, out_proto_type, stream)
+                    await P2P.send_protobuf(result, out_proto_type, writer)
                 except P2P.InterruptedError:
                     pass
                 except Exception as exc:
-                    await P2P.send_data(exc, stream)
+                    await P2P.send_data(exc, writer)
                 finally:
                     pending_task = pending.pop()
                     pending_task.cancel()
@@ -202,7 +205,7 @@ class P2P(object):
                     except asyncio.CancelledError:
                         pass
             finally:
-                await stream.close()
+                writer.close()
 
         return do_handle_unary_stream
 
@@ -237,12 +240,12 @@ class P2P(object):
 
     async def call_peer_handler(self, peer_id, handler_name, input_data):
         libp2p_peer_id = ID.from_base58(peer_id)
-        stream_info, stream = await self._client.stream_open(libp2p_peer_id, (handler_name,))
+        stream_info, reader, writer = await self._client.stream_open(libp2p_peer_id, (handler_name,))
         try:
-            await P2P.send_data(input_data, stream)
-            return await P2P.receive_data(stream)
+            await P2P.send_data(input_data, writer)
+            return await P2P.receive_data(reader)
         finally:
-            await stream.close()
+            writer.close()
 
     def __del__(self):
         self._kill_child()
