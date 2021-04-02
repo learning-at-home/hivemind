@@ -2,7 +2,7 @@ import asyncio
 import multiprocessing as mp
 import subprocess
 
-from libp2p.peer.id import ID
+from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
 
 import numpy as np
 import pytest
@@ -86,16 +86,16 @@ async def test_call_unary_handler(should_cancel, handle_name="handle"):
 
     await asyncio.sleep(1)
     libp2p_server_id = ID.from_base58(server.id)
-    stream_info, stream = await client._client.stream_open(libp2p_server_id, (handle_name,))
+    stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
 
-    await P2P.send_raw_data(ping_request.SerializeToString(), stream)
+    await P2P.send_raw_data(ping_request.SerializeToString(), writer)
 
     if should_cancel:
-        await stream.close()
+        writer.close()
         await asyncio.sleep(1)
         assert handler_cancelled
     else:
-        result = await P2P.receive_protobuf(dht_pb2.PingResponse, stream)
+        result = await P2P.receive_protobuf(dht_pb2.PingResponse, reader)
         assert result == expected_response
         assert not handler_cancelled
 
@@ -139,6 +139,25 @@ async def test_call_peer_single_process(test_input, handle, handler_name="handle
     assert not is_process_running(client_pid)
 
 
+async def run_server(handler_name, server_side, client_side, response_received):
+    server = await P2P.create()
+    server_pid = server._child.pid
+    await server.add_stream_handler(handler_name, handle_square)
+    assert is_process_running(server_pid)
+
+    server_side.send(server.id)
+    while response_received.value == 0:
+        await asyncio.sleep(0.5)
+
+    await server.stop_listening()
+    server.__del__()
+    assert not is_process_running(server_pid)
+
+
+def server_target(handler_name, server_side, client_side, response_received):
+    asyncio.run(run_server(handler_name, server_side, client_side, response_received))
+
+
 @pytest.mark.asyncio
 async def test_call_peer_different_processes():
     handler_name = "square"
@@ -148,24 +167,7 @@ async def test_call_peer_different_processes():
     response_received = mp.Value(np.ctypeslib.as_ctypes_type(np.int32))
     response_received.value = 0
 
-    async def run_server():
-        server = await P2P.create()
-        server_pid = server._child.pid
-        await server.add_stream_handler(handler_name, handle_square)
-        assert is_process_running(server_pid)
-
-        server_side.send(server.id)
-        while response_received.value == 0:
-            await asyncio.sleep(0.5)
-
-        await server.stop_listening()
-        server.__del__()
-        assert not is_process_running(server_pid)
-
-    def server_target():
-        asyncio.run(run_server())
-
-    proc = mp.Process(target=server_target)
+    proc = mp.Process(target=server_target, args=(handler_name, server_side, client_side, response_received))
     proc.start()
 
     client = await P2P.create()

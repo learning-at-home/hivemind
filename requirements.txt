@@ -10,6 +10,5 @@ grpcio>=1.33.2
 grpcio-tools>=1.33.2
 protobuf>=3.12.2
 configargparse>=1.2.3
-trio==0.16.0
-libp2p>=0.1.5
-p2pclient>=0.1.2
+multiaddr==0.0.9
+pymultihash==0.8.2
