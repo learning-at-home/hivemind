@@ -3,7 +3,8 @@ import dataclasses
 import pytest
 
 from hivemind.dht import get_dht_time
-from hivemind.dht.crypto import DHTRecord, RSASignatureValidator
+from hivemind.dht.crypto import RSASignatureValidator
+from hivemind.dht.validation import DHTRecord
 
 
 def test_rsa_signature_validator():
