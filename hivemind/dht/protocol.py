@@ -56,9 +56,6 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
         self.client = await P2P.create(host_port=get_port(listen_on))
         if listen:  # set up server to process incoming rpc requests
-            # grpc.aio.init_grpc_aio()
-            # self.server = grpc.aio.server(**kwargs, options=GRPC_KEEPALIVE_OPTIONS)
-            # dht_grpc.add_DHTServicer_to_server(self, self.server)
             self.server = self.client
             await self.server.add_unary_handler(
                 DHTProtocol.PING_NAME, functools.partial(DHTProtocol.rpc_ping, self),
@@ -72,8 +69,6 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
             self.port = self.server._host_port
             assert self.port != 0, f"Failed to listen to {listen_on}"
-            # if endpoint is not None and endpoint.endswith('*'):
-            #     endpoint = replace_port(endpoint, self.port)
             self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes(), rpc_port=self.port,
                                               endpoint=endpoint or self.server.endpoint)
         else:  # not listening to incoming requests, client-only mode
