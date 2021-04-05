@@ -9,6 +9,7 @@ from typing import Optional, Tuple, List, Dict, DefaultDict, Collection, Union, 
 
 from sortedcontainers import SortedSet
 
+from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
 from hivemind.dht.storage import DictionaryDHTValue
@@ -80,6 +81,7 @@ class DHTNode:
             cache_on_store: bool = True, reuse_get_requests: bool = True, num_workers: int = 1, chunk_size: int = 16,
             blacklist_time: float = 5.0, backoff_rate: float = 2.0,
             listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", endpoint: Optional[Endpoint] = None,
+            record_validator: Optional[RecordValidatorBase] = None,
             validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
@@ -136,7 +138,8 @@ class DHTNode:
         self.cache_refresh_task = None
 
         self.protocol = await DHTProtocol.create(self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
-                                                 parallel_rpc, cache_size, listen, listen_on, endpoint, **kwargs)
+                                                 parallel_rpc, cache_size, listen, listen_on, endpoint, record_validator,
+                                                 **kwargs)
         self.port = self.protocol.port
 
         if initial_peers:
@@ -297,7 +300,17 @@ class DHTNode:
             store_candidates = sorted(nearest_nodes + ([] if exclude_self else [self.node_id]),
                                       key=key_id.xor_distance, reverse=True)  # ordered so that .pop() returns nearest
             [original_key, *_], current_subkeys, current_values, current_expirations = zip(*key_id_to_data[key_id])
-            binary_values: List[bytes] = list(map(self.protocol.serializer.dumps, current_values))
+
+            key_bytes = key_id.to_bytes()
+            binary_values = []
+            for subkey, value, expiration_time in zip(
+                    current_subkeys, current_values, current_expirations):
+                value_bytes = self.protocol.serializer.dumps(value)
+                if self.protocol.record_validator is not None:
+                    subkey_bytes = self.protocol.serializer.dumps(subkey)
+                    record = DHTRecord(key_bytes, subkey_bytes, value_bytes, expiration_time)
+                    value_bytes = self.protocol.record_validator.sign_value(record)
+                binary_values.append(value_bytes)
 
             while num_successful_stores < self.num_replicas and (store_candidates or pending_store_tasks):
                 while store_candidates and num_successful_stores + len(pending_store_tasks) < self.num_replicas:
@@ -420,7 +433,9 @@ class DHTNode:
         beam_size = beam_size if beam_size is not None else self.protocol.bucket_size
         num_workers = num_workers if num_workers is not None else self.num_workers
         search_results: Dict[DHTID, _SearchState] = {key_id: _SearchState(
-            key_id, sufficient_expiration_time, serializer=self.protocol.serializer) for key_id in key_ids}
+            key_id, sufficient_expiration_time,
+            serializer=self.protocol.serializer,
+            record_validator=self.protocol.record_validator) for key_id in key_ids}
 
         if not _is_refresh:  # if we're already refreshing cache, there's no need to trigger subsequent refreshes
             for key_id in key_ids:
@@ -609,6 +624,7 @@ class _SearchState:
     source_node_id: Optional[DHTID] = None  # node that gave us the value
     future: asyncio.Future[Optional[ValueWithExpiration[DHTValue]]] = field(default_factory=asyncio.Future)
     serializer: type(SerializerBase) = MSGPackSerializer
+    record_validator: Optional[RecordValidatorBase] = None
 
     def add_candidate(self, candidate: Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]],
                       source_node_id: Optional[DHTID]):
@@ -637,10 +653,25 @@ class _SearchState:
         elif not self.found_something:
             self.future.set_result(None)
         elif isinstance(self.binary_value, BinaryDHTValue):
-            self.future.set_result(ValueWithExpiration(self.serializer.loads(self.binary_value), self.expiration_time))
+            value_bytes = self.binary_value
+            if self.record_validator is not None:
+                record = DHTRecord(self.key_id.to_bytes(), DHTProtocol.IS_REGULAR_VALUE,
+                                   value_bytes, self.expiration_time)
+                value_bytes = self.record_validator.strip_value(record)
+
+            self.future.set_result(
+                ValueWithExpiration(self.serializer.loads(value_bytes), self.expiration_time))
         elif isinstance(self.binary_value, DictionaryDHTValue):
-            dict_with_subkeys = {key: ValueWithExpiration(self.serializer.loads(value), item_expiration_time)
-                                 for key, (value, item_expiration_time) in self.binary_value.items()}
+            dict_with_subkeys = {}
+            for subkey, (value_bytes, item_expiration_time) in self.binary_value.items():
+                if self.record_validator is not None:
+                    subkey_bytes = self.serializer.dumps(subkey)
+                    record = DHTRecord(self.key_id.to_bytes(), subkey_bytes,
+                                       value_bytes, item_expiration_time)
+                    value_bytes = self.record_validator.strip_value(record)
+
+                dict_with_subkeys[subkey] = ValueWithExpiration(
+                    self.serializer.loads(value_bytes), item_expiration_time)
             self.future.set_result(ValueWithExpiration(dict_with_subkeys, self.expiration_time))
         else:
             logger.error(f"Invalid value type: {type(self.binary_value)}")
