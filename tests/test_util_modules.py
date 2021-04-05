@@ -58,9 +58,9 @@ def test_mpfuture_cancel():
             future.result()
         with pytest.raises(CancelledError):
             future.exception()
-        with pytest.raises(RuntimeError):
+        with pytest.raises(InvalidStateError):
             future.set_result(123)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(InvalidStateError):
             future.set_exception(NotImplementedError())
         assert future.cancelled() and future.done() and not future.running()
 
