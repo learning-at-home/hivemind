@@ -79,14 +79,14 @@ class MPFuture(base.Future, Generic[ResultType]):
     def set_result(self, result: ResultType):
         self._sync_updates()
         if self._state in self.TERMINAL_STATES:
-            raise RuntimeError(f"Can't set_result to a future that is in {self._state}")
+            raise base.InvalidStateError(f"Can't set_result to a future that is {self._state} ({self})")
         self._state, self._result = base.FINISHED, result
         return self._send_updates()
 
     def set_exception(self, exception: BaseException):
         self._sync_updates()
         if self._state in self.TERMINAL_STATES:
-            raise RuntimeError(f"Can't set_exception to a future that is in {self._state}")
+            raise base.InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self})")
         self._state, self._exception = base.FINISHED, exception
         self._send_updates()
 
@@ -98,7 +98,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         elif self._state == base.CANCELLED:
             return False
         else:
-            raise RuntimeError(f"Can't set_running_or_notify_cancel to a future that is in {self._state}")
+            raise RuntimeError(f"Can't set_running_or_notify_cancel to a future that is in {self._state} ({self})")
 
     def cancel(self):
         self._sync_updates()
