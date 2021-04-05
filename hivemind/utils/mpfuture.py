@@ -8,12 +8,9 @@ import time
 from functools import lru_cache
 from typing import Optional, Tuple, Generic, TypeVar
 
-from hivemind.utils.logging import get_logger
 from hivemind.utils.threading import run_in_background
 
 ResultType = TypeVar('ResultType')
-
-logger = get_logger(__name__)
 
 
 class MPFuture(base.Future, Generic[ResultType]):
@@ -81,9 +78,6 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def set_result(self, result: ResultType):
         self._sync_updates()
-        if self._state == base.FINISHED:
-            logger.debug('Called set_result for a finished future, ignoring')
-            return
         if self._state in self.TERMINAL_STATES:
             raise RuntimeError(f"Can't set_result to a future that is in {self._state}")
         self._state, self._result = base.FINISHED, result
@@ -91,9 +85,6 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def set_exception(self, exception: BaseException):
         self._sync_updates()
-        if self._state == base.FINISHED:
-            logger.debug('Called set_exception for a finished future, ignoring')
-            return
         if self._state in self.TERMINAL_STATES:
             raise RuntimeError(f"Can't set_exception to a future that is in {self._state}")
         self._state, self._exception = base.FINISHED, exception
@@ -104,8 +95,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         if self._state == base.PENDING:
             self._state = base.RUNNING
             return self._send_updates()
-        elif self._state in (base.CANCELLED, base.FINISHED):
-            logger.debug(f'Called set_result for a future in state {self._state}, ignoring')
+        elif self._state == base.CANCELLED:
             return False
         else:
             raise RuntimeError(f"Can't set_running_or_notify_cancel to a future that is in {self._state}")

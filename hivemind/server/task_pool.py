@@ -199,7 +199,8 @@ class TaskPool(TaskPoolBase):
 
                 # dispatch results to futures
                 for task, task_outputs in zip(batch_tasks, outputs_per_task):
-                    task.future.set_result(tuple(task_outputs))
+                    if task.future.running():
+                        task.future.set_result(tuple(task_outputs))
         except KeyboardInterrupt:
             logger.debug(f"Caught KeyboardInterrupt, shutting down")
 
