@@ -1,1 +1,1 @@
-from hivemind.p2p.p2p_daemon import P2P
+from hivemind.p2p.p2p_daemon import P2P, P2PContext

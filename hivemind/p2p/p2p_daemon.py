@@ -2,6 +2,7 @@ import asyncio
 import copy
 from pathlib import Path
 import pickle
+import signal
 import subprocess
 import typing as tp
 import warnings
@@ -10,6 +11,7 @@ import google.protobuf
 from multiaddr import Multiaddr
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import ID, StreamInfo
+from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure
 
 from hivemind.utils.networking import find_open_port
 
@@ -22,6 +24,9 @@ class P2PContext(object):
         self.ours_port = ours_port
         self.handle_name = handle_name
 
+    def peer(self) -> str:
+        return self.peer_id.to_base58()
+
 
 class P2P(object):
     """
@@ -31,7 +36,7 @@ class P2P(object):
     """
 
     P2PD_RELATIVE_PATH = 'hivemind_cli/p2pd'
-    NUM_RETRIES = 3
+    NUM_RETRIES = 4
     RETRY_DELAY = 0.4
     HEADER_LEN = 8
     BYTEORDER = 'big'
@@ -92,7 +97,8 @@ class P2P(object):
     async def _identify_client(self, delay):
         await asyncio.sleep(delay)
         encoded = await self._client.identify()
-        self.id = encoded[0].to_base58()
+        self.id = encoded[0]
+        self.endpoint = self.id.to_base58()
 
     def _assign_daemon_ports(self, host_port=None, daemon_listen_port=None):
         self._host_port, self._daemon_listen_port = host_port, daemon_listen_port
@@ -209,12 +215,16 @@ class P2P(object):
 
         return do_handle_unary_stream
 
-    def start_listening(self):
+    async def start_listening(self):
+        started = asyncio.Event()
+
         async def listen():
             async with self._client.listen():
+                started.set()
                 await self._server_stopped.wait()
 
         self._listen_task = asyncio.create_task(listen())
+        await started.wait()
 
     async def stop_listening(self):
         if self._listen_task is not None:
@@ -228,24 +238,43 @@ class P2P(object):
 
     async def add_stream_handler(self, name, handle):
         if self._listen_task is None:
-            self.start_listening()
+            await self.start_listening()
         await self._client.stream_handler(name, P2P._handle_stream(handle))
 
     async def add_unary_handler(self, name, handle, in_proto_type, out_proto_type):
         if self._listen_task is None:
-            self.start_listening()
+            await self.start_listening()
         context = P2PContext(ours_id=self.id, ours_port=self._host_port, handle_name=name)
         await self._client.stream_handler(
             name, P2P._handle_unary_stream(handle, context, in_proto_type, out_proto_type))
 
-    async def call_peer_handler(self, peer_id, handler_name, input_data):
-        libp2p_peer_id = ID.from_base58(peer_id)
-        stream_info, reader, writer = await self._client.stream_open(libp2p_peer_id, (handler_name,))
+    async def _call_handler(self, peer_endpoint, handle_name, input_data: bytes) -> bytes:
+        peer_id = ID.from_base58(peer_endpoint)
+        for try_count in range(P2P.NUM_RETRIES):
+            try:
+                stream_info, reader, writer = await self._client.stream_open(
+                    peer_id, (handle_name,))
+            except ControlFailure:
+                if try_count == P2P.NUM_RETRIES - 1:
+                    raise
+                await asyncio.sleep(P2P.RETRY_DELAY * (2 ** try_count))
         try:
-            await P2P.send_data(input_data, writer)
-            return await P2P.receive_data(reader)
+            await P2P.send_raw_data(input_data, writer)
+            return await P2P.receive_raw_data(reader)
         finally:
             writer.close()
+
+    async def call_peer_handler(self, peer_endpoint, handle_name, request):
+        response_data = await self._call_handler(peer_endpoint, handle_name, pickle.dumps(request))
+        return pickle.loads(response_data)
+
+    async def call_unary_handler(self, peer_endpoint, handle_name, request_protobuf,
+                                 response_proto_type):
+        response_data = await self._call_handler(peer_endpoint, handle_name,
+                                                 request_protobuf.SerializeToString())
+        response = response_proto_type()
+        response.ParseFromString(response_data)
+        return response
 
     def __del__(self):
         self._kill_child()
@@ -254,6 +283,13 @@ class P2P(object):
         if self._child is not None and self._child.poll() is None:
             self._child.kill()
             self._child.wait()
+
+    async def wait_for_termination(self):
+        def _handler(signum, frame):
+            self._kill_child()
+
+        signal.signal(signal.SIGTERM, _handler)
+        await asyncio.Event().wait()
 
     def _make_process_args(self, *args, **kwargs) -> tp.List[str]:
         proc_args = []
