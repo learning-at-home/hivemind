@@ -56,8 +56,7 @@ class ParameterAveragingOptimizer(DecentralizedOptimizerBase):
 
     def __del__(self):
         self.stop_event.set()
-        while self.background_averaging_thread.is_alive():
-            self.update_event.set()
+        self.update_event.set()
 
     def shutdown(self):
         self.averager.shutdown()
