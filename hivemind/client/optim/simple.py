@@ -39,10 +39,10 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
         self.averager = DecentralizedAverager(averaged_tensors, dht, start=True, prefix=prefix,
                                               target_group_size=target_group_size, **kwargs)
         self.lock_parameters, self.update_event, self.stop_event = Lock(), Event(), Event()
-        self.background_averaging_thread = Thread(daemon=True, target=_average_parameters_in_background,
-                                                  args=[self.update_event, self.stop_event, self.averager, self.opt],
-                                                  kwargs=dict(averaging_period=averaging_period, timeout=timeout,
-                                                              verbose=verbose))
+        self.background_averaging_thread = Thread(
+            name=f'{self.__class__.__name__}', daemon=True, target=_average_parameters_in_background,
+            args=[self.lock_parameters, self.update_event, self.stop_event, self.averager, self.opt],
+            kwargs=dict(averaging_period=averaging_period, timeout=timeout, verbose=verbose))
         self.background_averaging_thread.start()
 
     def step(self, *args, **kwargs):
@@ -62,8 +62,9 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
         self.averager.shutdown()
 
 
-def _average_parameters_in_background(update_event: Event, stop_event: Event, averager: DecentralizedAverager,
-                                      opt: torch.optim.Optimizer, averaging_period: float, verbose: bool, **kwargs):
+def _average_parameters_in_background(
+        lock_parameters: Lock, update_event: Event, stop_event: Event, averager: DecentralizedAverager,
+        opt: torch.optim.Optimizer, averaging_period: float, verbose: bool, **kwargs):
     """ Iteratively find groups of peers, average parameters with these peers and update local model parameters. """
     while True:
         update_event.wait()
@@ -77,9 +78,10 @@ def _average_parameters_in_background(update_event: Event, stop_event: Event, av
             time_to_nearest_interval = max(0.0, averaging_period - current_time % averaging_period)
             time.sleep(time_to_nearest_interval)
 
-        with torch.no_grad(), averager.get_tensors() as averaged_tensors:
+        with torch.no_grad(), lock_parameters, averager.get_tensors() as averaged_tensors:
             local_tensors = tuple(p for group in opt.param_groups for p in group['params'])
             assert len(local_tensors) == len(averaged_tensors), "The number of optimized parameters should not change."
+
             for local_tensor, averaged_tensor in zip(local_tensors, averaged_tensors):
                 averaged_tensor[...] = local_tensor.cpu().float()
 
@@ -89,7 +91,7 @@ def _average_parameters_in_background(update_event: Event, stop_event: Event, av
             group_info = averager.step(**kwargs)
 
             if group_info is not None:
-                with torch.no_grad(), averager.get_tensors() as averaged_tensors:
+                with torch.no_grad(), lock_parameters, averager.get_tensors() as averaged_tensors:
                     for local_tensor, averaged_tensor in zip(local_tensors, averaged_tensors):
                         local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype)
                 if verbose:
