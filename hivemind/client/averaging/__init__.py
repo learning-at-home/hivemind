@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import ctypes
 import multiprocessing as mp
+import os
 import threading
 import uuid
 import weakref
@@ -196,14 +197,14 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def shutdown(self) -> None:
         """ Shut down the averager process """
         # TODO notify peers before terminating
-        if self.is_alive():
+        if self._parent_pid != os.getpid() or self.is_alive():
             self._pipe.send(('_SHUTDOWN', None))
             self.terminate()
         else:
             logger.warning("DHT shutdown has no effect: the process is not alive")
 
     def __del__(self):
-        if self.is_alive():
+        if self._parent_pid != os.getpid() or self.is_alive():
             self.shutdown()
 
     def step(self, gather: Optional[DataForGather] = None, allow_retries: bool = True, timeout: Optional[float] = None,
