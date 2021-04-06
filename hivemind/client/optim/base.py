@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 
 from hivemind.dht import DHT
@@ -23,8 +25,11 @@ class DecentralizedOptimizerBase(torch.optim.Optimizer):
     def state_dict(self) -> dict:
         return self.opt.state_dict()
 
-    def load_state_dict(self, state_dict: dict) -> None:
+    def load_state_dict(self, state_dict: dict) -> Any:
         return self.opt.load_state_dict(state_dict)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(opt={repr(self.opt)}, dht={repr(self.dht)})"
+
+    def shutdown(self):
+        raise NotImplementedError()

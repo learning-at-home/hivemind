@@ -1,3 +1,4 @@
+import time
 from threading import Thread, Lock, Event
 from typing import Optional, Callable, Any
 
@@ -6,7 +7,7 @@ import torch
 from hivemind.dht import DHT
 from hivemind.client.averaging import DecentralizedAverager
 from hivemind.client.optim.base import DecentralizedOptimizerBase
-from hivemind.utils import MPFuture, get_logger
+from hivemind.utils import MPFuture, get_logger, get_dht_time
 
 logger = get_logger(__name__)
 
@@ -17,6 +18,8 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
 
     :param opt: a pytorch optimizer configured to update model parameters.
     :param dht: a running hivemind DHT daemon connected to other peers
+    :param averaging_period: if specified, optimizer will attempt to average weights at regular intervals of this many
+      seconds. (averaging step will only occur if the optimizer ran at least one step in that interval)
     :param prefix: all DHT keys that point to optimization metadata will have this prefix
     :param target_group_size: maximum group size for averaging (see DecentralizedAverager)
     :param kwargs: additional parameters passed to DecentralizedAverager
@@ -26,10 +29,9 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
       statistics are synchronized or use a more advanced DecentralizedOptimizer version, if applicable.
     :note: the base optimizer cannot add param groups after the DecentralizedOptimizer is created
     """
-    averager_step: Optional[MPFuture] = None
 
     def __init__(self, opt: torch.optim.Optimizer, dht: DHT, prefix: str, target_group_size: int,
-                 timeout: Optional[float] = None, verbose: bool = False, **kwargs):
+                 averaging_period: float = 0.0, timeout: Optional[float] = None, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
         with torch.no_grad():
             averaged_tensors = tuple(p.cpu().float().clone().requires_grad_(False)
@@ -39,7 +41,8 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
         self.lock_parameters, self.update_event, self.stop_event = Lock(), Event(), Event()
         self.background_averaging_thread = Thread(daemon=True, target=_average_parameters_in_background,
                                                   args=[self.update_event, self.stop_event, self.averager, self.opt],
-                                                  kwargs=dict(verbose=verbose, timeout=timeout))
+                                                  kwargs=dict(averaging_period=averaging_period, timeout=timeout,
+                                                              verbose=verbose))
         self.background_averaging_thread.start()
 
     def step(self, closure: Optional[Callable[[], Any]] = None):
@@ -55,15 +58,24 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
         while self.background_averaging_thread.is_alive():
             self.update_event.set()
 
+    def shutdown(self):
+        self.averager.shutdown()
+
 
 def _average_parameters_in_background(update_event: Event, stop_event: Event, averager: DecentralizedAverager,
-                                      opt: torch.optim.Optimizer, verbose: bool, **kwargs):
+                                      opt: torch.optim.Optimizer, averaging_period: float, verbose: bool, **kwargs):
     """ Iteratively find groups of peers, average parameters with these peers and update local model parameters. """
     while True:
         update_event.wait()
         update_event.clear()
         if stop_event.is_set():
             break
+
+        if averaging_period:
+            current_time = get_dht_time()
+            # note: we use global DHT time to make sure peers start averaging at the ~same time (to form groups)
+            time_to_nearest_interval = max(0.0, averaging_period - current_time % averaging_period)
+            time.sleep(time_to_nearest_interval)
 
         with torch.no_grad(), averager.get_tensors() as averaged_tensors:
             local_tensors = tuple(p for group in opt.param_groups for p in group['params'])
@@ -83,6 +95,7 @@ def _average_parameters_in_background(update_event: Event, stop_event: Event, av
                 if verbose:
                     logger.info(f"Finished averaging round in with {len(group_info)} peers.")
             else:
-                logger.info(f"Averaging round failed: could not find group.")
+                if verbose:
+                    logger.warning(f"Averaging round failed: could not find group.")
         except Exception as e:
-            logger.info(f"Averaging round failed: caught {e}.")
+            logger.error(f"Averaging round failed: caught {e}.")
