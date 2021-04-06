@@ -22,6 +22,7 @@ class ParameterAveragingOptimizer(DecentralizedOptimizerBase):
       seconds. (averaging step will only occur if the optimizer ran at least one step in that interval)
     :param prefix: all DHT keys that point to optimization metadata will have this prefix
     :param target_group_size: maximum group size for averaging (see DecentralizedAverager)
+    :param timeout: if DecentralizedAverager step is unable to form group in this many seconds, cancel step
     :param kwargs: additional parameters passed to DecentralizedAverager
 
     :note: using DecentralizedOptimizer with adaptive learning rates may result in poor convergence due to
