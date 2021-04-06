@@ -62,4 +62,4 @@ def test_decentralized_optimizer_step():
     time.sleep(0.5)
     assert torch.allclose(param1, param2)
     reference = 0.5 * (0.0 - 0.1 * 1.0) + 0.5 * (1.0 - 0.05 * 300)
-    torch.allclose(param1, torch.full_like(param1, reference))
+    assert torch.allclose(param1, torch.full_like(param1, reference))
