@@ -121,7 +121,7 @@ class DHTNode:
         :param kwargs: extra parameters used in grpc.aio.server
         """
         self = cls(_initialized_with_create=True)
-        self.node_id = node_id = node_id if node_id is not None else DHTID.generate()
+        self.node_id = node_id if node_id is not None else DHTID.generate()
         self.num_replicas, self.num_workers, self.chunk_size = num_replicas, num_workers, chunk_size
         self.is_alive = True  # if set to False, cancels all background jobs such as routing table refresh
 
