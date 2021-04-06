@@ -17,7 +17,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
 
     :param opt: a pytorch optimizer configured to update model parameters.
     :param dht: a running hivemind DHT daemon connected to other peers
-    :param prefix: all keys that point to a DHT metadata will have this prefix
+    :param prefix: all DHT keys that point to optimization metadata will have this prefix
     :param target_group_size: maximum group size for averaging (see DecentralizedAverager)
     :param kwargs: additional parameters passed to DecentralizedAverager
 
