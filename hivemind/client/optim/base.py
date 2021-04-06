@@ -25,7 +25,7 @@ class DecentralizedOptimizerBase(torch.optim.Optimizer):
     def state_dict(self) -> dict:
         return self.opt.state_dict()
 
-    def load_state_dict(self, state_dict: dict) -> Any:
+    def load_state_dict(self, state_dict: dict):
         return self.opt.load_state_dict(state_dict)
 
     def __repr__(self):
