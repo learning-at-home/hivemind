@@ -45,13 +45,13 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
                                                               verbose=verbose))
         self.background_averaging_thread.start()
 
-    def step(self, closure: Optional[Callable[[], Any]] = None):
+    def step(self, *args, **kwargs):
         self.update_event.set()
         with self.lock_parameters:
-            return self.opt.step(closure)
+            return self.opt.step(*args, **kwargs)
 
-    def zero_grad(self, set_to_none: Optional[bool] = False):
-        return self.opt.zero_grad()
+    def zero_grad(self, *args, **kwargs):
+        return self.opt.zero_grad(*args, **kwargs)
 
     def __del__(self):
         self.stop_event.set()
