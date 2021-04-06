@@ -1,1 +1,1 @@
-from hivemind.client.optim.simple import ParameterAveragingOptimizer
+from hivemind.client.optim.simple import ParameterAveragingOptimizer, DecentralizedSGD

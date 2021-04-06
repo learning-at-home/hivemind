@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.datasets import load_digits
 
-from hivemind import RemoteExpert, background_server, DHT, DecentralizedOptimizer
+from hivemind import RemoteExpert, background_server, DHT, DecentralizedSGD
 
 
 @pytest.mark.forked
@@ -45,14 +45,12 @@ def test_decentralized_optimizer_step():
     initial_peers = [f"127.0.0.1:{dht_root.port}"]
 
     param1 = torch.nn.Parameter(torch.zeros(32, 32), requires_grad=True)
-    opt1 = DecentralizedOptimizer(opt=torch.optim.SGD([param1], lr=0.1),
-                                  dht=DHT(initial_peers=initial_peers, start=True),
-                                  prefix='foo', target_group_size=2, verbose=True)
+    opt1 = DecentralizedSGD([param1], lr=0.1, dht=DHT(initial_peers=initial_peers, start=True),
+                            prefix='foo', target_group_size=2, verbose=True)
 
     param2 = torch.nn.Parameter(torch.ones(32, 32), requires_grad=True)
-    opt2 = DecentralizedOptimizer(opt=torch.optim.SGD([param2], lr=0.05),
-                                  dht=DHT(initial_peers=initial_peers, start=True),
-                                  prefix='foo', target_group_size=2, verbose=True)
+    opt2 = DecentralizedSGD([param2], lr=0.05, dht=DHT(initial_peers=initial_peers, start=True),
+                            prefix='foo', target_group_size=2, verbose=True)
 
     assert not torch.allclose(param1, param2)
 
