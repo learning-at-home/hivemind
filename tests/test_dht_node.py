@@ -113,6 +113,7 @@ def test_dht_protocol():
 
     peer1_proc.terminate()
     peer2_proc.terminate()
+    protocol.__del__()
 
 
 @pytest.mark.forked
@@ -146,6 +147,7 @@ def test_empty_table():
     assert loop.run_until_complete(protocol.call_ping(peer_endpoint)) == peer_id
     assert loop.run_until_complete(protocol.call_ping(f'{LOCALHOST}:{hivemind.find_open_port()}')) is None
     peer_proc.terminate()
+    protocol.__del__()
 
 
 def run_node(node_id, peers, status_pipe: mp.Pipe):
@@ -288,6 +290,9 @@ def test_dht_node():
 
     for proc in processes:
         proc.terminate()
+    me.__del__()
+    detached_node.__del__()
+    that_guy.__del__()
 
 
 @pytest.mark.forked
@@ -315,6 +320,9 @@ async def test_dhtnode_replicas():
 
     assert await you.store('key2', 'baz', get_dht_time() + 1000)
     assert sum(len(peer.protocol.storage) for peer in peers) == total_size, "total size should not have changed"
+
+    for p in peers:
+        p.__del__()
 
 
 @pytest.mark.forked
@@ -361,6 +369,8 @@ async def test_dhtnode_caching(T=0.2):
     assert len(node1.cache_refresh_queue) == 0
 
     await asyncio.gather(node1.shutdown(), node2.shutdown())
+    node1.__del__()
+    node2.__del__()
 
 
 @pytest.mark.forked
@@ -395,6 +405,9 @@ async def test_dhtnode_reuse_get():
     assert await futures1['k2'] == await futures2['k2'] and (await futures1['k2'])[0] == 567
     assert await futures2['k3'] == await futures3['k3'] and (await futures3['k3']) is None
 
+    for p in peers:
+        p.__del__()
+
 
 @pytest.mark.forked
 @pytest.mark.asyncio
@@ -424,6 +437,9 @@ async def test_dhtnode_blacklist():
     node2_endpoint = await node2.protocol.get_outgoing_request_endpoint(node1.endpoint)
     assert await node1.get('abc', latest=True)  # force node1 to crawl dht and discover unresponsive peers
     assert node2_endpoint not in node1.blacklist
+
+    for node in [node1, node2, node3, node4]:
+        node.__del__()
 
 
 @pytest.mark.forked

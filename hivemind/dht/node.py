@@ -179,6 +179,9 @@ class DHTNode:
         assert _initialized_with_create, " Please use DHTNode.create coroutine to spawn new node instances "
         super().__init__()
 
+    def __del__(self):
+        self.protocol.__del__()
+
     async def shutdown(self, timeout=None):
         """ Process existing requests, close all connections and stop the server """
         self.is_alive = False
