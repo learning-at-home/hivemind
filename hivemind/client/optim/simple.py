@@ -66,7 +66,7 @@ def _average_parameters_in_background(
         lock_parameters: Lock, update_event: Event, stop_event: Event, averager: DecentralizedAverager,
         opt: torch.optim.Optimizer, averaging_period: float, verbose: bool, **kwargs):
     """ Iteratively find groups of peers, average parameters with these peers and update local model parameters. """
-    while True:
+    while not stop_event.is_set():
         update_event.wait()
         update_event.clear()
         if stop_event.is_set():
