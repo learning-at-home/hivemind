@@ -205,7 +205,7 @@ class Server(threading.Thread):
 
         for process in self.conn_handlers:
             process.join()
-        if self.dht:
+        if self.dht and self.experts:
             dht_handler_thread.stop.set()
             dht_handler_thread.join()
         if self.checkpoint_saver is not None:
