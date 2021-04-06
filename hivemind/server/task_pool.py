@@ -9,13 +9,13 @@ import time
 import uuid
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple
-from concurrent.futures import Future, InvalidStateError
+from concurrent.futures import Future
 from queue import Empty
 from typing import List, Tuple, Dict, Any, Generator
 
 import torch
 
-from hivemind.utils import MPFuture, get_logger
+from hivemind.utils import MPFuture, get_logger, FutureStateError
 
 logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))
@@ -129,7 +129,7 @@ class TaskPool(TaskPoolBase):
                 if task.future.set_running_or_notify_cancel():
                     batch.append(task)
                     total_size += task_size
-            except RuntimeError as e:
+            except FutureStateError as e:
                 logger.debug(f"Failed to add task to batch: {task.future} raised {e}")
 
     def run(self, *args, **kwargs):
@@ -204,7 +204,7 @@ class TaskPool(TaskPoolBase):
                 for task, task_outputs in zip(batch_tasks, outputs_per_task):
                     try:
                         task.future.set_result(tuple(task_outputs))
-                    except InvalidStateError as e:
+                    except FutureStateError as e:
                         logger.debug(f"Failed to send task result due to an exception: {e}")
         except KeyboardInterrupt:
             logger.debug(f"Caught KeyboardInterrupt, shutting down")

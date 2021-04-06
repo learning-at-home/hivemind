@@ -13,6 +13,11 @@ from hivemind.utils.threading import run_in_background
 ResultType = TypeVar('ResultType')
 
 
+class FutureStateError(RuntimeError):
+    """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
+    pass
+
+
 class MPFuture(base.Future, Generic[ResultType]):
     """ Multiprocessing version of concurrent.futures.Future. Can also be awaited like asyncio.Future """
 
@@ -79,14 +84,14 @@ class MPFuture(base.Future, Generic[ResultType]):
     def set_result(self, result: ResultType):
         self._sync_updates()
         if self._state in self.TERMINAL_STATES:
-            raise base.InvalidStateError(f"Can't set_result to a future that is {self._state} ({self})")
+            raise FutureStateError(f"Can't set_result to a future that is {self._state} ({self})")
         self._state, self._result = base.FINISHED, result
         return self._send_updates()
 
     def set_exception(self, exception: BaseException):
         self._sync_updates()
         if self._state in self.TERMINAL_STATES:
-            raise base.InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self})")
+            raise FutureStateError(f"Can't set_exception to a future that is {self._state} ({self})")
         self._state, self._exception = base.FINISHED, exception
         self._send_updates()
 
@@ -98,7 +103,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         elif self._state == base.CANCELLED:
             return False
         else:
-            raise RuntimeError(f"Can't set_running_or_notify_cancel to a future that is in {self._state} ({self})")
+            raise FutureStateError(f"Can't set_running_or_notify_cancel to a future that is in {self._state} ({self})")
 
     def cancel(self):
         self._sync_updates()

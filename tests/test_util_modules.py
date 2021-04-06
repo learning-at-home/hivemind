@@ -1,15 +1,16 @@
 import asyncio
-import torch
-import numpy as np
+from concurrent.futures import CancelledError
 
+import numpy as np
 import pytest
-import hivemind
+import torch
+
 from hivemind.proto.dht_pb2_grpc import DHTStub
-from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
-from hivemind.utils import MSGPackSerializer
-from concurrent.futures import CancelledError, InvalidStateError
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
+import hivemind
+from hivemind.utils import MSGPackSerializer, serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils.mpfuture import FutureStateError
 
 
 def test_mpfuture_result():
@@ -19,9 +20,9 @@ def test_mpfuture_result():
     assert f1.result() == 321
 
     for future in [f1, f2]:
-        with pytest.raises(InvalidStateError):
+        with pytest.raises(FutureStateError):
             future.set_result(123)
-        with pytest.raises(InvalidStateError):
+        with pytest.raises(FutureStateError):
             future.set_exception(ValueError())
         assert future.cancel() is False
         assert future.done() and not future.running() and not future.cancelled()
@@ -58,9 +59,9 @@ def test_mpfuture_cancel():
             future.result()
         with pytest.raises(CancelledError):
             future.exception()
-        with pytest.raises(InvalidStateError):
+        with pytest.raises(FutureStateError):
             future.set_result(123)
-        with pytest.raises(InvalidStateError):
+        with pytest.raises(FutureStateError):
             future.set_exception(NotImplementedError())
         assert future.cancelled() and future.done() and not future.running()
 
