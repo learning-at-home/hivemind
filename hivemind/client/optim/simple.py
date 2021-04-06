@@ -32,7 +32,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
                  timeout: Optional[float] = None, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
         with torch.no_grad():
-            averaged_tensors = tuple(p.cpu().float().requires_grad_(False)
+            averaged_tensors = tuple(p.cpu().float().clone().requires_grad_(False)
                                      for group in self.param_groups for p in group['params'])
         self.averager = DecentralizedAverager(averaged_tensors, dht, start=True, prefix=prefix,
                                               target_group_size=target_group_size, **kwargs)
@@ -58,6 +58,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
 
 def _average_parameters_in_background(update_event: Event, stop_event: Event, averager: DecentralizedAverager,
                                       opt: torch.optim.Optimizer, verbose: bool, **kwargs):
+    """ Iteratively find groups of peers, average parameters with these peers and update local model parameters. """
     while True:
         update_event.wait()
         update_event.clear()
@@ -68,7 +69,7 @@ def _average_parameters_in_background(update_event: Event, stop_event: Event, av
             local_tensors = tuple(p for group in opt.param_groups for p in group['params'])
             assert len(local_tensors) == len(averaged_tensors), "The number of optimized parameters should not change."
             for local_tensor, averaged_tensor in zip(local_tensors, averaged_tensors):
-                averaged_tensors[...] = local_tensor.cpu().float()
+                averaged_tensor[...] = local_tensor.cpu().float()
 
         try:
             if verbose:
