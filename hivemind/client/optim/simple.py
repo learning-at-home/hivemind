@@ -1,18 +1,18 @@
 import time
 from threading import Thread, Lock, Event
-from typing import Optional, Callable, Any
+from typing import Optional
 
 import torch
 
 from hivemind.dht import DHT
 from hivemind.client.averaging import DecentralizedAverager
 from hivemind.client.optim.base import DecentralizedOptimizerBase
-from hivemind.utils import MPFuture, get_logger, get_dht_time
+from hivemind.utils import get_logger, get_dht_time
 
 logger = get_logger(__name__)
 
 
-class DecentralizedOptimizer(DecentralizedOptimizerBase):
+class ParameterAveragingOptimizer(DecentralizedOptimizerBase):
     """
     A simple optimizer that trains a shared model by averaging model parameters with peers in the background.
 
@@ -31,7 +31,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     """
 
     def __init__(self, opt: torch.optim.Optimizer, dht: DHT, prefix: str, target_group_size: int,
-                 averaging_period: float = 0.0, timeout: Optional[float] = None, verbose: bool = False, **kwargs):
+                 averaging_period: float = 0, timeout: Optional[float] = None, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
         with torch.no_grad():
             averaged_tensors = tuple(p.cpu().float().clone().requires_grad_(False)

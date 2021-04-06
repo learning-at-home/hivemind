@@ -1,1 +1,1 @@
-from hivemind.client.optim.simple import DecentralizedOptimizer
+from hivemind.client.optim.simple import ParameterAveragingOptimizer
