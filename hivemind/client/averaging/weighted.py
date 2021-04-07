@@ -23,12 +23,14 @@ class WeightedAverager(DecentralizedAverager):
     :param average_gradients: whether or not to average model gradients in self.step(...)
     :param initialize_optimizer: if True, this will run a speculative optimizer step with
       zero gradients to initialize all tensors. If False, please initialize the optimizer state manually.
+    :param extra_tensors: if specified, these extra tensors will also be averaged and shared in load_state_from_peers.
+    :note: you can use extra_tensors for averaging tensors that are updated outside of opt.step (e.g. batchnorm stats)
     :param kwargs: any additional parameters will be forwarded to DecentralizedAverager
     """
     def __init__(self, opt: torch.optim.Optimizer, *, average_parameters: bool, average_gradients: bool,
-                 initialize_optimizer: bool = True, **kwargs):
+                 extra_tensors: Sequence[torch.Tensor] = (), initialize_optimizer: bool = True, **kwargs):
 
-        self.opt, self.global_step = opt, 0
+        self.opt, self.extra_tensors, self.local_step = opt, extra_tensors, 0
         self.average_parameters, self.average_gradients = average_parameters, average_gradients
         self.lock_averager_step = Lock()
         if initialize_optimizer:
@@ -80,16 +82,19 @@ class WeightedAverager(DecentralizedAverager):
         Iterate local trainer's tensors that should be averaged with peers
 
         :param replace_none: if True and average_gradients is True, None grads will be replaced with a zero tensors
+          Otherwise, such gradients will be skipped. (this may cause inconsistencies with averaged_tensors)
         """
         if self.average_parameters:
             for param_group in self.opt.param_groups:
-                yield param_group['params']
+                yield from param_group['params']
         if self.average_gradients:
             for param_group in self.opt.param_groups:
-                if param_group['params'].grad is not None:
-                    yield param_group['params'].grad
-                elif replace_none:
-                    yield torch.zeros_like(param_group['params'])
+                for param in param_group['params']:
+                    if param.grad is not None:
+                        yield param.grad
+                    elif replace_none:
+                        yield torch.zeros_like(param)
+        yield from iter(self.extra_tensors)
 
     def get_current_state(self):
         """
@@ -101,7 +106,7 @@ class WeightedAverager(DecentralizedAverager):
                                          for param in param_group['params'])
             optimizer_metadata, optimizer_tensors = dump_optimizer_state(self.opt)
 
-        metadata = dict(step=self.global_step, group_bits=self.get_group_bits(), optimizer_metadata=optimizer_metadata)
+        metadata = dict(step=self.local_step, group_bits=self.get_group_bits(), optimizer_metadata=optimizer_metadata)
         return metadata, list(chain(optimized_parameters, optimizer_tensors))
 
     def load_state_from_peers(self, **kwargs):
@@ -124,7 +129,7 @@ class WeightedAverager(DecentralizedAverager):
                 local_param[...] = loaded_param
             load_optimizer_state(self.opt, metadata['optimizer_metadata'], opt_tensors)
 
-        self.global_step = max(self.global_step, metadata['step'])
+        self.local_step = max(self.local_step, metadata['step'])
 
 
 def initialize_optimizer_state(opt: torch.optim.Optimizer):
