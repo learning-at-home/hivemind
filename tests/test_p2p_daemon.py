@@ -29,7 +29,7 @@ def is_process_running(pid: int) -> bool:
 
 
 async def replicate_if_needed(p2p: P2P, replicate: bool):
-    return await P2P.replica(p2p._daemon_listen_port, p2p._host_port) if replicate else p2p
+    return await P2P.replicate(p2p._daemon_listen_port, p2p._host_port) if replicate else p2p
 
 
 @pytest.mark.asyncio
@@ -46,7 +46,7 @@ async def test_daemon_killed_on_del():
 @pytest.mark.asyncio
 async def test_daemon_replica_does_not_affect_primary():
     p2p_daemon = await P2P.create()
-    p2p_replica = await P2P.replica(p2p_daemon._daemon_listen_port, p2p_daemon._host_port)
+    p2p_replica = await P2P.replicate(p2p_daemon._daemon_listen_port, p2p_daemon._host_port)
 
     child_pid = p2p_daemon._child.pid
     assert is_process_running(child_pid)

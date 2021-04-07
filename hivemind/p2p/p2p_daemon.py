@@ -74,7 +74,7 @@ class P2P(object):
         return self
 
     @classmethod
-    async def replica(cls, daemon_listen_port: int, host_port: int):
+    async def replicate(cls, daemon_listen_port: int, host_port: int):
         self = cls()
         # There is no child under control
         # Use external already running p2pd
