@@ -30,7 +30,7 @@ class WeightedAverager(DecentralizedAverager):
     def __init__(self, opt: torch.optim.Optimizer, *, average_parameters: bool, average_gradients: bool,
                  extra_tensors: Sequence[torch.Tensor] = (), initialize_optimizer: bool = True, **kwargs):
 
-        self.opt, self.extra_tensors, self.local_step = opt, extra_tensors, 0
+        self.opt, self.extra_tensors, self.local_step = opt, tuple(extra_tensors), 0
         self.average_parameters, self.average_gradients = average_parameters, average_gradients
         self.lock_averager_step = Lock()
         if initialize_optimizer:
