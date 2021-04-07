@@ -5,7 +5,8 @@ import grpc
 import torch
 
 from hivemind.utils import Endpoint, get_logger, ChannelCache, anext
-from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor, split_for_streaming, combine_from_streaming
+from hivemind.utils import split_for_streaming, combine_from_streaming
+from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.proto import averaging_pb2_grpc, runtime_pb2, averaging_pb2
 
 # flavour types
