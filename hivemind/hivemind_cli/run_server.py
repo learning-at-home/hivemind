@@ -40,8 +40,9 @@ def main():
     parser.add_argument('--optimizer', type=str, default='adam', required=False, help='adam, sgd or none')
     parser.add_argument('--scheduler', type=str, choices=schedule_name_to_scheduler.keys(), default='none',
                         help='LR scheduler type to use')
-    parser.add_argument('--num-warmup-steps', type=int, required=False, help='the number of warmup steps for LR schedule')
-    parser.add_argument('--num-training-steps', type=int, required=False, help='the total number of steps for LR schedule')
+    parser.add_argument('--num_warmup_steps', type=int, required=False, help='The number of warmup steps for LR schedule')
+    parser.add_argument('--num_total_steps', type=int, required=False, help='The total number of steps for LR schedule')
+    parser.add_argument('--clip_grad_norm', type=float, required=False, help='Maximum gradient norm used for clipping')
 
     parser.add_argument('--no_dht', action='store_true', help='if specified, the server will not be attached to a dht')
     parser.add_argument('--initial_peers', type=str, nargs='*', required=False, default=[],
@@ -53,6 +54,8 @@ def main():
     parser.add_argument('--compression', type=str, default='NONE', required=False, help='Tensor compression '
                         'parameter for grpc. Can be NONE, MEANSTD or FLOAT16')
     parser.add_argument('--checkpoint_dir', type=Path, required=False, help='Directory to store expert checkpoints')
+    parser.add_argument('--stats_report_interval', type=int, required=False,
+                        help='Interval between two reports of batch processing performance statistics')
 
     # fmt:on
     args = vars(parser.parse_args())
