@@ -25,7 +25,7 @@ def example_experts():
     expert_backend = ExpertBackend(name=EXPERT_NAME, expert=expert, optimizer=opt,
                                    scheduler=get_linear_schedule_with_warmup,
                                    num_warmup_steps=BACKWARD_PASSES_BEFORE_SAVE,
-                                   num_training_steps=BACKWARD_PASSES_BEFORE_SAVE + BACKWARD_PASSES_AFTER_SAVE,
+                                   num_total_steps=BACKWARD_PASSES_BEFORE_SAVE + BACKWARD_PASSES_AFTER_SAVE,
                                    args_schema=args_schema, outputs_schema=BatchTensorDescriptor(1), max_batch_size=1,
                                    )
     experts = {EXPERT_NAME: expert_backend}

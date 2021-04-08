@@ -67,7 +67,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
       refresh the collaboration-wide statistics (to avoid missing the moment when to run the next step)
     :param bandwidth: peer's network bandwidth for the purpose of load balancing (recommended: internet speed in mbps)
     :param performance_ema_alpha: smoothing value used to estimate this peer's performance (training samples per second)
-    :param averaging_expiration: peer's requests for evaraging will be valid for this many seconds
+    :param averaging_expiration: peer's requests for averaging will be valid for this many seconds
     :param metadata_expiration: peer's metadata (e.g. samples processed) is stored onto DHT for this many seconds
     :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
     :param scheduler: if specified, use this scheduler to update optimizer learning rate
