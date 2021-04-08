@@ -12,7 +12,7 @@ from hivemind import RemoteExpert, background_server, DHT, DecentralizedSGD
 
 @pytest.mark.forked
 def test_training(max_steps: int = 100, threshold: float = 0.9):
-    dataset = load_digits()
+    dataset = load_digits(n_class=2)
     X_train, y_train = torch.tensor(dataset['data'], dtype=torch.float), torch.tensor(dataset['target'])
     SGD = partial(torch.optim.SGD, lr=0.05)
 
@@ -20,7 +20,7 @@ def test_training(max_steps: int = 100, threshold: float = 0.9):
                            no_dht=True) as (server_endpoint, dht_endpoint):
         expert1 = RemoteExpert('expert.0', server_endpoint)
         expert2 = RemoteExpert('expert.1', server_endpoint)
-        model = nn.Sequential(expert2, nn.Tanh(), expert1, nn.Linear(64, 10))
+        model = nn.Sequential(expert2, nn.ReLU(), expert1, nn.Linear(64, 2))
 
         opt = torch.optim.SGD(model.parameters(), lr=0.05)
 
