@@ -1,4 +1,3 @@
-import asyncio
 import multiprocessing as mp
 import os
 import pickle
@@ -6,7 +5,6 @@ from typing import Dict
 
 import grpc
 import torch
-import uvloop
 
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
 from hivemind.server.expert_backend import ExpertBackend
