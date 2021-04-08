@@ -28,6 +28,7 @@ class CollaborationState:
     samples_accumulated: int
     target_batch_size: int
     num_peers: int
+    num_clients: int
     eta_next_step: float
     next_fetch_time: float
 
@@ -156,12 +157,12 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                 logger.warning("Averaging step failed, using local updates for this step.")
                 return
 
-            outputs = self.opt.step()
+            output = self.opt.step()
             self.opt.zero_grad()
             self.local_samples_accumulated = self.local_steps_accumulated = 0
             self.collaboration_state.register_step()
             logger.info(f"Optimizer step: done!")
-            return outputs
+            return output
 
     def report_training_progress(self):
         """ Declare this trainer's current step and the number of batches accumulated towards the next step """
@@ -194,20 +195,25 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             logger.warning(f"Found no active peers: {response}")
             local_eta_next_step = max(0, self.target_batch_size - self.local_steps_accumulated
                                       ) / self.performance_ema.samples_per_second
-            return CollaborationState(self.local_step, self.local_samples_accumulated, self.target_batch_size, 0,
-                                      eta_next_step=current_time + local_eta_next_step,
+            return CollaborationState(self.local_step, self.local_samples_accumulated, self.target_batch_size,
+                                      num_peers=0, num_clients=0, eta_next_step=current_time + local_eta_next_step,
                                       next_fetch_time=current_time + self.default_refresh_period)
 
         valid_peer_states = [peer_state.value for peer_state in response.values()
                              if isinstance(peer_state, ValueWithExpiration)
                              and self.is_valid_peer_state(peer_state.value)]
-        global_optimizer_step = max(self.local_step, max(step for step, *_ in valid_peer_states))
-        logger.info(f"Out of sync (local_step={self.local_step}, global={self.collaboration_state.optimizer_step})")
 
         num_peers = len(valid_peer_states)
+        num_clients = sum(is_client for *_, is_client in valid_peer_states)
+
+        global_optimizer_step = self.local_step
+        for opt_step, samples_accumulated, samples_per_second, timestep, is_client in valid_peer_states:
+            if not is_client:
+                global_optimizer_step = max(global_optimizer_step, opt_step)
+
         total_samples_accumulated = estimated_curent_samples = total_samples_per_second = 0
 
-        for opt_step, samples_accumulated, samples_per_second, timestep in valid_peer_states:
+        for opt_step, samples_accumulated, samples_per_second, timestep, is_client in valid_peer_states:
             total_samples_per_second += samples_per_second
             if opt_step == global_optimizer_step:
                 total_samples_accumulated += samples_accumulated
@@ -215,8 +221,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             # note: we deliberately count only valid peers for samples_accumulated, but all peers for performance;
             # the rationale behind this is that outdated peers will synchronize and begin contributing shortly.
 
-        samples_remaining_to_next_step = self.target_batch_size - estimated_curent_samples
-        estimated_time_to_next_step = max(0.0, samples_remaining_to_next_step) / total_samples_per_second
+        estimated_samples_remaining = self.target_batch_size - estimated_curent_samples
+        estimated_time_to_next_step = max(0, estimated_samples_remaining) / total_samples_per_second
 
         expected_max_peers = max(num_peers + self.expected_drift_peers, num_peers * (1 + self.expected_drift_rate))
         time_to_next_fetch = float(np.clip(a=estimated_time_to_next_step * num_peers / expected_max_peers,
@@ -225,7 +231,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                     f"ETA {estimated_time_to_next_step:.2f} seconds (refresh in {time_to_next_fetch:.2f}s.)")
         return CollaborationState(
             global_optimizer_step, total_samples_accumulated, target_batch_size=self.target_batch_size,
-            num_peers=num_peers, eta_next_step=current_time + estimated_time_to_next_step,
+            num_peers=num_peers, num_clients=num_clients, eta_next_step=current_time + estimated_time_to_next_step,
             next_fetch_time=current_time + time_to_next_fetch)
 
     def zero_grad(self, *args, **kwargs):
