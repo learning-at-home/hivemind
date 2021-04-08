@@ -188,7 +188,7 @@ def test_client_anomaly_detection():
                                                         max_batch_size=16,
                                                         )
 
-    experts['expert.3'].expert.layers[0].weight.data[0, 0] = float('nan')
+    experts['expert.3'].expert.ffn.weight.data[0, 0] = float('nan')
 
     dht = hivemind.DHT(start=True, expiration=999)
     server = hivemind.Server(dht, experts, num_connection_handlers=1)
