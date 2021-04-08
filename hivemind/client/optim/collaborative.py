@@ -120,10 +120,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         """ Attempt to fetch the newest collaboration state from other peers """
         with self.lock_collaboration_state:
             self.averager.load_state_from_peers(**kwargs)
-            if self.scheduler:
-                while self.scheduler._step_count < self.local_step:
-                    self.scheduler.step()
             self.local_samples_accumulated = self.local_steps_accumulated = 0
+            self.update_scheduler()
             self.opt.zero_grad()
 
     def step(self, batch_size: Optional[int] = None, **kwargs):
@@ -161,6 +159,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.opt.zero_grad()
             self.local_samples_accumulated = self.local_steps_accumulated = 0
             self.collaboration_state.register_step()
+            self.state_updated.set()
+            self.update_scheduler()
             logger.info(f"Optimizer step: done!")
             return output
 
@@ -241,6 +241,11 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     def is_valid_peer_state(state):
         return isinstance(state, (list, tuple)) and len(state) == 5 \
                and all(map(isinstance, state, (int, int, float, float, bool)))
+
+    def update_scheduler(self):
+        if self.scheduler:
+            while self.scheduler._step_count < self.local_step:
+                self.scheduler.step()
 
     def shutdown(self):
         logger.info("Shutting down averager...")
