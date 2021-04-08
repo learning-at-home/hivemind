@@ -13,7 +13,7 @@ class WeightedAverager(DecentralizedAverager):
     """
     An high-level interface to DecentralizedAverager that averages trainable params or gradients with peer-wise weights.
 
-    This averager implements a number of typical use cases that arize in collaborative optimization
+    This averager implements a number of typical use cases that arise in collaborative optimization
     - averaging parameters or gradients or both (in future, this will support averaging learning rates as well)
     - this peer's weight (e.g. based on its batch size) can be specified via averager.step(weight=...)
     - when out of sync, the averager will load the entire optimizer state from an up-to-date peer
@@ -41,7 +41,7 @@ class WeightedAverager(DecentralizedAverager):
         super().__init__(averaged_tensors=averaged_tensors, **kwargs)
 
     def step(self, weight: float = 1.0, wait: bool = True, **kwargs):
-        """ Average optimizer weights ang gradients with peers. """
+        """ Average optimizer weights and gradients with peers. """
         if not wait:
             return run_in_background(self.step, weight=weight, wait=False, **kwargs)
 
@@ -62,7 +62,7 @@ class WeightedAverager(DecentralizedAverager):
                 logger.info(f"Averaged parameters with {len(group_weights)} peers.")
                 averaging_failed = False
             except Exception as e:
-                logger.error(f"Averaging step falied: {e}")
+                logger.error(f"Averaging step failed: {e}")
                 group_weights = {self.endpoint: weight}
                 averaging_failed = True
 
@@ -122,10 +122,10 @@ class WeightedAverager(DecentralizedAverager):
         parameters_and_extras.extend(self.extra_tensors)
         num_local_tensors = len(parameters_and_extras)
 
-        loadad_state = super().load_state_from_peers(**kwargs)
-        if loadad_state is None:
+        loaded_state = super().load_state_from_peers(**kwargs)
+        if loaded_state is None:
             return
-        metadata, flat_tensors = loadad_state
+        metadata, flat_tensors = loaded_state
         loaded_parameters_and_extras = flat_tensors[:num_local_tensors]
         loaded_opt_tensors = flat_tensors[num_local_tensors:]
 

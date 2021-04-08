@@ -38,4 +38,3 @@ class PerformanceEMA:
         finally:
             self.timestamp = get_dht_time()
             self.paused = was_paused
-
