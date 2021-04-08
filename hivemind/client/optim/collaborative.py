@@ -17,7 +17,6 @@ logger = get_logger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
 
 #TODO make sure that the weighted averager will NOT advertize for averaging if it is out of sync!
-# TODO count global step using only non-client peers!
 # warn if expiration is too infrequent (measure mean time between steps)
 #TODO do not forget to setup client mode!
 
