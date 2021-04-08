@@ -58,24 +58,22 @@ class WeightedAverager(DecentralizedAverager):
             try:
                 # find a group and hopefully update averaged tensors
                 group_weights = super().step(gather=weight, **kwargs)
-                averaging_failed = False
+                return group_weights
             except Exception as e:
-                averaging_failed = True
                 logger.error(f"Averaging step falied: {e}")
                 group_weights = {self.endpoint: weight}
+                return None
+            finally:
+                # All averaged parameters were pre-multiplied by the weights of the corresponding peers.
+                # Let us compensate for that by dividing weights by the sum of grad scales over the entire group.
+                sum_of_weights = sum(weight for weight in group_weights.values() if isinstance(weight, float))
+                normalization_coefficient = (len(group_weights) / sum_of_weights) if sum_of_weights > 0 else 1.0
 
-        # All averaged parameters were pre-multiplied by the weights of the corresponding peers.
-        # Let us compensate for that by dividing weights by the sum of grad scales over the entire group.
-        sum_of_weights = sum(weight for weight in group_weights.values() if isinstance(weight, float))
-        normalization_coefficient = (len(group_weights) / sum_of_weights) if sum_of_weights > 0 else 1.0
-
-        with torch.no_grad(), self.get_tensors() as averaged_tensors:
-            assert len(averaged_tensors) == len(local_tensors)
-            for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                averaged_tensor *= normalization_coefficient
-                local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
-
-        return group_weights if averaging_failed else None
+                with torch.no_grad(), self.get_tensors() as averaged_tensors:
+                    assert len(averaged_tensors) == len(local_tensors)
+                    for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
+                        averaged_tensor *= normalization_coefficient
+                        local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
 
     def local_tensors(self, replace_none: bool = True) -> Iterator[torch.Tensor]:
         """
