@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 
-from hivemind import get_dht_time
+from hivemind.utils import get_dht_time
 
 
 class PerformanceEMA:

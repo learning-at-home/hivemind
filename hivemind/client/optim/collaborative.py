@@ -21,7 +21,7 @@ LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
 #TODO do not forget to setup client mode!
 #TODO make sure we can recover from zero_grad!
 #TODO actually use scheduler normally on step!
-
+#TODO enforce minimum period on reporting progress
 
 @dataclass(frozen=False)
 class CollaborationState:
