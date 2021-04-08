@@ -19,6 +19,8 @@ LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
 #TODO make sure that the weighted averager will NOT advertize for averaging if it is out of sync!
 # warn if expiration is too infrequent (measure mean time between steps)
 #TODO do not forget to setup client mode!
+#TODO make sure we can recover from zero_grad!
+#TODO actually use scheduler normally on step!
 
 
 @dataclass(frozen=False)
@@ -65,11 +67,12 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
       refresh the collaboration-wide statistics (to avoid missing the moment when to run the next step)
     :param bandwidth: peer's network bandwidth for the purpose of load balancing (recommended: internet speed in mbps)
     :param performance_ema_alpha: smoothing value used to estimate this peer's performance (training samples per second)
-    :param averaging_expiration: peer's metadata is stored onto DHT for this many seconds
+    :param averaging_expiration: peer's requests for evaraging will be valid for this many seconds
+    :param metadata_expiration: peer's metadata (e.g. samples processed) is stored onto DHT for this many seconds
     :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
-
-    #TODO make sure we can recover from zero_grad!
-
+    :param scheduler: if specified, use this scheduler to update optimizer learning rate
+    :note: if you are using CollaborativeOptimizer with a lr_scheduler, it is recommended to pass this scheduler
+      explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
     """
 
     def __init__(self, opt: torch.optim.Optimizer, *, dht: DHT, prefix: str, target_group_size: int,
@@ -108,7 +111,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     @property
     def is_synchronized(self) -> bool:
-        return self.local_step == self.collaboration_state.optimizer_step
+        return self.local_step >= self.collaboration_state.optimizer_step
 
     def is_alive(self) -> bool:
         return self.averager.is_alive()
@@ -143,18 +146,16 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not self.is_synchronized:
             self.load_state_from_peers()
             return
-        if self.collaboration_state.num_peers <= 1:
-            logger.info(f"Skipped averaging: collaboration consists of {self.collaboration_state.num_peers} peers.")
-            return
 
         with self.performance_ema.pause(), self.lock_collaboration_state:
-            mean_samples_per_worker = self.target_batch_size / self.collaboration_state.num_peers
-            weight = self.local_samples_accumulated / mean_samples_per_worker
-
-            info = self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
-            if info is None:
-                logger.warning("Averaging step failed, using local updates for this step.")
-                return
+            if self.collaboration_state.num_peers > 1:
+                mean_samples_per_worker = self.target_batch_size / self.collaboration_state.num_peers
+                weight = self.local_samples_accumulated / mean_samples_per_worker
+                self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
+            else:
+                logger.info(
+                    f"Skipped averaging: collaboration consists of {self.collaboration_state.num_peers} peer(s).")
+                self.averager.local_step += 1
 
             output = self.opt.step()
             self.opt.zero_grad()
@@ -179,8 +180,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         while self.is_alive:
             time_to_next_update = max(0.0, self.collaboration_state.next_fetch_time - get_dht_time())
             if self.state_updated.wait(time_to_next_update):
+                self.state_updated.clear()
                 continue  # if state was updated externally, reset timer
-            self.state_updated.clear()
 
             with self.lock_collaboration_state:
                 self.collaboration_state = self.fetch_collaboration_state()

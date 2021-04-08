@@ -58,22 +58,26 @@ class WeightedAverager(DecentralizedAverager):
             try:
                 # find a group and hopefully update averaged tensors
                 group_weights = super().step(gather=weight, **kwargs)
-                return group_weights
+                logger.info(f"Averaged parameters with {len(group_weights)} peers.")
+                averaging_failed = False
             except Exception as e:
                 logger.error(f"Averaging step falied: {e}")
                 group_weights = {self.endpoint: weight}
-                return None
-            finally:
-                # All averaged parameters were pre-multiplied by the weights of the corresponding peers.
-                # Let us compensate for that by dividing weights by the sum of grad scales over the entire group.
-                sum_of_weights = sum(weight for weight in group_weights.values() if isinstance(weight, float))
-                normalization_coefficient = (len(group_weights) / sum_of_weights) if sum_of_weights > 0 else 1.0
+                averaging_failed = True
 
-                with torch.no_grad(), self.get_tensors() as averaged_tensors:
-                    assert len(averaged_tensors) == len(local_tensors)
-                    for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                        averaged_tensor *= normalization_coefficient
-                        local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
+            # All averaged parameters were pre-multiplied by the weights of the corresponding peers.
+            # Let us compensate for that by dividing weights by the sum of grad scales over the entire group.
+            sum_of_weights = sum(weight for weight in group_weights.values() if isinstance(weight, float))
+            normalization_coefficient = (len(group_weights) / sum_of_weights) if sum_of_weights > 0 else 1.0
+
+            with torch.no_grad(), self.get_tensors() as averaged_tensors:
+                assert len(averaged_tensors) == len(local_tensors)
+                for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
+                    averaged_tensor *= normalization_coefficient
+                    local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
+
+            self.local_step += 1
+            return group_weights if not averaging_failed else None
 
     def local_tensors(self, replace_none: bool = True) -> Iterator[torch.Tensor]:
         """
@@ -112,16 +116,15 @@ class WeightedAverager(DecentralizedAverager):
         Attempt to download the latest optimizer state from peers and update trainer parameters/statistics.
         :returns: whether or the averager succeeded in loading parameters
         """
+        local_parameters = tuple(param for param_group in self.opt.param_groups for param in param_group['params'])
+        num_params = len(local_parameters)
 
         loadad_state = super().load_state_from_peers(**kwargs)
         if loadad_state is None:
             return
-
         metadata, flat_tensors = loadad_state
-        local_parameters = [param for param_group in self.opt.param_groups for param in param_group]
-        num_params = len(local_parameters)
-
         optimized_parameters, opt_tensors = flat_tensors[:num_params], flat_tensors[num_params:]
+
         with torch.no_grad():
             for local_param, loaded_param in zip(local_parameters, optimized_parameters):
                 local_param[...] = loaded_param
