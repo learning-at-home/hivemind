@@ -74,7 +74,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     def __init__(self, opt: torch.optim.Optimizer, *, dht: DHT, prefix: str, target_group_size: int,
                  target_batch_size: int, batch_size_per_step: int, scheduler: Optional[LRSchedulerBase] = None,
-                 min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
+                 min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 10,
                  expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
                  averaging_expiration: float = 30, metadata_expiration: float = 30.0,
                  averaging_timeout: Optional[float] = None, **kwargs):
@@ -191,7 +191,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         current_time = get_dht_time()
 
         if not isinstance(response, dict) or len(response) == 0:
-            logger.warning(f"Found no active peers: {response}")
+            logger.info(f"Found no active peers: {response}")
             local_eta_next_step = max(0, self.target_batch_size - self.local_steps_accumulated
                                       ) / self.performance_ema.samples_per_second
             return CollaborationState(self.local_step, self.local_samples_accumulated, self.target_batch_size,
