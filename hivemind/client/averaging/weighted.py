@@ -47,6 +47,7 @@ class WeightedAverager(DecentralizedAverager):
 
         assert isinstance(weight, (int, float)), f"weight must be a single int or float, but got {type(weight)}"
         local_tensors = list(self.local_tensors())
+
         with torch.no_grad(), self.lock_averager_step:
 
             # fill averager's tensors with current local tensors, scaled by peer's weight
@@ -102,30 +103,32 @@ class WeightedAverager(DecentralizedAverager):
         with torch.no_grad():
             optimized_parameters = tuple(param.detach().cpu() for param_group in self.opt.param_groups
                                          for param in param_group['params'])
+            extra_tensors = tuple(tensor.detach().cpu() for tensor in self.extra_tensors)
             optimizer_metadata, optimizer_tensors = dump_optimizer_state(self.opt)
 
         metadata = dict(step=self.local_step, group_bits=self.get_group_bits(), optimizer_metadata=optimizer_metadata)
-        return metadata, list(chain(optimized_parameters, optimizer_tensors))
+        return metadata, list(chain(optimized_parameters, extra_tensors, optimizer_tensors))
 
     def load_state_from_peers(self, **kwargs):
         """
-        Attempt to download the latest optimizer state from peers and update trainer parameters/statistics.
-        :returns: whether or the averager succeeded in loading parameters
-        """
+         Attempt to download the latest optimizer state from peers and update trainer parameters/statistics.
+         :returns: whether or the averager succeeded in loading parameters
+         """
+        parameters_and_extras = [param for param_group in self.opt.param_groups for param in param_group['params']]
+        parameters_and_extras.extend(self.extra_tensors)
+        num_local_tensors = len(parameters_and_extras)
 
-        loadad_state = super().load_state_from_peers(**kwargs)
-        if loadad_state is None:
+        loaded_state = super().load_state_from_peers(**kwargs)
+        if loaded_state is None:
             return
+        metadata, flat_tensors = loaded_state
+        loaded_parameters_and_extras = flat_tensors[:num_local_tensors]
+        loaded_opt_tensors = flat_tensors[num_local_tensors:]
 
-        metadata, flat_tensors = loadad_state
-        local_parameters = [param for param_group in self.opt.param_groups for param in param_group]
-        num_params = len(local_parameters)
-
-        optimized_parameters, opt_tensors = flat_tensors[:num_params], flat_tensors[num_params:]
         with torch.no_grad():
-            for local_param, loaded_param in zip(local_parameters, optimized_parameters):
+            for local_param, loaded_param in zip(parameters_and_extras, loaded_parameters_and_extras):
                 local_param[...] = loaded_param
-            load_optimizer_state(self.opt, metadata['optimizer_metadata'], opt_tensors)
+            load_optimizer_state(self.opt, metadata['optimizer_metadata'], loaded_opt_tensors)
 
         self.local_step = max(self.local_step, metadata['step'])
 
