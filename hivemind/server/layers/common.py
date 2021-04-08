@@ -13,12 +13,13 @@ class FeedforwardBlock(nn.Module):
         super().__init__()
         self.ffn = nn.Linear(hid_dim, 4 * hid_dim)
         self.ffn_output = nn.Linear(4 * hid_dim, hid_dim)
+        self.layer_norm = nn.LayerNorm(hid_dim, eps=1e-12)
 
     def forward(self, x):
         ffn_output = self.ffn(x)
         ffn_output = gelu_fast(ffn_output)
         ffn_output = self.ffn_output(ffn_output)
-        return ffn_output
+        return self.layer_norm(x + ffn_output)
 
 
 class TransformerEncoderLayer(nn.Module):
