@@ -8,11 +8,11 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+            - py37-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
-          key: v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          key: py37-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
           paths:
             - '~/.cache/pip'
       - run:
@@ -28,11 +28,11 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+            - py38-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
-          key: v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          key: py38-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
           paths:
             - '~/.cache/pip'
       - run:
@@ -48,11 +48,11 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+            - py39-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
-          key: v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          key: py39-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
           paths:
             - '~/.cache/pip'
       - run:

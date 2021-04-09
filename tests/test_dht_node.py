@@ -10,6 +10,7 @@ import pytest
 
 import hivemind
 from hivemind import get_dht_time, replace_port
+from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST
 from hivemind.dht.protocol import DHTProtocol, ValidationError
 from hivemind.dht.storage import DictionaryDHTValue
@@ -428,7 +429,6 @@ async def test_dhtnode_blacklist():
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_validate(fake_endpoint='127.0.0.721:*'):
-
     node1 = await hivemind.DHTNode.create(blacklist_time=999)
     with pytest.raises(ValidationError):
         node2 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"],
@@ -441,7 +441,7 @@ async def test_dhtnode_edge_cases():
     peers = []
     for i in range(5):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
+        peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=4))
 
     subkeys = [0, '', False, True, 'abyrvalg', 4555]
     keys = subkeys + [()]
@@ -454,3 +454,33 @@ async def test_dhtnode_edge_cases():
         assert stored is not None
         assert subkey in stored.value
         assert stored.value[subkey].value == value
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_dhtnode_signatures():
+    alice = await hivemind.DHTNode.create(record_validator=RSASignatureValidator())
+    bob = await hivemind.DHTNode.create(
+        record_validator=RSASignatureValidator(), initial_peers=[f"{LOCALHOST}:{alice.port}"])
+    mallory = await hivemind.DHTNode.create(
+        record_validator=RSASignatureValidator(), initial_peers=[f"{LOCALHOST}:{alice.port}"])
+
+    key = b'key'
+    subkey = b'protected_subkey' + bob.protocol.record_validator.ownership_marker
+
+    assert await bob.store(key, b'true_value', hivemind.get_dht_time() + 10, subkey=subkey)
+    assert (await alice.get(key, latest=True)).value[subkey].value == b'true_value'
+
+    store_ok = await mallory.store(key, b'fake_value', hivemind.get_dht_time() + 10, subkey=subkey)
+    assert not store_ok
+    assert (await alice.get(key, latest=True)).value[subkey].value == b'true_value'
+
+    assert await bob.store(key, b'updated_true_value', hivemind.get_dht_time() + 10, subkey=subkey)
+    assert (await alice.get(key, latest=True)).value[subkey].value == b'updated_true_value'
+
+    await bob.shutdown()  # Bob has shut down, now Mallory is the single peer of Alice
+
+    store_ok = await mallory.store(key, b'updated_fake_value',
+                                   hivemind.get_dht_time() + 10, subkey=subkey)
+    assert not store_ok
+    assert (await alice.get(key, latest=True)).value[subkey].value == b'updated_true_value'

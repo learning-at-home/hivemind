@@ -3,11 +3,11 @@ Task pool is responsible for receiving tasks and grouping them together for proc
 """
 import ctypes
 import multiprocessing as mp
-import multiprocessing.context
 import os
 import threading
 import time
 import uuid
+from abc import ABCMeta, abstractmethod
 from collections import namedtuple
 from concurrent.futures import Future
 from queue import Empty
@@ -15,13 +15,13 @@ from typing import List, Tuple, Dict, Any, Generator
 
 import torch
 
-from hivemind.utils import MPFuture, get_logger
+from hivemind.utils import MPFuture, get_logger, FutureStateError
 
 logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))
 
 
-class TaskPoolBase(mp.context.ForkProcess):
+class TaskPoolBase(mp.context.ForkProcess, metaclass=ABCMeta):
     """ A pool that accepts tasks and forms batches for parallel processing, interacts with Runtime """
 
     def __init__(self, process_func: callable, daemon=True):
@@ -29,14 +29,17 @@ class TaskPoolBase(mp.context.ForkProcess):
         self.process_func = process_func
         self._priority = mp.Value(ctypes.c_double, 1.0)  # higher priority = the more urgent to process this pool
 
+    @abstractmethod
     def run(self):
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def submit_task(self, *args: torch.Tensor) -> Future:
-        raise NotImplementedError()
+        pass
 
+    @abstractmethod
     def iterate_minibatches(self, *args, **kwargs) -> Generator[List[Task], None, None]:
-        raise NotImplementedError()
+        pass
 
     @property
     def priority(self):
@@ -47,8 +50,9 @@ class TaskPoolBase(mp.context.ForkProcess):
         self._priority.value = float(value)
 
     @property
+    @abstractmethod
     def empty(self):
-        raise NotImplementedError()
+        pass
 
 
 class TaskPool(TaskPoolBase):
@@ -121,9 +125,12 @@ class TaskPool(TaskPoolBase):
                 batch = []
                 total_size = 0
 
-            if task.future.set_running_or_notify_cancel():
-                batch.append(task)
-                total_size += task_size
+            try:
+                if task.future.set_running_or_notify_cancel():
+                    batch.append(task)
+                    total_size += task_size
+            except FutureStateError as e:
+                logger.debug(f"Failed to add task to batch: {task.future} raised {e}")
 
     def run(self, *args, **kwargs):
         torch.set_num_threads(1)
@@ -195,7 +202,10 @@ class TaskPool(TaskPoolBase):
 
                 # dispatch results to futures
                 for task, task_outputs in zip(batch_tasks, outputs_per_task):
-                    task.future.set_result(tuple(task_outputs))
+                    try:
+                        task.future.set_result(tuple(task_outputs))
+                    except FutureStateError as e:
+                        logger.debug(f"Failed to send task result due to an exception: {e}")
         except KeyboardInterrupt:
             logger.debug(f"Caught KeyboardInterrupt, shutting down")
 

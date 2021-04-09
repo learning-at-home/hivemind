@@ -1,17 +1,20 @@
+import os
 import threading
 from datetime import datetime
 from pathlib import Path
 from shutil import copy2
 from tempfile import TemporaryDirectory
 from typing import Dict
-import os
 
 import torch
 
 from hivemind.server.expert_backend import ExpertBackend
+from hivemind.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
-def dir_is_correct(directory: Path):
+def is_directory(directory: Path):
     assert directory is not None
     assert directory.exists()
     assert directory.is_dir()
@@ -33,7 +36,7 @@ def copy_tree(src: str, dst: str):
 class CheckpointSaver(threading.Thread):
     def __init__(self, expert_backends: Dict[str, ExpertBackend], checkpoint_dir: Path, update_period: int):
         super().__init__()
-        assert dir_is_correct(checkpoint_dir)
+        assert is_directory(checkpoint_dir)
         self.expert_backends = expert_backends
         self.update_period = update_period
         self.checkpoint_dir = checkpoint_dir
@@ -48,21 +51,25 @@ class CheckpointSaver(threading.Thread):
 
 
 def store_experts(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
-    assert dir_is_correct(checkpoint_dir)
+    logger.debug(f'Storing experts at {checkpoint_dir.absolute()}')
+    assert is_directory(checkpoint_dir)
     timestamp = datetime.now().isoformat(sep='_')
     with TemporaryDirectory() as tmpdirname:
         for expert_name, expert_backend in experts.items():
             expert_dir = Path(tmpdirname) / expert_name
             expert_dir.mkdir()
             checkpoint_name = expert_dir / f'checkpoint_{timestamp}.pt'
-            torch.save(expert_backend.state_dict(), checkpoint_name)
+            torch.save(expert_backend.get_full_state(), checkpoint_name)
             os.symlink(checkpoint_name, expert_dir / 'checkpoint_last.pt')
         copy_tree(tmpdirname, str(checkpoint_dir))
 
 
-def load_weights(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
-    assert dir_is_correct(checkpoint_dir)
+def load_experts(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
+    assert is_directory(checkpoint_dir)
     for expert_name, expert in experts.items():
         checkpoints_folder = checkpoint_dir / expert_name
         latest_checkpoint = checkpoints_folder / 'checkpoint_last.pt'
-        expert.load_state_dict(torch.load(latest_checkpoint))
+        if latest_checkpoint.exists():
+            expert.load_full_state(torch.load(latest_checkpoint))
+        else:
+            logger.warning(f'Failed to load checkpoint for expert {expert_name}')

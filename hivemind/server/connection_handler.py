@@ -1,4 +1,3 @@
-import asyncio
 import multiprocessing as mp
 import os
 import pickle
@@ -6,17 +5,17 @@ from typing import Dict
 
 import grpc
 import torch
-import uvloop
 
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
 from hivemind.server.expert_backend import ExpertBackend
 from hivemind.utils import get_logger, serialize_torch_tensor, deserialize_torch_tensor, Endpoint, nested_flatten
 from hivemind.utils.grpc import GRPC_KEEPALIVE_OPTIONS
+from hivemind.utils.asyncio import switch_to_uvloop
 
 logger = get_logger(__name__)
 
 
-class ConnectionHandler(mp.Process):
+class ConnectionHandler(mp.context.ForkProcess):
     """
     A process that accepts incoming requests to experts and submits them into the corresponding TaskPool.
 
@@ -32,8 +31,7 @@ class ConnectionHandler(mp.Process):
 
     def run(self):
         torch.set_num_threads(1)
-        uvloop.install()
-        loop = asyncio.new_event_loop()
+        loop = switch_to_uvloop()
 
         async def _run():
             grpc.aio.init_grpc_aio()
