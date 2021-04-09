@@ -172,10 +172,15 @@ def quantile_encode_approx(tensor: torch.Tensor, n_bits: int) -> Tuple[torch.Ten
     n_bins = 2 ** n_bits
     borders = torch.as_tensor(quantile_qq_approximation(tensor.numpy(), n_bins + 1)[1:-1])
     quant_weight = torch.clamp_(torch.bucketize(tensor, borders), 0, n_bins - 1)
-    bin_sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten(), tensor.flatten())
+    lookup = average_buckets(tensor, quant_weight, n_bins)
+    return quant_weight, lookup
+
+
+def average_buckets(tensor: torch.Tensor, quant_weight: torch.Tensor, n_bins:int):
+    bin_sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten().long(), tensor.flatten())
     bin_counts = torch.clamp_min_(torch.bincount(quant_weight.flatten(), minlength=n_bins), 1)
     lookup = bin_sums / bin_counts
-    return quant_weight, lookup
+    return lookup
 
 
 def quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size: int = 10 ** 5) -> np.ndarray:
@@ -217,12 +222,7 @@ def uint8_uniform_buckets_encode(tensor: torch.Tensor, range_in_sigmas: float):
     scale = range_in_sigmas * tensor.std() / UINT8_RANGE
 
     quant_weight = torch.quantize_per_tensor(tensor - shift, scale, offset, torch.quint8).int_repr()
-
-    lookup = torch.arange(0, UINT8_RANGE, dtype=torch.float32, device=tensor.device)
-    lookup = scale * (lookup - offset) + shift
-    # Take into account the tails of distribution
-    lookup[0], lookup[-1] = tensor[quant_weight == 0].mean(), tensor[quant_weight == UINT8_RANGE - 1].mean()
-
+    lookup = average_buckets(tensor, quant_weight, UINT8_RANGE)
     return quant_weight, lookup
 
 
@@ -294,7 +294,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
     return proto
 
 
-def construct_torch_tensor(array: np.ndarray, size: Sequence, dtype: Optional[torch.dtype]=None):
+def construct_torch_tensor(array: np.ndarray, size: Sequence, dtype: Optional[torch.dtype] = None):
     """ Helper conversion function that handles edge case with scalar deserialization """
     if size:
         return torch.as_tensor(array, dtype=dtype).view(*size)
