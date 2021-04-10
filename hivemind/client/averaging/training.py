@@ -40,7 +40,7 @@ class TrainingAverager(DecentralizedAverager):
             averaged_tensors = [tensor.detach().cpu().float().clone() for tensor in self.local_tensors()]
         super().__init__(averaged_tensors=averaged_tensors, **kwargs)
 
-    @torch.no_grad
+    @torch.no_grad()
     def step(self, wait: bool = True, **kwargs):
         """ Average optimizer weights and gradients with peers. """
         if not wait:
