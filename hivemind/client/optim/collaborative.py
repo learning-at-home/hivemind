@@ -2,7 +2,7 @@ from __future__ import annotations
 import warnings
 from dataclasses import dataclass
 from threading import Thread, Lock, Event
-from typing import Optional
+from typing import Optional, Type
 import logging
 
 import torch
@@ -78,8 +78,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             batch_size_per_step: Optional[int] = None, scheduler: Optional[LRSchedulerBase] = None,
             min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
             expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
-            metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, verbose: bool = False,
-            **kwargs):
+            metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None,
+            averager_cls: Type[TrainingAverager] = TrainingAverager, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
         self.prefix, self.scheduler = prefix, scheduler
         self.target_batch_size, self.batch_size_per_step = target_batch_size, batch_size_per_step
@@ -87,9 +87,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             min_refresh_period, max_refresh_period, default_refresh_period
         self.expected_drift_peers, self.expected_drift_rate = expected_drift_peers, expected_drift_rate
         self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration
-        self.averager = TrainingAverager(
-            opt, average_parameters=True, average_gradients=True, dht=dht, prefix=f"{self.prefix}_averaging",
-            target_group_size=target_group_size, allreduce_timeout=self.averaging_timeout, **kwargs)
+        self.averager = averager_cls(opt, average_parameters=True, average_gradients=True, dht=dht,
+                                     prefix=f"{self.prefix}_averaging", target_group_size=target_group_size,
+                                     allreduce_timeout=self.averaging_timeout, **kwargs)
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
 
         self.training_progress_key = f"{self.prefix}_progress"
