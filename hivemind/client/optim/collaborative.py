@@ -226,14 +226,12 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                              if isinstance(peer_state, ValueWithExpiration)
                              and self.is_valid_peer_state(peer_state.value)]
 
-        num_peers = len(valid_peer_states)
-        num_clients = sum(is_client for *_, is_client in valid_peer_states)
-
         global_optimizer_step = self.local_step
         for opt_step, samples_accumulated, samples_per_second, timestep, is_client in valid_peer_states:
             if not is_client:
                 global_optimizer_step = max(global_optimizer_step, opt_step)
 
+        num_peers, num_clients = 0, 0
         total_samples_accumulated = estimated_curent_samples = total_samples_per_second = 0
 
         for opt_step, samples_accumulated, samples_per_second, timestep, is_client in valid_peer_states:
@@ -241,6 +239,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             if opt_step == global_optimizer_step:
                 total_samples_accumulated += samples_accumulated
                 estimated_curent_samples += samples_accumulated + max(0, current_time - timestep) * samples_per_second
+                num_clients += int(is_client)
+                num_peers += 1
             # note: we deliberately count only valid peers for samples_accumulated, but all peers for performance;
             # the rationale behind this is that outdated peers will synchronize and begin contributing shortly.
 
