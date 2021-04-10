@@ -190,7 +190,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
             logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
             self.set_exception(e)
-            for peer_endpoint, part_size in enumerate(self.ordered_group_endpoints, self.part_sizes):
+            for peer_endpoint, part_size in zip(self.ordered_group_endpoints, self.part_sizes):
                 if peer_endpoint != self.endpoint and part_size > 0:
                     asyncio.create_task(self._send_error_to_peer(peer_endpoint, code))
             raise
