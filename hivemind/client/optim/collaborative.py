@@ -92,16 +92,17 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             target_group_size=target_group_size, allreduce_timeout=self.averaging_timeout, **kwargs)
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
 
-        # Each step contains {gradient_accumulation_steps} of forward and backward passes
-        self.performance_ema = PerformanceEMA(alpha=performance_ema_alpha)
-        self.last_step_time = None
-
         self.training_progress_key = f"{self.prefix}_progress"
         self.local_samples_accumulated = 0  # a number of local samples accumulated since last optimizer update
         self.local_steps_accumulated = 0  # a number of calls to step() since last optimizer update
+        self.performance_ema = PerformanceEMA(alpha=performance_ema_alpha)
+        self.last_step_time = None
 
         self.collaboration_state = self.fetch_collaboration_state()
-        self.lock_collaboration_state, self.state_updated = Lock(), Event()
+        self.lock_collaboration_state, self.collaboration_state_updated = Lock(), Event()
+        self.lock_local_progress, self.should_report_progress = Lock(), Event()
+        self.progress_reporter = Thread(target=self.report_training_progress, daemon=True, name=f"{self}.reporter")
+        self.progress_reporter.start()
         self.collaboration_state_updater = Thread(target=self.check_collaboration_state_periodically, daemon=True,
                                                   name=f"{self}.collaboration_state_updater")
         self.collaboration_state_updater.start()
@@ -141,18 +142,20 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             return
 
         if self.last_step_time is not None and get_dht_time() - self.last_step_time > self.metadata_expiration:
-            logger.warning("metadata")
+            logger.warning(f"Training step took {get_dht_time() - self.last_step_time}, but metadata {self.metadata_expiration}, but ")
 
-        self.local_samples_accumulated += batch_size
-        self.local_steps_accumulated += 1
-        self.performance_ema.update(num_processed=self.batch_size_per_step)
-        run_in_background(self.report_training_progress)
+        with self.lock_local_progress:
+            self.local_samples_accumulated += batch_size
+            self.local_steps_accumulated += 1
+            self.performance_ema.update(num_processed=self.batch_size_per_step)
+            self.should_report_progress.set()
+
         if not self.collaboration_state.ready_for_step:
             return
 
         logger.log(self.status_loglevel, "Averaging parameters and gradients with peers...")
         self.collaboration_state = self.fetch_collaboration_state()
-        self.state_updated.set()
+        self.collaboration_state_updated.set()
 
         if not self.is_synchronized:
             self.load_state_from_peers()
@@ -173,29 +176,34 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.opt.zero_grad()
             self.local_samples_accumulated = self.local_steps_accumulated = 0
             self.collaboration_state.register_step()
-            self.state_updated.set()
+            self.collaboration_state_updated.set()
             self.update_scheduler()
 
             logger.log(self.status_loglevel, f"Optimizer step: done!")
             return output
 
     def report_training_progress(self):
-        """ Declare this trainer's current step and the number of batches accumulated towards the next step """
-        current_time = get_dht_time()
-        local_state_info = [self.local_step, self.local_samples_accumulated, self.performance_ema.samples_per_second,
-                            current_time, not self.averager.listen]
-        assert self.is_valid_peer_state(local_state_info), local_state_info
-        self.dht.store(self.training_progress_key, subkey=self.averager.endpoint, value=local_state_info,
-                       expiration_time=current_time + self.metadata_expiration, return_future=True)
+        """ Periodically publish metadata and the current number of samples accumulated towards the next step """
+        while self.is_alive():
+            self.should_report_progress.wait()
+            self.should_report_progress.clear()
+            with self.lock_local_progress:
+                current_time = get_dht_time()
+                local_state_info = [self.local_step, self.local_samples_accumulated,
+                                    self.performance_ema.samples_per_second, current_time, not self.averager.listen]
+
+            assert self.is_valid_peer_state(local_state_info), local_state_info
+            self.dht.store(self.training_progress_key, subkey=self.averager.endpoint, value=local_state_info,
+                           expiration_time=current_time + self.metadata_expiration, return_future=True)
 
     def check_collaboration_state_periodically(self):
         """
         Periodically check the training progress from all peers. Trigger update after target_batch_size total samples
         """
-        while self.is_alive:
+        while self.is_alive():
             time_to_next_update = max(0.0, self.collaboration_state.next_fetch_time - get_dht_time())
-            if self.state_updated.wait(time_to_next_update):
-                self.state_updated.clear()
+            if self.collaboration_state_updated.wait(time_to_next_update):
+                self.collaboration_state_updated.clear()
                 continue  # if state was updated externally, reset timer
 
             with self.lock_collaboration_state:
