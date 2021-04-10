@@ -214,7 +214,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self.shutdown()
 
     def step(self, gather: Optional[DataForGather] = None, weight: float = 1.0, timeout: Optional[float] = None,
-             allow_retries: bool = False, wait: bool = True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
+             allow_retries: bool = True, wait: bool = True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
 
@@ -261,9 +261,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     asyncio.InvalidStateError, grpc.RpcError, grpc.aio.AioRpcError, InternalError) as e:
                 time_elapsed = get_dht_time() - start_time
                 if not allow_retries or (timeout is not None and timeout < time_elapsed):
+                    logger.warning(f"Averager caught {e}")
                     future.set_result(None)
                 else:
-                    logger.debug(f"caught {e}, retrying")
+                    logger.warning(f"Averager caught {e}, retrying")
 
             except Exception as e:
                 future.set_exception(e)
@@ -277,6 +278,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         try:
             weights, throughputs, modes, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
             user_gathered = dict(zip(group_info.endpoints,  map(self.serializer.loads, user_gathered)))
+            print(weights)
 
             # compute optimal part sizes from peer throughputs
             incoming_throughputs = [thr if listen else 0.0 for thr, listen in zip(throughputs, modes)]
@@ -284,7 +286,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             async with self.get_tensors_async() as averaged_tensors:
                 return AllReduceRunner(group_id=group_info.group_id, tensors=averaged_tensors, endpoint=self.endpoint,
                                        ordered_group_endpoints=group_info.endpoints, part_sizes=part_sizes,
-                                       gathered=user_gathered, return_deltas=True, **kwargs)
+                                       weights=weights, gathered=user_gathered, return_deltas=True, **kwargs)
         except Exception as e:
             raise MatchmakingException(f"Unable to create allreduce runner ({e}), group_info: {group_info}")
 

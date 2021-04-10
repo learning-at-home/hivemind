@@ -30,14 +30,15 @@ class AllReduceProtocol:
         assert endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
         self.group_id, self.endpoint = group_id, endpoint
         self.ordered_group_endpoints, self.part_sizes = ordered_group_endpoints, part_sizes
-        self.client_mode_endpoints = {endpoint for endpoint, size in zip(self.ordered_group_endpoints, part_sizes) if size == 0}
+        self.client_mode_endpoints = {endpoint for endpoint, part_size in zip(self.ordered_group_endpoints, part_sizes)
+                                      if part_size == 0}
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
         self.return_deltas = return_deltas
 
-        self.accumulator = self.local_tensor_parts[self.endpoint].clone()  # sum inputs from peers to this tensor
-        self.denominator = 0.0  # number of peers or sum of weights, if weighted
-        self.accumulated_from: Set[Endpoint] = {self.endpoint}  # peers that we have accumulated our part from
+        self.accumulator = torch.zeros_like(self.local_tensor_parts[self.endpoint])
+        self.denominator = 0.0  # number of peers added to accumulator or sum of their weights
+        self.accumulated_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
@@ -64,6 +65,7 @@ class AllReduceProtocol:
         assert source in self.local_tensor_parts, "unexpected source, not a part of current group"
         assert source not in self.accumulated_from, "duplicate source, already received that part"
         assert not self.endpoint in self.client_mode_endpoints, f"{self.endpoint} is in client mode"
+        assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
         logger.debug(f"{self} - accumulating tensor part from {source}")
 
         self.accumulator.add_(remote_part, alpha=weight)
@@ -129,11 +131,12 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
     def __init__(self, *, group_id: GroupID, tensors: Sequence[torch.Tensor], endpoint: Endpoint,
                  ordered_group_endpoints: Sequence[Endpoint], compression_type: runtime_pb2.CompressionType,
-                 chunk_size_bytes: int, part_sizes: Tuple[int, ...], gathered: Dict[Endpoint, Any],
-                 return_deltas: bool = False):
+                 chunk_size_bytes: int, part_sizes: Tuple[int, ...], weights: Tuple[float, ...],
+                 gathered: Dict[Endpoint, Any], return_deltas: bool = False):
         super().__init__(group_id=group_id, tensors=tensors, endpoint=endpoint, part_sizes=part_sizes,
                          ordered_group_endpoints=ordered_group_endpoints, return_deltas=return_deltas)
         self.compression_type, self.chunk_size_bytes, self.gathered = compression_type, chunk_size_bytes, gathered
+        self.peer_weights = dict(zip(self.ordered_group_endpoints, weights))
         self.averaged_part_stream: asyncio.Future[Tuple[runtime_pb2.Tensor, ...]] = asyncio.Future()
 
     def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
@@ -141,6 +144,8 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
     async def _communicate_with_peer(self, peer_endpoint: Endpoint, local_part: torch.Tensor) -> torch.Tensor:
         """ Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors """
+        if peer_endpoint == self.endpoint:
+            return await self.accumulate_part(self.endpoint, local_part, weight=self.peer_weights[self.endpoint])
         serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
         chunks = split_for_streaming(serialized_tensor_part, self.chunk_size_bytes)
 
@@ -179,14 +184,14 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         try:
             await asyncio.gather(self, *(self._communicate_with_peer(peer, self.local_tensor_parts[peer])
                                          for i, peer in enumerate(self.ordered_group_endpoints)
-                                         if peer != self.endpoint and self.part_sizes[i] > 0))
+                                         if peer not in self.client_mode_endpoints))
             return await self
         except BaseException as e:
             code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
             logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
             self.set_exception(e)
-            for peer_endpoint in self.ordered_group_endpoints:
-                if peer_endpoint != self.endpoint:
+            for i, peer_endpoint in enumerate(self.ordered_group_endpoints):
+                if peer_endpoint != self.endpoint and self.part_sizes[i] > 0:
                     asyncio.create_task(self._send_error_to_peer(peer_endpoint, code))
             raise
 
@@ -198,7 +203,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         except RuntimeError as e:
             raise AllreduceException(f"Could not deserialize tensor part from {source} for streaming {e}")
 
-        averaged_part = await self.accumulate_part(source, tensor_part)
+        averaged_part = await self.accumulate_part(source, tensor_part, weight=self.peer_weights[source])
         if not self.averaged_part_stream.done():
             serialized_tensor = serialize_torch_tensor(averaged_part, self.compression_type, allow_inplace=False)
             stream_chunks = tuple(split_for_streaming(serialized_tensor, self.chunk_size_bytes))
