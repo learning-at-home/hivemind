@@ -35,8 +35,7 @@ message JoinRequest {
   bytes schema_hash = 2;        // A hash that describes follower's tensors (shapes, num tensors, etc)
   double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time
   bytes gather = 4;             // optional metadata that is gathered from all peers (e.g. batch size or current loss)
-  float throughput = 5;         // Follower has this bandwidth for averaging (-1 = default)
-  bool client_mode = 6;         // if True, the incoming averager is a client with no capacity for averaging
+  bool client_mode = 5;         // if True, the incoming averager is a client with no capacity for averaging
 }
 
 message MessageFromLeader {
@@ -44,9 +43,7 @@ message MessageFromLeader {
   bytes group_id = 2;        // a unique identifier of this group, only valid until allreduce is finished/failed
   string suggested_leader = 3;  // if peer is already in a group, it'll provide us with an endpoint of its leader
   repeated string ordered_group_endpoints = 4;  // a sequence of peers, each responsible for one shard during averaging
-  repeated int32 part_sizes = 5;  // a sequence of tensor parts assigned to each peer, same order as endpoints
-  repeated bytes gathered = 6;  // metadata (gather) from all groupmates in the same order as their endoints
-  int32 group_key_seed = 7;  // a random seed used by peers to update their group keys
+  repeated bytes gathered = 5;  // metadata (gather) from all groupmates in the same order as their endoints
 }
 
 message AveragingData {
@@ -54,6 +51,7 @@ message AveragingData {
   bytes group_id = 2;       // a unique group identifier, same as in MessageFromLeader
   string endpoint = 3;      // sender's rpc endpoint, used for coordination
   Tensor tensor_part = 4;   // either peer's local tensor part (rpc input) or group average of this part (rpc output)
+  bytes metadata = 5;       // reserved user-extendable metadata
 }
 
 message DownloadRequest {}
