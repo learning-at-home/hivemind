@@ -123,8 +123,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             prefix=prefix, initial_group_bits=initial_group_bits, target_group_size=target_group_size,
             min_group_size=min_group_size, averaging_expiration=averaging_expiration, request_timeout=request_timeout)
         self.allreduce_kwargs = dict(compression_type=compression_type, chunk_size_bytes=chunk_size_bytes,
-                                     min_vector_size=min_vector_size, averaging_alpha=averaging_alpha,
-                                     allreduce_timeout=allreduce_timeout)
+                                     min_vector_size=min_vector_size)
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
@@ -215,7 +214,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self.shutdown()
 
     def step(self, gather: Optional[DataForGather] = None, weight: float = 1.0, timeout: Optional[float] = None,
-             allow_retries: bool = True, wait: bool = True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
+             allow_retries: bool = False, wait: bool = True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
 
@@ -248,7 +247,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 group_info = await self._matchmaking.look_for_group(timeout=timeout, data_for_gather=data_for_gather)
                 if group_info is None:
                     raise AllreduceException("Averaging step failed: could not find a group.")
-
                 group_id = group_info.group_id
                 allreduce_runner = await self._make_allreduce_runner(group_info, **self.allreduce_kwargs)
                 self._running_groups[group_id] = allreduce_runner
