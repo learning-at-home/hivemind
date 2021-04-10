@@ -75,27 +75,6 @@ def test_allreduce_once(n_client_mode_peers):
             for ref, our in zip(reference, averaged_tensors):
                 assert torch.allclose(ref, our, atol=1e-6)
 
-    weights = list(map(float, np.random.rand(len(averagers)) * 10 + 0.01))
-    for ref in reference:
-        ref.zero_()
-
-    for i, averager in enumerate(averagers):
-        with averager.get_tensors() as averaged_tensors:
-            for tensor, ref in zip(averaged_tensors, reference):
-                tensor[...] = torch.randn_like(tensor)
-                ref.add_(tensor, alpha=weights[i] / sum(weights))
-
-    futures = []
-    for averager, weight in zip(averagers, weights):
-        futures.append(averager.step(weight=weight, wait=False))
-    for future in futures:
-        future.result()
-
-    for future, averager in zip(futures, averagers):
-        with averager.get_tensors() as averaged_tensors:
-            for ref, our in zip(reference, averaged_tensors):
-                assert torch.allclose(ref, our, atol=1e-6)
-
     for averager in averagers:
         averager.shutdown()
     dht.shutdown()
