@@ -2,7 +2,9 @@
 from itertools import chain
 from threading import Lock
 from typing import Sequence, Dict, Iterator
+
 import torch
+
 from hivemind.client.averaging import DecentralizedAverager
 from hivemind.utils import nested_flatten, nested_pack, get_logger, run_in_background
 
