@@ -11,6 +11,7 @@ import threading
 import uuid
 import weakref
 from concurrent.futures.thread import ThreadPoolExecutor
+from dataclasses import asdict
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 
 import grpc
@@ -18,16 +19,18 @@ from grpc._cython.cygrpc import InternalError
 import torch
 import numpy as np
 
-import hivemind
+from hivemind.dht import DHT, DHTID
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, split_into_parts
+from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
+from hivemind.client.averaging.group_info import GroupInfo
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, \
     serialize_torch_tensor, deserialize_torch_tensor, split_for_streaming, combine_from_streaming
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
 from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
-from hivemind.utils import Endpoint, Port, MPFuture, get_logger
+from hivemind.utils import Endpoint, Port, MPFuture, get_logger, TensorDescriptor
 
 # flavour types
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
@@ -54,7 +57,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
       note - this expiration time only applies to looking for group, passing tensors in allreduce may take more time
     :param compression_type: optionally compress tensors with this compression algorithm before sending them to peers
     :param allreduce_timeout: spend at most this many seconds for allreduce (after group is formed)
-    :param averaging_alpha: optional "learning rate" for averaging. If specified, local parameters will be shifted
+    :param averaging_alpha: optionkl "learning rate" for averaging. If specified, local parameters will be shifted
       towards the (estimated) average by this coefficient. By default, local parameters are set equal to average.
     :param request_timeout: when looking for group, wait for a response from leader for at most this many seconds.
     :note: request_timeout must be smaller than averaging_expiration to avoid potential deadlocks.
@@ -85,7 +88,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     _pending_group_assembled: asyncio.Event
     serializer = MSGPackSerializer
 
-    def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: hivemind.dht.DHT, *, start: bool,
+    def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: DHT, *, start: bool,
                  prefix: str, target_group_size: int, min_group_size: int = 2, initial_group_bits: Optional[str] = None,
                  averaging_expiration: float = 15, request_timeout: float = 3, chunk_size_bytes: int = 2 ** 16,
                  allreduce_timeout: Optional[float] = None, averaging_alpha: float = 1.0,
@@ -94,8 +97,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', daemon: bool = True,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
-        assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
-            "throughput must be a non-negative float32"
+        assert throughput is None or (throughput > 0 and np.isfinite(np.float32(throughput))), \
+            "throughput must be a positive floating point number"
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
@@ -112,12 +115,16 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         for tensor in self._averaged_tensors:
             assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
             tensor.share_memory_()
+        self.total_size = sum(map(torch.Tensor.numel, self._averaged_tensors))
+        self.schema_hash = compute_schema_hash(self._averaged_tensors)
+        self._throughput = throughput
 
         self.matchmaking_kwargs = dict(
             prefix=prefix, initial_group_bits=initial_group_bits, target_group_size=target_group_size,
-            min_group_size=min_group_size, averaging_expiration=averaging_expiration, request_timeout=request_timeout,
-            chunk_size_bytes=chunk_size_bytes, compression_type=compression_type,
-            throughput=throughput, min_vector_size=min_vector_size)
+            min_group_size=min_group_size, averaging_expiration=averaging_expiration, request_timeout=request_timeout)
+        self.allreduce_kwargs = dict(compression_type=compression_type, chunk_size_bytes=chunk_size_bytes,
+                                     min_vector_size=min_vector_size, averaging_alpha=averaging_alpha,
+                                     allreduce_timeout=allreduce_timeout)
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
@@ -170,8 +177,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             else:
                 logger.info(f"The averager running in an experimental client mode, please report any bugs.")
 
-            self._matchmaking = Matchmaking(self.endpoint, self._averaged_tensors, self.dht, **self.matchmaking_kwargs,
-                                            client_mode=not self.listen, return_deltas=True)
+            self._matchmaking = Matchmaking(self.endpoint, self.schema_hash, self.dht, **self.matchmaking_kwargs,
+                                            client_mode=not self.listen)
             if self.listen:
                 asyncio.create_task(self._declare_for_download_periodically())
 
@@ -207,26 +214,29 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if self._parent_pid != os.getpid() or self.is_alive():
             self.shutdown()
 
-    def step(self, gather: Optional[DataForGather] = None, allow_retries: bool = True, timeout: Optional[float] = None,
-             wait=True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
+    def step(self, gather: Optional[DataForGather] = None, weight: float = 1.0, timeout: Optional[float] = None,
+             allow_retries: bool = True, wait: bool = True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
 
-        :param allow_retries: if averager fails to run one round of allreduce, this option will allow it to try again
-          within the specified timeout
         :param gather: optionally send this informaton to all peers in the next group and gather it from every groupmate
           (this operation is known as all-gather). The gathered data will be available as the output of this function.
+        :param weight: averaging weight for this peer, int or float, must be strictly positive
+        :param allow_retries: if averager fails to run one round of allreduce, this option will allow it to try again
+          within the specified timeout
         :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failedK
         :param wait: if True (default), return when finished. Otherwise return MPFuture and run in background.
         :returns: on success, update averaged_tensors and return group info; on failure, return None
         """
+        assert isinstance(weight, (int, float)) and weight > 0, f"Expected a positive int/float, got {type(weight)}"
         future, _future = MPFuture.make_pair()
         gather_binary = self.serializer.dumps(gather)  # serialize here to avoid loading modules in the averager process
-        self.pipe.send(('_step', [], dict(future=_future, gather_binary=gather_binary,
+        self.pipe.send(('_step', [], dict(future=_future, gather_binary=gather_binary, weight=weight,
                                           allow_retries=allow_retries, timeout=timeout)))
         return future.result() if wait else future
 
-    async def _step(self, *, future: MPFuture, gather_binary: bytes, allow_retries: bool, timeout: Optional[float]):
+    async def _step(self, *, future: MPFuture, gather_binary: bytes, weight: float,
+                    allow_retries: bool, timeout: Optional[float]):
         loop = asyncio.get_event_loop()
         start_time = get_dht_time()
         group_id = None
@@ -234,23 +244,23 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         while not future.done():
             try:
                 self._pending_group_assembled.clear()
-                allreduce_group = await self._matchmaking.look_for_group(timeout=timeout, data_for_gather=gather_binary)
-                if allreduce_group is None:
+                data_for_gather = self.serializer.dumps([weight, self._throughput, self.listen, gather_binary])
+                group_info = await self._matchmaking.look_for_group(timeout=timeout, data_for_gather=data_for_gather)
+                if group_info is None:
                     raise AllreduceException("Averaging step failed: could not find a group.")
 
-                group_id = allreduce_group.group_id
-                self._running_groups[group_id] = allreduce_group
+                group_id = group_info.group_id
+                allreduce_runner = await self._make_allreduce_runner(group_info, **self.allreduce_kwargs)
+                self._running_groups[group_id] = allreduce_runner
                 self._pending_group_assembled.set()
-                await asyncio.wait_for(allreduce_group.run(), self._allreduce_timeout)
-                await loop.run_in_executor(None, self.update_tensors, allreduce_group)
+                await asyncio.wait_for(allreduce_runner.run(), self._allreduce_timeout)
+                await loop.run_in_executor(None, self.update_tensors, allreduce_runner)
 
                 # averaging is finished, exit the loop
-                gathered_items = map(self.serializer.loads, allreduce_group.gathered)
-                gathered_data_by_peer = dict(zip(allreduce_group.ordered_group_endpoints, gathered_items))
-                future.set_result(gathered_data_by_peer)
+                future.set_result(allreduce_runner.gathered)
 
-            except (AllreduceException, MatchmakingException, asyncio.InvalidStateError,
-                    grpc.RpcError, grpc.aio.AioRpcError, InternalError) as e:
+            except (AllreduceException, MatchmakingException, AssertionError,
+                    asyncio.InvalidStateError, grpc.RpcError, grpc.aio.AioRpcError, InternalError) as e:
                 time_elapsed = get_dht_time() - start_time
                 if not allow_retries or (timeout is not None and timeout < time_elapsed):
                     future.set_result(None)
@@ -263,6 +273,22 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             finally:
                 _ = self._running_groups.pop(group_id, None)
                 self._pending_group_assembled.set()
+
+    async def _make_allreduce_runner(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> AllReduceRunner:
+        """ Use a group description found by Matchmaking to form AllreduceRunner """
+        try:
+            weights, throughputs, modes, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
+            user_gathered = dict(zip(group_info.endpoints,  map(self.serializer.loads, user_gathered)))
+
+            # compute optimal part sizes from peer throughputs
+            incoming_throughputs = [thr if listen else 0.0 for thr, listen in zip(throughputs, modes)]
+            part_sizes = load_balance_peers(self.total_size, incoming_throughputs, min_size=min_vector_size)
+            async with self.get_tensors_async() as averaged_tensors:
+                return AllReduceRunner(group_id=group_info.group_id, tensors=averaged_tensors, endpoint=self.endpoint,
+                                       ordered_group_endpoints=group_info.endpoints, part_sizes=part_sizes,
+                                       gathered=user_gathered, return_deltas=True, **kwargs)
+        except Exception as e:
+            raise MatchmakingException(f"Unable to create allreduce runner ({e}), group_info: {group_info}")
 
     def update_tensors(self, allreduce_group: AllReduceRunner):
         """
@@ -287,6 +313,15 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         with self.lock_averaged_tensors:
             yield self._averaged_tensors
         self.last_updated = get_dht_time()
+
+    @contextlib.asynccontextmanager
+    async def get_tensors_async(self) -> Sequence[torch.Tensor]:
+        """ Like get_tensors, but uses an asynchronous contextmanager """
+        try:
+            await asyncio.get_event_loop().run_in_executor(None, self.lock_averaged_tensors.acquire)
+            yield self._averaged_tensors
+        finally:
+            self.lock_averaged_tensors.release()
 
     async def rpc_join_group(self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
@@ -478,3 +513,10 @@ def _background_thread_fetch_current_state(serializer: SerializerBase, pipe: mp.
             future.set_exception(e)
             logger.warning(e)
             continue
+
+def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
+    """ A hash that describes follower's tensor shapes, dtypes, devices, but not the actual values """
+    schema_dicts = [{field_name: str(field_value)
+                     for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
+                    for tensor in tensors]
+    return DHTID.generate(source=schema_dicts).to_bytes()
