@@ -142,7 +142,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             return
 
         if self.last_step_time is not None and get_dht_time() - self.last_step_time > self.metadata_expiration:
-            logger.warning(f"Training step took {get_dht_time() - self.last_step_time}, but metadata {self.metadata_expiration}, but ")
+            logger.warning(f"Training step took {get_dht_time() - self.last_step_time}, "
+                           f"but metadata expired in {self.metadata_expiration} s.")
 
         with self.lock_local_progress:
             self.local_samples_accumulated += batch_size
