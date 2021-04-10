@@ -9,7 +9,7 @@ import numpy as np
 
 from hivemind.dht import DHT
 from hivemind.client.optim.base import DecentralizedOptimizerBase
-from hivemind.client.averaging.weighted import WeightedAverager
+from hivemind.client.averaging.training import TrainingAverager
 from hivemind.utils import get_logger, get_dht_time, run_in_background, ValueWithExpiration
 from hivemind.client.optim.performance_ema import PerformanceEMA
 
@@ -87,7 +87,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             min_refresh_period, max_refresh_period, default_refresh_period
         self.expected_drift_peers, self.expected_drift_rate = expected_drift_peers, expected_drift_rate
         self.averaging_expiration, self.metadata_expiration = averaging_expiration, metadata_expiration
-        self.averager = WeightedAverager(opt, average_parameters=True, average_gradients=True, dht=dht,
+        self.averager = TrainingAverager(opt, average_parameters=True, average_gradients=True, dht=dht,
                                          prefix=f"{self.prefix}_averaging", target_group_size=target_group_size,
                                          allreduce_timeout=self.averaging_timeout, **kwargs)
 
