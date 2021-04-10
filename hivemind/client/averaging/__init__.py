@@ -512,6 +512,7 @@ def _background_thread_fetch_current_state(serializer: SerializerBase, pipe: mp.
             logger.warning(e)
             continue
 
+
 def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
     """ A hash that describes follower's tensor shapes, dtypes, devices, but not the actual values """
     schema_dicts = [{field_name: str(field_value)
