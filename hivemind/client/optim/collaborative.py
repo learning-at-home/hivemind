@@ -17,11 +17,6 @@ from hivemind.client.optim.performance_ema import PerformanceEMA
 logger = get_logger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
 
-#TODO make sure that the weighted averager will NOT advertize for averaging if it is out of sync!
-# warn if expiration is too infrequent (measure mean time between steps)
-#TODO make sure we can recover from zero_grad!
-#TODO enforce minimum period on reporting progress
-
 
 @dataclass(frozen=False)
 class CollaborationState:
@@ -50,7 +45,10 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     These optimizers use DHT to track how much progress did the collaboration make towards target batch size.
     Once enough samples were accumulated, optimizers will compute a weighted average of their statistics.
 
-    :note: calling .step() with this optimizer does not always trigger a model update
+    :note: this optimizer behaves unlike regular pytorch optimizers in two ways:
+
+    - it may run multiple .step calls without updating model parameters, waiting for peers to accumulate enough samples
+    - it may replace local tensors with data downloaded from other peers, in order to synchronize with them
 
     :param opt: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
     :param dht: a running hivemind.DHT daemon connected to other peers
@@ -58,6 +56,10 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param target_batch_size: perform optimizer step after all peers collectively accumulate this many samples
     :param batch_size_per_step: before each call to .step, user should accumulate gradients over this many samples
     :param target_group_size: maximum group size for DecentralizedAverager's all-reduce
+    :param accumulate_grads: if True, create a set of buffers for gradient accumulation. Otherwise, use builtin .grad
+     fields in order to accumulate gradients. This is more efficent, but requires that user does not call .zero_grad.
+    :param accumulate_grads_on: whether to accumulate gradients on cpu (offload) or accelerator (extra vram usage).
+     By default, accumulate gradients on the same device where parameters are allocated.
     :param min_refresh_period: wait for at least this many seconds before fetching new collaboration state
     :param max_refresh_period: wait for at most this many seconds before fetching new collaboration state
     :param default_refresh_period: if no peers are detected, attempt to fetch collaboration state this often (seconds)
@@ -126,6 +128,11 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.opt.zero_grad()
 
     def step(self, batch_size: Optional[int] = None, **kwargs):
+        """
+        Report accumulating gradients w.r.t. batch_size additional samples, optionally update model parameters
+
+        :note: this .step is different from normal pytorch optimizers in several key ways. See __init__ for details.
+        """
         batch_size = self.batch_size_per_step if batch_size is None else batch_size
         if not self.is_synchronized:
             self.load_state_from_peers()
@@ -150,10 +157,11 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             if self.collaboration_state.num_peers > 1:
                 mean_samples_per_worker = self.target_batch_size / self.collaboration_state.num_peers
                 weight = self.local_samples_accumulated / mean_samples_per_worker
-                self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
+                output = self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
             else:
                 logger.log(self.status_loglevel, f"Skipped averaging: collaboration consists of "
                                                  f"{self.collaboration_state.num_peers} peer(s).")
+                output = None
                 self.averager.local_step += 1
 
             output = self.opt.step()
