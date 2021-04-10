@@ -45,7 +45,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     These optimizers use DHT to track how much progress did the collaboration make towards target batch size.
     Once enough samples were accumulated, optimizers will compute a weighted average of their statistics.
 
-    :note: this optimizer behaves unlike regular pytorch optimizers in two ways:
+    :note: This optimizer behaves unlike regular pytorch optimizers in two ways:
 
     - calling .step will periodially zero-out gradients w.r.t. model parameters after each step
     - it may take multiple .step calls without updating model parameters, waiting for peers to accumulate enough samples
@@ -134,7 +134,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         :note: this .step is different from normal pytorch optimizers in several key ways. See __init__ for details.
         """
         if batch_size is not None and self.batch_size_per_step is None:
-            raise ValueError("please either set batch_size_per_step parameter at init or provide batch_size in .step")
+            raise ValueError("Please either set batch_size_per_step parameter at init or provide batch_size in .step")
         batch_size = self.batch_size_per_step if batch_size is None else batch_size
 
         if not self.is_synchronized:
@@ -281,4 +281,3 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     def __del__(self):
         self.shutdown()
-

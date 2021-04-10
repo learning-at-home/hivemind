@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 class TrainingAverager(DecentralizedAverager):
     """
-    An high-level interface to DecentralizedAverager that averages trainable params or gradients for an optimizer.
+    A high-level interface to DecentralizedAverager that averages trainable params or gradients for an optimizer.
 
     This averager implements a number of typical use cases that arise in collaborative optimization
     - averaging parameters or gradients or both (in future, this will support averaging learning rates as well)
