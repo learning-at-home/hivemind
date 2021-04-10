@@ -45,7 +45,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     These optimizers use DHT to track how much progress did the collaboration make towards target batch size.
     Once enough samples were accumulated, optimizers will compute a weighted average of their statistics.
 
-    :note: this optimizer behaves unlike regular pytorch optimizers in two ways:
+    :note: This optimizer behaves unlike regular pytorch optimizers in two ways:
 
     - calling .step will periodially zero-out gradients w.r.t. model parameters after each step
     - it may take multiple .step calls without updating model parameters, waiting for peers to accumulate enough samples
