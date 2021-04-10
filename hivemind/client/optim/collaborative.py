@@ -73,13 +73,12 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
     """
 
-    def __init__(
-            self, opt: torch.optim.Optimizer, *, dht: DHT, prefix: str, target_group_size: int, target_batch_size: int,
-            batch_size_per_step: Optional[int] = None, scheduler: Optional[LRSchedulerBase] = None,
-            min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
-            expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
-            metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None,
-            averager_cls: Type[TrainingAverager] = TrainingAverager, verbose: bool = False, **kwargs):
+    def __init__(self, opt: torch.optim.Optimizer, *, dht: DHT, prefix: str, target_batch_size: int,
+                 batch_size_per_step: Optional[int] = None, scheduler: Optional[LRSchedulerBase] = None,
+                 min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
+                 expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
+                 metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, verbose: bool = False,
+                 **kwargs):
         super().__init__(opt, dht)
         self.prefix, self.scheduler = prefix, scheduler
         self.target_batch_size, self.batch_size_per_step = target_batch_size, batch_size_per_step
@@ -87,10 +86,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             min_refresh_period, max_refresh_period, default_refresh_period
         self.expected_drift_peers, self.expected_drift_rate = expected_drift_peers, expected_drift_rate
         self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration
-        self.averager = averager_cls(opt, average_parameters=True, average_gradients=True, dht=dht,
-                                     prefix=f"{self.prefix}_averaging", target_group_size=target_group_size,
-                                     allreduce_timeout=self.averaging_timeout, **kwargs)
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
+        self.averager = self._make_averager(**kwargs)
 
         self.training_progress_key = f"{self.prefix}_progress"
         self.local_samples_accumulated = 0  # a number of local samples accumulated since last optimizer update
@@ -106,6 +103,10 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.collaboration_state_updater = Thread(target=self.check_collaboration_state_periodically, daemon=True,
                                                   name=f"{self}.collaboration_state_updater")
         self.collaboration_state_updater.start()
+
+    def _make_averager(self, **kwargs):
+        return TrainingAverager(self.opt, dht=self.dht, average_parameters=True, average_gradients=True,
+                                prefix=f"{self.prefix}_averaging", allreduce_timeout=self.averaging_timeout, **kwargs)
 
     @property
     def local_step(self) -> int:
