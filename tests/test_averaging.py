@@ -43,7 +43,7 @@ async def test_key_manager():
 
 @pytest.mark.forked
 @pytest.mark.parametrize("n_client_mode_peers", [0, 2])
-def test_allreduce_simple(n_client_mode_peers):
+def test_allreduce_once(n_client_mode_peers):
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
 
     n_peers = 4
@@ -84,6 +84,42 @@ def test_allreduce_simple(n_client_mode_peers):
             for tensor, ref in zip(averaged_tensors, reference):
                 tensor[...] = torch.randn_like(tensor)
                 ref.add_(tensor, alpha=weights[i] / sum(weights))
+
+    futures = []
+    for averager, weight in zip(averagers, weights):
+        futures.append(averager.step(weight=weight, wait=False))
+    for future in futures:
+        future.result()
+
+    for future, averager in zip(futures, averagers):
+        with averager.get_tensors() as averaged_tensors:
+            for ref, our in zip(reference, averaged_tensors):
+                assert torch.allclose(ref, our, atol=1e-6)
+
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
+
+
+@pytest.mark.forked
+def test_allreduce_weighted(n_client_mode_peers: int = 2):
+    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+
+    n_peers = 4
+    should_listen = [False] * n_client_mode_peers + [True] * (n_peers - n_client_mode_peers)
+    random.shuffle(should_listen)
+
+    tensors1 = [torch.randn(123), torch.zeros(3)]
+    tensors2 = [torch.rand(123), torch.ones(3)]
+    tensors3 = [-torch.rand(123), torch.arange(3).to(torch.float32)]
+    tensors4 = [torch.randn(123) ** 3, torch.arange(3).to(torch.float32) / 2]
+    averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
+                                                prefix='mygroup', listen=listen, listen_on='127.0.0.1:*',
+                                                start=True)
+                 for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)]
+    weights = list(map(float, np.random.rand(len(averagers)) * 10 + 0.01))
+    reference = [(tensors1[i] * weights[0] + tensors2[i] * weights[1] + tensors3[i] * weights[2]
+                  + tensors4[i] * weights[3]) / sum(weights) for i in range(len(tensors1))]
 
     futures = []
     for averager, weight in zip(averagers, weights):
