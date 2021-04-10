@@ -78,7 +78,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             batch_size_per_step: Optional[int] = None, scheduler: Optional[LRSchedulerBase] = None,
             min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
             expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
-            metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, verbose: bool = False, **kwargs):
+            metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, verbose: bool = False,
+            **kwargs):
         super().__init__(opt, dht)
         self.prefix, self.scheduler = prefix, scheduler
         self.target_batch_size, self.batch_size_per_step = target_batch_size, batch_size_per_step
