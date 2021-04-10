@@ -47,8 +47,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     :note: this optimizer behaves unlike regular pytorch optimizers in two ways:
 
-    - it may run multiple .step calls without updating model parameters, waiting for peers to accumulate enough samples
-    - it may replace local tensors with data downloaded from other peers, in order to synchronize with them
+    - calling .step will periodially zero-out gradients w.r.t. model parameters after each step
+    - it may take multiple .step calls without updating model parameters, waiting for peers to accumulate enough samples
 
     :param opt: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
     :param dht: a running hivemind.DHT daemon connected to other peers
@@ -56,10 +56,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param target_batch_size: perform optimizer step after all peers collectively accumulate this many samples
     :param batch_size_per_step: before each call to .step, user should accumulate gradients over this many samples
     :param target_group_size: maximum group size for DecentralizedAverager's all-reduce
-    :param accumulate_grads: if True, create a set of buffers for gradient accumulation. Otherwise, use builtin .grad
-     fields in order to accumulate gradients. This is more efficent, but requires that user does not call .zero_grad.
-    :param accumulate_grads_on: whether to accumulate gradients on cpu (offload) or accelerator (extra vram usage).
-     By default, accumulate gradients on the same device where parameters are allocated.
     :param min_refresh_period: wait for at least this many seconds before fetching new collaboration state
     :param max_refresh_period: wait for at most this many seconds before fetching new collaboration state
     :param default_refresh_period: if no peers are detected, attempt to fetch collaboration state this often (seconds)
@@ -77,26 +73,27 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
     """
 
-    def __init__(self, opt: torch.optim.Optimizer, *, dht: DHT, prefix: str, target_group_size: int,
-                 target_batch_size: int, batch_size_per_step: int, scheduler: Optional[LRSchedulerBase] = None,
-                 min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
-                 expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
-                 averaging_expiration: float = 30, metadata_expiration: float = 30.0,
-                 averaging_timeout: Optional[float] = None, verbose: bool = False, **kwargs):
+    def __init__(
+            self, opt: torch.optim.Optimizer, *, dht: DHT, prefix: str, target_group_size: int, target_batch_size: int,
+            batch_size_per_step: Optional[int] = None, scheduler: Optional[LRSchedulerBase] = None,
+            min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
+            expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
+            metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
-        self.prefix, self.scheduler, self.averaging_timeout = prefix, scheduler, averaging_timeout
+        self.prefix, self.scheduler = prefix, scheduler
         self.target_batch_size, self.batch_size_per_step = target_batch_size, batch_size_per_step
         self.min_refresh_period, self.max_refresh_period, self.default_refresh_period =\
             min_refresh_period, max_refresh_period, default_refresh_period
         self.expected_drift_peers, self.expected_drift_rate = expected_drift_peers, expected_drift_rate
-        self.averaging_expiration, self.metadata_expiration = averaging_expiration, metadata_expiration
-        self.averager = TrainingAverager(opt, average_parameters=True, average_gradients=True, dht=dht,
-                                         prefix=f"{self.prefix}_averaging", target_group_size=target_group_size,
-                                         allreduce_timeout=self.averaging_timeout, **kwargs)
+        self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration
+        self.averager = TrainingAverager(
+            opt, average_parameters=True, average_gradients=True, dht=dht, prefix=f"{self.prefix}_averaging",
+            target_group_size=target_group_size, allreduce_timeout=self.averaging_timeout, **kwargs)
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
 
         # Each step contains {gradient_accumulation_steps} of forward and backward passes
         self.performance_ema = PerformanceEMA(alpha=performance_ema_alpha)
+        self.last_step_time = None
 
         self.training_progress_key = f"{self.prefix}_progress"
         self.local_samples_accumulated = 0  # a number of local samples accumulated since last optimizer update
@@ -131,12 +128,19 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         """
         Report accumulating gradients w.r.t. batch_size additional samples, optionally update model parameters
 
+        :param batch_size: optional override for batch_size_per_step from init
         :note: this .step is different from normal pytorch optimizers in several key ways. See __init__ for details.
         """
+        if batch_size is not None and self.batch_size_per_step is None:
+            raise ValueError("please either set batch_size_per_step parameter at init or provide batch_size in .step")
         batch_size = self.batch_size_per_step if batch_size is None else batch_size
+
         if not self.is_synchronized:
             self.load_state_from_peers()
             return
+
+        if self.last_step_time is not None and get_dht_time() - self.last_step_time > self.metadata_expiration:
+            logger.warning("metadata")
 
         self.local_samples_accumulated += batch_size
         self.local_steps_accumulated += 1
@@ -164,7 +168,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                 output = None
                 self.averager.local_step += 1
 
-            output = self.opt.step()
+            self.opt.step()
             self.opt.zero_grad()
             self.local_samples_accumulated = self.local_steps_accumulated = 0
             self.collaboration_state.register_step()
