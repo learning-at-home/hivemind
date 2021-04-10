@@ -36,6 +36,7 @@ class AllReduceProtocol:
         self.return_deltas = return_deltas
 
         self.accumulator = self.local_tensor_parts[self.endpoint].clone()  # sum inputs from peers to this tensor
+        self.denominator = 0.0  # number of peers or sum of weights, if weighted
         self.accumulated_from: Set[Endpoint] = {self.endpoint}  # peers that we have accumulated our part from
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
@@ -56,7 +57,7 @@ class AllReduceProtocol:
     def group_size(self):
         return len(self.ordered_group_endpoints)
 
-    async def accumulate_part(self, source: Endpoint, remote_part: torch.Tensor) -> torch.Tensor:
+    async def accumulate_part(self, source: Endpoint, remote_part: torch.Tensor, weight: float = 1.0) -> torch.Tensor:
         """ Add vector part to accumulator, wait for all other vectors to be added, then return the average part """
         assert not self.averaged_part.done(), f"already finished averaging part: {self.averaged_part}"
         assert not self.future.done(), f"already finished allreduce: {self.future}"
@@ -65,12 +66,13 @@ class AllReduceProtocol:
         assert not self.endpoint in self.client_mode_endpoints, f"{self.endpoint} is in client mode"
         logger.debug(f"{self} - accumulating tensor part from {source}")
 
-        self.accumulator.add_(remote_part)
+        self.accumulator.add_(remote_part, alpha=weight)
+        self.denominator += weight
         self.accumulated_from.add(source)
 
         assert len(self.accumulated_from) <= self.group_size
         if len(self.accumulated_from) == len(self.local_tensor_parts):
-            average_result = self.accumulator.div_(len(self.accumulated_from))
+            average_result = self.accumulator.div_(self.denominator)
             self.register_averaged_part(self.endpoint, average_result)
             self.averaged_part.set_result(average_result)
 
