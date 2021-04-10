@@ -40,13 +40,14 @@ class TrainingAverager(DecentralizedAverager):
             averaged_tensors = [tensor.detach().cpu().float().clone() for tensor in self.local_tensors()]
         super().__init__(averaged_tensors=averaged_tensors, **kwargs)
 
+    @torch.no_grad
     def step(self, wait: bool = True, **kwargs):
         """ Average optimizer weights and gradients with peers. """
         if not wait:
             return run_in_background(self.step, wait=False, **kwargs)
 
         local_tensors = list(self.local_tensors())
-        with torch.no_grad(), self.lock_averager_step:
+        with self.lock_averager_step:
             # fill averager's tensors with current local tensors, scaled by peer's weight
             with self.get_tensors() as averaged_tensors:
                 assert len(local_tensors) == len(averaged_tensors)
@@ -57,7 +58,7 @@ class TrainingAverager(DecentralizedAverager):
             gathered = super().step(**kwargs)
 
             # load averaged tensors back into model
-            with torch.no_grad(), self.get_tensors() as averaged_tensors:
+            with self.get_tensors() as averaged_tensors:
                 assert len(averaged_tensors) == len(local_tensors)
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                     local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
