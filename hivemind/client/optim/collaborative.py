@@ -3,6 +3,7 @@ import warnings
 from dataclasses import dataclass
 from threading import Thread, Lock, Event
 from typing import Optional
+import logging
 
 import torch
 import numpy as np
@@ -79,7 +80,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                  min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
                  expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
                  averaging_expiration: float = 30, metadata_expiration: float = 30.0,
-                 averaging_timeout: Optional[float] = None, **kwargs):
+                 averaging_timeout: Optional[float] = None, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
         self.prefix, self.scheduler, self.averaging_timeout = prefix, scheduler, averaging_timeout
         self.target_batch_size, self.batch_size_per_step = target_batch_size, batch_size_per_step
@@ -90,6 +91,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.averager = TrainingAverager(opt, average_parameters=True, average_gradients=True, dht=dht,
                                          prefix=f"{self.prefix}_averaging", target_group_size=target_group_size,
                                          allreduce_timeout=self.averaging_timeout, **kwargs)
+        self.status_loglevel = logging.INFO if verbose else logging.DEBUG
 
         # Each step contains {gradient_accumulation_steps} of forward and backward passes
         self.performance_ema = PerformanceEMA(alpha=performance_ema_alpha)
@@ -136,7 +138,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not self.collaboration_state.ready_for_step:
             return
 
-        logger.info("Averaging parameters and gradients with peers...")
+        logger.log(self.status_loglevel, "Averaging parameters and gradients with peers...")
         self.collaboration_state = self.fetch_collaboration_state()
         self.state_updated.set()
 
@@ -150,8 +152,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                 weight = self.local_samples_accumulated / mean_samples_per_worker
                 self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
             else:
-                logger.info(
-                    f"Skipped averaging: collaboration consists of {self.collaboration_state.num_peers} peer(s).")
+                logger.log(self.status_loglevel, f"Skipped averaging: collaboration consists of "
+                                                 f"{self.collaboration_state.num_peers} peer(s).")
                 self.averager.local_step += 1
 
             output = self.opt.step()
@@ -160,7 +162,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.collaboration_state.register_step()
             self.state_updated.set()
             self.update_scheduler()
-            logger.info(f"Optimizer step: done!")
+
+            logger.log(self.status_loglevel, f"Optimizer step: done!")
             return output
 
     def report_training_progress(self):
@@ -191,7 +194,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         current_time = get_dht_time()
 
         if not isinstance(response, dict) or len(response) == 0:
-            logger.info(f"Found no active peers: {response}")
+            logger.log(self.status_loglevel, f"Found no active peers: {response}")
             local_eta_next_step = max(0, self.target_batch_size - self.local_steps_accumulated
                                       ) / self.performance_ema.samples_per_second
             return CollaborationState(self.local_step, self.local_samples_accumulated, self.target_batch_size,
@@ -226,8 +229,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         expected_max_peers = max(num_peers + self.expected_drift_peers, num_peers * (1 + self.expected_drift_rate))
         time_to_next_fetch = float(np.clip(a=estimated_time_to_next_step * num_peers / expected_max_peers,
                                            a_min=self.min_refresh_period, a_max=self.max_refresh_period))
-        logger.info(f"Collaboration accumulated {total_samples_accumulated} samples from {num_peers} peers; "
-                    f"ETA {estimated_time_to_next_step:.2f} seconds (refresh in {time_to_next_fetch:.2f}s.)")
+        logger.log(self.status_loglevel, f"Collaboration accumulated {total_samples_accumulated} samples from "
+                                         f"{num_peers} peers; ETA {estimated_time_to_next_step:.2f} seconds "
+                                         f"(refresh in {time_to_next_fetch:.2f}s.)")
         return CollaborationState(
             global_optimizer_step, total_samples_accumulated, target_batch_size=self.target_batch_size,
             num_peers=num_peers, num_clients=num_clients, eta_next_step=current_time + estimated_time_to_next_step,
@@ -247,12 +251,12 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                 self.scheduler.step()
 
     def shutdown(self):
-        logger.info("Shutting down averager...")
+        logger.debug("Shutting down averager...")
         self.averager.shutdown()
-        logger.info("Sending goodbye to peers...")
+        logger.debug("Sending goodbye to peers...")
         self.dht.store(self.training_progress_key, subkey=self.averager.endpoint, value=None,
                        expiration_time=get_dht_time() + self.metadata_expiration)
-        logger.info(f"{self.__class__.__name__} is shut down.")
+        logger.debug(f"{self.__class__.__name__} is shut down.")
 
     def __del__(self):
         self.shutdown()
