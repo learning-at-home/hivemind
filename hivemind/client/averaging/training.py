@@ -128,10 +128,21 @@ class TrainingAverager(DecentralizedAverager):
 
 
 def initialize_optimizer_state(opt: torch.optim.Optimizer):
+    print('DEBUG_002')
     for param_group in opt.param_groups:
         for param in param_group['params']:
+
+            print('Param:', param.device)
+            if param.grad:
+                print('Grad:', param.grad.device)
+
             if param.grad is None:
                 (0 * param.sum()).backward()
+
+            print('Param:', param.device)
+            if param.grad:
+                print('Grad:', param.grad.device)
+
     opt.step()
 
 

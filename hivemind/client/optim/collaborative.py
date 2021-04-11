@@ -194,8 +194,10 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
             print('DEBUG_001')
             for param_group in self.opt.param_groups:
-                print('Param:', param_group['params'][0].device)
-                print('Grad:', param_group['params'][0].grad.device)
+                for p in param_group['params']:
+                    print('Param:', p.device)
+                    print('Grad:', p.grad.device)
+
 
             print(self.opt)
 

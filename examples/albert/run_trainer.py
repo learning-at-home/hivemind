@@ -141,6 +141,7 @@ def main():
     config = AlbertConfig.from_pretrained(dataset_args.config_path, cache_dir=dataset_args.cache_dir)
     tokenizer = AlbertTokenizerFast.from_pretrained(dataset_args.tokenizer_path, cache_dir=dataset_args.cache_dir)
     model = get_model(training_args, config, tokenizer)
+    model.to(training_args.device)
 
     tokenized_dataset_path = Path(dataset_args.dataset_path)
     tokenized_datasets = load_from_disk(tokenized_dataset_path)
