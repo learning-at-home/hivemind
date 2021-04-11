@@ -1,17 +1,24 @@
 from __future__ import annotations
-import time
-import multiprocessing as mp
-import multiprocessing.connection
-import concurrent.futures._base as base
 
 import asyncio
+import concurrent.futures._base as base
+import multiprocessing as mp
+import multiprocessing.connection
+import time
 from functools import lru_cache
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Generic, TypeVar
 
 from hivemind.utils.threading import run_in_background
 
+ResultType = TypeVar('ResultType')
 
-class MPFuture(base.Future):
+
+class FutureStateError(RuntimeError):
+    """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
+    pass
+
+
+class MPFuture(base.Future, Generic[ResultType]):
     """ Multiprocessing version of concurrent.futures.Future. Can also be awaited like asyncio.Future """
 
     TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
@@ -74,17 +81,17 @@ class MPFuture(base.Future):
         except TimeoutError:
             pass
 
-    def set_result(self, result):
+    def set_result(self, result: ResultType):
         self._sync_updates()
         if self._state in self.TERMINAL_STATES:
-            raise RuntimeError(f"Can't set_result to a future that is in {self._state}")
+            raise FutureStateError(f"Can't set_result to a future that is {self._state} ({self})")
         self._state, self._result = base.FINISHED, result
         return self._send_updates()
 
     def set_exception(self, exception: BaseException):
         self._sync_updates()
         if self._state in self.TERMINAL_STATES:
-            raise RuntimeError(f"Can't set_exception to a future that is in {self._state}")
+            raise FutureStateError(f"Can't set_exception to a future that is {self._state} ({self})")
         self._state, self._exception = base.FINISHED, exception
         self._send_updates()
 
@@ -96,7 +103,7 @@ class MPFuture(base.Future):
         elif self._state == base.CANCELLED:
             return False
         else:
-            raise RuntimeError(f"Can't set_running_or_notify_cancel to a future that is in {self._state}")
+            raise FutureStateError(f"Can't set_running_or_notify_cancel to a future that is in {self._state} ({self})")
 
     def cancel(self):
         self._sync_updates()
@@ -105,13 +112,13 @@ class MPFuture(base.Future):
         self._state, self._exception = base.CANCELLED, base.CancelledError()
         return self._send_updates()
 
-    def result(self, timeout: Optional[float] = None):
+    def result(self, timeout: Optional[float] = None) -> ResultType:
         self._await_terminal_state(timeout)
         if self._exception is not None:
             raise self._exception
         return self._result
 
-    def exception(self, timeout=None):
+    def exception(self, timeout=None) -> BaseException:
         self._await_terminal_state(timeout)
         if self._state == base.CANCELLED:
             raise base.CancelledError()

@@ -1,4 +1,4 @@
-from typing import TypeVar, AsyncIterator, Union, AsyncIterable
+from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable
 import asyncio
 import uvloop
 T = TypeVar('T')
@@ -32,3 +32,13 @@ async def achain(*async_iters: AsyncIterable[T]) -> AsyncIterator[T]:
     for aiter in async_iters:
         async for elem in aiter:
             yield elem
+
+
+async def await_cancelled(awaitable: Awaitable) -> bool:
+    try:
+        await awaitable
+        return False
+    except asyncio.CancelledError:
+        return True
+    except BaseException:
+        return False

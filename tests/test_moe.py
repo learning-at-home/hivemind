@@ -12,15 +12,15 @@ from hivemind.server import layers
 @pytest.mark.forked
 def test_moe():
     all_expert_uids = [f'ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
-                       for _ in range(20)]
-    with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn',
-                           num_handlers=1, hidden_dim=16) as (server_endpoint, dht_endpoint):
+                       for _ in range(10)]
+    with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn', num_handlers=1,
+                           hidden_dim=16) as (server_endpoint, dht_endpoint):
         dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
 
         dmoe = hivemind.RemoteMixtureOfExperts(
             in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn.')
 
-        for i in range(10):
+        for i in range(5):
             out = dmoe(torch.randn(10, 16))
             out.sum().backward()
 
@@ -35,7 +35,7 @@ def test_call_many(hidden_dim=16):
     detect_anomalies = False
     atol = 1e-5
 
-    with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=8, hidden_dim=hidden_dim,
+    with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=hidden_dim,
                            optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
         inputs = torch.randn(4, hidden_dim, requires_grad=True)
         inputs_clone = inputs.clone().detach().requires_grad_(True)
@@ -109,10 +109,10 @@ def test_beam_search_correctness():
 
     for i in range(25):
         input = torch.randn(32)
-        grid_scores = dmoe.proj(input).split_with_sizes(dmoe.grid_size, dim=-1)
+        grid_scores = dmoe.proj(input).split_with_sizes(dmoe.beam_search.grid_size, dim=-1)
 
-        chosen_experts = dht.find_best_experts(dmoe.uid_prefix, [tensor.detach().numpy() for tensor in grid_scores],
-                                               beam_size=dmoe.k_best)
+        chosen_experts = dmoe.beam_search.find_best_experts([tensor.detach().numpy() for tensor in grid_scores],
+                                                            beam_size=dmoe.k_best)
         chosen_scores = dmoe.compute_expert_scores([dim_scores[None] for dim_scores in grid_scores],
                                                    [chosen_experts])[0]
         our_best_scores = list(chosen_scores.cpu().detach().numpy())
@@ -182,13 +182,13 @@ def test_client_anomaly_detection():
     for i in range(4):
         expert = layers.name_to_block['ffn'](HID_DIM)
         experts[f'expert.{i}'] = hivemind.ExpertBackend(name=f'expert.{i}',
-                                                        expert=expert, opt=torch.optim.Adam(expert.parameters()),
+                                                        expert=expert, optimizer=torch.optim.Adam(expert.parameters()),
                                                         args_schema=(hivemind.BatchTensorDescriptor(HID_DIM),),
                                                         outputs_schema=hivemind.BatchTensorDescriptor(HID_DIM),
                                                         max_batch_size=16,
                                                         )
 
-    experts['expert.3'].expert.layers[0].weight.data[0, 0] = float('nan')
+    experts['expert.3'].expert.ffn.weight.data[0, 0] = float('nan')
 
     dht = hivemind.DHT(start=True, expiration=999)
     server = hivemind.Server(dht, experts, num_connection_handlers=1)

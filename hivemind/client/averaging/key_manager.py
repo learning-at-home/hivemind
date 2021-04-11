@@ -6,7 +6,7 @@ from typing import Optional, List, Tuple
 import numpy as np
 
 from hivemind.dht import DHT
-from hivemind.client.averaging.allreduce import AllReduceRunner
+from hivemind.client.averaging.group_info import GroupInfo
 from hivemind.utils import get_logger, Endpoint, DHTExpiration, get_dht_time, ValueWithExpiration
 
 GroupKey = str
@@ -103,17 +103,17 @@ class GroupKeyManager:
         else:
             return None
 
-    async def update_key_on_group_assembled(self, allreduce_group: AllReduceRunner, is_leader: bool = True):
+    async def update_key_on_group_assembled(self, group_info: GroupInfo, is_leader: bool = True):
         """ this function is triggered every time an averager finds an allreduce group """
-        rng = random.Random(allreduce_group.group_key_seed)
-        index = allreduce_group.ordered_group_endpoints.index(self.endpoint)
-        generalized_index = rng.sample(range(self.target_group_size), allreduce_group.group_size)[index]
+        rng = random.Random(group_info.group_id)
+        index = group_info.endpoints.index(self.endpoint)
+        generalized_index = rng.sample(range(self.target_group_size), group_info.group_size)[index]
         nbits = int(np.ceil(np.log2(self.target_group_size)))
         new_bits = bin(generalized_index)[2:].rjust(nbits, '0')
         self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits):] if self.group_bits else ''
         logger.debug(f"{self.endpoint} - updated group key to {self.group_bits}")
 
-        if is_leader and self.insufficient_size < allreduce_group.group_size < self.excessive_size:
+        if is_leader and self.insufficient_size < group_info.group_size < self.excessive_size:
             asyncio.create_task(self.notify_stragglers())
         if self.suggested_nbits is not None and self.suggested_nbits != len(self.group_bits):
             num_extra_bits = max(0, self.suggested_nbits - len(self.group_bits))

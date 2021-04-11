@@ -8,6 +8,8 @@ from hivemind.proto.runtime_pb2 import CompressionType
 DUMMY_BATCH_SIZE = 3  # used for dummy runs only
 
 warnings.filterwarnings("ignore", "CUDA initialization*", category=UserWarning)
+
+
 # ^-- cures https://github.com/pytorch/pytorch/issues/47038
 
 
@@ -32,11 +34,13 @@ class TensorDescriptor(DescriptorBase):
 
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor):
-        return cls(tensor.shape, tensor.dtype, tensor.layout, tensor.device, tensor.requires_grad, safe_check_pinned(tensor))
+        return cls(tensor.shape, tensor.dtype, tensor.layout, tensor.device, tensor.requires_grad,
+                   safe_check_pinned(tensor))
 
     def make_empty(self, **kwargs):
         properties = asdict(self)
         properties.update(kwargs)
+        properties.pop('compression')
         return torch.empty(**properties)
 
 
@@ -60,7 +64,7 @@ class BatchTensorDescriptor(TensorDescriptor):
         assert self.shape[0] is None, "Make sure 0-th dimension is not specified (set to None)"
         return super().make_empty(size=(batch_size, *self.shape[1:]), **kwargs)
 
-    
+
 def safe_check_pinned(tensor: torch.Tensor) -> bool:
     """ Check whether or not a tensor is pinned. If torch cannot initialize cuda, returns False instead of error. """
     try:
