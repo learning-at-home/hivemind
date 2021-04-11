@@ -152,7 +152,7 @@ def main():
     collaborative_optimizer = CollaborativeOptimizer(
         opt=opt,
         scheduler=scheduler,
-        dht=DHT(initial_peers=collaboration_args.initial_peers, start=True),
+        dht=DHT(initial_peers=[collaboration_args.initial_peers], start=True),
         prefix=collaboration_args.dht_key_for_averaging,
         target_group_size=collaboration_args.target_group_size,
         target_batch_size=collaboration_args.target_batch_size,
