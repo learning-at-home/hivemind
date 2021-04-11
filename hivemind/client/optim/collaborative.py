@@ -72,6 +72,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param accumulate_grads_on: if specified, accumulate gradients on this device. By default, this will use the same
      device as model parameters. One can specify a different device (e.g. 'cpu' vs 'cuda') to save device memory at
      the cost of extra time per step. If reuse_gradient_accumulators is True, this parameter has no effect.
+    :param client_mode: if True, runs training without incoming connections, in a firewall-compatible mode
     :param kwargs: additional parameters forwarded to DecentralizedAverager
     :note: if you are using CollaborativeOptimizer with a lr_scheduler, it is recommended to pass this scheduler
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
@@ -82,7 +83,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                  min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
                  expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
                  metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, verbose: bool = False,
-                 reuse_grad_buffers: bool = False, accumulate_grads_on: Optional[torch.device] = None, **kwargs):
+                 reuse_grad_buffers: bool = False, accumulate_grads_on: Optional[torch.device] = None,
+                 client_mode: bool = False, **kwargs):
         super().__init__(opt, dht)
         if reuse_grad_buffers and accumulate_grads_on is not None:
             logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
@@ -94,6 +96,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration
         self._grads, self.reuse_grad_buffers, self.accumulate_grads_on = None, reuse_grad_buffers, accumulate_grads_on
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
+        self.client_mode = client_mode
         self.averager = self._make_averager(**kwargs)
 
         self.training_progress_key = f"{self.prefix}_progress"
@@ -113,7 +116,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     def _make_averager(self, **kwargs):
         return TrainingAverager(self.opt, dht=self.dht, average_parameters=True, average_gradients=True,
-                                prefix=f"{self.prefix}_averaging", allreduce_timeout=self.averaging_timeout, **kwargs)
+                                prefix=f"{self.prefix}_averaging", allreduce_timeout=self.averaging_timeout,
+                                listen=not self.client_mode, **kwargs)
 
     @property
     def local_step(self) -> int:
