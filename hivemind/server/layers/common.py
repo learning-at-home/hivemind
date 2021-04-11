@@ -8,7 +8,6 @@ from hivemind.server.layers.custom_experts import register_expert_class
 def gelu_fast(x):
     return 0.5 * x * (1.0 + torch.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x)))
 
-
 ffn_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
 @register_expert_class('ffn', ffn_sample_input)
 class FeedforwardBlock(nn.Module):

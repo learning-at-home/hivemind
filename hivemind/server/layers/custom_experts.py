@@ -21,8 +21,6 @@ def register_expert_class(name: str, sample_input: Callable[[int, int], torch.te
         sample of an input in the module
     :unchanged module
     """
-    with open('debug_logs', 'a') as f:
-        print("Added name : ", name, os.getpid(), file=f)
     def registrator(custom_class: Type[nn.Module]):
         if name in name_to_block or name in name_to_input:
             raise RuntimeError("The class might already exist or be added twice")

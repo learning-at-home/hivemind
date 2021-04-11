@@ -7,7 +7,6 @@ from typing import Optional
 from hivemind import RemoteExpert, background_server
 
 @pytest.mark.forked
-@pytest.mark.skip
 def test_custom_expert(port: Optional[int] = None, hid_dim=16):
     with background_server(
         expert_cls='perceptron', num_experts=2, device='cpu',
@@ -29,7 +28,6 @@ def test_custom_expert(port: Optional[int] = None, hid_dim=16):
             loss.backward()
 
 @pytest.mark.forked
-@pytest.mark.skip
 def test_multihead_expert(port: Optional[int] = None, hid_dim=16):
     with background_server(
         expert_cls='multihead', num_experts=2, device='cpu',
