@@ -60,7 +60,7 @@ def _get_chunk_size(num_elements: int, min_chunk_size: int) -> int:
 def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionType.NONE,
                            allow_inplace=False) -> runtime_pb2.Tensor:
     assert tensor.device == torch.device('cpu')
-    if compression_type == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
+    if compression_type == CompressionType.MEANSTD_16BIT:
         assert tensor.dtype == torch.float32
 
         tensor = tensor if allow_inplace else tensor.clone()
@@ -132,7 +132,7 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.dtype(serialized_tensor.dtype))
         tensor = construct_torch_tensor(array, serialized_tensor.size)
 
-    elif serialized_tensor.compression == CompressionType.MEANSTD_LAST_AXIS_FLOAT16:
+    elif serialized_tensor.compression == CompressionType.MEANSTD_16BIT:
         stats_size = list(serialized_tensor.size)
         stats_size[-1] = 1
         stats_count = np.prod(stats_size)
