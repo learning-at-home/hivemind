@@ -192,6 +192,13 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                 output = None
                 self.averager.local_step += 1
 
+            print('DEBUG_001')
+            for param_group in self.opt.param_groups:
+                print('Param:', param_group['params'].device)
+                print('Grad:', param_group['params'].grad.device)
+
+            print(self.opt)
+
             self.opt.step()
             self.reset_accumulated_grads_()
             self.local_samples_accumulated = self.local_steps_accumulated = 0

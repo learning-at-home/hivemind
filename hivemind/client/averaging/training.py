@@ -65,6 +65,8 @@ class TrainingAverager(DecentralizedAverager):
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                     local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
 
+            print('DEBUG_000', local_tensor.device)
+
             self.local_step += 1
             return gathered
 
