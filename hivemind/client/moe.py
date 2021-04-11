@@ -5,17 +5,17 @@ from queue import Queue, Empty
 from typing import Tuple, List, Optional, Dict, Any
 
 import grpc
-
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
 import hivemind
-from hivemind.client.expert import RemoteExpert, DUMMY, _get_expert_stub
-from hivemind.server.expert_uid import UID_DELIMITER
 from hivemind.client.beam_search import MoEBeamSearcher
+from hivemind.client.expert import RemoteExpert, DUMMY, _get_expert_stub
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
-from hivemind.utils import nested_pack, nested_flatten, serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.server.expert_uid import UID_DELIMITER
+from hivemind.utils import nested_pack, nested_flatten
+from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
