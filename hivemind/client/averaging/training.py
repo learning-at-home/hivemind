@@ -133,14 +133,14 @@ def initialize_optimizer_state(opt: torch.optim.Optimizer):
         for param in param_group['params']:
 
             print('Param:', param.device)
-            if param.grad:
+            if param.grad is not None:
                 print('Grad:', param.grad.device)
 
             if param.grad is None:
                 (0 * param.sum()).backward()
 
             print('Param:', param.device)
-            if param.grad:
+            if param.grad is not None:
                 print('Grad:', param.grad.device)
 
     opt.step()
