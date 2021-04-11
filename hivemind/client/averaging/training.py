@@ -65,8 +65,6 @@ class TrainingAverager(DecentralizedAverager):
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                     local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
 
-            print('DEBUG_000', local_tensor.device)
-
             self.local_step += 1
             return gathered
 
@@ -128,21 +126,10 @@ class TrainingAverager(DecentralizedAverager):
 
 
 def initialize_optimizer_state(opt: torch.optim.Optimizer):
-    print('DEBUG_002')
     for param_group in opt.param_groups:
         for param in param_group['params']:
-
-            print('Param:', param.device)
-            if param.grad is not None:
-                print('Grad:', param.grad.device)
-
             if param.grad is None:
                 (0 * param.sum()).backward()
-
-            print('Param:', param.device)
-            if param.grad is not None:
-                print('Grad:', param.grad.device)
-
     opt.step()
 
 
