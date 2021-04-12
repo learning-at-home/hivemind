@@ -113,7 +113,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.collaboration_state_updater = Thread(target=self.check_collaboration_state_periodically, daemon=True,
                                                   name=f"{self}.collaboration_state_updater")
         self.collaboration_state_updater.start()
-        self._step_supports_amp_scaling = False
+        self._step_supports_amp_scaling = True
 
     def _make_averager(self, **kwargs):
         return TrainingAverager(self.opt, dht=self.dht, average_parameters=True, average_gradients=True,
