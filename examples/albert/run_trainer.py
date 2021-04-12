@@ -51,7 +51,7 @@ class AlbertTrainingArguments(TrainingArguments):
     adam_epsilon: float = 1e-6
     weight_decay: float = 0.01
     max_grad_norm: float = 1.0
-    clamp_value: float = 10000.0
+    clamp_value: float = 10.0
 
     fp16: bool = True
     fp16_opt_level: str = 'O2'
