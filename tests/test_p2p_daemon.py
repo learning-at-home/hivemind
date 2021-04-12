@@ -55,28 +55,21 @@ def handle_add(args):
 @pytest.mark.asyncio
 async def test_call_unary_handler(should_cancel, handle_name="handle"):
     handler_cancelled = False
-    class A:
-        def __init__(self):
-            self.a = 10
 
-        async def ping_handler(self, request, context):
-            self.a += 10
-            try:
-                await asyncio.sleep(2)
-            except asyncio.CancelledError:
-                nonlocal handler_cancelled
-                handler_cancelled = True
-            return dht_pb2.PingResponse(
-                peer=dht_pb2.NodeInfo(
-                    node_id=context.ours_id.to_bytes(), rpc_port=context.ours_port),
-                sender_endpoint=context.peer(), available=True)
-    class B: pass
+    async def ping_handler(request, context):
+        try:
+            await asyncio.sleep(2)
+        except asyncio.CancelledError:
+            nonlocal handler_cancelled
+            handler_cancelled = True
+        return dht_pb2.PingResponse(
+            peer=dht_pb2.NodeInfo(
+                node_id=context.ours_id.to_bytes(), rpc_port=context.ours_port),
+            sender_endpoint=context.peer(), available=True)
 
     server = await P2P.create()
     server_pid = server._child.pid
-    from functools import partial
-    a = A()
-    await server.add_unary_handler(handle_name, partial(A.ping_handler, a), dht_pb2.PingRequest,
+    await server.add_unary_handler(handle_name, ping_handler, dht_pb2.PingRequest,
                                    dht_pb2.PingResponse)
     assert is_process_running(server_pid)
 
@@ -112,7 +105,6 @@ async def test_call_unary_handler(should_cancel, handle_name="handle"):
 
     client.__del__()
     assert not is_process_running(client_pid)
-    assert a.a == 20
 
 
 @pytest.mark.parametrize(
