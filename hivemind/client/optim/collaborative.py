@@ -155,8 +155,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.batch_size_per_step = batch_size
         batch_size = batch_size if batch_size is not None else self.batch_size_per_step
 
-        print('Batch size = ', batch_size)
-
         if not self.is_synchronized:
             print('Not sync!')
             self.load_state_from_peers()
