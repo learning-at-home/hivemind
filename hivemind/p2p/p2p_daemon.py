@@ -78,6 +78,20 @@ class P2P(object):
             break
         return self
 
+    @classmethod
+    async def replicate(cls, daemon_listen_port: int, host_port: int):
+        self = cls()
+        # There is no child under control
+        # Use external already running p2pd
+        self._child = None
+        self._assign_daemon_ports(host_port, daemon_listen_port)
+        self._client_listen_port = find_open_port()
+        self._client = p2pclient.Client(
+            Multiaddr(f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}'),
+            Multiaddr(f'/ip4/127.0.0.1/tcp/{self._client_listen_port}'))
+        await self._identify_client(0)
+        return self
+
     def _initialize(self, proc_args: tp.List[str]) -> None:
         proc_args = copy.deepcopy(proc_args)
         proc_args.extend(self._make_process_args(
