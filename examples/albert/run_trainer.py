@@ -145,7 +145,7 @@ class CustomLoggingCallback(transformers.TrainerCallback):
             tr_loss = state.log_history[-1]['loss']
 
             my_info = [
-                self.collaborative_optimizer.local_step, tr_loss / self.collaborative_optimizer.local_steps_accumulated
+                self.collaborative_optimizer.local_step, tr_loss
             ]
 
             self.dht.store("my_progress", subkey=self.trainer_uuid, value=my_info,

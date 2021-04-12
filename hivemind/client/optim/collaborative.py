@@ -16,6 +16,7 @@ from hivemind.client.optim.performance_ema import PerformanceEMA
 logger = get_logger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
 
+CNT = 0
 
 @dataclass(frozen=False)
 class CollaborationState:
@@ -171,11 +172,11 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.local_steps_accumulated += 1
             self.performance_ema.update(num_processed=self.batch_size_per_step)
             self.should_report_progress.set()
-
-            print('Set should_report_progress')
+            #
+            # print('Set should_report_progress')
 
         if not self.collaboration_state.ready_for_step:
-            print('Not ready for step')
+            # print('Not ready for step')
             return
 
         logger.log(self.status_loglevel, "Averaging parameters and gradients with peers...")
@@ -257,22 +258,17 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     def report_training_progress(self):
         """ Periodically publish metadata and the current number of samples accumulated towards the next step """
-        print('Reporting training progress')
         while self.is_alive():
-            print('Waiting')
             self.should_report_progress.wait()
-            print('Waiting end')
             self.should_report_progress.clear()
             with self.lock_local_progress:
                 current_time = get_dht_time()
-                print('Get local info')
                 local_state_info = [self.local_step, self.local_samples_accumulated,
                                     self.performance_ema.samples_per_second, current_time, not self.averager.listen]
 
             assert self.is_valid_peer_state(local_state_info), local_state_info
             self.dht.store(self.training_progress_key, subkey=self.averager.endpoint, value=local_state_info,
                            expiration_time=current_time + self.metadata_expiration, return_future=True)
-            print('Dht is updated')
 
     def check_collaboration_state_periodically(self):
         """
