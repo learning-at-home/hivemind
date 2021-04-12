@@ -148,7 +148,7 @@ class CustomLoggingCallback(transformers.TrainerCallback):
                 self.collaborative_optimizer.local_step, tr_loss / self.collaborative_optimizer.local_steps_accumulated
             ]
 
-            self.dht.store(self.my_progess_key, subkey=self.trainer_uuid, value=my_info,
+            self.dht.store("my_progress", subkey=self.trainer_uuid, value=my_info,
                            expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
                            return_future=True)
 
