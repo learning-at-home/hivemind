@@ -9,7 +9,8 @@ from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 import hivemind
-from hivemind.utils import MSGPackSerializer, serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils import MSGPackSerializer
+from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.mpfuture import FutureStateError
 
 
@@ -128,7 +129,7 @@ def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     torch.manual_seed(0)
     X = torch.randn(*size)
     assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_LAST_AXIS_FLOAT16)) - X
+    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_16BIT)) - X
     assert error.square().mean() < alpha
     error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.FLOAT16)) - X
     assert error.square().mean() < alpha
@@ -177,33 +178,33 @@ async def test_channel_cache():
 def test_serialize_tensor():
     tensor = torch.randn(512, 12288)
 
-    serialized_tensor = hivemind.serialize_torch_tensor(tensor, hivemind.CompressionType.NONE)
+    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.NONE)
     for chunk_size in [1024, 64 * 1024, 64 * 1024 + 1, 10 ** 9]:
         chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
         assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
         restored = hivemind.combine_from_streaming(chunks)
-        assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor)
+        assert torch.allclose(deserialize_torch_tensor(restored), tensor)
 
     chunk_size = 30 * 1024
-    serialized_tensor = hivemind.serialize_torch_tensor(tensor, hivemind.CompressionType.FLOAT16)
+    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.FLOAT16)
     chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
     assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
     restored = hivemind.combine_from_streaming(chunks)
-    assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor, rtol=0, atol=1e-2)
+    assert torch.allclose(deserialize_torch_tensor(restored), tensor, rtol=0, atol=1e-2)
 
     tensor = torch.randint(0, 100, (512, 1, 1))
-    serialized_tensor = hivemind.serialize_torch_tensor(tensor, hivemind.CompressionType.NONE)
+    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.NONE)
     chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
     assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
     restored = hivemind.combine_from_streaming(chunks)
-    assert torch.allclose(hivemind.deserialize_torch_tensor(restored), tensor)
+    assert torch.allclose(deserialize_torch_tensor(restored), tensor)
 
     scalar = torch.tensor(1.)
-    serialized_scalar = hivemind.serialize_torch_tensor(scalar, hivemind.CompressionType.NONE)
-    assert torch.allclose(hivemind.deserialize_torch_tensor(serialized_scalar), scalar)
+    serialized_scalar = serialize_torch_tensor(scalar, CompressionType.NONE)
+    assert torch.allclose(deserialize_torch_tensor(serialized_scalar), scalar)
 
-    serialized_scalar = hivemind.serialize_torch_tensor(scalar, hivemind.CompressionType.FLOAT16)
-    assert torch.allclose(hivemind.deserialize_torch_tensor(serialized_scalar), scalar)
+    serialized_scalar = serialize_torch_tensor(scalar, CompressionType.FLOAT16)
+    assert torch.allclose(deserialize_torch_tensor(serialized_scalar), scalar)
 
 
 def test_serialize_tuple():
@@ -222,7 +223,7 @@ def test_serialize_tuple():
 
 def test_split_parts():
     tensor = torch.randn(910, 512)
-    serialized_tensor_part = hivemind.utils.serialize_torch_tensor(tensor, allow_inplace=False)
+    serialized_tensor_part = serialize_torch_tensor(tensor, allow_inplace=False)
     chunks1 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 16384))
     assert len(chunks1) == int(np.ceil(tensor.numel() * tensor.element_size() / 16384))
 
@@ -232,8 +233,7 @@ def test_split_parts():
     chunks3 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10 ** 9))
     assert len(chunks3) == 1
 
-    compressed_tensor_part = hivemind.utils.serialize_torch_tensor(tensor, hivemind.CompressionType.FLOAT16,
-                                                                   allow_inplace=False)
+    compressed_tensor_part = serialize_torch_tensor(tensor, CompressionType.FLOAT16, allow_inplace=False)
     chunks4 = list(hivemind.utils.split_for_streaming(compressed_tensor_part, 16384))
     assert len(chunks4) == int(np.ceil(tensor.numel() * 2 / 16384))
 
@@ -242,16 +242,16 @@ def test_split_parts():
     combined3 = hivemind.utils.combine_from_streaming(chunks3)
     combined4 = hivemind.utils.combine_from_streaming(chunks4)
     for combined in combined1, combined2, combined3:
-        assert torch.allclose(tensor, hivemind.deserialize_torch_tensor(combined), rtol=1e-5, atol=1e-8)
+        assert torch.allclose(tensor, deserialize_torch_tensor(combined), rtol=1e-5, atol=1e-8)
 
-    assert torch.allclose(tensor, hivemind.deserialize_torch_tensor(combined4), rtol=1e-3, atol=1e-3)
+    assert torch.allclose(tensor, deserialize_torch_tensor(combined4), rtol=1e-3, atol=1e-3)
 
     combined_incomplete = hivemind.utils.combine_from_streaming(chunks4[:5])
     combined_incomplete2 = hivemind.utils.combine_from_streaming(chunks4[:1])
     combined_incomplete3 = hivemind.utils.combine_from_streaming(chunks4[:-1])
     for combined in combined_incomplete, combined_incomplete2, combined_incomplete3:
         with pytest.raises(RuntimeError):
-            hivemind.deserialize_torch_tensor(combined)
+            deserialize_torch_tensor(combined)
             # note: we rely on this being RuntimeError in hivemind.client.averager.allreduce.AllreduceProtocol
 
 

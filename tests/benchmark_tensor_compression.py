@@ -3,7 +3,7 @@ import argparse
 import torch
 
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 
 
 def benchmark_compression(tensor: torch.Tensor, compression_type: CompressionType) -> float:
