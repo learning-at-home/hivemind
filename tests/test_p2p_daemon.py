@@ -263,7 +263,7 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
         return key
 
     server_primary = await P2P.create()
-    server_id = server_primary.id
+    server_endpoint = server_primary.endpoint
     await server_primary.add_stream_handler(handler_name, partial(handler, key="primary"))
 
     server_replica1 = await replicate_if_needed(server_primary, True)
@@ -274,13 +274,13 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
 
     client = await P2P.create()
     await asyncio.sleep(1)
-    result = await client.call_peer_handler(server_id, handler_name, "")
+    result = await client.call_peer_handler(server_endpoint, handler_name, "")
     assert result == "primary"
 
-    result = await client.call_peer_handler(server_id, handler_name + "1", "")
+    result = await client.call_peer_handler(server_endpoint, handler_name + "1", "")
     assert result == "replica1"
 
-    result = await client.call_peer_handler(server_id, handler_name + "2", "")
+    result = await client.call_peer_handler(server_endpoint, handler_name + "2", "")
     assert result == "replica2"
 
     await server_replica1.stop_listening()
@@ -288,9 +288,9 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
 
     # Primary does not handle replicas protocols
     with pytest.raises(P2P.IncompleteRead):
-        await client.call_peer_handler(server_id, handler_name + "1", "")
+        await client.call_peer_handler(server_endpoint, handler_name + "1", "")
     with pytest.raises(P2P.IncompleteRead):
-        await client.call_peer_handler(server_id, handler_name + "2", "")
+        await client.call_peer_handler(server_endpoint, handler_name + "2", "")
 
     await server_primary.stop_listening()
     server_primary.__del__()
