@@ -89,8 +89,8 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
             handler_cancelled = True
         return dht_pb2.PingResponse(
             peer=dht_pb2.NodeInfo(
-                node_id=context.ours_id.encode(), rpc_port=context.ours_port),
-            sender_endpoint=context.handle_name, available=True)
+                node_id=context.ours_id.to_bytes(), rpc_port=context.ours_port),
+            sender_endpoint=context.peer(), available=True)
 
     server_primary = await P2P.create()
     server = await replicate_if_needed(server_primary, replicate)
@@ -105,24 +105,24 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
     assert is_process_running(client_pid)
 
     ping_request = dht_pb2.PingRequest(
-        peer=dht_pb2.NodeInfo(node_id=client.id.encode(), rpc_port=client._host_port),
+        peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes(), rpc_port=client._host_port),
         validate=True)
     expected_response = dht_pb2.PingResponse(
-        peer=dht_pb2.NodeInfo(node_id=server.id.encode(), rpc_port=server._host_port),
-        sender_endpoint=handle_name, available=True)
+        peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes(), rpc_port=server._host_port),
+        sender_endpoint=client.endpoint, available=True)
 
     await asyncio.sleep(1)
-    libp2p_server_id = ID.from_base58(server.id)
-    stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
-
-    await P2P.send_raw_data(ping_request.SerializeToString(), writer)
 
     if should_cancel:
+        stream_info, reader, writer = await client._client.stream_open(
+            server.id, (handle_name,))
+        await P2P.send_raw_data(ping_request.SerializeToString(), writer)
         writer.close()
         await asyncio.sleep(1)
         assert handler_cancelled
     else:
-        result = await P2P.receive_protobuf(dht_pb2.PingResponse, reader)
+        result = await client.call_unary_handler(server.endpoint, handle_name, ping_request,
+                                                 dht_pb2.PingResponse)
         assert result == expected_response
         assert not handler_cancelled
 
@@ -154,8 +154,8 @@ async def test_call_peer_single_process(test_input, handle, handler_name="handle
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
-    await asyncio.sleep(1)
-    result = await client.call_peer_handler(server.id, handler_name, test_input)
+    # await asyncio.sleep(1)
+    result = await client.call_peer_handler(server.endpoint, handler_name, test_input)
     assert result == handle(test_input)
 
     server.__del__()
@@ -193,17 +193,18 @@ async def test_call_peer_different_processes():
     response_received = mp.Value(np.ctypeslib.as_ctypes_type(np.int32))
     response_received.value = 0
 
-    proc = mp.Process(target=server_target, args=(handler_name, server_side, client_side, response_received))
+    proc = mp.Process(target=server_target,
+                      args=(handler_name, server_side, client_side, response_received))
     proc.start()
 
     client = await P2P.create()
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
-    await asyncio.sleep(1)
+    # await asyncio.sleep(1)
     peer_id = client_side.recv()
 
-    result = await client.call_peer_handler(peer_id, handler_name, test_input)
+    result = await client.call_peer_handler(peer_id.to_base58(), handler_name, test_input)
     assert np.allclose(result, handle_square(test_input))
     response_received.value = 1
 
@@ -230,8 +231,8 @@ async def test_call_peer_numpy(test_input, handle, replicate, handler_name="hand
     client_primary = await P2P.create()
     client = await replicate_if_needed(client_primary, replicate)
 
-    await asyncio.sleep(1)
-    result = await client.call_peer_handler(server.id, handler_name, test_input)
+    # await asyncio.sleep(1)
+    result = await client.call_peer_handler(server.endpoint, handler_name, test_input)
     assert np.allclose(result, handle(test_input))
 
 
@@ -250,8 +251,8 @@ async def test_call_peer_error(replicate, handler_name="handle"):
     client_primary = await P2P.create()
     client = await replicate_if_needed(client_primary, replicate)
 
-    await asyncio.sleep(1)
-    result = await client.call_peer_handler(server.id, handler_name,
+    # await asyncio.sleep(1)
+    result = await client.call_peer_handler(server.endpoint, handler_name,
                                             [np.zeros((2, 3)), np.zeros((3, 2))])
     assert type(result) == ValueError
 
@@ -262,7 +263,7 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
         return key
 
     server_primary = await P2P.create()
-    server_id = server_primary.id
+    server_endpoint = server_primary.endpoint
     await server_primary.add_stream_handler(handler_name, partial(handler, key="primary"))
 
     server_replica1 = await replicate_if_needed(server_primary, True)
@@ -273,13 +274,13 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
 
     client = await P2P.create()
     await asyncio.sleep(1)
-    result = await client.call_peer_handler(server_id, handler_name, "")
+    result = await client.call_peer_handler(server_endpoint, handler_name, "")
     assert result == "primary"
 
-    result = await client.call_peer_handler(server_id, handler_name + "1", "")
+    result = await client.call_peer_handler(server_endpoint, handler_name + "1", "")
     assert result == "replica1"
 
-    result = await client.call_peer_handler(server_id, handler_name + "2", "")
+    result = await client.call_peer_handler(server_endpoint, handler_name + "2", "")
     assert result == "replica2"
 
     await server_replica1.stop_listening()
@@ -287,9 +288,9 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
 
     # Primary does not handle replicas protocols
     with pytest.raises(P2P.IncompleteRead):
-        await client.call_peer_handler(server_id, handler_name + "1", "")
+        await client.call_peer_handler(server_endpoint, handler_name + "1", "")
     with pytest.raises(P2P.IncompleteRead):
-        await client.call_peer_handler(server_id, handler_name + "2", "")
+        await client.call_peer_handler(server_endpoint, handler_name + "2", "")
 
     await server_primary.stop_listening()
     server_primary.__del__()

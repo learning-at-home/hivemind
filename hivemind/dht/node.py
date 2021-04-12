@@ -141,6 +141,7 @@ class DHTNode:
                                                  parallel_rpc, cache_size, listen, listen_on, endpoint, record_validator,
                                                  **kwargs)
         self.port = self.protocol.port
+        self.endpoint = self.protocol.client.endpoint
 
         if initial_peers:
             # stage 1: ping initial_peers, add each other to the routing table
@@ -180,6 +181,9 @@ class DHTNode:
         """ Internal init method. Please use DHTNode.create coroutine to spawn new node instances """
         assert _initialized_with_create, " Please use DHTNode.create coroutine to spawn new node instances "
         super().__init__()
+
+    def __del__(self):
+        self.protocol.__del__()
 
     async def shutdown(self, timeout=None):
         """ Process existing requests, close all connections and stop the server """
@@ -233,7 +237,7 @@ class DHTNode:
         for query, nearest_nodes in nearest_nodes_per_query.items():
             if not exclude_self:
                 nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query.xor_distance)
-                node_to_endpoint[self.node_id] = f"{LOCALHOST}:{self.port}"
+                node_to_endpoint[self.node_id] = self.endpoint
             nearest_nodes_with_endpoints[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
         return nearest_nodes_with_endpoints
 
