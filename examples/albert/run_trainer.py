@@ -176,7 +176,9 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
+    print('Starting DHT')
     dht = DHT(initial_peers=[collaboration_args.initial_peers], start=True)
+    print('DHT OK')
 
     collaborative_optimizer = CollaborativeOptimizer(
         opt=opt,
@@ -190,6 +192,8 @@ def main():
         client_mode=collaboration_args.client_mode,
         verbose=True
     )
+
+    print('ColOpt is created')
 
     def noop(*args, **kwargs):
         if noop.visited < 5:
@@ -209,6 +213,8 @@ def main():
         optimizers=(collaborative_optimizer, scheduler),
         callbacks=[CustomLoggingCallback(dht, collaborative_optimizer, collaboration_args, uuid.uuid4().hex)]
     )
+
+    print('Trainer is created')
 
     # Training
     if training_args.do_train:
