@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 import time
-import uuid
 import argparse
 import hivemind
+import wandb
 
 
 def get_public_ip():
@@ -34,6 +34,29 @@ if __name__ == '__main__':
 
     dht = hivemind.DHT(start=True, listen_on=args.listen_on, endpoint=f"{args.address}:*")
     print(f"Running DHT root at {args.address}:{dht.port}", flush=True)
+
+    wandb.init(project="Demo-run")
+
+    t = -1
+    num = 1
+    den = 1
+
     while True:
-        dht.get(uuid.uuid4().bytes, latest=True)
+        u = dht.get('my_progress', latest=True)
+        if u is not None:
+            u = u.value
+            c = [u[a].value for a in u]
+            p = max(c)[0]
+            if p != t:
+                t = p
+                den = 0
+                num = 0
+                for a, b in c:
+                    if a == p:
+                        num += b
+                        den += 1
+                wandb.log({
+                    "loss": num / den
+                })
+            print(num / den, flush=True)
         time.sleep(args.refresh_period)

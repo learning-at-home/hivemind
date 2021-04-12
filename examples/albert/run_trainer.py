@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+import uuid
 
 from datasets import load_from_disk
 import transformers
@@ -16,6 +17,7 @@ from transformers.trainer import Trainer
 from torch_optimizer import Lamb
 
 
+import hivemind
 from hivemind.client import CollaborationArguments
 from hivemind.client.optim import CollaborativeOptimizer
 from hivemind import DHT
@@ -41,8 +43,6 @@ class AlbertTrainingArguments(TrainingArguments):
     dataloader_num_workers: int = 8
     per_device_train_batch_size: int = 4
     per_device_eval_batch_size: int = 4
-    gradient_accumulation_steps: int = 2
-    # ^-- note: this is NOT the number of accumulation steps for each parameter update
     seq_length: int = 512
 
     max_steps: int = 1_000_000  # Albert is actually ready after 125000 steps
@@ -50,8 +50,8 @@ class AlbertTrainingArguments(TrainingArguments):
     warmup_steps: int = 5000
     adam_epsilon: float = 1e-6
     weight_decay: float = 0.01
-    max_grad_norm: float = 10.0
-    clamp_value: float = 10.0
+    max_grad_norm: float = 1.0
+    clamp_value: float = 10000.0
 
     fp16: bool = True
     fp16_opt_level: str = 'O2'
@@ -129,6 +129,32 @@ def get_optimizer_and_scheduler(training_args, model):
     return opt, scheduler
 
 
+class CustomLoggingCallback(transformers.TrainerCallback):
+    def __init__(self, dht: DHT, collaborative_optimizer: CollaborativeOptimizer,
+                 collaboration_args: CollaborationArguments, trainer_uuid):
+        self.dht = dht
+        self.collaborative_optimizer = collaborative_optimizer
+        self.statistics_expiration = collaboration_args.statistics_expiration
+        self.trainer_uuid = trainer_uuid
+
+    def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
+                    control: transformers.TrainerControl, **kwargs):
+        control.should_log = True
+
+        if state.log_history:
+            tr_loss = state.log_history[-1]['loss']
+
+            my_info = [
+                self.collaborative_optimizer.local_step, tr_loss / self.collaborative_optimizer.local_steps_accumulated
+            ]
+
+            self.dht.store(self.my_progess_key, subkey=self.trainer_uuid, value=my_info,
+                           expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
+                           return_future=True)
+
+        return control
+
+
 def main():
     parser = HfArgumentParser((AlbertTrainingArguments, DatasetArguments, CollaborationArguments))
     training_args, dataset_args, collaboration_args = parser.parse_args_into_dataclasses()
@@ -150,17 +176,29 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
+    dht = DHT(initial_peers=[collaboration_args.initial_peers], start=True)
+
     collaborative_optimizer = CollaborativeOptimizer(
         opt=opt,
         scheduler=scheduler,
-        dht=DHT(initial_peers=[collaboration_args.initial_peers], start=True),
+        dht=dht,
         prefix=collaboration_args.dht_key_for_averaging,
         target_group_size=collaboration_args.target_group_size,
         target_batch_size=collaboration_args.target_batch_size,
         batch_size_per_step=training_args.per_device_train_batch_size,
         start=True,
-        client_mode=collaboration_args.client_mode
+        client_mode=collaboration_args.client_mode,
+        verbose=True
     )
+
+    def noop(*args, **kwargs):
+        if noop.visited < 5:
+            print('Zero grad is successfully overwritten')
+            noop.visited += 1
+
+    noop.visited = 0
+
+    model.zero_grad = noop
 
     trainer = Trainer(
         model=model, args=training_args,
@@ -168,7 +206,8 @@ def main():
         eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        optimizers=(collaborative_optimizer, scheduler)
+        optimizers=(collaborative_optimizer, scheduler),
+        callbacks=[CustomLoggingCallback(dht, collaborative_optimizer, collaboration_args, uuid.uuid4().hex)]
     )
 
     # Training
