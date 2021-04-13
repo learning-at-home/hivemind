@@ -214,8 +214,6 @@ def main():
         callbacks=[CustomLoggingCallback(dht, collaborative_optimizer, collaboration_args, uuid.uuid4().hex)]
     )
 
-    print('Trainer is created')
-
     # Training
     if training_args.do_train:
         latest_checkpoint_dir = max(

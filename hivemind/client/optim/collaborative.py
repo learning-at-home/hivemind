@@ -113,6 +113,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.collaboration_state_updater = Thread(target=self.check_collaboration_state_periodically, daemon=True,
                                                   name=f"{self}.collaboration_state_updater")
         self.collaboration_state_updater.start()
+        # Flag to implement transformers.Trainer compatible workaround. See perform_custom_amp_scaling
         self._step_supports_amp_scaling = True
 
     def _make_averager(self, **kwargs):
@@ -139,6 +140,19 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.reset_accumulated_grads_()
             self.update_scheduler()
 
+    def perform_custom_amp_scaling(self, scaler):
+        inv_scale = scaler._scale.double().reciprocal().float()
+        found_inf = torch.full((1,), 0.0, dtype=torch.float32, device=scaler._scale.device)
+        unscaled = scaler._unscale_grads_(self, inv_scale, found_inf, False)
+        with torch.no_grad():
+            for group in self.opt.param_groups:
+                for param in group["params"]:
+                    if param.grad is None:
+                        continue
+
+                    if not torch.all(torch.isfinite(param.grad)):
+                        param.grad.data.fill_(0.)
+
     def step(self, batch_size: Optional[int] = None, **kwargs):
         """
         Report accumulating gradients w.r.t. batch_size additional samples, optionally update model parameters
@@ -157,6 +171,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             logger.log(self.status_loglevel, "Peer is out of sync.")
             self.load_state_from_peers()
             return
+
+        if 'grad_scaler' in kwargs:
+            self.perform_custom_amp_scaling(kwargs.pop('grad_scaler'))
 
         if self.last_step_time is not None and get_dht_time() - self.last_step_time > self.metadata_expiration:
             logger.warning(f"Training step took {get_dht_time() - self.last_step_time}, "
