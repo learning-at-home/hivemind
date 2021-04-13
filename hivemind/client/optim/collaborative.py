@@ -16,7 +16,6 @@ from hivemind.client.optim.performance_ema import PerformanceEMA
 logger = get_logger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
 
-CNT = 0
 
 @dataclass(frozen=False)
 class CollaborationState:
@@ -127,11 +126,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     @property
     def is_synchronized(self) -> bool:
-        print(f'Local step: {self.local_step}, opt_step: {self.collaboration_state.optimizer_step}')
         return self.local_step >= self.collaboration_state.optimizer_step
 
     def is_alive(self) -> bool:
-        print('Alive?', self.averager.is_alive())
         return self.averager.is_alive()
 
     def load_state_from_peers(self, **kwargs):
@@ -157,7 +154,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         batch_size = batch_size if batch_size is not None else self.batch_size_per_step
 
         if not self.is_synchronized:
-            print('Not sync!')
+            logger.log(self.status_loglevel, "Peer is out of sync.")
             self.load_state_from_peers()
             return
 
@@ -172,11 +169,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.local_steps_accumulated += 1
             self.performance_ema.update(num_processed=self.batch_size_per_step)
             self.should_report_progress.set()
-            #
-            # print('Set should_report_progress')
 
         if not self.collaboration_state.ready_for_step:
-            # print('Not ready for step')
             return
 
         logger.log(self.status_loglevel, "Averaging parameters and gradients with peers...")
