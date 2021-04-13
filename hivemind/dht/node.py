@@ -65,11 +65,12 @@ class DHTNode:
 
     """
     # fmt:off
-    node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
+    #TODO remove port
+    node_id: DHTID; is_alive: bool; endpoint: Endpoint; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     chunk_size: int; refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
     cache_on_store: bool; reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedSet[_SearchState]]
     cache_refresh_task: Optional[asyncio.Task]; cache_refresh_evt: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
-    blacklist: Blacklist
+    blacklist: Blacklist;
     # fmt:on
 
     @classmethod
@@ -181,9 +182,6 @@ class DHTNode:
         """ Internal init method. Please use DHTNode.create coroutine to spawn new node instances """
         assert _initialized_with_create, " Please use DHTNode.create coroutine to spawn new node instances "
         super().__init__()
-
-    def __del__(self):
-        self.protocol.__del__()
 
     async def shutdown(self, timeout=None):
         """ Process existing requests, close all connections and stop the server """

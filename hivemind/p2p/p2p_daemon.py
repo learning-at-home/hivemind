@@ -5,7 +5,6 @@ import pickle
 import signal
 import subprocess
 import typing as tp
-import warnings
 
 import google.protobuf
 from multiaddr import Multiaddr
@@ -14,6 +13,10 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import ID, StreamInfo
 from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure
 
 from hivemind.utils.networking import find_open_port
+from hivemind.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 class P2PContext(object):
@@ -68,8 +71,8 @@ class P2P(object):
             try:
                 self._initialize(proc_args)
                 await self._identify_client(P2P.RETRY_DELAY * (2 ** try_count))
-            except Exception as exc:
-                warnings.warn("Failed to initialize p2p daemon: " + str(exc), RuntimeWarning)
+            except Exception as e:
+                logger.debug(f"Failed to initialize p2p daemon: {e}", RuntimeWarning)
                 self._kill_child()
                 if try_count == P2P.NUM_RETRIES - 1:
                     raise
@@ -173,7 +176,8 @@ class P2P(object):
             try:
                 request = await P2P.receive_data(reader)
             except P2P.IncompleteRead:
-                warnings.warn("Incomplete read while receiving request from peer", RuntimeWarning)
+                if self.is_alive:
+                    logger.warning("Incomplete read while receiving request from peer")
                 writer.close()
                 return
             try:
@@ -200,11 +204,10 @@ class P2P(object):
                 try:
                     request = await P2P.receive_protobuf(in_proto_type, reader)
                 except P2P.IncompleteRead:
-                    warnings.warn("Incomplete read while receiving request from peer",
-                                  RuntimeWarning)
+                    logger.warning("Incomplete read while receiving request from peer")
                     return
                 except google.protobuf.message.DecodeError as error:
-                    warnings.warn(repr(error), RuntimeWarning)
+                    logger.warning(repr(error))
                     return
 
                 context.peer_id, context.peer_addr = stream_info.peer_id, stream_info.addr
@@ -293,6 +296,13 @@ class P2P(object):
     def __del__(self):
         self._kill_child()
 
+    @property
+    def is_alive(self):
+        return self._child.is_alive
+
+    async def shutdown(self, timeout=None):
+        await asyncio.get_event_loop().run_in_executor(None, self._kill_child)
+
     def _kill_child(self):
         if self._child is not None and self._child.poll() is None:
             self._child.kill()
@@ -303,7 +313,7 @@ class P2P(object):
             self._kill_child()
 
         signal.signal(signal.SIGTERM, _handler)
-        await asyncio.Event().wait()
+        await asyncio.Event().wait() #TODO justify this
 
     def _make_process_args(self, *args, **kwargs) -> tp.List[str]:
         proc_args = []

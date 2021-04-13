@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 class DHTProtocol(dht_grpc.DHTServicer):
     # fmt:off
     node_id: DHTID; port: int; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
-    channel_options: Tuple[Tuple[str, Any]]; server: P2P
+    channel_options: Tuple[Tuple[str, Any]]; client: P2P; server: Optional[P2P]
     storage: DHTLocalStorage; cache: DHTLocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
     record_validator: Optional[RecordValidatorBase]
     # fmt:on
@@ -89,17 +89,15 @@ class DHTProtocol(dht_grpc.DHTServicer):
         assert _initialized_with_create, " Please use DHTProtocol.create coroutine to spawn new protocol instances "
         super().__init__()
 
-    def __del__(self):
-        self.client.__del__()
-
     async def shutdown(self, timeout=None):
         """ Process existing requests, close all connections and stop the server """
         if self.server:
             await self.server.stop_listening()
+            await self.client.shutdown(timeout)
         else:
             logger.warning("DHTProtocol has no server (due to listen=False), it doesn't need to be shut down")
 
-    class DHTStub:
+    class DHTStub: #TODO refactor this
         def __init__(self, protocol: DHTProtocol, peer: Endpoint):
             self.protocol = protocol
             self.peer = peer
