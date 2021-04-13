@@ -171,8 +171,10 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
         tensor = construct_torch_tensor(array, serialized_tensor.size, torch.float32)
 
     elif serialized_tensor.compression in (CompressionType.QUANTILE_8BIT, CompressionType.UNIFORM_8BIT):
-        lookup = serialized_tensor.buffer[:NUM_COMPRESSION_QUANTILES * NUM_BYTES_FLOAT32]
-        quantized = serialized_tensor.buffer[NUM_COMPRESSION_QUANTILES * NUM_BYTES_FLOAT32:]
+        lookup_size = NUM_COMPRESSION_QUANTILES * NUM_BYTES_FLOAT32 \
+            if serialized_tensor.compression == CompressionType.QUANTILE_8BIT else UINT8_RANGE * NUM_BYTES_FLOAT32
+        lookup = serialized_tensor.buffer[:lookup_size]
+        quantized = serialized_tensor.buffer[lookup_size:]
         lookup = torch.as_tensor(np.frombuffer(lookup, dtype=np.float32))
         quantized = np.frombuffer(quantized, dtype=np.uint8)
         quantized = construct_torch_tensor(quantized, serialized_tensor.size, dtype=torch.int64)
