@@ -176,8 +176,7 @@ class P2P(object):
             try:
                 request = await P2P.receive_data(reader)
             except P2P.IncompleteRead:
-                if self.is_alive:
-                    logger.warning("Incomplete read while receiving request from peer")
+                logger.debug("Incomplete read while receiving request from peer")
                 writer.close()
                 return
             try:
@@ -204,7 +203,7 @@ class P2P(object):
                 try:
                     request = await P2P.receive_protobuf(in_proto_type, reader)
                 except P2P.IncompleteRead:
-                    logger.warning("Incomplete read while receiving request from peer")
+                    logger.debug("Incomplete read while receiving request from peer")
                     return
                 except google.protobuf.message.DecodeError as error:
                     logger.warning(repr(error))
@@ -308,12 +307,12 @@ class P2P(object):
             self._child.kill()
             self._child.wait()
 
-    async def wait_for_termination(self):
+    async def wait_for_termination(self):  #TODO what does this do?
         def _handler(signum, frame):
             self._kill_child()
 
         signal.signal(signal.SIGTERM, _handler)
-        await asyncio.Event().wait() #TODO justify this
+        await asyncio.Event().wait()
 
     def _make_process_args(self, *args, **kwargs) -> tp.List[str]:
         proc_args = []
