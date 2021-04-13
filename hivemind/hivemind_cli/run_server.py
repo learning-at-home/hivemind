@@ -53,8 +53,7 @@ def main():
     parser.add_argument('--increase_file_limit', action='store_true',
                         help='On *nix, this will increase the max number of processes '
                              'a server can spawn before hitting "Too many open files"; Use at your own risk.')
-    parser.add_argument('--compression', type=str, default='NONE', required=False, help='Tensor compression '
-                        'parameter for grpc. Can be NONE, MEANSTD or FLOAT16')
+    parser.add_argument('--compression', type=str, default='NONE', required=False, help='Tensor compression for gRPC')
     parser.add_argument('--checkpoint_dir', type=Path, required=False, help='Directory to store expert checkpoints')
     parser.add_argument('--stats_report_interval', type=int, required=False,
                         help='Interval between two reports of batch processing performance statistics')
@@ -79,10 +78,7 @@ def main():
         increase_file_limit()
 
     compression_type = args.pop("compression")
-    if compression_type == "MEANSTD":
-        compression = CompressionType.MEANSTD_LAST_AXIS_FLOAT16
-    else:
-        compression = getattr(CompressionType, compression_type)
+    compression = getattr(CompressionType, compression_type)
 
     server = Server.create(**args, optim_cls=optim_cls, start=True, compression=compression)
 

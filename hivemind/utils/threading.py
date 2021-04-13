@@ -1,7 +1,7 @@
 import os
 from concurrent.futures import Future, ThreadPoolExecutor
 
-from hivemind.utils import get_logger
+from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
