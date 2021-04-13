@@ -7,7 +7,7 @@ from hivemind.server.layers.common import FeedforwardBlock, TransformerEncoderLa
 from hivemind.server.layers.dropout import DeterministicDropout, DeterministicDropoutNetwork
 from hivemind.server.layers.lr_schedule import get_linear_schedule_with_warmup
 
-from hivemind.server.layers.custom_experts import *
+from hivemind.server.layers.custom_experts import add_custom_models_from_file, register_expert_class
 
 import hivemind.server.layers.common
 import hivemind.server.layers.dropout

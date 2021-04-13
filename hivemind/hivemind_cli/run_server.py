@@ -1,10 +1,8 @@
 from functools import partial
 from pathlib import Path
 
-import os
 import configargparse
 import torch
-import importlib
 
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.server import Server
