@@ -164,10 +164,16 @@ class NoOpScheduler:
         pass
 
     def get_lr(self):
-        return 1
+        return [1., 1.]
+
+    def print_lr(self, is_verbose, group, lr, epoch=None):
+        pass
 
     def step(self):
         print('NoOpScheduler step called')
+
+    def get_last_lr(self):
+        return [1., 1.]
 
 
 def main():
@@ -218,8 +224,6 @@ def main():
     noop.visited = 0
 
     model.zero_grad = noop
-
-
 
     trainer = Trainer(
         model=model, args=training_args,
