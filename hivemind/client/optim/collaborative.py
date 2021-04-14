@@ -68,7 +68,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param metadata_expiration: peer's metadata (e.g. samples processed) is stored onto DHT for this many seconds
     :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
     :param scheduler: if specified, use this scheduler to update optimizer learning rate
-    :param reuse_grads_accumulators: if True, use model's .grad buffers for gradient accumulation.
+    :param reuse_grad_accumulators: if True, use model's .grad buffers for gradient accumulation.
       This is more memory efficient, but it requires that the user does *NOT* call model/opt zero_grad at all
     :param accumulate_grads_on: if specified, accumulate gradients on this device. By default, this will use the same
      device as model parameters. One can specify a different device (e.g. 'cpu' vs 'cuda') to save device memory at
