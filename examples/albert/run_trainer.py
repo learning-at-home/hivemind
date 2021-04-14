@@ -200,9 +200,8 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
-    # TODO: many initial peers
     dht = DHT(
-        initial_peers=[collaboration_args.initial_peers],
+        initial_peers=list(map(str.strip, collaboration_args.initial_peers.split(','))),
         start=True,
         listen=not collaboration_args.client_mode,
     )
