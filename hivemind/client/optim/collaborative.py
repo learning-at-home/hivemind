@@ -230,6 +230,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     @torch.no_grad()
     def apply_accumulated_grads_(self, scale_by: Optional[float] = None):
+        if self.reuse_grad_buffers:
+            return
         for grad_buf, grad_acc in zip(self._grad_buffers(), self.accumulated_grads()):
             grad_buf[...] = grad_acc.to(grad_buf.device)
             if scale_by is not None:
@@ -237,6 +239,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     @torch.no_grad()
     def reset_accumulated_grads_(self):
+        if self.reuse_grad_buffers:
+            return
         for grad_buf in self._grad_buffers():
             grad_buf.zero_()
 
