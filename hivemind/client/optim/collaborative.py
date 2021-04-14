@@ -73,7 +73,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param accumulate_grads_on: if specified, accumulate gradients on this device. By default, this will use the same
      device as model parameters. One can specify a different device (e.g. 'cpu' vs 'cuda') to save device memory at
      the cost of extra time per step. If reuse_gradient_accumulators is True, this parameter has no effect.
-    :param kwargs: additional parameters are forwarded to DecentralizedAverager parameters
+    :param kwargs: additional parameters forwarded to DecentralizedAverager
     :note: if you are using CollaborativeOptimizer with a lr_scheduler, it is recommended to pass this scheduler
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
     """
