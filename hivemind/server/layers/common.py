@@ -70,7 +70,7 @@ transformer_sample_input = lambda batch_size, hid_dim: \
 class TunedTransformer(TransformerEncoderLayer):
 
     def __init__(self, hid_dim):
-        super(TunedTransformer, self).__init__(hid_dim, dim_feedforward=4 * hid_dim, nhead=16)
+        super().__init__(hid_dim, dim_feedforward=4 * hid_dim, nhead=16)
 
 
 nop_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
