@@ -15,6 +15,7 @@ from transformers.optimization import get_linear_schedule_with_warmup
 from transformers.trainer_utils import is_main_process
 from transformers.trainer import Trainer
 from torch_optimizer import Lamb
+import torch
 
 
 import hivemind
@@ -24,6 +25,7 @@ from hivemind import DHT
 
 
 logger = logging.getLogger(__name__)
+LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
 
 
 @dataclass
@@ -118,7 +120,8 @@ def get_optimizer_and_scheduler(training_args, model):
         betas=(training_args.adam_beta1, training_args.adam_beta2),
         eps=training_args.adam_epsilon,
         weight_decay=training_args.weight_decay,
-        debias=True, clamp_value=training_args.clamp_value,
+        debias=True,
+        clamp_value=training_args.clamp_value,
     )
 
     scheduler = get_linear_schedule_with_warmup(
@@ -156,7 +159,7 @@ class CustomLoggingCallback(transformers.TrainerCallback):
         return control
 
 
-class NoOpScheduler:
+class NoOpScheduler(LRSchedulerBase):
     def state_dict(self):
         return {}
 
@@ -197,6 +200,7 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
+    # TODO: many initial peers
     dht = DHT(
         initial_peers=[collaboration_args.initial_peers],
         start=True,
@@ -210,20 +214,12 @@ def main():
         prefix=collaboration_args.dht_key_for_averaging,
         target_group_size=collaboration_args.target_group_size,
         target_batch_size=collaboration_args.target_batch_size,
+        # TODO: multiple GPUs
         batch_size_per_step=training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps,
         start=True,
         client_mode=collaboration_args.client_mode,
         verbose=True
     )
-
-    def noop(*args, **kwargs):
-        if noop.visited < 5:
-            print('Zero grad is successfully overwritten')
-            noop.visited += 1
-
-    noop.visited = 0
-
-    model.zero_grad = noop
 
     trainer = Trainer(
         model=model, args=training_args,
