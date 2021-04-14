@@ -206,7 +206,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                 for param_group in self.opt.param_groups for param in param_group['parameters']]
 
     @property
-    def accumulated_grads(self):
+    def accumulated_grads(self) -> Sequence[torch.Tensor]:
         """ local gradient accumulators """
         if self.reuse_grad_buffers:
             return self._grad_buffers
