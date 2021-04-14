@@ -241,7 +241,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     def reset_accumulated_grads_(self):
         if self.reuse_grad_buffers:
             return
-        for grad_buf in self._grad_buffers():
+        for grad_buf in self.accumulated_grads():
             grad_buf.zero_()
 
     def report_training_progress(self):
