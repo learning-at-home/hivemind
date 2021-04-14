@@ -132,7 +132,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.averager.load_state_from_peers(**kwargs)
             self.local_samples_accumulated = self.local_steps_accumulated = 0
             self.update_scheduler()
-            self.opt.zero_grad()
+            self.reset_accumulated_grads_()
+            if self.reuse_grad_buffers:
+                self.opt.zero_grad()
 
     def step(self, batch_size: Optional[int] = None, **kwargs):
         """
