@@ -2,7 +2,7 @@ from __future__ import annotations
 import warnings
 from dataclasses import dataclass
 from threading import Thread, Lock, Event
-from typing import Optional, Sequence
+from typing import Optional, Iterator
 import logging
 
 import torch
@@ -68,7 +68,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param metadata_expiration: peer's metadata (e.g. samples processed) is stored onto DHT for this many seconds
     :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
     :param scheduler: if specified, use this scheduler to update optimizer learning rate
-    :param reuse_grad_accumulators: if True, use model's .grad buffers for gradient accumulation.
+    :param reuse_grad_buffers: if True, use model's .grad buffers for gradient accumulation.
       This is more memory efficient, but it requires that the user does *NOT* call model/opt zero_grad at all
     :param accumulate_grads_on: if specified, accumulate gradients on this device. By default, this will use the same
      device as model parameters. One can specify a different device (e.g. 'cpu' vs 'cuda') to save device memory at
@@ -145,6 +145,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if self.batch_size_per_step is None:
             if batch_size is None:
                 raise ValueError("Please either set batch_size_per_step parameter at init or when calling .step")
+            logger.log(self.status_loglevel, f"Setting default batch_size_per_step to {batch_size}")
             self.batch_size_per_step = batch_size
         batch_size = batch_size if batch_size is not None else self.batch_size_per_step
 
@@ -199,20 +200,19 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             logger.log(self.status_loglevel, f"Optimizer step: done!")
             return output
 
-    @property
-    def _grad_buffers(self) -> Sequence[torch.Tensor]:
+    def _grad_buffers(self) -> Iterator[torch.Tensor]:
         """ pytorch-internal gradient buffers """
         return [param.grad if param.grad is not None else torch.zeros_like(param)
                 for param_group in self.opt.param_groups for param in param_group['params']]
 
-    @property
-    def accumulated_grads(self) -> Sequence[torch.Tensor]:
+    @torch.no_grad()
+    def accumulated_grads(self) -> Iterator[torch.Tensor]:
         """ local gradient accumulators """
         if self.reuse_grad_buffers:
-            return self._grad_buffers
+            yield from self._grad_buffers()
         elif self._grads is None:
             with torch.no_grad():
-                self._grads = [torch.zeros_like(grad, device=self.accumulate_grads_on) for grad in self._grad_buffers]
+                self._grads = [torch.zeros_like(grad, device=self.accumulate_grads_on) for grad in self._grad_buffers()]
         return self._grads
 
     @torch.no_grad()
@@ -221,19 +221,19 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if self.reuse_grad_buffers:
             return  # user is responsible for accumulating gradients in .grad buffers
         alpha = float(batch_size) / self.batch_size_per_step
-        for grad_buf, grad_acc in zip(self._grad_buffers, self.accumulated_grads):
+        for grad_buf, grad_acc in zip(self._grad_buffers(), self.accumulated_grads()):
             grad_acc.add_(grad_buf.to(grad_acc.device), alpha=alpha)
 
     @torch.no_grad()
     def apply_accumulated_grads_(self, scale_by: Optional[float] = None):
-        for grad_buf, grad_acc in zip(self._grad_buffers, self.accumulated_grads):
+        for grad_buf, grad_acc in zip(self._grad_buffers(), self.accumulated_grads()):
             grad_buf[...] = grad_acc.to(grad_buf.device)
             if scale_by is not None:
                 grad_buf.mul_(scale_by)
 
     @torch.no_grad()
     def reset_accumulated_grads_(self):
-        for grad_buf in self._grad_buffers:
+        for grad_buf in self._grad_buffers():
             grad_buf.zero_()
 
     def report_training_progress(self):
