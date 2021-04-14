@@ -203,7 +203,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     def _grad_buffers(self) -> Sequence[torch.Tensor]:
         """ pytorch-internal gradient buffers """
         return [param.grad if param.grad is not None else torch.zeros_like(param)
-                for param_group in self.opt.param_groups for param in param_group['parameters']]
+                for param_group in self.opt.param_groups for param in param_group['params']]
 
     @property
     def accumulated_grads(self) -> Sequence[torch.Tensor]:
