@@ -43,6 +43,7 @@ class AlbertTrainingArguments(TrainingArguments):
     dataloader_num_workers: int = 8
     per_device_train_batch_size: int = 4
     per_device_eval_batch_size: int = 4
+    gradient_accumulation_steps: int = 2
     seq_length: int = 512
 
     max_steps: int = 1_000_000  # Albert is actually ready after 125000 steps
@@ -155,6 +156,20 @@ class CustomLoggingCallback(transformers.TrainerCallback):
         return control
 
 
+class NoOpScheduler:
+    def state_dict(self):
+        return {}
+
+    def load_state_dict(self, state_dict):
+        pass
+
+    def get_lr(self):
+        return 1
+
+    def step(self):
+        print('NoOpScheduler step called')
+
+
 def main():
     parser = HfArgumentParser((AlbertTrainingArguments, DatasetArguments, CollaborationArguments))
     training_args, dataset_args, collaboration_args = parser.parse_args_into_dataclasses()
@@ -189,7 +204,7 @@ def main():
         prefix=collaboration_args.dht_key_for_averaging,
         target_group_size=collaboration_args.target_group_size,
         target_batch_size=collaboration_args.target_batch_size,
-        batch_size_per_step=training_args.per_device_train_batch_size,
+        batch_size_per_step=training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps,
         start=True,
         client_mode=collaboration_args.client_mode,
         verbose=True
@@ -204,13 +219,15 @@ def main():
 
     model.zero_grad = noop
 
+
+
     trainer = Trainer(
         model=model, args=training_args,
         train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
         eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        optimizers=(collaborative_optimizer, scheduler),
+        optimizers=(collaborative_optimizer, NoOpScheduler()),
         callbacks=[CustomLoggingCallback(dht, collaborative_optimizer, collaboration_args, uuid.uuid4().hex)]
     )
 
