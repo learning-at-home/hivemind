@@ -1,6 +1,8 @@
 import torch
 from torch import nn as nn
 
+from hivemind.server.layers.custom_experts import register_expert_class
+
 
 # https://github.com/huggingface/transformers/blob/master/src/transformers/activations.py
 @torch.jit.script
@@ -8,7 +10,10 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + torch.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x)))
 
 
+ffn_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
+@register_expert_class('ffn', ffn_sample_input)
 class FeedforwardBlock(nn.Module):
+
     def __init__(self, hid_dim):
         super().__init__()
         self.ffn = nn.Linear(hid_dim, 4 * hid_dim)
@@ -58,7 +63,20 @@ class TransformerEncoderLayer(nn.Module):
         return src
 
 
+transformer_sample_input = lambda batch_size, hid_dim: \
+    (torch.empty((batch_size, 128, hid_dim)), \
+    torch.empty((batch_size, 128), dtype=torch.bool))
+@register_expert_class('transformer', transformer_sample_input)
+class TunedTransformer(TransformerEncoderLayer):
+
+    def __init__(self, hid_dim):
+        super().__init__(hid_dim, dim_feedforward=4 * hid_dim, nhead=16)
+
+
+nop_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
+@register_expert_class('nop', nop_sample_input)
 class NopExpert(nn.Sequential):
+
     def __init__(self, hid_dim):
         super().__init__()
         self.w = nn.Parameter(torch.zeros(0), requires_grad=True)

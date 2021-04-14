@@ -96,6 +96,9 @@ class ExpertBackend:
         """
         args, kwargs = nested_pack(inputs, structure=self.forward_schema)
 
+        if args[0].shape[0] == 0:
+            raise RuntimeError("Batch should contain more than 0 samples")
+
         with torch.no_grad():
             outputs = self.expert(*args, **kwargs)
 
