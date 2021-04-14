@@ -226,7 +226,7 @@ def main():
         eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        optimizers=(collaborative_optimizer, NoOpScheduler()),
+        optimizers=(collaborative_optimizer, NoOpScheduler(collaborative_optimizer)),
         callbacks=[CustomLoggingCallback(dht, collaborative_optimizer, collaboration_args, uuid.uuid4().hex)]
     )
 
