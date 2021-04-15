@@ -232,7 +232,7 @@ def main():
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
     dht = hivemind.DHT(
-        initial_peers=list(map(str.strip, collaboration_args_dict.pop('initial_peers').split(','))),
+        initial_peers=collaboration_args_dict.pop('initial_peers'),
         listen=not collaboration_args_dict['client_mode'], listen_on=collaboration_args_dict.pop('dht_listen_on'),
         endpoint=collaboration_args_dict.pop('endpoint'), start=True)
 
