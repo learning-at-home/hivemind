@@ -97,7 +97,6 @@ class AlbertTrainingArguments(TrainingArguments):
     logging_steps: int = 10 ** 10
 
 
-
 def setup_logging(training_args):
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -253,7 +252,12 @@ def main():
         verbose=True, start=True, **collaboration_args_dict
     )
 
-    trainer = Trainer(
+    class _Trainer(Trainer):
+        def compute_loss(self, model, inputs):
+            print("DEBUG:", inputs) # debugpring, will be removed
+            return super().compute_loss(model, inputs)
+
+    trainer = _Trainer(
         model=model, args=training_args, tokenizer=tokenizer, data_collator=data_collator,
         train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
         eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
