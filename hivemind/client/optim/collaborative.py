@@ -31,8 +31,8 @@ class CollaborationState:
     def ready_for_step(self):
         return self.samples_accumulated >= self.target_batch_size or get_dht_time() >= self.eta_next_step
 
-    def register_step(self):
-        self.optimizer_step += 1
+    def register_step(self, local_step: int):
+        self.optimizer_step = max(local_step, self.optimizer_step)
         self.samples_accumulated = 0
         self.eta_next_step = float('inf')
 
@@ -96,8 +96,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration
         self._grads, self.reuse_grad_buffers, self.accumulate_grads_on = None, reuse_grad_buffers, accumulate_grads_on
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
-        self.client_mode = client_mode
         self.averager = self._make_averager(**kwargs)
+        self.client_mode = client_mode
 
         self.training_progress_key = f"{self.prefix}_progress"
         self.local_samples_accumulated = 0  # a number of local samples accumulated since last optimizer update
@@ -172,7 +172,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not self.collaboration_state.ready_for_step:
             return
 
-        logger.log(self.status_loglevel, "Averaging parameters and gradients with peers...")
+        logger.log(self.status_loglevel, f"Beginning global optimizer step {self.collaboration_state.optimizer_step}")
         self.collaboration_state = self.fetch_collaboration_state()
         self.collaboration_state_updated.set()
 
@@ -183,26 +183,32 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         with self.performance_ema.pause(), self.lock_collaboration_state:
             # divide accumulators by local steps to recover the true average grad w.r.t. local_samples_accumulated
             self.apply_accumulated_grads_(scale_by=1. / self.local_steps_accumulated)
+            current_step, group_info = self.averager.local_step, None
 
             if self.collaboration_state.num_peers > 1:
                 mean_samples_per_worker = self.target_batch_size / self.collaboration_state.num_peers
                 weight = self.local_samples_accumulated / mean_samples_per_worker
-                output = self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
+                try:
+                    group_info = self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
+                    if group_info:
+                        logger.log(self.status_loglevel, f"Averaged tensors successfully with {len(group_info)} peers")
+                except Exception as e:
+                    logger.log(self.status_loglevel, f"Skipped averaging: averaging round failed with {e}.")
+
             else:
                 logger.log(self.status_loglevel, f"Skipped averaging: collaboration consists of "
                                                  f"{self.collaboration_state.num_peers} peer(s).")
-                output = None
-                self.averager.local_step += 1
 
             self.opt.step()
             self.reset_accumulated_grads_()
             self.local_samples_accumulated = self.local_steps_accumulated = 0
-            self.collaboration_state.register_step()
+            self.collaboration_state.register_step(current_step + 1)
+            self.averager.local_step = current_step + 1
             self.collaboration_state_updated.set()
             self.update_scheduler()
 
             logger.log(self.status_loglevel, f"Optimizer step: done!")
-            return output
+            return group_info
 
     def _grad_buffers(self) -> Iterator[torch.Tensor]:
         """ pytorch-internal gradient buffers """
