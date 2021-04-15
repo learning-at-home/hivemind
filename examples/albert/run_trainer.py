@@ -249,7 +249,6 @@ def main():
     class TrainerWithIndependentShuffling(Trainer):
         def get_train_dataloader(self) -> DataLoader:
             """ Shuffle data independently for each peer to avoid duplicating batches [important for quality] """
-            print('CALLBACKS'*100 , self.callback_handler.callbacks)
             torch.manual_seed(hash(trainer_uuid))
             return super().get_train_dataloader()
 
