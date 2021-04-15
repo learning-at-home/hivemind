@@ -52,7 +52,7 @@ class CollaborationArguments:
     collaboration_drift_peers: float = 3  # trainer assumes that this many new peers can join per step
     collaboration_drift_rate = 0.2  # trainer assumes that this fraction of current size can join per step
 
-    throughput: float = 1000.0  # available network bandwidth, in mbps (used for load balancing in all-reduce)
+    bandwidth: float = 1000.0  # available network bandwidth, in mbps (used for load balancing in all-reduce)
     performance_ema_alpha: float = 0.1  # uses this alpha for moving average estimate of samples per second
 
 
@@ -243,8 +243,8 @@ def main():
     collaborative_optimizer = hivemind.CollaborativeOptimizer(
         opt=opt, dht=dht, scheduler=scheduler, prefix=collaboration_args_dict.pop('experiment_prefix'),
         compression_type=hivemind.utils.CompressionType.Value(collaboration_args_dict.pop('compression')),
-        batch_size_per_step=total_batch_size_per_step, verbose=True, start=True, **collaboration_args_dict,
-
+        batch_size_per_step=total_batch_size_per_step, throughput=collaboration_args_dict.pop('bandwidth'),
+        verbose=True, start=True, **collaboration_args_dict
     )
 
     trainer = Trainer(
