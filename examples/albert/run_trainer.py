@@ -91,6 +91,7 @@ class AlbertTrainingArguments(TrainingArguments):
 
     save_total_limit: int = 2
     save_steps: int = 500
+    disable_tqdm: bool = False
 
 
 def setup_logging(training_args):
@@ -265,7 +266,6 @@ def main():
 
     # Training
     if training_args.do_train:
-        print('!!!DEBUGPRINT', logger.getEffectiveLevel())
         latest_checkpoint_dir = max(
             Path(training_args.output_dir).glob('checkpoint*'),
             default=None,
