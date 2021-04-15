@@ -168,19 +168,16 @@ class CollaborativeCallback(transformers.TrainerCallback):
                  trainer_uuid: str, statistics_expiration: float):
         self.dht, self.collaborative_optimizer = dht, collaborative_optimizer
         self.trainer_uuid, self.statistics_expiration = trainer_uuid, statistics_expiration
+        self.last_reported_collaboration_step = -1
         super().__init__()
 
-    def on_log(self, args: TrainingArguments, state: transformers.TrainerState,
-               control: transformers.TrainerControl, logs: Optional[dict] = None, **kwargs):
+    def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
+                    control: transformers.TrainerControl, **kwargs):
 
-        if state.log_history:
-            tr_loss = state.log_history[-1]['loss']
-
-            my_info = [
-                self.collaborative_optimizer.local_step, tr_loss
-            ]
-
-            self.dht.store("my_progress", subkey=self.trainer_uuid, value=my_info,
+        if state.log_history and self.collaborative_optimizer.local_step != self.last_reported_collaboration_step:
+            self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
+            statistics = [self.collaborative_optimizer.local_step, state.log_history[-1]['loss']]
+            self.dht.store("my_progress", subkey=self.trainer_uuid, value=statistics,
                            expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
                            return_future=True)
         return control
