@@ -91,6 +91,12 @@ class AlbertTrainingArguments(TrainingArguments):
     save_total_limit: int = 2
     save_steps: int = 500
 
+    # disable builtin logging and evaluation in favor of collaborative logging
+    do_eval: bool = False
+    eval_steps: int = 10 ** 10
+    logging_steps: int = 10 ** 10
+
+
 
 def setup_logging(training_args):
     logging.basicConfig(
