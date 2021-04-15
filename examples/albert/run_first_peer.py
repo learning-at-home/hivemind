@@ -22,6 +22,8 @@ if __name__ == '__main__':
                         help="'localhost' for local connections only, '0.0.0.0' for ipv4 '[::]' for ipv6")
     parser.add_argument('--refresh_period', type=float, default=30, required=False,
                         help="coordinator will fetch random keys every :this many: seconds to detect inactive peers")
+    parser.add_argument('--dht_key_for_averaging', type=float, default=30, required=False,
+                        help="coordinator will fetch random keys every :this many: seconds to detect inactive peers")
 
     args = parser.parse_args()
     if args.address is None:
