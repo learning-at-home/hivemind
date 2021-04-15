@@ -56,6 +56,9 @@ def main():
     parser.add_argument('--stats_report_interval', type=int, required=False,
                         help='Interval between two reports of batch processing performance statistics')
 
+    parser.add_argument('--custom_module_path', type=str, required=False,
+                        help='Path of a file with custom nn.modules, wrapped into special decorator')
+
     # fmt:on
     args = vars(parser.parse_args())
     args.pop('config', None)
