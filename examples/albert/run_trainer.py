@@ -9,6 +9,7 @@ import uuid
 
 from datasets import load_from_disk
 import transformers
+from torch.utils.data import DataLoader
 from transformers import (set_seed, HfArgumentParser, TrainingArguments,
                           DataCollatorForLanguageModeling, AlbertTokenizerFast, AlbertConfig, AlbertForPreTraining)
 from transformers.optimization import get_linear_schedule_with_warmup
@@ -153,8 +154,8 @@ def get_optimizer_and_scheduler(training_args, model):
         betas=(training_args.adam_beta1, training_args.adam_beta2),
         eps=training_args.adam_epsilon,
         weight_decay=training_args.weight_decay,
-        debias=True,
         clamp_value=training_args.clamp_value,
+        debias=True,
     )
 
     scheduler = get_linear_schedule_with_warmup(
@@ -252,12 +253,17 @@ def main():
         verbose=True, start=True, **collaboration_args_dict
     )
 
-    class _Trainer(Trainer):
+    class ShuffledTrainer(Trainer):
+        def get_train_dataloader(self) -> DataLoader:
+            """ Shuffle data independently for each peer to avoid duplicating batches """
+            torch.manual_seed(hash(trainer_uuid))
+            return super().get_train_dataloader()
+
         def compute_loss(self, model, inputs):
             print("DEBUG:", inputs['input_ids'][0][:5]) # debugpring, will be removed
             return super().compute_loss(model, inputs)
 
-    trainer = _Trainer(
+    trainer = ShuffledTrainer(
         model=model, args=training_args, tokenizer=tokenizer, data_collator=data_collator,
         train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
         eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
