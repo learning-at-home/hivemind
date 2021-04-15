@@ -254,7 +254,7 @@ def main():
 
     class _Trainer(Trainer):
         def compute_loss(self, model, inputs):
-            print("DEBUG:", inputs) # debugpring, will be removed
+            print("DEBUG:", inputs['input_ids'][0][:5]) # debugpring, will be removed
             return super().compute_loss(model, inputs)
 
     trainer = _Trainer(
