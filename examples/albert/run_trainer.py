@@ -92,11 +92,6 @@ class AlbertTrainingArguments(TrainingArguments):
     save_total_limit: int = 2
     save_steps: int = 500
 
-    # disable builtin logging and evaluation in favor of collaborative logging
-    do_eval: bool = False
-    eval_steps: int = 10 ** 10
-    logging_steps: int = 10 ** 10
-
 
 def setup_logging(training_args):
     logging.basicConfig(
@@ -172,10 +167,11 @@ class CollaborativeCallback(transformers.TrainerCallback):
                  trainer_uuid: str, statistics_expiration: float):
         self.dht, self.collaborative_optimizer = dht, collaborative_optimizer
         self.trainer_uuid, self.statistics_expiration = trainer_uuid, statistics_expiration
+        super().__init__()
 
     def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
                     control: transformers.TrainerControl, **kwargs):
-        control.should_log = True
+        control.should_log = state.global_step % args.logging_steps == 0
 
         if state.log_history:
             tr_loss = state.log_history[-1]['loss']
