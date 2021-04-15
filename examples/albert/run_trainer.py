@@ -44,6 +44,7 @@ class CollaborationArguments:
     dht_listen_on: str = '[::]:*'  # network interface used for incoming DHT communication. Default: all ipv6
     listen_on: str = '[::]:*'  # network interface used for incoming averager communication. Default: all ipv6
     endpoint: Optional[str] = None  # this node's IP for inbound connections, used when running from behind a proxy
+    compression: str = 'FLOAT16'
 
     min_refresh_period: float = 0.25  # wait for at least this many seconds before fetching new collaboration state
     max_refresh_period: float = 30  # wait for at most this many seconds before fetching new collaboration state
@@ -206,8 +207,14 @@ class NoOpScheduler(LRSchedulerBase):
 
 def main():
     parser = HfArgumentParser((AlbertTrainingArguments, DatasetArguments, CollaborationArguments))
-    training_args, dataset_args, _collaboration_args = parser.parse_args_into_dataclasses()
-    collaboration_args_dict = asdict(_collaboration_args)
+    training_args, dataset_args, collaboration_args = parser.parse_args_into_dataclasses()
+
+    collaboration_args.initial_peers = list(map(str.strip, collaboration_args.initial_peers.split(',')))
+    logger.info(f"Found {len(collaboration_args.initial_peers)} initial peers: {collaboration_args.initial_peers}")
+    if len(collaboration_args.initial_peers) == 0:
+        raise ValueError("Please specify at least one network endpoint in initial peers.")
+
+    collaboration_args_dict = asdict(collaboration_args)
     setup_logging(training_args)
 
     # Set seed before initializing model.
@@ -224,8 +231,10 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
-    dht = hivemind.DHT(initial_peers=list(map(str.strip, collaboration_args_dict.pop('initial_peers').split(','))),
-                       listen=not collaboration_args_dict['client_mode'], start=True)
+    dht = hivemind.DHT(
+        initial_peers=list(map(str.strip, collaboration_args_dict.pop('initial_peers').split(','))),
+        listen=not collaboration_args_dict['client_mode'], listen_on=collaboration_args_dict.pop('dht_listen_on'),
+        endpoint=collaboration_args_dict.pop('endpoint'), start=True)
 
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     trainer_uuid = collaboration_args_dict.pop('trainer_uuid')
@@ -233,7 +242,9 @@ def main():
 
     collaborative_optimizer = hivemind.CollaborativeOptimizer(
         opt=opt, dht=dht, scheduler=scheduler, prefix=collaboration_args_dict.pop('experiment_prefix'),
-        batch_size_per_step=total_batch_size_per_step, verbose=True, start=True, **collaboration_args_dict
+        compression_type=hivemind.utils.CompressionType.Value(collaboration_args_dict.pop('compression')),
+        batch_size_per_step=total_batch_size_per_step, verbose=True, start=True, **collaboration_args_dict,
+
     )
 
     trainer = Trainer(
