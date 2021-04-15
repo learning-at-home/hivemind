@@ -41,7 +41,7 @@ if __name__ == '__main__':
             exit(-1)
 
     dht = hivemind.DHT(start=True, listen_on=args.listen_on, endpoint=f"{args.address}:*")
-    logger.info(f"Running DHT root at {args.address}:{dht.port}", flush=True)
+    logger.info(f"Running DHT root at {args.address}:{dht.port}")
 
     wandb.init(project=args.wandb_project)
     current_step = 0
