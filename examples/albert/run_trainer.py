@@ -71,7 +71,7 @@ class DatasetArguments:
 
 @dataclass
 class AlbertTrainingArguments(TrainingArguments):
-    dataloader_num_workers: int = 1 #TODO
+    dataloader_num_workers: int = 4
     per_device_train_batch_size: int = 4
     per_device_eval_batch_size: int = 4
     gradient_accumulation_steps: int = 2
