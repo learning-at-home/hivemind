@@ -89,6 +89,7 @@ class AlbertTrainingArguments(TrainingArguments):
     fp16_opt_level: str = 'O2'
     do_train: bool = True
 
+    logging_steps: int = 100
     save_total_limit: int = 2
     save_steps: int = 500
 
@@ -169,9 +170,8 @@ class CollaborativeCallback(transformers.TrainerCallback):
         self.trainer_uuid, self.statistics_expiration = trainer_uuid, statistics_expiration
         super().__init__()
 
-    def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
-                    control: transformers.TrainerControl, **kwargs):
-        control.should_log = True
+    def on_log(self, args: TrainingArguments, state: transformers.TrainerState,
+               control: transformers.TrainerControl, logs: Optional[dict] = None, **kwargs):
 
         if state.log_history:
             tr_loss = state.log_history[-1]['loss']
