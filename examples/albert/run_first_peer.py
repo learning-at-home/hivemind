@@ -65,5 +65,6 @@ if __name__ == '__main__':
                     "samples": num_samples,
                     "performance": sum_perf
                 })
-            print(sum_loss / alive_peers, flush=True)
+                print(sum_loss / alive_peers, flush=True)
+            print("ALIVE", flush = True)
         time.sleep(args.refresh_period)
