@@ -113,7 +113,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.collaboration_state_updater = Thread(target=self.check_collaboration_state_periodically, daemon=True,
                                                   name=f"{self}.collaboration_state_updater")
         self.collaboration_state_updater.start()
-        self.previous_model_parameters = self.get_current_model_parameters()
 
     def _make_averager(self, **kwargs):
         return TrainingAverager(self.opt, dht=self.dht, average_parameters=True, average_gradients=True,
@@ -181,11 +180,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.load_state_from_peers()
             return
 
-        if not self.are_finite_params():
-            logger.warning("Not all peer's model weights are finite. Loading weights from previous checkpoint.")
-            self.load_model_parameters(self.previous_model_parameters)
-            return
-
         with self.performance_ema.pause(), self.lock_collaboration_state:
             # divide accumulators by local steps to recover the true average grad w.r.t. local_samples_accumulated
             self.apply_accumulated_grads_(scale_by=1. / self.local_steps_accumulated)
@@ -213,7 +207,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.collaboration_state_updated.set()
             self.update_scheduler()
 
-            self.previous_model_parameters = self.get_current_model_parameters()
             logger.log(self.status_loglevel, f"Optimizer step: done!")
             return group_info
 
@@ -225,30 +218,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                     yield torch.zeros_like(param)
                 else:
                     yield param.grad
-
-    @torch.no_grad()
-    def are_finite_params(self):
-        for param_group in self.opt.param_groups:
-            for param in param_group['params']:
-                if not torch.all(torch.isfinite(param)):
-                    return False
-        return True
-
-    @torch.no_grad()
-    def get_current_model_parameters(self):
-        model_parameters = []
-        for param_group in self.opt.param_groups:
-            for param in param_group['params']:
-                model_parameters.append(param.clone())
-        return model_parameters
-
-    @torch.no_grad()
-    def load_model_parameters(self, model_parameters):
-        param_num = 0
-        for param_group in self.opt.param_groups:
-            for param in param_group['params']:
-                param.set_(model_parameters[param_num])
-                param_num += 1
 
     @torch.no_grad()
     def accumulated_grads(self) -> Iterator[torch.Tensor]:
