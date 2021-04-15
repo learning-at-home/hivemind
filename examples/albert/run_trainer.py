@@ -176,10 +176,15 @@ class CollaborativeCallback(transformers.TrainerCallback):
 
         if state.log_history and self.collaborative_optimizer.local_step != self.last_reported_collaboration_step:
             self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
-            statistics = [self.collaborative_optimizer.local_step, state.log_history[-1]['loss']]
-            self.dht.store("my_progress", subkey=self.trainer_uuid, value=statistics,
-                           expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
+            statistics = [self.collaborative_optimizer.local_step,
+                          self.collaborative_optimizer.performance_ema.samples_per_second,
+                          self.collaborative_optimizer.local_samples_accumulated,
+                          state.log_history[-1]['loss']]
+
+            self.dht.store(self.collaborative_optimizer.prefix+"my_progress", subkey=self.trainer_uuid,
+                           value=statistics, expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
                            return_future=True)
+            self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
         return control
 
 
