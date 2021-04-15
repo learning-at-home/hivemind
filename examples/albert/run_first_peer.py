@@ -35,28 +35,33 @@ if __name__ == '__main__':
     dht = hivemind.DHT(start=True, listen_on=args.listen_on, endpoint=f"{args.address}:*")
     print(f"Running DHT root at {args.address}:{dht.port}", flush=True)
 
-    wandb.init(project="Demo-run")
-
-    t = -1
-    num = 1
-    den = 1
+    wandb.init(project="Demo-run-2")
+    t = 0
 
     while True:
-        u = dht.get('my_progress', latest=True)
+        u = dht.get(args.dht_key_for_averaging + 'my_progress', latest=True)
         if u is not None:
             u = u.value
             c = [u[a].value for a in u]
             p = max(c)[0]
             if p != t:
                 t = p
-                den = 0
-                num = 0
-                for a, b in c:
-                    if a == p:
-                        num += b
-                        den += 1
+                alive_peers = 0
+                num_batches = 0
+                sum_loss = 0
+                num_samples = 0
+                sum_perf = 0
+                for step, perf, samples, loss in c:
+                    if step == p:
+                        sum_loss += loss
+                        alive_peers += 1
+                        sum_perf += perf
+                        num_samples += samples
                 wandb.log({
-                    "loss": num / den
+                    "loss": sum_loss / alive_peers,
+                    "alive peers": alive_peers,
+                    "samples": num_samples,
+                    "performance": sum_perf
                 })
-            print(num / den, flush=True)
+            print(sum_loss / alive_peers, flush=True)
         time.sleep(args.refresh_period)
