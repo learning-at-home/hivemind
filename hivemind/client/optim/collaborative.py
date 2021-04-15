@@ -96,8 +96,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration
         self._grads, self.reuse_grad_buffers, self.accumulate_grads_on = None, reuse_grad_buffers, accumulate_grads_on
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
-        self.averager = self._make_averager(**kwargs)
         self.client_mode = client_mode
+        self.averager = self._make_averager(**kwargs)
 
         self.training_progress_key = f"{self.prefix}_progress"
         self.local_samples_accumulated = 0  # a number of local samples accumulated since last optimizer update
