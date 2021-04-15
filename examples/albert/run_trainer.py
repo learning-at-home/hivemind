@@ -171,7 +171,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
 
     def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
                     control: transformers.TrainerControl, **kwargs):
-        control.should_log = state.global_step % args.logging_steps == 0
+        control.should_log = True
 
         if state.log_history:
             tr_loss = state.log_history[-1]['loss']
@@ -265,6 +265,7 @@ def main():
 
     # Training
     if training_args.do_train:
+        print('!!!DEBUGPRINT', logger.getEffectiveLevel())
         latest_checkpoint_dir = max(
             Path(training_args.output_dir).glob('checkpoint*'),
             default=None,
