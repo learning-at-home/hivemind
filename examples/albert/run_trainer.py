@@ -175,7 +175,6 @@ class CollaborativeCallback(transformers.TrainerCallback):
                     control: transformers.TrainerControl, **kwargs):
 
         if state.log_history and self.collaborative_optimizer.local_step != self.last_reported_collaboration_step:
-            print("IM LOGGIN!!!!!", state.log_history[-1]['loss'])
             self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
             statistics = [self.collaborative_optimizer.local_step, state.log_history[-1]['loss']]
             self.dht.store("my_progress", subkey=self.trainer_uuid, value=statistics,
