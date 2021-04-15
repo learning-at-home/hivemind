@@ -253,17 +253,13 @@ def main():
         verbose=True, start=True, **collaboration_args_dict
     )
 
-    class ShuffledTrainer(Trainer):
+    class TrainerWithIndependentShuffling(Trainer):
         def get_train_dataloader(self) -> DataLoader:
-            """ Shuffle data independently for each peer to avoid duplicating batches """
+            """ Shuffle data independently for each peer to avoid duplicating batches [important for quality] """
             torch.manual_seed(hash(trainer_uuid))
             return super().get_train_dataloader()
 
-        def compute_loss(self, model, inputs):
-            print("DEBUG:", inputs['input_ids'][0][:5]) # debugpring, will be removed
-            return super().compute_loss(model, inputs)
-
-    trainer = ShuffledTrainer(
+    trainer = TrainerWithIndependentShuffling(
         model=model, args=training_args, tokenizer=tokenizer, data_collator=data_collator,
         train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
         eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
