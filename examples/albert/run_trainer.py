@@ -17,15 +17,42 @@ from transformers.trainer import Trainer
 from torch_optimizer import Lamb
 import torch
 
-
 import hivemind
-from hivemind.client import CollaborationArguments
-from hivemind.client.optim import CollaborativeOptimizer
-from hivemind import DHT
 
 
 logger = logging.getLogger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
+
+
+@dataclass
+class CollaborationArguments:
+    """ define how peers interact with each other while training"""
+
+    # primary parameters
+    initial_peers: str  # one or more peers (comma-separated) that will welcome you into the collaboration
+    experiment_prefix: str  # a unique "name" of this experiment, used to store metadata on the DHT
+    averaging_expiration: float = 5.0  # averaging group will wait for stragglers for at most this many
+    averaging_step_timeout: float = 30.0  # give up on averaging step after this many seconds
+    target_batch_size: int = 4096  # perform optimizer step after all peers collectively accumulate this many samples
+    client_mode: bool = False  # if True, runs training without incoming connections, in a firewall-compatible mode
+    trainer_uuid: str = uuid.uuid4().hex  # this peer's name - used when publishing metadata to DHT, default = random
+
+    # optional tweaks
+    target_group_size: int = 64  # maximum group size for all-reduce
+    metadata_expiration: float = 30  # peer's metadata will be removed if not updated in this many seconds
+    statistics_expiration: float = 3600  # statistics will be removed if not updated in this many seconds
+    dht_listen_on: str = '[::]:*'  # network interface used for incoming DHT communication. Default: all ipv6
+    listen_on: str = '[::]:*'  # network interface used for incoming averager communication. Default: all ipv6
+    endpoint: Optional[str] = None  # this node's IP for inbound connections, used when running from behind a proxy
+
+    min_refresh_period: float = 0.25  # wait for at least this many seconds before fetching new collaboration state
+    max_refresh_period: float = 30  # wait for at most this many seconds before fetching new collaboration state
+    default_refresh_period: float = 3  # attempt to fetch collaboration state every this often until successful
+    expected_collaboration_drift_peers: float = 3  # trainer assumes that this many new peers can join per step
+    expected_collaboration_drift_rate = 0.2  # trainer assumes that this fraction of current size can join per step
+
+    bandwidth: float = 1000.0  # available network bandwidth, in mbps (used for load balancing in all-reduce)
+    performance_ema_alpha: float = 0.1  # uses this alpha for moving average estimate of samples per second
 
 
 @dataclass
@@ -133,13 +160,12 @@ def get_optimizer_and_scheduler(training_args, model):
     return opt, scheduler
 
 
-class CustomLoggingCallback(transformers.TrainerCallback):
-    def __init__(self, dht: DHT, collaborative_optimizer: CollaborativeOptimizer,
-                 collaboration_args: CollaborationArguments, trainer_uuid):
+class CollaborativeCallback(transformers.TrainerCallback):
+    def __init__(self, dht: hivemind.DHT, collaborative_optimizer: hivemind.CollaborativeOptimizer,
+                 collaboration_args: CollaborationArguments):
         self.dht = dht
         self.collaborative_optimizer = collaborative_optimizer
-        self.statistics_expiration = collaboration_args.statistics_expiration
-        self.trainer_uuid = trainer_uuid
+        self.collaboration_args = collaboration_args
 
     def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
                     control: transformers.TrainerControl, **kwargs):
@@ -152,10 +178,9 @@ class CustomLoggingCallback(transformers.TrainerCallback):
                 self.collaborative_optimizer.local_step, tr_loss
             ]
 
-            self.dht.store("my_progress", subkey=self.trainer_uuid, value=my_info,
-                           expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
+            self.dht.store("my_progress", subkey=self.collaboration_args.trainer_uuid, value=my_info,
+                           expiration_time=hivemind.get_dht_time() + self.collaboration_args.statistics_expiration,
                            return_future=True)
-
         return control
 
 
@@ -182,7 +207,6 @@ class NoOpScheduler(LRSchedulerBase):
 def main():
     parser = HfArgumentParser((AlbertTrainingArguments, DatasetArguments, CollaborationArguments))
     training_args, dataset_args, collaboration_args = parser.parse_args_into_dataclasses()
-
     setup_logging(training_args)
 
     # Set seed before initializing model.
@@ -193,6 +217,8 @@ def main():
     model = get_model(training_args, config, tokenizer)
     model.to(training_args.device)
 
+    #TODO SHUFFLE DATA INDIVIDUALLY!!!!!
+
     tokenized_dataset_path = Path(dataset_args.dataset_path)
     tokenized_datasets = load_from_disk(tokenized_dataset_path)
     # This data collator will take care of randomly masking the tokens.
@@ -200,24 +226,17 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
-    dht = DHT(
-        initial_peers=list(map(str.strip, collaboration_args.initial_peers.split(','))),
-        start=True,
-        listen=not collaboration_args.client_mode,
-    )
+    dht = hivemind.DHT(initial_peers=list(map(str.strip, collaboration_args.initial_peers.split(','))),
+                       listen=not collaboration_args.client_mode, start=True)
 
-    collaborative_optimizer = CollaborativeOptimizer(
-        opt=opt,
-        scheduler=scheduler,
-        dht=dht,
-        prefix=collaboration_args.dht_key_for_averaging,
+    total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
+
+    collaborative_optimizer = hivemind.CollaborativeOptimizer(
+        opt=opt, dht=dht, scheduler=scheduler, prefix=collaboration_args.experiment_prefix,
+        target_batch_size=collaboration_args.target_batch_size, batch_size_per_step=total_batch_size_per_step,
         target_group_size=collaboration_args.target_group_size,
-        target_batch_size=collaboration_args.target_batch_size,
-        # TODO: multiple GPUs
-        batch_size_per_step=training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps,
-        start=True,
-        client_mode=collaboration_args.client_mode,
-        verbose=True
+        averaging_expiration=collaboration_args.averaging_expiration,
+        client_mode=collaboration_args.client_mode, verbose=True, start=True
     )
 
     trainer = Trainer(
@@ -227,7 +246,7 @@ def main():
         tokenizer=tokenizer,
         data_collator=data_collator,
         optimizers=(collaborative_optimizer, NoOpScheduler(collaborative_optimizer)),
-        callbacks=[CustomLoggingCallback(dht, collaborative_optimizer, collaboration_args, uuid.uuid4().hex)]
+        callbacks=[CollaborativeCallback(dht, collaborative_optimizer, collaboration_args)]
     )
 
     # Training
