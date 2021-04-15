@@ -138,6 +138,13 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.reset_accumulated_grads_()
             self.update_scheduler()
 
+    def are_finite_params(self):
+        for param_group in self.opt.param_groups:
+            for param in param_group['params']:
+                if not torch.all(torch.isfinite(param.grad.data)):
+                    return False
+        return True
+
     def step(self, batch_size: Optional[int] = None, **kwargs):
         """
         Report accumulating gradients w.r.t. batch_size additional samples, optionally update model parameters
@@ -179,6 +186,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not self.is_synchronized:
             self.load_state_from_peers()
             return
+
+        if not self.are_finite_params():
+            pass  # load prev checkpoint
 
         with self.performance_ema.pause(), self.lock_collaboration_state:
             # divide accumulators by local steps to recover the true average grad w.r.t. local_samples_accumulated
