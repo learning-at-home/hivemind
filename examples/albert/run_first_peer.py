@@ -47,7 +47,7 @@ if __name__ == '__main__':
     current_step = 0
 
     while True:
-        metrics_dict = dht.get(args.dht_key_for_averaging + '_metrics', latest=True)
+        metrics_dict = dht.get(args.experiment_prefix + '_metrics', latest=True)
         if metrics_dict is not None:
             metrics_dict = metrics_dict.value
             metrics = [metrics_dict[peer].value for peer in metrics_dict]
