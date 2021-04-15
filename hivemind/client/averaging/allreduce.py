@@ -132,7 +132,6 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         super().__init__(group_id=group_id, tensors=tensors, endpoint=endpoint, part_sizes=part_sizes,
                          ordered_group_endpoints=ordered_group_endpoints, return_deltas=return_deltas)
         self.compression_type, self.chunk_size_bytes, self.gathered = compression_type, chunk_size_bytes, gathered
-        self.averaged_part_stream: asyncio.Future[Tuple[runtime_pb2.Tensor, ...]] = asyncio.Future()
         self.group_key_seed = group_key_seed
 
     def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
@@ -200,7 +199,6 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         averaged_part = await self.accumulate_part(source, tensor_part)
         serialized_tensor = serialize_torch_tensor(averaged_part-tensor_part, self.compression_type, allow_inplace=False)
         stream_chunks = tuple(split_for_streaming(serialized_tensor, self.chunk_size_bytes))
-        self.averaged_part_stream.set_result(stream_chunks)
         return stream_chunks
 
     async def rpc_aggregate_part(self, stream: AsyncIterator[averaging_pb2.AveragingData], context: grpc.ServicerContext
