@@ -204,7 +204,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             raise AllreduceException(f"Could not deserialize tensor part from {source} for streaming {e}")
 
         averaged_part = await self.accumulate_part(source, tensor_part, weight=self.peer_weights[source])
-        serialized_tensor = serialize_torch_tensor(averaged_part, self.compression_type, allow_inplace=False)
+        serialized_tensor = serialize_torch_tensor(averaged_part - tensor_part, self.compression_type, allow_inplace=False)
         stream_chunks = tuple(split_for_streaming(serialized_tensor, self.chunk_size_bytes))
         return stream_chunks
 
