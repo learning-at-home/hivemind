@@ -48,7 +48,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
         super().__init__(grid_size=grid_size, **kwargs)
 
         initial_utilization = torch.cat(
-            [torch.tensor([1 / dim_size for _ in range(dim_size)], dtype=torch.float, requires_grad=False)
+            [torch.tensor([1 / dim_size for _ in range(dim_size)], dtype=torch.float)
              for dim_size in grid_size],
         )
         self.register_buffer('grid_utilization', initial_utilization)
@@ -72,11 +72,11 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
         else:
             input_for_gating = input
 
-        # Multiplicative jitter for regularized expert routing
+        # Multiplicative jitter for regularized routing
         jitter_noise = torch.empty_like(input_for_gating).uniform_(1 - self.jitter_eps, 1 + self.jitter_eps)
         input_for_gating *= jitter_noise
 
-        # compute scores and find most appropriate experts with beam search
+        # Compute scores, find most appropriate experts with beam search
         grid_scores = self.proj(input_for_gating).split_with_sizes(self.beam_search.grid_size, dim=-1)
 
         grid_dropout_masks = (
@@ -105,7 +105,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         batch_utilization = self._compute_batch_utilization(chosen_experts, expert_mask)
         self.grid_utilization = \
-            (1 - self.utilization_alpha) * self.grid_utilization + self.utilization_alpha * batch_utilization
+            self.utilization_alpha * self.grid_utilization + (1 - self.utilization_alpha) * batch_utilization
 
         # compute expert probabilities as product across grid dimensions
         expert_probs = self.compute_expert_scores(grid_softmax, chosen_experts)
@@ -122,10 +122,10 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
         # balancing loss: fraction of examples routed to each expert,
         # fraction of probability assigned to each expert (both across all experts)
         # want both to have equal allocation
-        loss_for_dim = torch.stack([torch.mean(dim_softmax.mean(0) * dim_utilization) * (dim_size ** 2)
-                                    for dim_softmax, dim_utilization, dim_size in
-                                    zip(grid_softmax, self.grid_utilization, self.beam_search.grid_size)])
-        balancing_loss = torch.sum(loss_for_dim)
+
+        balancing_loss = torch.stack([torch.mean(dim_softmax.mean(0) * dim_utilization) * (dim_size ** 2)
+                                      for dim_softmax, dim_utilization, dim_size in
+                                      zip(grid_softmax, self.grid_utilization, self.beam_search.grid_size)]).sum()
 
         # residual connection
         if isinstance(packed_outputs, torch.Tensor):
@@ -135,8 +135,11 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         return packed_outputs, balancing_loss
 
+    @torch.no_grad()
     def _compute_batch_utilization(self, batch_experts, expert_mask):
-        batch_utilization = torch.zeros_like(self.grid_utilization)
+        batch_utilization = [torch.zeros((dim_size,), dtype=self.grid_utilization.dtype,
+                                         device=self.grid_utilization.device)
+                             for dim_size in self.beam_search.grid_size]
 
         # out of chosen_experts, select those for which expert_mask is True
         for (sample_idx, expert_idx) in expert_mask.nonzero().numpy():
@@ -144,12 +147,12 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
             expert_indices = expert.uid[len(self.beam_search.uid_prefix):]
             expert_indices = list(map(int, expert_indices.split(UID_DELIMITER)))
 
-            for grid_index in expert_indices:
-                batch_utilization[grid_index] += 1
+            for dim_index, dim_utilization in zip(expert_indices, batch_utilization):
+                dim_utilization[dim_index] += 1
 
         return torch.cat([
             torch.nn.functional.normalize(dim_utilization, p=1, dim=0)
-            for dim_utilization in batch_utilization.split_with_sizes(self.beam_search.grid_size)
+            for dim_utilization in batch_utilization
         ])
 
     def compute_expert_scores(
