@@ -125,7 +125,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     @property
     def is_synchronized(self) -> bool:
-        return self.local_step >= self.collaboration_state.optimizer_step
+        return self.local_step >= self.collaboration_state.optimizer_step - 1
 
     def is_alive(self) -> bool:
         return self.averager.is_alive()
