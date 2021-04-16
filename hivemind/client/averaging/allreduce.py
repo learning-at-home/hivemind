@@ -203,8 +203,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
     async def rpc_aggregate_part(self, stream: AsyncIterator[averaging_pb2.AveragingData], context: grpc.ServicerContext
                                  ) -> AsyncIterator[averaging_pb2.AveragingData]:
-        """ a groupmate sends us a part of his tensor; we should average it with other peers and return the result
-        TODO: return delta (or maybe inside accumulate_part_streaming)"""
+        """ a groupmate sends us a part of his tensor; we should average it with other peers and return the delta"""
         request: averaging_pb2.AveragingData = await anext(stream)
 
         if request.group_id != self.group_id:
