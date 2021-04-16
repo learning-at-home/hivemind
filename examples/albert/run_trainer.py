@@ -32,7 +32,7 @@ class CollaborationArguments:
     # primary parameters
     initial_peers: str  # one or more peers (comma-separated) that will welcome you into the collaboration
     experiment_prefix: str  # a unique "name" of this experiment, used to store metadata on the DHT
-    averaging_expiration: float = 5.0  # averaging group will wait for stragglers for at most this many
+    averaging_expiration: float = 8.0  # averaging group will wait for stragglers for at most this many
     averaging_timeout: float = 30.0  # give up on averaging step after this many seconds
     target_batch_size: int = 4096  # perform optimizer step after all peers collectively accumulate this many samples
     client_mode: bool = False  # if True, runs training without incoming connections, in a firewall-compatible mode
@@ -47,7 +47,7 @@ class CollaborationArguments:
     endpoint: Optional[str] = None  # this node's IP for inbound connections, used when running from behind a proxy
     compression: str = 'FLOAT16'
 
-    min_refresh_period: float = 0.25  # wait for at least this many seconds before fetching new collaboration state
+    min_refresh_period: float = 0.5  # wait for at least this many seconds before fetching new collaboration state
     max_refresh_period: float = 30  # wait for at most this many seconds before fetching new collaboration state
     default_refresh_period: float = 3  # attempt to fetch collaboration state every this often until successful
     expected_drift_peers: float = 3  # trainer assumes that this many new peers can join per step
