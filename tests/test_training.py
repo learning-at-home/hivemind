@@ -83,10 +83,6 @@ class SwitchNetwork(nn.Module):
         return self.linear(moe_output), balancing_loss
 
 
-def entropy(x):
-    return -(x.log() * x).sum()
-
-
 @pytest.mark.forked
 def test_switch_training(max_steps: int = 10, threshold: float = 0.9, hidden_dim=16, num_experts=5):
     dataset = load_digits(n_class=2)
@@ -103,7 +99,7 @@ def test_switch_training(max_steps: int = 10, threshold: float = 0.9, hidden_dim
 
         for step in range(max_steps):
             outputs, balancing_loss = model(X_train)
-            loss = F.cross_entropy(outputs, y_train) + 0.1 * balancing_loss
+            loss = F.cross_entropy(outputs, y_train) + 0.01 * balancing_loss
             loss.backward()
             opt.step()
             opt.zero_grad()
@@ -112,7 +108,7 @@ def test_switch_training(max_steps: int = 10, threshold: float = 0.9, hidden_dim
             if accuracy >= threshold:
                 break
 
-        assert model.moe.grid_utilization.min().item() > 1 / num_experts - 0.15
+        assert model.moe.grid_utilization.min().item() > (1 / num_experts) / 2
         assert accuracy >= threshold, f"too small accuracy: {accuracy}"
 
 
