@@ -4,20 +4,17 @@ from __future__ import annotations
 
 import contextlib
 import random
-from dataclasses import asdict
 from math import isfinite
-from typing import Sequence, Optional, AsyncIterator, Set, Tuple, Dict
+from typing import Optional, AsyncIterator, Set, Tuple, Dict
 import concurrent.futures
 import asyncio
 
 import grpc
-import torch
 
-from hivemind.client.averaging.allreduce import AllReduceRunner
-from hivemind.client.averaging.load_balancing import load_balance_peers
+from hivemind.client.averaging.group_info import GroupInfo
 from hivemind.client.averaging.key_manager import GroupKeyManager, GroupKey
 from hivemind.dht import DHT, DHTID, DHTExpiration, get_dht_time
-from hivemind.utils import get_logger, Endpoint, TensorDescriptor, timed_storage, TimedStorage
+from hivemind.utils import get_logger, Endpoint, timed_storage, TimedStorage
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 from hivemind.utils.grpc import ChannelCache
 
@@ -38,24 +35,21 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
       Hence, instead of accounting for such deadlocks, we simply break them with request_timeout.
     """
 
-    def __init__(self, endpoint: Endpoint, averaged_tensors: Sequence[torch.Tensor], dht: DHT, *,
-                 prefix: str, target_group_size: int, min_group_size: int, min_vector_size: int,
+    def __init__(self, endpoint: Endpoint, schema_hash: bytes, dht: DHT, *,
+                 prefix: str, target_group_size: int, min_group_size: int,
                  request_timeout: float, client_mode: bool, initial_group_bits: Optional[str] = None,
-                 averaging_expiration: float = 15, throughput: Optional[float] = None, **allreduce_kwargs):
+                 averaging_expiration: float = 15):
         assert '.' not in prefix, "group prefix must be a string without ."
         if request_timeout is None or request_timeout >= averaging_expiration:
             logger.warning("It is recommended to use request_timeout smaller than averaging_expiration. Otherwise,"
                            "matchmaking can cause deadlocks in some rare cases. Please see Matchmaking docstring.")
 
         super().__init__()
-        self.endpoint, self.averaged_tensors = endpoint, tuple(averaged_tensors)
+        self.endpoint, self.schema_hash = endpoint, schema_hash
         self.group_key_manager = GroupKeyManager(dht, endpoint, prefix, initial_group_bits, target_group_size)
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.request_timeout = averaging_expiration, request_timeout
         self.client_mode = client_mode
-        self.throughput, self.min_vector_size, self.allreduce_kwargs = throughput, min_vector_size, allreduce_kwargs
-        self.schema_hash = compute_schema_hash(self.averaged_tensors)
-        self.total_size = sum(tensor.numel() for tensor in self.averaged_tensors)
 
         self.lock_looking_for_group = asyncio.Lock()
         self.lock_request_join_group = asyncio.Lock()
@@ -83,8 +77,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         return f"{self.__class__.__name__}(endpoint={self.endpoint}, schema={schema_hash_repr}, {lfg_status}" \
                f" current key = {self.group_key_manager.current_key}, client_mode={self.client_mode})"
 
-    async def look_for_group(self, *, data_for_gather: bytes = b'', timeout: Optional[float] = None
-                             ) -> Optional[AllReduceRunner]:
+    async def look_for_group(self, *, data_for_gather: bytes, timeout: Optional[float] = None) -> Optional[GroupInfo]:
         """
         :param data_for_gather: optionally send this data to all peers in the next group and gather it from groupmates
         :param timeout: maximum time that may be spent looking for group (does not include allreduce itself)
@@ -123,7 +116,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 self.was_accepted_to_group.clear()
                 self.data_for_gather = None
 
-    async def _request_join_potential_leaders(self, timeout: Optional[float]) -> AllReduceRunner:
+    async def _request_join_potential_leaders(self, timeout: Optional[float]) -> GroupInfo:
         """ Request leaders from queue until we find the first runner. This coroutine is meant to run in background. """
         async with self.potential_leaders.begin_search(self.group_key_manager, timeout, declare=not self.client_mode):
             while True:
@@ -151,7 +144,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         self.assembled_group.set_exception(e)
                     raise e
 
-    async def request_join_group(self, leader: Endpoint, expiration_time: DHTExpiration) -> Optional[AllReduceRunner]:
+    async def request_join_group(self, leader: Endpoint, expiration_time: DHTExpiration) -> Optional[GroupInfo]:
         """
         :param leader: request this peer to be your leader for allreduce
         :param expiration_time: inform leader that we intend to begin averaging before this expiration_time
@@ -166,7 +159,6 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 leader_stub = ChannelCache.get_stub(leader, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
                 call = leader_stub.rpc_join_group(averaging_pb2.JoinRequest(
                     endpoint=self.endpoint, schema_hash=self.schema_hash, expiration=expiration_time,
-                    throughput=self.throughput if self.throughput is not None else -1.0,
                     client_mode=self.client_mode, gather=self.data_for_gather))
                 message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
 
@@ -255,11 +247,10 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     yield averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_DISBANDED)
                     return
 
-            allreduce_group = self.assembled_group.result()
-            yield averaging_pb2.MessageFromLeader(
-                code=averaging_pb2.BEGIN_ALLREDUCE, group_id=allreduce_group.group_id,
-                ordered_group_endpoints=allreduce_group.ordered_group_endpoints, part_sizes=allreduce_group.part_sizes,
-                gathered=allreduce_group.gathered, group_key_seed=allreduce_group.group_key_seed)
+            group_info = self.assembled_group.result()
+            yield averaging_pb2.MessageFromLeader(code=averaging_pb2.BEGIN_ALLREDUCE, group_id=group_info.group_id,
+                                                  ordered_group_endpoints=group_info.endpoints,
+                                                  gathered=group_info.gathered)
         except (concurrent.futures.CancelledError, asyncio.CancelledError):
             return  # note: this is a compatibility layer for python3.7
         except Exception as e:
@@ -296,58 +287,39 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         else:
             return None
 
-    async def leader_assemble_group(self) -> AllReduceRunner:
-        """ Form up all current followers into a group and prepare to _run_allreduce """
+    async def leader_assemble_group(self) -> GroupInfo:
+        """ Form up all current followers into a group and gather metadata """
         assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked() and not self.client_mode
         assert not self.assembled_group.done()
-        group_id = DHTID.generate().to_bytes()
+        group_id = DHTID.generate().to_bytes()  # note: both groupd_id and the order of endpoints must be random
         ordered_group_endpoints = list(self.current_followers)
         ordered_group_endpoints.append(self.endpoint)
         random.shuffle(ordered_group_endpoints)
 
-        averager_throughputs, gathered = [], []
-        for endpoint in ordered_group_endpoints:
-            if endpoint == self.endpoint:
-                averager_throughputs.append(self.throughput)
-                gathered.append(self.data_for_gather)
-            else:
-                follower_info = self.current_followers[endpoint]
-                throughput = follower_info.throughput if follower_info.throughput >= 0 else None
-                averager_throughput = throughput if not follower_info.client_mode else 0.0
-                averager_throughputs.append(averager_throughput)
-                gathered.append(follower_info.gather if follower_info.gather else None)
+        gathered = tuple(self.data_for_gather if endpoint == self.endpoint else self.current_followers[endpoint].gather
+                         for endpoint in ordered_group_endpoints)
 
-        part_sizes = load_balance_peers(self.total_size, averager_throughputs, self.min_vector_size)
-        group_key_seed = random.randint(- 2 ** 31, 2 ** 31 - 1)
+        logger.debug(f"{self.endpoint} - assembled group of {len(ordered_group_endpoints)} peers.")
+        group_info = GroupInfo(group_id, tuple(ordered_group_endpoints), gathered)
+        await self.group_key_manager.update_key_on_group_assembled(group_info, is_leader=True)
+        self.assembled_group.set_result(group_info)
+        return group_info
 
-        logger.debug(f"{self.endpoint} - leader started allreduce for {len(ordered_group_endpoints)} peers.")
-        allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-                                          ordered_group_endpoints=ordered_group_endpoints, part_sizes=part_sizes,
-                                          gathered=gathered, group_key_seed=group_key_seed, **self.allreduce_kwargs)
-        await self.group_key_manager.update_key_on_group_assembled(allreduce_group, is_leader=True)
-        self.assembled_group.set_result(allreduce_group)
-        return allreduce_group
-
-    async def follower_assemble_group(self, leader: Endpoint, msg: averaging_pb2.MessageFromLeader) -> AllReduceRunner:
-        """ Prepare to run allreduce using a list of peers provided by our leader """
+    async def follower_assemble_group(self, leader: Endpoint, msg: averaging_pb2.MessageFromLeader) -> GroupInfo:
+        """ Form a group from using peers and metadata provided by our leader """
         assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked()
         assert not self.assembled_group.done()
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
 
-        group_id, ordered_group_endpoints, part_sizes = msg.group_id, tuple(msg.ordered_group_endpoints), msg.part_sizes
+        group_id, ordered_group_endpoints = msg.group_id, msg.ordered_group_endpoints
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
-        assert len(ordered_group_endpoints) == len(part_sizes) == len(msg.gathered)
-        my_part_size = part_sizes[ordered_group_endpoints.index(self.endpoint)]
-        assert my_part_size == 0 or not self.client_mode, "Averager with client_mode=True cannot accept incoming data."
+        assert len(ordered_group_endpoints) == len(msg.gathered)
 
-        logger.debug(f"{self.endpoint} - follower started allreduce after being prompted by leader {leader}.")
-        allreduce_group = AllReduceRunner(group_id=group_id, tensors=self.averaged_tensors, endpoint=self.endpoint,
-                                          ordered_group_endpoints=ordered_group_endpoints,
-                                          part_sizes=tuple(part_sizes), gathered=msg.gathered,
-                                          group_key_seed=int(msg.group_key_seed), **self.allreduce_kwargs)
-        await self.group_key_manager.update_key_on_group_assembled(allreduce_group)
-        self.assembled_group.set_result(allreduce_group)
-        return allreduce_group
+        logger.debug(f"{self.endpoint} - follower assembled group with leader {leader}.")
+        group_info = GroupInfo(group_id, tuple(ordered_group_endpoints), tuple(msg.gathered))
+        await self.group_key_manager.update_key_on_group_assembled(group_info)
+        self.assembled_group.set_result(group_info)
+        return group_info
 
     async def leader_disband_group(self):
         """ Kick out all followers immediately, optionally direct them to our new leader (if we found one) """
@@ -488,14 +460,6 @@ class PotentialLeaders:
                     self.leader_queue, self.max_assured_time = TimedStorage[Endpoint, DHTExpiration](), float('-inf')
                     await key_manager.declare_averager(prev_declared_key, self.endpoint, prev_expiration_time,
                                                        looking_for_group=False)
-
-
-def compute_schema_hash(tensors: Sequence[torch.Tensor]) -> bytes:
-    """ A hash that describes follower's tensor shapes, dtypes, devices, but not the actual values """
-    schema_dicts = [{field_name: str(field_value)
-                     for field_name, field_value in asdict(TensorDescriptor.from_tensor(tensor)).items()}
-                    for tensor in tensors]
-    return DHTID.generate(source=schema_dicts).to_bytes()
 
 
 class MatchmakingException(Exception):

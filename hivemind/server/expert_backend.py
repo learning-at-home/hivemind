@@ -35,7 +35,8 @@ class ExpertBackend:
     :param kwargs_schema: description of keyword arguments to expert.forward, dict of BatchTensorProto
     :param outputs_schema: description of outputs from expert.forward, nested structure of BatchTensorProto
     :param num_warmup_steps: the number of warmup steps for LR schedule
-    :param num_training_steps: the total number of steps for LR schedule
+    :param num_total_steps: the total number of steps for LR schedule
+    :param clip_grad_norm: maximum gradient norm used for clipping
     :param kwargs: extra parameters to be forwarded into TaskPool.__init__
     """
 
@@ -44,7 +45,7 @@ class ExpertBackend:
                  args_schema: Tuple[BatchTensorDescriptor, ...] = None,
                  kwargs_schema: Dict[str, BatchTensorDescriptor] = None,
                  outputs_schema: Union[BatchTensorDescriptor, Tuple[BatchTensorDescriptor, ...]] = None,
-                 num_warmup_steps: int = None, num_training_steps: int = None,
+                 num_warmup_steps: int = None, num_total_steps: int = None, clip_grad_norm: float = None,
                  **kwargs):
         super().__init__()
         self.expert, self.optimizer, self.name = expert, optimizer, name
@@ -52,8 +53,9 @@ class ExpertBackend:
         if scheduler is None:
             self.scheduler = None
         else:
-            assert optimizer is not None and num_warmup_steps is not None and num_training_steps is not None
-            self.scheduler = scheduler(self.optimizer, num_warmup_steps, num_training_steps)
+            assert optimizer is not None and num_warmup_steps is not None and num_total_steps is not None
+            self.scheduler = scheduler(self.optimizer, num_warmup_steps, num_total_steps)
+        self.clip_grad_norm = clip_grad_norm
 
         self.args_schema = args_schema = tuple(args_schema or ())
         self.kwargs_schema = kwargs_schema = dict(kwargs_schema or {})
@@ -93,6 +95,9 @@ class ExpertBackend:
 
         """
         args, kwargs = nested_pack(inputs, structure=self.forward_schema)
+
+        if args[0].shape[0] == 0:
+            raise RuntimeError("Batch should contain more than 0 samples")
 
         with torch.no_grad():
             outputs = self.expert(*args, **kwargs)
@@ -147,6 +152,9 @@ class ExpertBackend:
         """
         Train the expert for one step. This method is called by ``ExpertBackend.backward`` after computing gradients.
         """
+        if self.clip_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.expert.parameters(), self.clip_grad_norm)
+
         self.optimizer.step()
         self.optimizer.zero_grad()
 

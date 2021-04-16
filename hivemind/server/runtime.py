@@ -7,7 +7,7 @@ from queue import SimpleQueue
 from selectors import DefaultSelector, EVENT_READ
 from statistics import mean
 from time import time
-from typing import Dict, NamedTuple
+from typing import Dict, NamedTuple, Optional
 
 import torch
 from prefetch_generator import BackgroundGenerator
@@ -43,7 +43,7 @@ class Runtime(threading.Thread):
     """
 
     def __init__(self, expert_backends: Dict[str, ExpertBackend], prefetch_batches=64, sender_threads: int = 1,
-                 device: torch.device = None, stats_report_interval=30):
+                 device: torch.device = None, stats_report_interval: Optional[int] = None):
         super().__init__()
         self.expert_backends = expert_backends
         self.pools = tuple(chain(*(expert.get_pools() for expert in expert_backends.values())))
@@ -51,7 +51,9 @@ class Runtime(threading.Thread):
         self.shutdown_recv, self.shutdown_send = mp.Pipe(duplex=False)
         self.ready = mp.Event()  # event is set iff server is currently running and ready to accept batches
 
-        self.stats_reporter = StatsReporter(stats_report_interval)
+        self.stats_report_interval = stats_report_interval
+        if self.stats_report_interval is not None:
+            self.stats_reporter = StatsReporter(self.stats_report_interval)
 
     def run(self):
         for pool in self.pools:
@@ -64,8 +66,10 @@ class Runtime(threading.Thread):
         with mp.pool.ThreadPool(self.sender_threads) as output_sender_pool:
             try:
                 self.ready.set()
-                self.stats_reporter.start()
+                if self.stats_report_interval is not None:
+                    self.stats_reporter.start()
                 logger.info("Started")
+
                 for pool, batch_index, batch in BackgroundGenerator(
                         self.iterate_minibatches_from_pools(), self.prefetch_batches):
                     logger.debug(f"Processing batch {batch_index} from pool {pool.uid}")
@@ -76,13 +80,18 @@ class Runtime(threading.Thread):
 
                     batch_size = outputs[0].size(0)
                     logger.debug(f"Pool {pool.uid}: batch {batch_index} processed, size {batch_size}")
-                    self.stats_reporter.report_stats(pool.uid, batch_size, batch_processing_time)
+
+                    if self.stats_report_interval is not None:
+                        self.stats_reporter.report_stats(pool.uid, batch_size, batch_processing_time)
 
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
             finally:
                 logger.info("Shutting down")
-                self.stats_reporter.stop.set()
-                self.stats_reporter.join()
+
+                if self.stats_report_interval is not None:
+                    self.stats_reporter.stop.set()
+                    self.stats_reporter.join()
+
                 self.shutdown()
 
     SHUTDOWN_TRIGGER = "RUNTIME SHUTDOWN TRIGGERED"
