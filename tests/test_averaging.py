@@ -377,3 +377,48 @@ def test_getset_bits():
                                               prefix='test_prefix', target_group_size=2)
     averager.set_group_bits('00101011101010')
     assert averager.get_group_bits() == '00101011101010'
+
+
+@pytest.mark.forked
+def test_training_averager(n_steps: int = 10, n_dims: int = 16):
+    torch.manual_seed(42)
+
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    common_kwargs = {'dht': dht, 'start': True, 'listen_on': '127.0.0.1:*',
+                     'prefix': 'demo-run', 'target_group_size': 2}
+
+    x1 = torch.randn(n_dims, requires_grad=True)
+    opt1 = torch.optim.Adam([x1], lr=0.05)
+    averager1 = hivemind.client.TrainingAverager(opt1, average_gradients=True, average_parameters=True,
+                                                 average_opt_statistics=["exp_avg_sq"], **common_kwargs)
+
+    x2 = torch.randn(n_dims, requires_grad=True)
+    opt2 = torch.optim.Adam([x2], lr=0.05)
+    averager2 = hivemind.client.TrainingAverager(opt2, average_gradients=True, average_parameters=True,
+                                                 average_opt_statistics=["exp_avg_sq"], **common_kwargs)
+    a = torch.ones(n_dims)
+
+    for i in range(n_steps):
+        opt1.zero_grad()
+        opt2.zero_grad()
+        (x1 - a).pow(2).sum().backward()
+        (x2 - a).pow(2).sum().backward()
+        opt1.step()
+        opt2.step()
+
+        with torch.no_grad():
+            x_avg = 0.5 * (x1 + x2)
+            grad_avg = 0.5 * (x1.grad + x2.grad)
+            stats_avg = 0.5 * (opt1.state[x1]["exp_avg_sq"] + opt2.state[x2]["exp_avg_sq"])
+
+        f1 = averager1.step(wait=False)
+        f2 = averager2.step(wait=False)
+        f1.result()
+        f2.result()
+
+        assert torch.allclose(x1, x_avg)
+        assert torch.allclose(x2, x_avg)
+        assert torch.allclose(x1.grad, grad_avg)
+        assert torch.allclose(x2.grad, grad_avg)
+        assert torch.allclose(opt1.state[x1]["exp_avg_sq"], stats_avg)
+        assert torch.allclose(opt2.state[x2]["exp_avg_sq"], stats_avg)

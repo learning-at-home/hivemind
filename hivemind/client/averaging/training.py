@@ -23,6 +23,7 @@ class TrainingAverager(DecentralizedAverager):
     :param opt: a pytorch optimizer to be averaged between peers (complete with model parameters)
     :param average_parameters: whether or not to average model parameters in self.step(...)
     :param average_gradients: whether or not to average model gradients in self.step(...)
+    :param average_opt_statistics: if specified, average optimizer statistics with corresponding names in statedict
     :param initialize_optimizer: if True, this will run a speculative optimizer step with
       zero gradients to initialize all tensors. If False, please initialize the optimizer state manually.
     :param extra_tensors: if specified, these extra tensors will also be averaged and shared in load_state_from_peers.
@@ -30,9 +31,11 @@ class TrainingAverager(DecentralizedAverager):
     :param kwargs: any additional parameters will be forwarded to DecentralizedAverager
     """
     def __init__(self, opt: torch.optim.Optimizer, *, average_parameters: bool, average_gradients: bool,
-                 extra_tensors: Sequence[torch.Tensor] = (), initialize_optimizer: bool = True, **kwargs):
+                 average_opt_statistics: Sequence[str] = (), extra_tensors: Sequence[torch.Tensor] = (),
+                 initialize_optimizer: bool = True, **kwargs):
 
         self.opt, self.extra_tensors, self.local_step = opt, tuple(extra_tensors), 0
+        self.opt_statistics = tuple(average_opt_statistics)
         self.average_parameters, self.average_gradients = average_parameters, average_gradients
         self.lock_averager_step = Lock()
         if initialize_optimizer:
@@ -85,6 +88,10 @@ class TrainingAverager(DecentralizedAverager):
                         yield param.grad
                     elif replace_none:
                         yield torch.zeros_like(param)
+        for stats in self.opt_statistics:
+            for param_group in self.opt.param_groups:
+                for param in param_group['params']:
+                    yield self.opt.state[param][stats]
         yield from iter(self.extra_tensors)
 
     def get_current_state(self):
