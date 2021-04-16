@@ -45,7 +45,8 @@ class CollaborationArguments:
     dht_listen_on: str = '[::]:*'  # network interface used for incoming DHT communication. Default: all ipv6
     listen_on: str = '[::]:*'  # network interface used for incoming averager communication. Default: all ipv6
     endpoint: Optional[str] = None  # this node's IP for inbound connections, used when running from behind a proxy
-    compression: str = 'FLOAT16'
+    batch_size_lead: int = 0  # optional: begin looking for group in advance, this many samples before target_batch_size
+    compression: str = 'FLOAT16'  # use this compression when averaging parameters/gradients
 
     min_refresh_period: float = 0.5  # wait for at least this many seconds before fetching new collaboration state
     max_refresh_period: float = 30  # wait for at most this many seconds before fetching new collaboration state
@@ -269,12 +270,14 @@ def main():
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     trainer_uuid = collaboration_args_dict.pop('trainer_uuid')
     statistics_expiration = collaboration_args_dict.pop('statistics_expiration')
+    adjusted_target_batch_size = collaboration_args_dict.pop('target_batch_size') \
+                                 - collaboration_args_dict.pop('batch_size_lead')
 
     collaborative_optimizer = hivemind.CollaborativeOptimizer(
         opt=opt, dht=dht, scheduler=scheduler, prefix=collaboration_args_dict.pop('experiment_prefix'),
         compression_type=hivemind.utils.CompressionType.Value(collaboration_args_dict.pop('compression')),
         batch_size_per_step=total_batch_size_per_step, throughput=collaboration_args_dict.pop('bandwidth'),
-        verbose=True, start=True, **collaboration_args_dict
+        target_batch_size=adjusted_target_batch_size, verbose=True, start=True, **collaboration_args_dict
     )
 
     class TrainerWithIndependentShuffling(Trainer):
