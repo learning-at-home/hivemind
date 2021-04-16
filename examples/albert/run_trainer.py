@@ -4,7 +4,7 @@ import logging
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 import uuid
 
 from datasets import load_from_disk
@@ -165,14 +165,21 @@ def get_optimizer_and_scheduler(training_args, model):
 
 class CollaborativeCallback(transformers.TrainerCallback):
     def __init__(self, dht: hivemind.DHT, collaborative_optimizer: hivemind.CollaborativeOptimizer,
-                 trainer_uuid: str, statistics_expiration: float):
+                 model: torch.nn.Module, trainer_uuid: str, statistics_expiration: float):
         self.dht, self.collaborative_optimizer = dht, collaborative_optimizer
+        self.model = model
         self.trainer_uuid, self.statistics_expiration = trainer_uuid, statistics_expiration
         self.last_reported_collaboration_step = -1
+        self.previous_state = self.get_current_state()
         super().__init__()
 
     def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
                     control: transformers.TrainerControl, **kwargs):
+        if not self.are_finite_params():
+            self.load_from_state(self.previous_state)
+            return control
+
+        self.previous_state = self.get_current_state()
 
         if state.log_history and self.collaborative_optimizer.local_step != self.last_reported_collaboration_step:
             self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
@@ -186,6 +193,25 @@ class CollaborativeCallback(transformers.TrainerCallback):
                            return_future=True)
             self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
         return control
+
+    @torch.no_grad()
+    def get_current_state(self) -> Dict[str, Any]:
+        return {
+            'model': self.model.state_dict(),
+            'opt': self.collaborative_optimizer.opt.state_dict()
+        }
+
+    @torch.no_grad()
+    def load_from_state(self, state):
+        self.model.load_state_dict(state['model'])
+        self.collaborative_optimizer.opt.load_state_dict(state['opt'])
+
+    @torch.no_grad()
+    def are_finite_params(self):
+        for param in self.model.parameters():
+            if not torch.all(torch.isfinite(param)):
+                return False
+        return True
 
 
 class NoOpScheduler(LRSchedulerBase):
