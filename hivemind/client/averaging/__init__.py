@@ -281,7 +281,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
             # compute optimal part sizes from peer throughputs
             np.random.seed(int.from_bytes(group_info.group_id, byteorder='big') % (2 ** 32))
-            incoming_throughputs = [thr if listen else 0.0 for thr, listen in zip(throughputs, modes)]
+            incoming_throughputs = [None if listen else 0.0 for thr, listen in zip(throughputs, modes)]
             part_sizes = await asyncio.get_event_loop().run_in_executor(
                 None, load_balance_peers, self.total_size, incoming_throughputs, min_vector_size)
             async with self.get_tensors_async() as averaged_tensors:
