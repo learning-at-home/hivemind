@@ -71,6 +71,7 @@ class MoEBeamSearcher:
         assert is_valid_prefix(uid_prefix), f"Prefix '{uid_prefix}' is invalid."
         self.dht = dht
         self.uid_prefix, self.grid_size = uid_prefix, grid_size
+        self.total_grid_size = sum(grid_size)
         self.negative_caching, self.num_workers, self.dht_kwargs = negative_caching, num_workers, kwargs
 
     def get_initial_beam(self, scores: Sequence[float], beam_size: int, return_future: bool = False

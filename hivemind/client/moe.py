@@ -54,7 +54,8 @@ class RemoteMixtureOfExperts(nn.Module):
         self.timeout_after_k_min = timeout_after_k_min
         self.detect_anomalies = detect_anomalies
 
-        self.proj = nn.Linear(in_features, sum(grid_size))  # jointly predict logits for all grid dimensions
+        # jointly predict logits for all grid dimensions
+        self.proj = nn.Linear(in_features, self.beam_search.total_grid_size)
         self._expert_info = None  # expert['info'] from one of experts in the grid
 
     def forward(self, input: torch.Tensor, *args: torch.Tensor, **kwargs: torch.Tensor):
