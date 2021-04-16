@@ -49,7 +49,7 @@ class TrainingAverager(DecentralizedAverager):
     def step(self, wait: bool = True, **kwargs):
         """ Average optimizer weights and gradients with peers. """
         if not wait:
-            return run_in_background(self.step, wait=False, **kwargs)
+            return run_in_background(self.step, wait=True, **kwargs)
 
         local_tensors = list(self.local_tensors())
         with self.lock_averager_step:
