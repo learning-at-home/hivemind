@@ -29,7 +29,7 @@ def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_
     return tuple(hagenbach_bishoff(vector_size, scores))
 
 
-def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int = 0, eps: float = 1e-15) -> np.ndarray:
+def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int = 0, ndigits: int = 9) -> np.ndarray:
     """
     This method solves an optimization problem to minimize the total allreduce time.
     In butterfly all-reduce, each peer acts both as a "client" and as an "aggregator":
@@ -60,7 +60,7 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
     # the constraints below are tuples (A, b) such that Ax <= b
     nonnegative_weights = -np.eye(group_size, M=num_variables), np.zeros(group_size)
     weights_sum_to_one = c[None, :] - 1.0, np.array([-1.0])
-    coeff_per_variable = (group_size - 2.0) / np.maximum(throughputs, eps)
+    coeff_per_variable = (group_size - 2.0) / np.maximum(throughputs, 10 ** -ndigits)
     coeff_matrix_minus_xi = np.hstack([np.diag(coeff_per_variable), -np.ones((group_size, 1))])
     xi_is_maximum = coeff_matrix_minus_xi[is_nonzero], -1.0 / throughputs[is_nonzero]
     force_max_weights = np.eye(group_size, M=num_variables), is_nonzero.astype(c.dtype)
@@ -73,6 +73,7 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
         # if some peers have less than min_size elements, transfer their share to other peers (if any)
         if np.max(peer_scores) >= min_size / float(vector_size):
             peer_scores[peer_scores < min_size / float(vector_size)] = 0.0
+        peer_scores = np.round(peer_scores, ndigits)
     else:
         logger.error(f"Failed to solve load-balancing for bandwidths {throughputs}.")
         peer_scores = np.ones(group_size)
