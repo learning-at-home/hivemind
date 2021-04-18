@@ -67,7 +67,7 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
 
     A, b = list(map(np.concatenate, zip(nonnegative_weights, weights_sum_to_one, xi_is_maximum, force_max_weights)))
 
-    solution = scipy.optimize.linprog(c, A_ub=A, b_ub=b)
+    solution = scipy.optimize.linprog(c, A_ub=A, b_ub=b, method='interior-point')
     if solution.success:
         peer_scores = solution.x[:group_size]
         # if some peers have less than min_size elements, transfer their share to other peers (if any)
