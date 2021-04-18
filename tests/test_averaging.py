@@ -411,6 +411,7 @@ def test_training_averager(n_steps: int = 10, n_dims: int = 16):
             grad_avg = 0.5 * (x1.grad + x2.grad)
             stats_avg = 0.5 * (opt1.state[x1]["exp_avg_sq"] + opt2.state[x2]["exp_avg_sq"])
 
+        # we set wait=False in order to prevent deadlock, when averager1 locks and waits for averager2
         f1 = averager1.step(wait=False)
         f2 = averager2.step(wait=False)
         f1.result()
