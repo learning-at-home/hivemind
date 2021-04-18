@@ -8,10 +8,10 @@ import torch
 import numpy as np
 
 from hivemind.dht import DHT
-from hivemind.client.optim.base import DecentralizedOptimizerBase
+from hivemind.optim.base import DecentralizedOptimizerBase
 from hivemind.client.averaging.training import TrainingAverager
 from hivemind.utils import get_logger, get_dht_time, ValueWithExpiration
-from hivemind.client.optim.performance_ema import PerformanceEMA
+from hivemind.optim.performance_ema import PerformanceEMA
 
 logger = get_logger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
