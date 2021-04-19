@@ -46,7 +46,7 @@ class TensorDescriptor(DescriptorBase):
 
 @dataclass(repr=True, frozen=True)
 class BatchTensorDescriptor(TensorDescriptor):
-    """ torch Tensor with a variable 0-th dimension, used to describe batched data """
+    """ torch.Tensor with a variable 0-th dimension, used to describe batched data """
 
     def __init__(self, *instance_size, **kwargs):  # compatibility: allow initializing with *size
         if len(instance_size) == 1 and isinstance(instance_size[0], (list, tuple, torch.Size)):
@@ -60,9 +60,9 @@ class BatchTensorDescriptor(TensorDescriptor):
                    pin_memory=safe_check_pinned(tensor),
                    compression=compression if tensor.is_floating_point() else CompressionType.NONE)
 
-    def make_empty(self, batch_size, **kwargs):
+    def make_empty(self, *batch_size, **kwargs):
         assert self.shape[0] is None, "Make sure 0-th dimension is not specified (set to None)"
-        return super().make_empty(size=(batch_size, *self.shape[1:]), **kwargs)
+        return super().make_empty(size=(*batch_size, *self.shape[1:]), **kwargs)
 
 
 def safe_check_pinned(tensor: torch.Tensor) -> bool:

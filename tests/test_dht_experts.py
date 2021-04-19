@@ -77,7 +77,7 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
 @pytest.mark.forked
 def test_dht_single_node():
     node = hivemind.DHT(start=True, expiration=999)
-    beam_search = MoEBeamSearcher(node, 'expert.')
+    beam_search = MoEBeamSearcher(node, 'expert.', grid_size=(10,))
 
     assert all(node.declare_experts(['expert.1', 'expert.2', 'expert.3'], f"{hivemind.LOCALHOST}:1337").values())
     assert len(node.declare_experts(["ffn.1", "ffn.2"], endpoint="that_place")) == 4
@@ -104,7 +104,7 @@ def test_dht_single_node():
     assert initial_beam[2][:2] == (0.0, 'expert.3.')
 
     with pytest.raises(AssertionError):
-        beam_search = MoEBeamSearcher(node, 'expert.1.ffn')
+        beam_search = MoEBeamSearcher(node, 'expert.1.ffn', (2, 2))
 
     with pytest.raises(AssertionError):
         beam_search.get_active_successors(['e.1.2.', 'e.2', 'e.4.5.'])
@@ -147,7 +147,7 @@ async def test_negative_caching():
 
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
     neg_caching_peer = hivemind.DHT(initial_peers=neighbors_i, cache_locally=False, start=True)
-    beam_search = MoEBeamSearcher(neg_caching_peer, uid_prefix='ffn.', negative_caching=True)
+    beam_search = MoEBeamSearcher(neg_caching_peer, uid_prefix='ffn.', grid_size=(10, 10, 10), negative_caching=True)
     # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
     assert len(beam_search.get_initial_beam(scores=[.1, .2, .3, .4, .5, .6], beam_size=3)) == 2
 
