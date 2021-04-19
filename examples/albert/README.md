@@ -1,6 +1,6 @@
 # Training ALBERT
 
-This tutorial will walk you through setting up training ALBERT-large-v2 with WikiText103 dataset. It will walk you through the necessary steps to setup your own collaborative training for similar models and tasks.
+This tutorial will walk you through the steps to set up ALBERT-large-v2 collaborative training with WikiText103 dataset.
 
 ### Preparation
 * Install hivemind: `pip install git+https://github.com/learning-at-home/hivemind.git`
