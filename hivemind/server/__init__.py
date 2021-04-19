@@ -262,11 +262,15 @@ def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[hivemind.End
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
     pipe, runners_pipe = mp.Pipe(duplex=True)
     runner = mp.Process(target=_server_runner, args=(runners_pipe, *args), kwargs=kwargs)
-
     try:
         runner.start()
-        yield pipe.recv()  # once the server is ready, runner will send us a tuple(hostname, port, dht port)
-        pipe.send('SHUTDOWN')  # on exit from context, send shutdown signal
+        # once the server is ready, runner will send us either (False, exception) or (True, (server_port, dht_port))
+        start_ok, data = pipe.recv()
+        if start_ok:
+            yield data
+            pipe.send('SHUTDOWN')  # on exit from context, send shutdown signal
+        else:
+            raise RuntimeError(f"Server failed to start: {data}")
     finally:
         runner.join(timeout=shutdown_timeout)
         if runner.is_alive():
@@ -276,14 +280,21 @@ def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[hivemind.End
 
 
 def _server_runner(pipe, *args, **kwargs):
-    server = Server.create(*args, start=True, **kwargs)
+    try:
+        server = Server.create(*args, start=True, **kwargs)
+    except Exception as e:
+        logger.exception(f"Encountered an exception when starting a server: {e}")
+        pipe.send((False, f'{type(e).__name__} {e}'))
+        return
+
     try:
         if server.dht is not None:
             dht_listen_on = hivemind.replace_port(server.dht.listen_on, server.dht.port)
         else:
             dht_listen_on = None
-        pipe.send((server.listen_on, dht_listen_on))
+        pipe.send((True, (server.listen_on, dht_listen_on)))
         pipe.recv()  # wait for shutdown signal
+
     finally:
         logger.info("Shutting down server...")
         server.shutdown()
