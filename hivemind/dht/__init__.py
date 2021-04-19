@@ -91,7 +91,7 @@ class DHT(mp.Process):
         """
         self.start()
         if await_ready and not self.ready.wait(timeout=timeout):
-            raise TimeoutError("Server didn't notify .ready in {timeout} seconds")
+            raise TimeoutError(f"Server didn't notify .ready in {timeout} seconds")
 
     def shutdown(self) -> None:
         """ Shut down a running dht process """
@@ -186,6 +186,7 @@ class DHT(mp.Process):
             else:
                 future.set_result(await main_task)
         except BaseException as e:
+            logger.exception(f'Caught an exception when running a coroutine: {e}')
             if not future.done():
                 future.set_exception(e)
 
@@ -243,7 +244,7 @@ class DHT(mp.Process):
                                             f" Please ensure the node is connected or specify peers=... manually."))
 
     def declare_experts(self, uids, endpoint, wait: bool = True):
-        logger.warning("dht.declare_experts is scheduled for removal in 0.9.8, please use hivemind.declare_experts.",)
+        logger.warning("dht.declare_experts is scheduled for removal in 0.9.8, please use hivemind.declare_experts.")
         return hivemind.declare_experts(self, uids, endpoint, wait=wait)
 
     def get_experts(self, uids, expiration_time: Optional[DHTExpiration] = None,
