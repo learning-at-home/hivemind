@@ -1,6 +1,6 @@
 # Training ALBERT
 
-This tutorial will walk you through the steps to set up collaborative training with ALBERT-large-v2 model and WikiText103 dataset. It uses huggingface `datasets` and `transformers` libraries to do compute the local updates, using `hivmeind.CollaborativeOptimizer` to exchange information between peers.
+This tutorial will walk you through the steps to set up collaborative training with ALBERT-large-v2 model and WikiText103 dataset. It uses huggingface `datasets` and `transformers` libraries to compute the local updates, using `hivemind.CollaborativeOptimizer` to exchange information between peers.
 
 ### Preparation
 * Install hivemind: `pip install git+https://github.com/learning-at-home/hivemind.git`
