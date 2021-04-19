@@ -44,17 +44,9 @@ __`run_first_peer.py`:__ this peer exists solely to welcome other peers onto the
 
 __Tuning for hardware/network:__ the optimal training parameters for each peer depend on its GPU and internet connection. If a peer cannot accept incoming connections (e.g. when in colab or behind a firewall), add `--client_mode` to the training script (see example below). In case of high network latency, you may want to increase `--averaging_expiration` by a few seconds or set `--batch_size_lead` to start averaging a bit earlier than the rest of the collaboration. GPU-wise, each peer should be able to process one local microbatch each `0.5~1` seconds (see trainer's progressbar). To achieve that, we recommend tuning `--per_device_train_batch_size` and `--gradient_accumulation_steps`. The example trainer supports multiple GPUs via DataParallel. However, in using advanced distributed training strategies (e.g. [zero3](https://www.deepspeed.ai/news/2021/03/07/zero3-offload.html)) will require changes in `run_trainer.py`.
 
-__Example trainer script:__
-
-
-
-__Using public GPU providers:__ There are awesome services like [Google Colab](https://colab.research.google.com/)/[Kaggle kernels](https://www.kaggle.com/dansbecker/running-kaggle-kernels-with-a-gpu)/[Paperspace](https://gradient.paperspace.com/free-gpu) that provide free GPUs. These services usually come with significant limitations (e.g. last gen GPUs, reset every few hours), but they allow just about anyone to join your collaborative experiment. Here are some tips and tricks:
-  -
+__Using public GPU providers:__ There are awesome services like [Google Colab](https://colab.research.google.com/), [Kaggle kernels](https://www.kaggle.com/dansbecker/running-kaggle-kernels-with-a-gpu) or[Paperspace](https://gradient.paperspace.com/free-gpu) that provide free GPUs. These services usually come with significant limitations (e.g. last gen GPUs, reset every few hours), but they allow just about anyone to join your collaborative experiment. Here's how to best use them.
+  - before you begin, __read the rules carefully__. Most free-tier GPU services allow only one GPU per user and using more than one account will get you banned. It is **your** duty to make sure that collaborators won't get in trouble for helping you.
   - you can create starter kits to make it more convenient for collaborators to join your trianing run ([example](https://colab.research.google.com/gist/yhn112/e858cb841c73879d8ef98a84e03b43e7/collaborative-training-v0-10.ipynb)). Ideally, joining collaboration should take at most a couple of clicks.
-- 
-- [vast.ai](https://vast.ai/)
-- 
-
 
 Here's an example of full trainer script for google colab:
 ```
@@ -67,19 +59,3 @@ Here's an example of full trainer script for google colab:
  --logging_first_step --logging_steps 100  --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs \
  --experiment_prefix EXPERIMENT_NAME_HERE --seed 42
 ```
-
-## Tips and tricks: adding peers to a collaboration
-Hosting data
-Colab/vastai
-
-
-The trainer node can be launched on any computer with a GPU, such as AWS VM or vast.ai instance. Trainer nodes can be added to the system at any time.
-
-`-----------------`
-To be added:
-- colab/vastai peers
-- how to run (first peer, trainers)
-- tips on how to host a collaboration (colab/kaggle runners, client_mode)
-- explain collaboration metrics
-- how to read/extend the code
-- data uploading best practices (s3 vs local server vs dropbox vs preprocess independently)
