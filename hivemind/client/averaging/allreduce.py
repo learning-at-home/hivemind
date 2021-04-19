@@ -1,5 +1,5 @@
 import asyncio
-from typing import Sequence, Set, Dict, Tuple, Iterable, AsyncIterator, Any
+from typing import Sequence, Set, Dict, Tuple, List, Iterable, AsyncIterator, Any
 
 import grpc
 import torch
@@ -11,7 +11,126 @@ from hivemind.proto import averaging_pb2_grpc, runtime_pb2, averaging_pb2
 
 # flavour types
 GroupID = bytes
+TensorID = int
 logger = get_logger(__name__)
+
+class TensorPartContainer:
+    def __init__(self, tensors: Sequence[torch.Tensor], part_sizes: Tuple[int, ...], endpoints: Sequence[Endpoint]):
+        assert len(endpoints) == len(part_sizes), "length of part_sizes mismatch with endpoints"
+        # Sort tensors descending by size
+        tensor_ids, tensors = zip(*sorted(enumerate(tensors), key=lambda idx_tensor: -idx_tensor[-1].numel()))
+        # Sort peers ascending by part_size
+        endpoints, part_sizes = zip(*sorted(zip(endpoints, part_sizes), key=lambda peer_size: peer_size[-1]))
+
+        chunks, chunk_ids = self._split_into_parts(tensors, tensor_ids=tensor_ids, part_sizes=part_sizes)
+        self._orig_shapes = {idx: tensor.shape for idx, tensor in zip(tensor_ids, tensors)}
+
+        self._make_views(chunks, chunk_ids, endpoints)
+        self.endpoints = tuple(endpoints)
+
+    def _make_views(self, chunks, chunk_ids, endpoints):
+        self._peer_tensor_id_view: Dict[Endpoint, Tuple[TensorID, ...]] = dict()
+        self._chunk_view: Dict[Tuple[Endpoint, TensorID], torch.Tensor] = dict()
+
+        tensor_parts = []
+        for part_chunks, part_ids, endpoint in zip(chunks, chunk_ids, endpoints):
+            self._peer_tensor_id_view[endpoint] = tuple(part_ids)
+
+            part_keys = zip([endpoint] * len(part_ids), part_ids)
+            tensor_parts.extend(zip(part_keys, part_chunks))
+
+        self._chunk_view = dict(tensor_parts)
+
+    def get_chunk(self, peer: Endpoint, tensor_id: int) -> torch.Tensor:
+        return self._chunk_view[(peer, tensor_id)]
+
+    def get_part(self, peer: Endpoint) -> List[torch.Tensor]:
+        """Return peer part of tensor chunks. Chunks ordered by ids"""
+        return [self.get_chunk(peer, idx) for idx in self._peer_tensor_id_view[peer]]
+
+    def get_part_with_ids(self, peer: Endpoint) -> List[Tuple[TensorID, torch.Tensor]]:
+        """Return peer part of tensor chunks. Chunks ordered by ids"""
+        return list(zip(self._peer_tensor_id_view[peer], self.get_part(peer)))
+
+    def set_chunk(self, chunk: torch.Tensor, peer: Endpoint, tensor_id: int):
+        assert self._chunk_view[(peer, tensor_id)].shape == chunk.shape, "chunk shape mismatch"
+        assert self._chunk_view[(peer, tensor_id)].dtype == chunk.dtype, "chunk dtype mismatch"
+        self._chunk_view[(peer, tensor_id)] = chunk
+
+    def set_part(self, peer_part: List[torch.Tensor], peer: Endpoint, tensor_ids: List[TensorID] = None):
+        """Chunks must be ordered by tensor id"""
+        if tensor_ids is None:
+            tensor_ids = self._peer_tensor_id_view[peer]
+        for tensor_id, tensor in zip(tensor_ids, peer_part):
+            self.set_chunk(tensor, peer, tensor_id)
+
+    def assert_part(self, peer_part: List[torch.Tensor], peer: Endpoint, tensor_ids: List[TensorID] = None, msg_template='{err_type}'):
+        if tensor_ids is None:
+        tensor_ids = self._peer_tensor_id_view[peer]
+        for tensor_id, peer_chunk in zip(tensor_ids, peer_part):
+            chunk = self._chunk_view[(peer, tensor_id)]
+            assert peer_chunk.shape == chunk.shape, msg_template.format("chunk shape mismatch")
+            assert peer_chunk.dtype == chunk.dtype, msg_template.format("chunk dtype mismatch")
+
+    @property
+    def tensors(self) -> Tuple[torch.Tensor, ...]:
+        part_keys, chunks = self._chunk_view.items()
+        _, chunk_ids = zip(*part_keys)
+        return self._restore_from_parts(chunk_ids, chunks, self._orig_shapes)
+
+    @staticmethod
+    def _split_into_parts(tensors: Sequence[torch.Tensor],
+                          tensor_ids: Sequence[torch.Tensor],
+                          part_sizes: Tuple[int]) -> Tuple[Sequence[List[torch.Tensor]], Sequence[List[int]]]:
+        """ combines averaged_tensors into one tensor and splits them into equal chunks of size group_size """
+        tensors = tuple(map(torch.Tensor.flatten, tensors))
+        enumerated_tensors = zip(tensor_ids, tensors)
+        chunks, chunk_ids = [], []
+
+        for part_size in part_sizes:
+            part, part_ids = [], []
+            accum_size = 0
+
+            for tensor_id, tensor in enumerated_tensors:
+                tensor_size = tensor.numel()
+
+                if accum_size + tensor_size <= part_size:
+                    part.append(tensor)
+                    part_ids.append(tensor_id)
+                    accum_size += tensor_size
+
+                    if accum_size == part_size:
+                        break
+                else:
+                    residue = part_size - accum_size
+                    print(accum_size, tensor_size, part_size, residue)
+                    shards = tensor[:residue], tensor[residue:]
+
+                    part.append(shards[0])
+                    part_ids.append(tensor_id)
+                    enumerated_tensors = iter([(tensor_id, shards[1])] + list(enumerated_tensors))
+                    break
+
+            chunks.append(part)
+            chunk_ids.append(part_ids)
+        return chunks, chunk_ids
+
+    @staticmethod
+    def _restore_from_parts(chunk_ids: Sequence[TensorID],
+                            chunks: Sequence[torch.Tensor],
+                            tensor_shapes: Dict[TensorID, torch.Size]) -> Tuple[torch.Tensor, ...]:
+        """ restores the original tensor shapes from chunks obtained by split_into_chunks """
+        restored, restored_ids, shapes = [], [], []
+        for tensor_id in chunk_ids:
+            if tensor_id not in restored_ids:
+                tensor = torch.cat([tensor for tid, tensor in zip(chunk_ids, chunks) if tid == tensor_id])
+
+                restored_ids.append(tensor_id)
+                restored.append(tensor)
+                shapes.append(tensor_shapes[tensor_id])
+
+        return tuple(map(torch.Tensor.reshape, restored, shapes))
+
 
 
 class AllReduceProtocol:
@@ -34,7 +153,7 @@ class AllReduceProtocol:
         self.client_mode_endpoints = {endpoint for endpoint, part_size in zip(self.ordered_group_endpoints, part_sizes)
                                       if part_size == 0}
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
-        self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
+
         self.return_deltas = return_deltas
 
         self.accumulator = torch.zeros_like(self.local_tensor_parts[self.endpoint])
@@ -91,12 +210,12 @@ class AllReduceProtocol:
         self.averaged_tensor_parts[source] = averaged_part
         if len(self.averaged_tensor_parts) == len(self.local_tensor_parts):
             ordered_averaged_parts = [self.averaged_tensor_parts[endpoint] for endpoint in self.ordered_group_endpoints]
-            outputs = restore_from_parts(ordered_averaged_parts, self.tensor_shapes)
+            outputs = restore_from_parts(ordered_averaged_parts,)
 
             if self.return_deltas:
                 local_parts = [self.local_tensor_parts[peer] for peer in self.ordered_group_endpoints]
                 with torch.no_grad():
-                    original_tensors = restore_from_parts(local_parts, self.tensor_shapes)
+                    original_tensors = restore_from_parts(local_parts,)
                     for averaged_tensor, original_tensor in zip(outputs, original_tensors):
                         averaged_tensor -= original_tensor
 
@@ -237,21 +356,6 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             logger.debug(f"{self} - peer {request.endpoint} sent {error_code}, allreduce cannot continue")
             self.set_exception(AllreduceException(f"peer {request.endpoint} sent {error_code}."))
             yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
-
-
-def split_into_parts(tensors: Sequence[torch.Tensor], part_sizes: Tuple[int]) -> Tuple[torch.Tensor, ...]:
-    """ combines averaged_tensors into one tensor and splits them into equal chunks of size group_size """
-    flat_tensor = torch.cat(tuple(map(torch.Tensor.flatten, tensors)))
-    return torch.split_with_sizes(flat_tensor, part_sizes, dim=0)
-
-
-def restore_from_parts(chunks: Sequence[torch.Tensor], shapes: Sequence[torch.Size]) -> Tuple[torch.Tensor, ...]:
-    """ restores the original tensor shapes from chunks obtained by split_into_chunks """
-    flat_tensor = torch.cat(tuple(chunks))
-    result_sizes = tuple(map(torch.Size.numel, shapes))
-    flat_original_tensors = torch.split_with_sizes(flat_tensor, result_sizes)
-    return tuple(map(torch.Tensor.reshape, flat_original_tensors, shapes))
-
 
 class AllreduceException(Exception):
     """ A special exception that is raised when allreduce can't continue normally (e.g. disbanded/bad request/etc) """
