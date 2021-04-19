@@ -1,13 +1,14 @@
+import time
 from functools import partial
 
-import time
 import pytest
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.datasets import load_digits
 
-from hivemind import RemoteExpert, background_server, DHT, DecentralizedSGD
+from hivemind import RemoteExpert, RemoteMixtureOfExperts, RemoteSwitchMixtureOfExperts, background_server, DHT, \
+    DecentralizedSGD
 
 
 @pytest.mark.forked
@@ -22,20 +23,91 @@ def test_training(max_steps: int = 100, threshold: float = 0.9):
         expert2 = RemoteExpert('expert.1', server_endpoint)
         model = nn.Sequential(expert2, nn.ReLU(), expert1, nn.Linear(64, 2))
 
-        opt = torch.optim.SGD(model.parameters(), lr=0.05)
+        opt = SGD(model.parameters(), lr=0.05)
 
         for step in range(max_steps):
-            opt.zero_grad()
-
             outputs = model(X_train)
             loss = F.cross_entropy(outputs, y_train)
             loss.backward()
             opt.step()
+            opt.zero_grad()
 
             accuracy = (outputs.argmax(dim=1) == y_train).float().mean().item()
             if accuracy >= threshold:
                 break
 
+        assert accuracy >= threshold, f"too small accuracy: {accuracy}"
+
+
+@pytest.mark.forked
+def test_moe_training(max_steps: int = 100, threshold: float = 0.9, num_experts=2):
+    dataset = load_digits(n_class=2)
+    X_train, y_train = torch.tensor(dataset['data'], dtype=torch.float), torch.tensor(dataset['target'])
+    SGD = partial(torch.optim.SGD, lr=0.05)
+
+    all_expert_uids = [f'expert.{i}' for i in range(num_experts)]
+    with background_server(expert_uids=all_expert_uids, device='cpu', optim_cls=SGD, hidden_dim=64, num_handlers=1) \
+            as (server_endpoint, dht_endpoint):
+        dht = DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+
+        moe = RemoteMixtureOfExperts(in_features=64, grid_size=(num_experts,), dht=dht, uid_prefix='expert.', k_best=2)
+        model = nn.Sequential(moe, nn.Linear(64, 2))
+
+        opt = SGD(model.parameters(), lr=0.05)
+
+        for step in range(max_steps):
+            outputs = model(X_train)
+            loss = F.cross_entropy(outputs, y_train)
+            loss.backward()
+            opt.step()
+            opt.zero_grad()
+
+            accuracy = (outputs.argmax(dim=1) == y_train).float().mean().item()
+            if accuracy >= threshold:
+                break
+
+        assert accuracy >= threshold, f"too small accuracy: {accuracy}"
+
+
+class SwitchNetwork(nn.Module):
+    def __init__(self, dht, in_features, num_classes, num_experts):
+        super().__init__()
+        self.moe = RemoteSwitchMixtureOfExperts(in_features=in_features, grid_size=(num_experts,), dht=dht,
+                                                jitter_eps=0, uid_prefix='expert.', k_best=1,
+                                                k_min=1)
+        self.linear = nn.Linear(in_features, num_classes)
+
+    def forward(self, x):
+        moe_output, balancing_loss = self.moe(x)
+        return self.linear(moe_output), balancing_loss
+
+
+@pytest.mark.forked
+def test_switch_training(max_steps: int = 10, threshold: float = 0.9, num_experts=5):
+    dataset = load_digits(n_class=2)
+    X_train, y_train = torch.tensor(dataset['data'], dtype=torch.float), torch.tensor(dataset['target'])
+    SGD = partial(torch.optim.SGD, lr=0.05)
+
+    all_expert_uids = [f'expert.{i}' for i in range(num_experts)]
+    with background_server(expert_uids=all_expert_uids, device='cpu', optim_cls=SGD, hidden_dim=64,
+                           num_handlers=1) as (server_endpoint, dht_endpoint):
+        dht = DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+
+        model = SwitchNetwork(dht, 64, 2, num_experts)
+        opt = SGD(model.parameters(), lr=0.05)
+
+        for step in range(max_steps):
+            outputs, balancing_loss = model(X_train)
+            loss = F.cross_entropy(outputs, y_train) + 0.01 * balancing_loss
+            loss.backward()
+            opt.step()
+            opt.zero_grad()
+
+            accuracy = (outputs.argmax(dim=1) == y_train).float().mean().item()
+            if accuracy >= threshold:
+                break
+
+        assert model.moe.grid_utilization.min().item() > (1 / num_experts) / 2
         assert accuracy >= threshold, f"too small accuracy: {accuracy}"
 
 

@@ -18,10 +18,27 @@ def test_moe():
         dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
 
         dmoe = hivemind.RemoteMixtureOfExperts(
-            in_features=16, grid_size=(32, 32, 32), dht=dht, k_best=3, uid_prefix='ffn.')
+            in_features=16, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix='ffn.')
 
-        for i in range(5):
+        for i in range(3):
             out = dmoe(torch.randn(10, 16))
+            out.sum().backward()
+
+
+@pytest.mark.forked
+def test_no_experts():
+    all_expert_uids = [f'expert.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
+                       for _ in range(10)]
+    with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='nop_delay', num_handlers=1,
+                           hidden_dim=16) as (server_endpoint, dht_endpoint):
+        dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+
+        dmoe = hivemind.RemoteSwitchMixtureOfExperts(
+            in_features=16, grid_size=(4, 4, 4), dht=dht, uid_prefix='expert.', forward_timeout=0.1,
+            backward_timeout=0.1, allow_zero_outputs=True)
+
+        for i in range(3):
+            out, balancing_loss = dmoe(torch.randn(10, 16))
             out.sum().backward()
 
 
@@ -33,6 +50,7 @@ def test_call_many(hidden_dim=16):
     forward_timeout = None
     backward_timeout = None
     detect_anomalies = False
+    allow_zero_outputs = False
     atol = 1e-5
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=hidden_dim,
@@ -44,7 +62,7 @@ def test_call_many(hidden_dim=16):
 
         mask, expert_outputs = hivemind.client.moe._RemoteCallMany.apply(
             DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []], k_min, backward_k_min, timeout_after_k_min,
-            forward_timeout, backward_timeout, detect_anomalies, e1.info, inputs
+            forward_timeout, backward_timeout, detect_anomalies, allow_zero_outputs, e1.info, inputs
         )
         assert mask.shape == (4, 3)
         assert expert_outputs.shape == (4, 3, hidden_dim)
