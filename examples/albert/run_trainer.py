@@ -284,7 +284,8 @@ def main():
         opt=opt, dht=dht, scheduler=scheduler, prefix=collaboration_args_dict.pop('experiment_prefix'),
         compression_type=hivemind.utils.CompressionType.Value(collaboration_args_dict.pop('compression')),
         batch_size_per_step=total_batch_size_per_step, throughput=collaboration_args_dict.pop('bandwidth'),
-        target_batch_size=adjusted_target_batch_size, verbose=True, start=True, **collaboration_args_dict
+        target_batch_size=adjusted_target_batch_size, verbose=True, client_mode=collaboration_args_dict.pop('client_mode'),
+        start=True, **collaboration_args_dict
     )
 
     class TrainerWithIndependentShuffling(Trainer):
