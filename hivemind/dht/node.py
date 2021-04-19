@@ -372,11 +372,13 @@ class DHTNode:
         store_succeeded = any(store_ok)
         is_dictionary = any(subkey is not None for subkey in subkeys)
         if store_succeeded and not is_dictionary:  # stored a new regular value, cache it!
-            stored_value_bytes, stored_expiration = max(zip(binary_values, expirations), key=lambda p: p[1])
+            stored_expiration, stored_value_bytes = max(zip(expirations, binary_values))
             self.protocol.cache.store(key_id, stored_value_bytes, stored_expiration)
         elif not store_succeeded and not is_dictionary:  # store rejected, check if local cache is also obsolete
-            rejected_value, rejected_expiration = max(zip(binary_values, expirations), key=lambda p: p[1])
-            if (self.protocol.cache.get(key_id) or (None, float("inf")))[1] <= rejected_expiration:  # cache would be rejected
+            rejected_expiration, rejected_value = max(zip(expirations, binary_values))
+            cached_value = self.protocol.cache.get(key_id)
+            if (cached_value is not None and
+                    cached_value.expiration_time <= rejected_expiration):  # cache would be rejected
                 self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
         elif is_dictionary and key_id in self.protocol.cache:  # there can be other keys and we should update
             for subkey, stored_value_bytes, expiration_time, valid in zip(
