@@ -64,10 +64,9 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
     nonnegative_weights = -np.eye(group_size, num_variables, c.dtype), np.zeros(group_size, c.dtype)
     weights_sum_to_one = c[None, :] - 1.0, np.array([-1.0])
     coeff_per_variable = (group_size - 2.0) / np.maximum(throughputs, 10 ** -LOAD_BALANCING_LP_DECIMALS)
-    coeff_matrix_minus_xi = np.hstack([np.diag(coeff_per_variable).astype(c.dtype),
-                                       -np.ones((group_size, 1), c.dtype)])
+    coeff_matrix_minus_xi = np.hstack([np.diag(coeff_per_variable), -np.ones((group_size, 1), c.dtype)])
     xi_is_maximum = coeff_matrix_minus_xi[is_nonzero], -1.0 / throughputs[is_nonzero]
-    force_max_weights = np.eye(group_size, M=num_variables).astype(c.dtype), is_nonzero.astype(c.dtype)
+    force_max_weights = np.eye(group_size, M=num_variables, dtype=c.dtype), is_nonzero.astype(c.dtype)
 
     A, b = list(map(np.concatenate, zip(nonnegative_weights, weights_sum_to_one, xi_is_maximum, force_max_weights)))
 
