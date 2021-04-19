@@ -5,7 +5,7 @@ This tutorial will walk you through the steps to set up collaborative training w
 ### Preparation
 * Install hivemind: `pip install git+https://github.com/learning-at-home/hivemind.git`
 * Dependencies: `pip install "transformers>=4.5.1" "datasets>=1.5.0" "torch_optimizer>=0.1.0" sentencepiece wandb whatsmyip`
-* Preprocess data: `python ./tokenize_wikitext103.py`
+* Preprocess data: `python tokenize_wikitext103.py`
 * Upload an archive preprocessed data to somewhere volunteers can reach, example: `https://hivemind-data.s3.us-east-2.amazonaws.com/wikitext103_preprocessed.tar`
 
 
