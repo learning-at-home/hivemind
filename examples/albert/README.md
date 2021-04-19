@@ -18,7 +18,7 @@ This tutorial will walk you through the steps to set up collaborative training w
    - This peer will run a DHT node on a certain IP/port (`Running DHT root at ...`). You will need this address for next steps.
    - ![image](https://user-images.githubusercontent.com/3491902/115176132-28ec8700-a0d5-11eb-8a7e-370b97a089da.png)
 
-- To join a collaboration with a gpu trainer, 
+- To join a collaboration with a GPU trainer, 
   - install the same dependencies (minus the `wandb` and `whatsmyip`), download the data and unpack it to the experiment folder,
   - if necessary, specify paths: `--dataset_path ./path/to/unpacked/data --tokenizer ./path/to/tokenizer/config` (see [default paths](https://github.com/learning-at-home/hivemind/blob/collaborative_albert_example/examples/albert/run_trainer.py#L63-L69) for reference)
   - run:
