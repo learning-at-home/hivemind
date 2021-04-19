@@ -106,10 +106,8 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         packed_outputs = nested_pack(averaged_outputs_flat, self.info['outputs_schema'])
 
-        # balancing loss: fraction of examples routed to each expert,
-        # fraction of probability assigned to each expert (both across all experts)
-        # want both to have equal allocation
-
+        # Load balancing loss: multiply fractions of probability mass and fractions of routed examples
+        # for each grid dimension, sum across all indices for a dimension. Optimizing this leads to uniform allocation
         balancing_loss = torch.stack([torch.mean(dim_softmax.mean(0) * dim_utilization) * (dim_size ** 2)
                                       for dim_softmax, dim_utilization, dim_size in
                                       zip(grid_softmax, self.grid_utilization, self.beam_search.grid_size)]).sum()
