@@ -6,7 +6,7 @@ from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-LOAD_BALANCING_LP_DECIMALS = 9  # round linear programming solution to this many decimals for numerical stability
+LOAD_BALANCING_LP_DECIMALS = 9
 
 
 def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_size: int = 0) -> Tuple[int, ...]:
