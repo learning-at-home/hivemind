@@ -1,31 +1,25 @@
 from __future__ import annotations
 
-import time
-from queue import Queue, Empty
-from typing import Tuple, List, Optional, Dict, Any
+from typing import Tuple, List
 
 import grpc
-
 import torch
-import torch.nn as nn
-from torch.autograd.function import once_differentiable
 
-import hivemind
-from hivemind.client.expert import RemoteExpert, DUMMY, _get_expert_stub
-from hivemind.server.expert_uid import UID_DELIMITER
-from hivemind.client.beam_search import MoEBeamSearcher
-from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
-from hivemind.utils import nested_pack, nested_flatten, serialize_torch_tensor, deserialize_torch_tensor
-from hivemind.utils.logging import get_logger
+from hivemind.client.expert import RemoteExpert, DUMMY
 from hivemind.client.moe import RemoteMixtureOfExperts, _RemoteCallMany
+from hivemind.server.expert_uid import UID_DELIMITER
+from hivemind.utils import nested_pack, nested_flatten
+from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
 class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
     """
-    A torch module that performs mixture of experts inference with a local gating function and multiple remote experts.
-    Natively supports pytorch autograd.
+    A module implementing Switch Transformers [1] Mixture-of-Experts inference with remote experts.
+
+    [1] Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity.
+     William Fedus, Barret Zoph, Noam Shazeer. https://arxiv.org/abs/2101.03961
 
     :note: By default, not all experts are guaranteed to perform forward pass. Moreover, not all of those who ran
      forward pass are guaranteed to perform backward pass. In the latter case, gradient will be averaged without
@@ -39,13 +33,15 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
     :param k_best: average this many highest-scoring experts to compute activations
     :param k_min: make sure at least this many experts returned output (i.e. didn't fail)
     :param timeout_after_k_min: wait for this many seconds after k_min experts returned results.
-    :param detect_anomalies: whether to check input/output tensors for NaN and infinity values
      Any expert that didn't manage to return output after that delay is considered unavailable
+    :param detect_anomalies: whether to check input/output tensors for NaN and infinity values
+    :param allow_zero_outputs: whether to return just the input if no experts respond on forward pass
     """
 
     def __init__(self, *, grid_size: Tuple[int, ...], utilization_alpha: float = 0.9, grid_dropout: float = 1.0,
-                 jitter_eps: float = 1e-2, **kwargs):
-        super().__init__(grid_size=grid_size, **kwargs)
+                 jitter_eps: float = 1e-2, k_best=1, k_min=0, backward_k_min=0, allow_zero_outputs=True, **kwargs):
+        super().__init__(grid_size=grid_size, k_best=k_best, k_min=k_min, backward_k_min=backward_k_min,
+                         allow_zero_outputs=allow_zero_outputs, **kwargs)
 
         initial_utilization = torch.cat(
             [torch.tensor([1 / dim_size for _ in range(dim_size)], dtype=torch.float)
@@ -57,16 +53,6 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
         self.jitter_eps = jitter_eps
 
     def forward(self, input: torch.Tensor, *args: torch.Tensor, **kwargs: torch.Tensor):
-        """
-        Choose k best experts with beam search, then call chosen experts and average their outputs.
-        Input tensor is averaged over all dimensions except for first and last
-        (we assume that extra dimensions represent sequence length or image height/width)
-
-        :param input: a tensor of values that are used to estimate gating function, batch-first.
-        :param args: extra positional parameters that will be passed to each expert after input, batch-first
-        :param kwargs: extra keyword parameters that will be passed to each expert, batch-first
-        :returns: averaged predictions of all experts that delivered result on time, nested structure of batch-first
-        """
         if input.ndim != 2:
             input_for_gating = input.mean(dim=tuple(range(1, input.ndim - 1)))
         else:
@@ -100,7 +86,8 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         expert_mask, *expert_outputs = _RemoteCallMany.apply(
             DUMMY, chosen_experts, self.k_min, self.backward_k_min, self.timeout_after_k_min, self.forward_timeout,
-            self.backward_timeout, self.detect_anomalies, self.info, *nested_flatten(((input, *args), kwargs)))
+            self.backward_timeout, self.detect_anomalies, self.allow_zero_outputs, self.info,
+            *nested_flatten(((input, *args), kwargs)))
         # ^-- multiple tensors of shape [batch_size, max_experts, ...output_shape]
 
         batch_utilization = self._compute_batch_utilization(chosen_experts, expert_mask)
