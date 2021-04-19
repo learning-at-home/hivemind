@@ -70,31 +70,30 @@ def test_moe_training(max_steps: int = 100, threshold: float = 0.9, num_experts=
 
 
 class SwitchNetwork(nn.Module):
-    def __init__(self, dht, in_features, moe_dim, num_classes, num_experts):
+    def __init__(self, dht, in_features, num_classes, num_experts):
         super().__init__()
-        self.pre_moe = nn.Linear(in_features, moe_dim)
-        self.moe = RemoteSwitchMixtureOfExperts(in_features=moe_dim, grid_size=(num_experts,), dht=dht,
+        self.moe = RemoteSwitchMixtureOfExperts(in_features=in_features, grid_size=(num_experts,), dht=dht,
                                                 jitter_eps=0, uid_prefix='expert.', k_best=1,
                                                 k_min=1)
-        self.linear = nn.Linear(moe_dim, num_classes)
+        self.linear = nn.Linear(in_features, num_classes)
 
     def forward(self, x):
-        moe_output, balancing_loss = self.moe(self.pre_moe(x))
+        moe_output, balancing_loss = self.moe(x)
         return self.linear(moe_output), balancing_loss
 
 
 @pytest.mark.forked
-def test_switch_training(max_steps: int = 10, threshold: float = 0.9, hidden_dim=16, num_experts=5):
+def test_switch_training(max_steps: int = 10, threshold: float = 0.9, num_experts=5):
     dataset = load_digits(n_class=2)
     X_train, y_train = torch.tensor(dataset['data'], dtype=torch.float), torch.tensor(dataset['target'])
     SGD = partial(torch.optim.SGD, lr=0.05)
 
     all_expert_uids = [f'expert.{i}' for i in range(num_experts)]
-    with background_server(expert_uids=all_expert_uids, device='cpu', optim_cls=SGD, hidden_dim=hidden_dim,
+    with background_server(expert_uids=all_expert_uids, device='cpu', optim_cls=SGD, hidden_dim=64,
                            num_handlers=1) as (server_endpoint, dht_endpoint):
         dht = DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
 
-        model = SwitchNetwork(dht, 64, hidden_dim, 2, num_experts)
+        model = SwitchNetwork(dht, 64, 2, num_experts)
         opt = SGD(model.parameters(), lr=0.05)
 
         for step in range(max_steps):
