@@ -2,15 +2,16 @@
 
 import time
 import argparse
-import hivemind
 import wandb
 
-from hivemind import get_logger
+import hivemind
+from hivemind.utils.logging import get_logger
 
 
 def get_public_ip():
-    from whatsmyip.ip import get_ip
+    # import this module locally because it is may not be installed
     from whatsmyip.providers import GoogleDnsProvider
+    from whatsmyip.ip import get_ip
     return get_ip(GoogleDnsProvider)
 
 
@@ -20,7 +21,7 @@ logger = get_logger(__name__)
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--address', type=str, required=False, default=None,
+    parser.add_argument('--address', type=str, required=False,
                         help="this machine's network address. Use public IP for global experiments, "
                              "local address for private runs.")
     parser.add_argument('--listen_on', type=str, default='0.0.0.0:*', required=False,

@@ -15,8 +15,22 @@ This tutorial will walk you through the steps to set up collaborative training w
    - Run `python run_first_peer.py --listen_on '[::]:*' --experiment_prefix NAME_YOUR_EXPERIMENT --wandb_project WANDB_PROJECT_HERE`
    - `NAME_YOUR_EXPERIMENT` must be a unique name of this training run, e.g. `my-first-albert`. It cannot contain `.` due to naming conventions.
    - `WANDB_PROJECT_HERE` is a name of wandb project used to track training metrics. Multiple experiments can have the same project name.
-   - This peer will run a DHT node on a certain IP/port (`Running DHT root at ...`). You will need this address for next steps.
-   - ![image](https://user-images.githubusercontent.com/3491902/115176132-28ec8700-a0d5-11eb-8a7e-370b97a089da.png)
+   - This peer will run a DHT node on a certain IP/port (`Running DHT root at ...`). You will need this address for next steps
+```
++ python ./run_first_peer.py --listen_on '[::]:31209' --experiment_prefix ysda_albert_v10 --wandb_project Demo-run
+[2021/04/19 02:30:06.051][WARN][root.<module>:36] No address specified. Attempting to infer address from DNS.
+[2021/04/19 02:30:06.088][INFO][root.<module>:44] Running DHT root at 18.217.13.97:31209
+wandb: Currently logged in as: ??? (use `wandb login --relogin` to force relogin)
+wandb: Tracking run with wandb version 0.10.26
+wandb: Syncing run wandering-sky-58
+wandb: ⭐ View project at https://wandb.ai/yhn112/Demo-run
+wandb: 🚀 View run at https://wandb.ai/yhn112/Demo-run/runs/38ygvt3n
+wandb: Run data is saved locally in /home/hivemind/examples/albert/wandb/run-20210419_023006-38ygvt3n
+wandb: Run `wandb offline` to turn off syncing.
+[2021/04/19 02:37:37.246][INFO][root.<module>:74] 11.05164
+[2021/04/19 02:39:37.441][INFO][root.<module>:74] 11.03771
+[2021/04/19 02:40:37.541][INFO][root.<module>:74] 11.02886
+```
 
 - To join a collaboration with a GPU trainer, 
   - install the same dependencies (minus the `wandb` and `whatsmyip`), download the data and unpack it to the experiment folder,
@@ -30,7 +44,13 @@ This tutorial will walk you through the steps to set up collaborative training w
 Here, `ONE_OR_MORE_PEERS` stands for either your coordinator endpoint (e.g. `123.123.123.123:1337`), an endpoint of any pre-existing trainer or multiple endpoints for stability. See tips & tricks section below for more information on setting up collaborative training.
 
 As the peer begins training, it will periodically report training logs in the following form:
-![image](https://user-images.githubusercontent.com/3491902/115177769-8c2be880-a0d8-11eb-875c-3f80b86e21d0.png)
+```
+{'loss': 4.3577, 'learning_rate': 0.001318944, 'epoch': 0.0}
+[...][INFO][...] Collaboration accumulated 448 samples from 17 peers; ETA 18.88 seconds (refresh in 15.73s.)
+[...][INFO][...] Collaboration accumulated 4096 samples from 16 peers; ETA 0.00 seconds (refresh in 0.50s.)
+[...][INFO][optim.collaborative.step:195] Averaged tensors successfully with 17 peers
+[...][INFO][optim.collaborative.step:211] Optimizer step: done!
+```
 
 __Sanity check:__ a healthy peer will periodically report `Averaged tensors successfully with [N > 1]` peers.
 
@@ -42,13 +62,17 @@ For convenience, you can view (and share!) the learning curves of your collabora
 
 Finally, we provide best practices for running collaborative experiments of different sizes.
 
-__Hosting the data:__ for small experiments (3-16 peers, <1GB data), you can use a free-tier file hosting that has a convenient way to [download with curl/wget](https://superuser.com/questions/470664/how-to-download-dropbox-files-using-wget-command). However, these services are not meant for high load and could ban you for generating too much traffic. If you want to scale up, you could either use an S3-like storage from [any](https://aws.amazon.com/s3/) [cloud](https://cloud.google.com/storage) [provider](https://cloud.google.com/storage) or host the data [yourself]((https://gist.github.com/willurd/5720255)). Large data files (>5GB) will take long to download; we recommend splitting them into chunks and implementing a custom dataloader that can load chunks on the fly. Finally, the most _comme il faut_ solution to sharing large datasets is to use [academic torrents](https://academictorrents.com/).
+### Hosting the data
+For small experiments (3-16 peers, <1GB data), you can use a free-tier file hosting that has a convenient way to [download with curl/wget](https://superuser.com/questions/470664/how-to-download-dropbox-files-using-wget-command). However, these services are not meant for high load and could ban you for generating too much traffic. If you want to scale up, you could either use an S3-like storage from [any](https://aws.amazon.com/s3/) [cloud](https://cloud.google.com/storage) [provider](https://cloud.google.com/storage) or host the data [yourself]((https://gist.github.com/willurd/5720255)). Large data files (>5GB) will take long to download; we recommend splitting them into chunks and implementing a custom dataloader that can load chunks on the fly. Finally, the most _comme il faut_ solution to sharing large datasets is to use [academic torrents](https://academictorrents.com/).
  
-__`run_first_peer.py`:__ this peer exists solely to welcome other peers onto the DHT and track learning progress. It requires neither GPU nor high bandwidth, the only prerequisite is that coordinator should have high uptime. If no high uptime server is available, one can also run multiple coordinators on different servers and list all of them as `--initial_peers`. The system will stay up as long as at least one coordinator is available. For short- to mid-term experiments you can host coordinator on a [free-tier VM](https://www.quora.com/Are-there-any-free-online-virtual-machines).
+### run_first_peer.py
+This peer exists solely to welcome other peers onto the DHT and track learning progress. It requires neither GPU nor high bandwidth, the only prerequisite is that coordinator should have high uptime. If no high uptime server is available, one can also run multiple coordinators on different servers and list all of them as `--initial_peers`. The system will stay up as long as at least one coordinator is available. For short- to mid-term experiments you can host coordinator on a [free-tier VM](https://www.quora.com/Are-there-any-free-online-virtual-machines).
 
-__Tuning for hardware/network:__ the optimal training parameters for each peer depend on its GPU and internet connection. If a peer cannot accept incoming connections (e.g. when in colab or behind a firewall), add `--client_mode` to the training script (see example below). In case of high network latency, you may want to increase `--averaging_expiration` by a few seconds or set `--batch_size_lead` to start averaging a bit earlier than the rest of the collaboration. GPU-wise, each peer should be able to process one local microbatch each `0.5~1` seconds (see trainer's progress bar). To achieve that, we recommend tuning `--per_device_train_batch_size` and `--gradient_accumulation_steps`. The example trainer supports multiple GPUs via DataParallel. However, using advanced distributed training strategies (e.g. [ZeRO-3](https://www.deepspeed.ai/news/2021/03/07/zero3-offload.html)) will require changes in `run_trainer.py`.
+### Tuning for hardware/network
+The optimal training parameters for each peer depend on its GPU and internet connection. If a peer cannot accept incoming connections (e.g. when in colab or behind a firewall), add `--client_mode` to the training script (see example below). In case of high network latency, you may want to increase `--averaging_expiration` by a few seconds or set `--batch_size_lead` to start averaging a bit earlier than the rest of the collaboration. GPU-wise, each peer should be able to process one local microbatch each `0.5~1` seconds (see trainer's progress bar). To achieve that, we recommend tuning `--per_device_train_batch_size` and `--gradient_accumulation_steps`. The example trainer supports multiple GPUs via DataParallel. However, using advanced distributed training strategies (e.g. [ZeRO-3](https://www.deepspeed.ai/news/2021/03/07/zero3-offload.html)) will require changes in `run_trainer.py`.
 
-__Using public GPU providers:__ There are awesome services like [Google Colab](https://colab.research.google.com/), [Kaggle kernels](https://www.kaggle.com/dansbecker/running-kaggle-kernels-with-a-gpu) or[Paperspace](https://gradient.paperspace.com/free-gpu) that provide free GPUs. These services usually come with significant limitations (e.g. last gen GPUs, reset every few hours), but they allow just about anyone to join your collaborative experiment. Here's how to best use them.
+### Using public GPU providers
+There are awesome services like [Google Colab](https://colab.research.google.com/), [Kaggle kernels](https://www.kaggle.com/dansbecker/running-kaggle-kernels-with-a-gpu) or[Paperspace](https://gradient.paperspace.com/free-gpu) that provide free GPUs. These services usually come with significant limitations (e.g. last gen GPUs, reset every few hours), but they allow just about anyone to join your collaborative experiment. Here's how to best use them.
   - before you begin, __read the rules carefully__. Most free-tier GPU services allow only one GPU per user and using more than one account will get you banned. It is **your** duty to make sure that collaborators won't get in trouble for helping you.
   - most free GPUs are running behind a firewall, which requires you to run trainer with `--client_mode` (see example below). Such peers can only exchange gradients if there is at least one non-client-mode peer (GPU server or desktop with public IP). We recommend using a few preemptible instances with the cheapest GPU you can find. For example, we tested this code on preemptible [`g4dn.xlarge`](https://aws.amazon.com/blogs/aws/now-available-ec2-instances-g4-with-nvidia-t4-tensor-core-gpus/) nodes for around $0.15/h apiece with 8 AWS nodes and up to 61 Colab/Kaggle participants.
   - you can create starter notebooks to make it more convenient for collaborators to join your training run ([example](https://colab.research.google.com/gist/yhn112/e858cb841c73879d8ef98a84e03b43e7/collaborative-training-v0-10.ipynb)). Ideally, joining collaboration should take at most a couple of clicks.
