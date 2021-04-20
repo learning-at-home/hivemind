@@ -3,16 +3,11 @@
 import time
 import argparse
 import wandb
+from whatsmyip.providers import GoogleDnsProvider
+from whatsmyip.ip import get_ip
 
 import hivemind
 from hivemind.utils.logging import get_logger
-
-
-def get_public_ip():
-    # import this module locally because it is may not be installed
-    from whatsmyip.providers import GoogleDnsProvider
-    from whatsmyip.ip import get_ip
-    return get_ip(GoogleDnsProvider)
 
 
 logger = get_logger(__name__)
@@ -35,11 +30,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.address is None:
         logger.warning("No address specified. Attempting to infer address from DNS.")
-        try:
-            args.address = get_public_ip()
-        except ImportError as e:
-            logger.error("Could not infer network address, please specify --address manually.")
-            exit(-1)
+        args.address = get_ip(GoogleDnsProvider)
 
     dht = hivemind.DHT(start=True, listen_on=args.listen_on, endpoint=f"{args.address}:*")
     logger.info(f"Running DHT root at {args.address}:{dht.port}")

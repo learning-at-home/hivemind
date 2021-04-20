@@ -176,7 +176,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
 
     def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
                     control: transformers.TrainerControl, **kwargs):
-        if not self.are_finite_params():
+        if not self.params_are_finite():
             self.load_from_state(self.previous_state)
             return control
 
@@ -208,7 +208,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
         self.collaborative_optimizer.opt.load_state_dict(state['opt'])
 
     @torch.no_grad()
-    def are_finite_params(self):
+    def params_are_finite(self):
         for param in self.model.parameters():
             if not torch.all(torch.isfinite(param)):
                 return False
