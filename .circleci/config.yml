@@ -4,7 +4,6 @@ jobs:
   build-and-test-py37:
     docker:
       - image: circleci/python:3.7.10
-    resource_class: medium+
     steps:
       - checkout
       - restore_cache:
@@ -25,7 +24,6 @@ jobs:
   build-and-test-py38:
     docker:
       - image: circleci/python:3.8.1
-    resource_class: medium+
     steps:
       - checkout
       - restore_cache:
@@ -46,7 +44,6 @@ jobs:
   build-and-test-py39:
     docker:
       - image: circleci/python:3.9.1
-    resource_class: medium+
     steps:
       - checkout
       - restore_cache:
