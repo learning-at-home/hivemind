@@ -54,7 +54,7 @@ class CollaborationArguments:
     expected_drift_peers: float = 3  # trainer assumes that this many new peers can join per step
     expected_drift_rate: float = 0.2  # trainer assumes that this fraction of current size can join per step
 
-    bandwidth: float = 1000.0  # available network bandwidth, in mbps (used for load balancing in all-reduce)
+    bandwidth: float = 100.0  # available network bandwidth, in mbps (used for load balancing in all-reduce)
     performance_ema_alpha: float = 0.1  # uses this alpha for moving average estimate of samples per second
 
 
