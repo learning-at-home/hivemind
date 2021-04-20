@@ -72,6 +72,6 @@ if __name__ == '__main__':
                     "samples": num_samples,
                     "performance": sum_perf
                 })
-                logger.info(f"{sum_loss / alive_peers:.5f}")
+                logger.info(f"Step #{current_step}\tloss = {sum_loss / alive_peers:.5f}")
             logger.debug("Peer is still alive...")
         time.sleep(args.refresh_period)
