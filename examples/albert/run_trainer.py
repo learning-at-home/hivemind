@@ -242,12 +242,6 @@ def main():
 
     collaboration_args.initial_peers = list(map(str.strip, collaboration_args.initial_peers.split(',')))
  
-    from logging.handlers import SysLogHandler
-    print(collaboration_args.initial_peers[0].split(":")[0])
-    syslog_handler = SysLogHandler(address=(collaboration_args.initial_peers[0].split(":")[0], 514))
-    logger.addHandler(syslog_handler)
-
- 
     logger.info(f"Found {len(collaboration_args.initial_peers)} initial peers: {collaboration_args.initial_peers}")
     if len(collaboration_args.initial_peers) == 0:
         raise ValueError("Please specify at least one network endpoint in initial peers.")
