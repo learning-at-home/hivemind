@@ -165,14 +165,14 @@ def get_optimizer_and_scheduler(training_args, model):
 
 
 class CollaborativeCallback(transformers.TrainerCallback):
-    def __init__(self, dht: hivemind.DHT, collaborative_optimizer: hivemind.CollaborativeOptimizer,
+    def __init__(self, dht: hivemind.DHT, optimizer: hivemind.CollaborativeOptimizer,
                  model: torch.nn.Module, trainer_uuid: str, statistics_expiration: float):
-        self.dht, self.collaborative_optimizer = dht, collaborative_optimizer
+        super().__init__()
         self.model = model
+        self.dht, self.collaborative_optimizer = dht, optimizer
         self.trainer_uuid, self.statistics_expiration = trainer_uuid, statistics_expiration
         self.last_reported_collaboration_step = -1
         self.previous_state = self.get_current_state()
-        super().__init__()
 
     def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
                     control: transformers.TrainerControl, **kwargs):
