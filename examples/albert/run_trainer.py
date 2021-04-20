@@ -32,14 +32,14 @@ class CollaborationArguments:
     # primary parameters
     initial_peers: str  # one or more peers (comma-separated) that will welcome you into the collaboration
     experiment_prefix: str  # a unique "name" of this experiment, used to store metadata on the DHT
-    averaging_expiration: float = 5.0  # averaging group will wait for stragglers for at most this many
+    averaging_expiration: float = 5.0  # averaging group will wait for stragglers for at most this many seconds
     averaging_timeout: float = 30.0  # give up on averaging step after this many seconds
     target_batch_size: int = 4096  # perform optimizer step after all peers collectively accumulate this many samples
     client_mode: bool = False  # if True, runs training without incoming connections, in a firewall-compatible mode
     trainer_uuid: str = uuid.uuid4().hex  # this peer's name - used when publishing metadata to DHT, default = random
 
     # optional tweaks
-    target_group_size: int = 64  # maximum group size for all-reduce, default = "everything that fits"
+    target_group_size: int = 64  # maximum group size for all-reduce
     metadata_expiration: float = 30  # peer's metadata will be removed if not updated in this many seconds
     statistics_expiration: float = 3600  # statistics will be removed if not updated in this many seconds
     dht_listen_on: str = '[::]:*'  # network interface used for incoming DHT communication. Default: all ipv6
@@ -54,7 +54,7 @@ class CollaborationArguments:
     expected_drift_peers: float = 3  # trainer assumes that this many new peers can join per step
     expected_drift_rate: float = 0.2  # trainer assumes that this fraction of current size can join per step
 
-    bandwidth: float = 1000.0  # available network bandwidth, in mbps (used for load balancing in all-reduce)
+    bandwidth: float = 100.0  # available network bandwidth, in mbps (used for load balancing in all-reduce)
     performance_ema_alpha: float = 0.1  # uses this alpha for moving average estimate of samples per second
 
 

@@ -30,7 +30,7 @@ if __name__ == '__main__':
                         help="coordinator will fetch keys from DHT once in this many seconds")
     parser.add_argument('--experiment_prefix', type=str, required=True,
                         help="a prefix where peers store their metrics for aggregation")
-    parser.add_argument('--wandb_project', type=str, required=True, help="learning curves will be published there")
+    parser.add_argument('--wandb_project', type=str, required=True, help="Weights & Biases project name to publish learning curves")
 
     args = parser.parse_args()
     if args.address is None:
