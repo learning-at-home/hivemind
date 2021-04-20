@@ -63,7 +63,7 @@ class MoEBeamSearcher:
          Though, this is a pathological case (e.g. only 90 experts in an oversized 100x100 grid) that should be avoided.
     """
 
-    def __init__(self, dht: DHT, uid_prefix: ExpertPrefix, grid_size: Optional[Tuple[int, ...]] = None,
+    def __init__(self, dht: DHT, uid_prefix: ExpertPrefix, grid_size: Tuple[int, ...],
                  num_workers: Optional[int] = None, negative_caching: bool = True, **kwargs):
         if not uid_prefix.endswith(UID_DELIMITER):
             uid_prefix += UID_DELIMITER
@@ -71,6 +71,7 @@ class MoEBeamSearcher:
         assert is_valid_prefix(uid_prefix), f"Prefix '{uid_prefix}' is invalid."
         self.dht = dht
         self.uid_prefix, self.grid_size = uid_prefix, grid_size
+        self.total_grid_size = sum(grid_size)
         self.negative_caching, self.num_workers, self.dht_kwargs = negative_caching, num_workers, kwargs
 
     def get_initial_beam(self, scores: Sequence[float], beam_size: int, return_future: bool = False
@@ -174,7 +175,7 @@ class MoEBeamSearcher:
         :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
-        assert (not self.grid_size or len(grid_scores) == len(self.grid_size)) and beam_size > 0
+        assert len(grid_scores) == len(self.grid_size) and beam_size > 0
         return self.dht.run_coroutine(partial(self._find_best_experts, prefix=self.uid_prefix, beam_size=beam_size,
                                               grid_scores=list(grid_scores), negative_caching=self.negative_caching,
                                               num_workers=self.num_workers), return_future)

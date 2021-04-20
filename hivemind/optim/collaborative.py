@@ -8,10 +8,10 @@ import torch
 import numpy as np
 
 from hivemind.dht import DHT
-from hivemind.client.optim.base import DecentralizedOptimizerBase
+from hivemind.optim.base import DecentralizedOptimizerBase
 from hivemind.client.averaging.training import TrainingAverager
 from hivemind.utils import get_logger, get_dht_time, ValueWithExpiration
-from hivemind.client.optim.performance_ema import PerformanceEMA
+from hivemind.optim.performance_ema import PerformanceEMA
 
 logger = get_logger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
@@ -82,9 +82,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                  batch_size_per_step: Optional[int] = None, scheduler: Optional[LRSchedulerBase] = None,
                  min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
                  expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
-                 metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, verbose: bool = False,
+                 metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, step_tolerance: int = 1,
                  reuse_grad_buffers: bool = False, accumulate_grads_on: Optional[torch.device] = None,
-                 client_mode: bool = False, **kwargs):
+                 client_mode: bool = False, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
         if reuse_grad_buffers and accumulate_grads_on is not None:
             logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
@@ -95,6 +95,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.expected_drift_peers, self.expected_drift_rate = expected_drift_peers, expected_drift_rate
         self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration
         self._grads, self.reuse_grad_buffers, self.accumulate_grads_on = None, reuse_grad_buffers, accumulate_grads_on
+        self.step_tolerance = step_tolerance
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
         self.client_mode = client_mode
         self.averager = self._make_averager(**kwargs)
@@ -125,7 +126,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     @property
     def is_synchronized(self) -> bool:
-        return self.local_step >= self.collaboration_state.optimizer_step
+        return self.local_step >= self.collaboration_state.optimizer_step - self.step_tolerance
 
     def is_alive(self) -> bool:
         return self.averager.is_alive()

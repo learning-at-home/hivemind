@@ -1,3 +1,5 @@
+import time
+
 import torch
 from torch import nn as nn
 
@@ -11,6 +13,8 @@ def gelu_fast(x):
 
 
 ffn_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
+
+
 @register_expert_class('ffn', ffn_sample_input)
 class FeedforwardBlock(nn.Module):
 
@@ -65,7 +69,9 @@ class TransformerEncoderLayer(nn.Module):
 
 transformer_sample_input = lambda batch_size, hid_dim: \
     (torch.empty((batch_size, 128, hid_dim)), \
-    torch.empty((batch_size, 128), dtype=torch.bool))
+     torch.empty((batch_size, 128), dtype=torch.bool))
+
+
 @register_expert_class('transformer', transformer_sample_input)
 class TunedTransformer(TransformerEncoderLayer):
 
@@ -74,6 +80,8 @@ class TunedTransformer(TransformerEncoderLayer):
 
 
 nop_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
+
+
 @register_expert_class('nop', nop_sample_input)
 class NopExpert(nn.Sequential):
 
@@ -82,4 +90,17 @@ class NopExpert(nn.Sequential):
         self.w = nn.Parameter(torch.zeros(0), requires_grad=True)
 
     def forward(self, x):
+        return x.clone()
+
+
+@register_expert_class('nop_delay', nop_sample_input)
+class DelayedNopExpert(nn.Sequential):
+
+    def __init__(self, hid_dim, delay=0.5):
+        super().__init__()
+        self.w = nn.Parameter(torch.zeros(0), requires_grad=True)
+        self.delay = delay
+
+    def forward(self, x):
+        time.sleep(self.delay)
         return x.clone()

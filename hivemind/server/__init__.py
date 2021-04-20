@@ -21,7 +21,7 @@ from hivemind.server.layers import name_to_block, name_to_input
 from hivemind.server.layers import add_custom_models_from_file, schedule_name_to_scheduler
 from hivemind.server.runtime import Runtime
 from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
-from hivemind.utils import Endpoint, get_port, replace_port, find_open_port, get_logger
+from hivemind.utils import Endpoint, get_port, replace_port, find_open_port, get_logger, BatchTensorDescriptor
 from hivemind.proto.runtime_pb2 import CompressionType
 
 logger = get_logger(__name__)
@@ -153,11 +153,11 @@ class Server(threading.Thread):
         optim_cls = optim_cls if optim_cls is not None else partial(torch.optim.SGD, lr=0.0)
         device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
-        sample_input = name_to_input[expert_cls](4, hidden_dim)
+        sample_input = name_to_input[expert_cls](3, hidden_dim)
         if isinstance(sample_input, tuple):
-            args_schema = tuple(hivemind.BatchTensorDescriptor.from_tensor(arg, compression) for arg in sample_input)
+            args_schema = tuple(BatchTensorDescriptor.from_tensor(arg, compression) for arg in sample_input)
         else:
-            args_schema = (hivemind.BatchTensorDescriptor.from_tensor(sample_input, compression),)
+            args_schema = (BatchTensorDescriptor.from_tensor(sample_input, compression),)
 
         scheduler = schedule_name_to_scheduler[scheduler]
 
@@ -167,8 +167,6 @@ class Server(threading.Thread):
             expert = name_to_block[expert_cls](hidden_dim)
             experts[expert_uid] = hivemind.ExpertBackend(name=expert_uid, expert=expert,
                                                          args_schema=args_schema,
-                                                         outputs_schema=hivemind.BatchTensorDescriptor(
-                                                             hidden_dim, compression=compression),
                                                          optimizer=optim_cls(expert.parameters()),
                                                          scheduler=scheduler,
                                                          num_warmup_steps=num_warmup_steps,
@@ -264,11 +262,15 @@ def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[hivemind.End
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
     pipe, runners_pipe = mp.Pipe(duplex=True)
     runner = mp.Process(target=_server_runner, args=(runners_pipe, *args), kwargs=kwargs)
-
     try:
         runner.start()
-        yield pipe.recv()  # once the server is ready, runner will send us a tuple(hostname, port, dht port)
-        pipe.send('SHUTDOWN')  # on exit from context, send shutdown signal
+        # once the server is ready, runner will send us either (False, exception) or (True, (server_port, dht_port))
+        start_ok, data = pipe.recv()
+        if start_ok:
+            yield data
+            pipe.send('SHUTDOWN')  # on exit from context, send shutdown signal
+        else:
+            raise RuntimeError(f"Server failed to start: {data}")
     finally:
         runner.join(timeout=shutdown_timeout)
         if runner.is_alive():
@@ -278,14 +280,21 @@ def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[hivemind.End
 
 
 def _server_runner(pipe, *args, **kwargs):
-    server = Server.create(*args, start=True, **kwargs)
+    try:
+        server = Server.create(*args, start=True, **kwargs)
+    except Exception as e:
+        logger.exception(f"Encountered an exception when starting a server: {e}")
+        pipe.send((False, f'{type(e).__name__} {e}'))
+        return
+
     try:
         if server.dht is not None:
             dht_listen_on = hivemind.replace_port(server.dht.listen_on, server.dht.port)
         else:
             dht_listen_on = None
-        pipe.send((server.listen_on, dht_listen_on))
+        pipe.send((True, (server.listen_on, dht_listen_on)))
         pipe.recv()  # wait for shutdown signal
+
     finally:
         logger.info("Shutting down server...")
         server.shutdown()

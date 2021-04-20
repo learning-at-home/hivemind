@@ -4,11 +4,13 @@ import torch.nn.functional as F
 
 from hivemind.server.layers.custom_experts import register_expert_class
 
-sample_input = lambda batch_size, hidden_dim : torch.empty((batch_size, hidden_dim))
+sample_input = lambda batch_size, hidden_dim: torch.empty((batch_size, hidden_dim))
+
+
 @register_expert_class('perceptron', sample_input)
 class MultilayerPerceptron(nn.Module):
     def __init__(self, hidden_dim, num_classes=10):
-        super(MultilayerPerceptron, self).__init__()
+        super().__init__()
         self.layer1 = nn.Linear(hidden_dim, 2 * hidden_dim)
         self.layer2 = nn.Linear(2 * hidden_dim, 2 * hidden_dim)
         self.layer3 = nn.Linear(2 * hidden_dim, num_classes)
@@ -19,14 +21,17 @@ class MultilayerPerceptron(nn.Module):
         x = self.layer3(x)
         return x
 
-multihead_sample_input = lambda batch_size, hidden_dim : \
+
+multihead_sample_input = lambda batch_size, hidden_dim: \
     (torch.empty((batch_size, hidden_dim)),
-    torch.empty((batch_size, 2 * hidden_dim)),
-    torch.empty((batch_size, 3 * hidden_dim)),)
+     torch.empty((batch_size, 2 * hidden_dim)),
+     torch.empty((batch_size, 3 * hidden_dim)),)
+
+
 @register_expert_class('multihead', multihead_sample_input)
 class MultiheadNetwork(nn.Module):
     def __init__(self, hidden_dim, num_classes=10):
-        super(MultiheadNetwork, self).__init__()
+        super().__init__()
         self.layer1 = nn.Linear(hidden_dim, num_classes)
         self.layer2 = nn.Linear(2 * hidden_dim, num_classes)
         self.layer3 = nn.Linear(3 * hidden_dim, num_classes)

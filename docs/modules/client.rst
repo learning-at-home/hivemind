@@ -18,6 +18,10 @@
    :members:
    :member-order: bysource
 
+.. autoclass:: RemoteSwitchMixtureOfExperts
+   :members:
+   :member-order: bysource
+
 .. autoclass:: DecentralizedAverager
    :members:
    :member-order: bysource
