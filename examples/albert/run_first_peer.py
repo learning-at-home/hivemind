@@ -17,7 +17,6 @@ def get_public_ip():
 
 logger = get_logger(__name__)
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -30,7 +29,8 @@ if __name__ == '__main__':
                         help="coordinator will fetch keys from DHT once in this many seconds")
     parser.add_argument('--experiment_prefix', type=str, required=True,
                         help="a prefix where peers store their metrics for aggregation")
-    parser.add_argument('--wandb_project', type=str, required=True, help="Weights & Biases project name to publish learning curves")
+    parser.add_argument('--wandb_project', type=str, required=True,
+                        help="Weights & Biases project name to publish learning curves")
 
     args = parser.parse_args()
     if args.address is None:
@@ -72,5 +72,5 @@ if __name__ == '__main__':
                     "performance": sum_perf
                 })
                 logger.info(f"Step #{current_step}\tloss = {sum_loss / alive_peers:.5f}")
-            logger.debug("Peer is still alive...")
+        logger.debug("Peer is still alive...")
         time.sleep(args.refresh_period)

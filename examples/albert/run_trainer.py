@@ -20,7 +20,6 @@ import torch
 
 import hivemind
 
-
 logger = logging.getLogger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
 
@@ -183,24 +182,25 @@ class CollaborativeCallback(transformers.TrainerCallback):
         if not self.are_finite_params():
             self.load_from_state(self.previous_state)
             return control
-        self.loss += state.log_history[-1]['loss']
         self.previous_state = self.get_current_state()
 
-        if state.log_history and self.collaborative_optimizer.local_step != self.last_reported_collaboration_step:
-            self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
+        if state.log_history:
+            self.loss += state.log_history[-1]['loss']
+            if self.collaborative_optimizer.local_step != self.last_reported_collaboration_step:
+                self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
 
-            statistics = [self.collaborative_optimizer.local_step,
-                          self.collaborative_optimizer.performance_ema.samples_per_second,
-                          self.samples,
-                          self.loss / self.steps]
-            self.loss = 0
+                statistics = [self.collaborative_optimizer.local_step,
+                              self.collaborative_optimizer.performance_ema.samples_per_second,
+                              self.samples,
+                              self.loss / self.steps]
+                self.loss = 0
 
-            self.dht.store(self.collaborative_optimizer.prefix + "_metrics", subkey=self.trainer_uuid,
-                           value=statistics, expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
-                           return_future=True)
-            self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
-            self.samples = self.collaborative_optimizer.local_samples_accumulated
-            self.steps = self.collaborative_optimizer.local_steps_accumulated
+                self.dht.store(self.collaborative_optimizer.prefix + "_metrics", subkey=self.trainer_uuid,
+                               value=statistics, expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
+                               return_future=True)
+        self.samples = self.collaborative_optimizer.local_samples_accumulated
+        self.steps = self.collaborative_optimizer.local_steps_accumulated
+
 
         return control
 
@@ -279,7 +279,7 @@ def main():
     trainer_uuid = collaboration_args_dict.pop('trainer_uuid')
     statistics_expiration = collaboration_args_dict.pop('statistics_expiration')
     adjusted_target_batch_size = collaboration_args_dict.pop('target_batch_size') \
-                                   - collaboration_args_dict.pop('batch_size_lead')
+                                 - collaboration_args_dict.pop('batch_size_lead')
 
     collaborative_optimizer = hivemind.CollaborativeOptimizer(
         opt=opt, dht=dht, scheduler=scheduler, prefix=collaboration_args_dict.pop('experiment_prefix'),
