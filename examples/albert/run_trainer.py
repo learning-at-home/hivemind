@@ -4,7 +4,7 @@ import logging
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import uuid
 
 from datasets import load_from_disk
@@ -30,7 +30,7 @@ class CollaborationArguments:
     """ define how peers interact with each other while training"""
 
     # primary parameters
-    initial_peers: str  # one or more peers (comma-separated) that will welcome you into the collaboration
+    initial_peers: List[str]  # one or more peers (comma-separated) that will welcome you into the collaboration
     experiment_prefix: str  # a unique "name" of this experiment, used to store metadata on the DHT
     averaging_expiration: float = 5.0  # averaging group will wait for stragglers for at most this many seconds
     averaging_timeout: float = 30.0  # give up on averaging step after this many seconds
@@ -41,7 +41,7 @@ class CollaborationArguments:
     # optional tweaks
     target_group_size: int = 64  # maximum group size for all-reduce
     metadata_expiration: float = 30  # peer's metadata will be removed if not updated in this many seconds
-    statistics_expiration: float = 3600  # statistics will be removed if not updated in this many seconds
+    statistics_expiration: float = 600  # statistics will be removed if not updated in this many seconds
     dht_listen_on: str = '[::]:*'  # network interface used for incoming DHT communication. Default: all ipv6
     listen_on: str = '[::]:*'  # network interface used for incoming averager communication. Default: all ipv6
     endpoint: Optional[str] = None  # this node's IP for inbound connections, used when running from behind a proxy
@@ -172,27 +172,36 @@ class CollaborativeCallback(transformers.TrainerCallback):
         self.trainer_uuid, self.statistics_expiration = trainer_uuid, statistics_expiration
         self.last_reported_collaboration_step = -1
         self.previous_state = self.get_current_state()
+        self.samples = 0
+        self.steps = 0
+        self.loss = 0
         super().__init__()
 
     def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
                     control: transformers.TrainerControl, **kwargs):
+        control.should_log = True
         if not self.are_finite_params():
             self.load_from_state(self.previous_state)
             return control
-
+        self.loss += state.log_history[-1]['loss']
         self.previous_state = self.get_current_state()
 
         if state.log_history and self.collaborative_optimizer.local_step != self.last_reported_collaboration_step:
             self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
+
             statistics = [self.collaborative_optimizer.local_step,
                           self.collaborative_optimizer.performance_ema.samples_per_second,
-                          self.collaborative_optimizer.local_samples_accumulated,
-                          state.log_history[-1]['loss']]
+                          self.samples,
+                          self.loss / self.steps]
+            self.loss = 0
 
             self.dht.store(self.collaborative_optimizer.prefix + "_metrics", subkey=self.trainer_uuid,
                            value=statistics, expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
                            return_future=True)
             self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
+            self.samples = self.collaborative_optimizer.local_samples_accumulated
+            self.steps = self.collaborative_optimizer.local_steps_accumulated
+
         return control
 
     @torch.no_grad()
@@ -240,8 +249,6 @@ def main():
     parser = HfArgumentParser((AlbertTrainingArguments, DatasetArguments, CollaborationArguments))
     training_args, dataset_args, collaboration_args = parser.parse_args_into_dataclasses()
 
-    collaboration_args.initial_peers = list(map(str.strip, collaboration_args.initial_peers.split(',')))
- 
     logger.info(f"Found {len(collaboration_args.initial_peers)} initial peers: {collaboration_args.initial_peers}")
     if len(collaboration_args.initial_peers) == 0:
         raise ValueError("Please specify at least one network endpoint in initial peers.")
@@ -295,6 +302,8 @@ def main():
         optimizers=(collaborative_optimizer, NoOpScheduler(collaborative_optimizer)),
         callbacks=[CollaborativeCallback(dht, collaborative_optimizer, model, trainer_uuid, statistics_expiration)]
     )
+    trainer.remove_callback(transformers.trainer_callback.PrinterCallback)
+    trainer.remove_callback(transformers.trainer_callback.ProgressCallback)
 
     # Training
     if training_args.do_train:

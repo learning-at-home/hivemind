@@ -61,11 +61,10 @@ if __name__ == '__main__':
                 num_samples = 0
                 sum_perf = 0
                 for step, perf, samples, loss in metrics:
-                    if step == latest_step:
-                        sum_loss += loss
-                        alive_peers += 1
-                        sum_perf += perf
-                        num_samples += samples
+                    sum_loss += loss
+                    alive_peers += 1
+                    sum_perf += perf
+                    num_samples += samples
                 wandb.log({
                     "loss": sum_loss / alive_peers,
                     "alive peers": alive_peers,
