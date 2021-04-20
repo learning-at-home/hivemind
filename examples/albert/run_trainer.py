@@ -192,7 +192,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
                 statistics = [self.collaborative_optimizer.local_step,
                               self.collaborative_optimizer.performance_ema.samples_per_second,
                               self.samples,
-                              self.loss / self.steps]
+                              self.loss / self.steps if self.steps else 0]
                 self.loss = 0
 
                 self.dht.store(self.collaborative_optimizer.prefix + "_metrics", subkey=self.trainer_uuid,
@@ -200,7 +200,6 @@ class CollaborativeCallback(transformers.TrainerCallback):
                                return_future=True)
         self.samples = self.collaborative_optimizer.local_samples_accumulated
         self.steps = self.collaborative_optimizer.local_steps_accumulated
-
 
         return control
 
