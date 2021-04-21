@@ -10,10 +10,11 @@ from whatsmyip.ip import get_ip
 
 import hivemind
 import torch
-from transformers import AlbertTokenizerFast, AlbertConfig, HfArgumentParser
+from torch_optimizer import Lamb
+from transformers import AlbertForPreTraining, AlbertConfig, HfArgumentParser
 from hivemind.utils.logging import get_logger
 
-from run_trainer import AlbertTrainingArguments, DatasetArguments, CollaborationArguments, \
+from run_trainer import DatasetArguments, CollaborationArguments, \
     get_model, get_optimizer_and_scheduler
 
 
@@ -26,34 +27,61 @@ class CoordinatorArguments(CollaborationArguments):
     # local address for private runs
     refresh_period: float = 30  # coordinator will fetch keys from DHT once in this many seconds
     wandb_project: Optional[str] = None  # learning curves will be published there
-    # initial_peers: Optional[List[str]] = None  # you might want to have several initial peers so that if one dies,
-    # new workers still can join the collaboration via alive initial peers' addresses
     save_checkpoint_step_interval: int = 5  # coordinator will load and save state from peers once every that many steps
     upload_model_as: Optional[str] = None  # coordinator will upload the checkpoint to that HuggingFace repo
     upload_interval: Optional[float] = None  # coordinator will upload model once in this many seconds
+    # Note: You might want to have several initial peers so that if one dies,
+    # new workers still can join the collaboration via alive initial peers' addresses.
+    # Specify initial_peers argument for that purpose
 
 
 class CheckpointHandler:
-    def __init__(self, coordinator_args, dataset_args, training_args, dht):
+    def __init__(self, coordinator_args: CoordinatorArguments, dataset_args: DatasetArguments, dht: hivemind.DHT):
         self.save_checkpoint_step_interval = coordinator_args.save_checkpoint_step_interval
         self.upload_model_as = coordinator_args.upload_model_as
         self.upload_interval = coordinator_args.upload_interval
         self.previous_step = -1
 
-        config = AlbertConfig.from_pretrained(dataset_args.config_path, cache_dir=dataset_args.cache_dir)
-        tokenizer = AlbertTokenizerFast.from_pretrained(dataset_args.tokenizer_path, cache_dir=dataset_args.cache_dir)
-        self.model = get_model(training_args, config, tokenizer)
+        config = AlbertConfig.from_pretrained(dataset_args.config_path)
+        self.model = AlbertForPreTraining(config)
 
         collaboration_args_dict = asdict(coordinator_args)
         collaboration_args_dict.pop('address')
+        collaboration_args_dict.pop('refresh_period')
+        collaboration_args_dict.pop('wandb_project')
+        collaboration_args_dict.pop('save_checkpoint_step_interval')
+        collaboration_args_dict.pop('upload_model_as')
+        collaboration_args_dict.pop('upload_interval')
 
-        opt, scheduler = get_optimizer_and_scheduler(training_args, self.model)
+        no_decay = ["bias", "LayerNorm.weight"]
+        optimizer_grouped_parameters = [
+            {
+                "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                "weight_decay": 0.01,
+            },
+            {
+                "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                "weight_decay": 0.0,
+            },
+        ]
+
+        opt = Lamb(
+            optimizer_grouped_parameters,
+            lr=0.00176, weight_decay=0.01, clamp_value=10000.0, debias=True,
+        )
+
         adjusted_target_batch_size = collaboration_args_dict.pop('target_batch_size') - \
             collaboration_args_dict.pop('batch_size_lead')
+
+        collaboration_args_dict.pop('initial_peers')
+        collaboration_args_dict.pop('trainer_uuid')
+        collaboration_args_dict.pop('dht_listen_on')
+        collaboration_args_dict.pop('statistics_expiration')
+        collaboration_args_dict.pop('endpoint')
+
         self.collaborative_optimizer = hivemind.CollaborativeOptimizer(
-            opt=opt, dht=dht, scheduler=scheduler, prefix=collaboration_args_dict.pop('experiment_prefix'),
+            opt=opt, dht=dht, prefix=collaboration_args_dict.pop('experiment_prefix'),
             compression_type=hivemind.utils.CompressionType.Value(collaboration_args_dict.pop('compression')),
-            batch_size_per_step=training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps,
             throughput=collaboration_args_dict.pop('bandwidth'),
             target_batch_size=adjusted_target_batch_size, client_mode=collaboration_args_dict.pop('client_mode'),
             verbose=True, start=True, **collaboration_args_dict
@@ -81,28 +109,27 @@ class CheckpointHandler:
             return False
 
     def upload_checkpoint(self):
-        self.model.save_pretrained("./collaborative-albert.bin")
-        torch.save(self.collaborative_optimizer.opt.state_dict(), "./optimizer_state.pt")
+        self.model.save_pretrained(f"{self.upload_model_as}/collaborative-albert.bin")
+        torch.save(self.collaborative_optimizer.opt.state_dict(), f"{self.upload_model_as}/optimizer_state.pt")
         self.previous_timestamp = time.time()
         try:
-            subprocess.run("git add --all && git commit -m 'State update' && git push".split(), check=True)
+            subprocess.run("git add --all".split(), check=True, cwd=self.upload_model_as)
+            subprocess.run("git commit -m 'Updating'".split(), check=True, cwd=self.upload_model_as)
+            subprocess.run("git push".split(), check=True, cwd=self.upload_model_as)
         except subprocess.CalledProcessError:
             logger.warning("Error while uploading model")
 
 
 if __name__ == '__main__':
-    parser = HfArgumentParser((CoordinatorArguments, AlbertTrainingArguments, DatasetArguments))
-    coordinator_args, training_args, dataset_args = parser.parse_args_into_dataclasses()
+    parser = HfArgumentParser((CoordinatorArguments, DatasetArguments))
+    coordinator_args, dataset_args = parser.parse_args_into_dataclasses()
 
     if coordinator_args.address is None:
         logger.warning("No address specified. Attempting to infer address from DNS.")
         coordinator_args.address = get_ip(GoogleDnsProvider)
 
-    if not coordinator_args.initial_peers:
-        dht = hivemind.DHT(start=True, listen_on=coordinator_args.listen_on, endpoint=f"{coordinator_args.address}:*")
-    else:
-        dht = hivemind.DHT(start=True, listen_on=coordinator_args.listen_on, endpoint=f"{coordinator_args.address}:*",
-                           initial_peers=coordinator_args.initial_peers)
+    dht = hivemind.DHT(start=True, listen_on=coordinator_args.dht_listen_on,
+        endpoint=f"{coordinator_args.address}:*", initial_peers=coordinator_args.initial_peers)
 
     logger.info(f"Running DHT root at {coordinator_args.address}:{dht.port}")
 
@@ -110,7 +137,7 @@ if __name__ == '__main__':
         wandb.init(project=coordinator_args.wandb_project)
 
     current_step = 0
-    checkpoint_handler = CheckpointHandler(coordinator_args, dataset_args, training_args, dht)
+    checkpoint_handler = CheckpointHandler(coordinator_args, dataset_args, dht)
 
     while True:
         metrics_dict = dht.get(coordinator_args.experiment_prefix + '_metrics', latest=True)
@@ -120,6 +147,13 @@ if __name__ == '__main__':
             latest_step = max(metrics)[0]
             if latest_step != current_step:
                 current_step = latest_step
+
+                if checkpoint_handler.is_time_to_save_state(current_step):
+                    checkpoint_handler.save_state(current_step)
+
+                if checkpoint_handler.is_time_to_upload():
+                    checkpoint_handler.upload_checkpoint()
+
                 alive_peers = 0
                 num_batches = 0
                 sum_loss = 0
@@ -139,6 +173,6 @@ if __name__ == '__main__':
                         "samples": num_samples,
                         "performance": sum_perf
                     })
-                logger.info(f"Step #{current_step}\tloss = {sum_loss / alive_peers:.5f}")
+                logger.info(f"Step #{current_step}\tloss = {sum_loss / sum_mini_steps:.5f}")
         logger.debug("Peer is still alive...")
         time.sleep(coordinator_args.refresh_period)

@@ -29,8 +29,9 @@ class CollaborationArguments:
     """ define how peers interact with each other while training"""
 
     # primary parameters
-    initial_peers: List[str]  # one or more peers (comma-separated) that will welcome you into the collaboration
     experiment_prefix: str  # a unique "name" of this experiment, used to store metadata on the DHT
+    initial_peers: List[str] = field(default_factory=list)  # one or more peers (comma-separated)
+    # that will welcome you into the collaboration
     averaging_expiration: float = 5.0  # averaging group will wait for stragglers for at most this many seconds
     averaging_timeout: float = 30.0  # give up on averaging step after this many seconds
     target_batch_size: int = 4096  # perform optimizer step after all peers collectively accumulate this many samples
@@ -92,6 +93,8 @@ class AlbertTrainingArguments(TrainingArguments):
     logging_steps: int = 100
     save_total_limit: int = 2
     save_steps: int = 500
+
+    output_dir: str = './outputs'
 
 
 def setup_logging(training_args):
@@ -175,6 +178,11 @@ class CollaborativeCallback(transformers.TrainerCallback):
         self.samples = 0
         self.steps = 0
         self.loss = 0
+
+    def on_train_begin(self, args: TrainingArguments, state: transformers.TrainerState,
+                       control: transformers.TrainerControl, **kwargs):
+        logger.warning('Loading state from peers')
+        self.collaborative_optimizer.load_state_from_peers()
 
     def on_step_end(self, args: TrainingArguments, state: transformers.TrainerState,
                     control: transformers.TrainerControl, **kwargs):

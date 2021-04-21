@@ -161,4 +161,7 @@ def load_optimizer_state(optimizer: torch.optim.Optimizer, flat_metadata: Dict, 
         elif elem.get('type') == 'value' and 'value' in elem:
             flat_optimizer_state.append(elem['value'])
     with torch.no_grad():
-        return optimizer.load_state_dict(nested_pack(flat_optimizer_state, structure=optimizer.state_dict()))
+        if flat_optimizer_state:
+            return optimizer.load_state_dict(nested_pack(flat_optimizer_state, structure=optimizer.state_dict()))
+        else:
+            return optimizer
