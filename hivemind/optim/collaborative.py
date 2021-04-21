@@ -31,8 +31,8 @@ class CollaborationState:
     def ready_for_step(self):
         return self.samples_accumulated >= self.target_batch_size or get_dht_time() >= self.eta_next_step
 
-    def register_step(self):
-        self.optimizer_step += 1
+    def register_step(self, local_step: int):
+        self.optimizer_step = max(local_step, self.optimizer_step)
         self.samples_accumulated = 0
         self.eta_next_step = float('inf')
 
@@ -62,6 +62,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :note: the expected collaboration drift parameters are used to adjust the frequency with which this optimizer will
       refresh the collaboration-wide statistics (to avoid missing the moment when to run the next step)
     :param bandwidth: peer's network bandwidth for the purpose of load balancing (recommended: internet speed in mbps)
+    :param step_tolerance: a peer can temporarily be delayed by this many steps without being deemed out of sync
     :param performance_ema_alpha: smoothing value used to estimate this peer's performance (training samples per second)
     :param averaging_expiration: peer's requests for averaging will be valid for this many seconds
     :param metadata_expiration: peer's metadata (e.g. samples processed) is stored onto DHT for this many seconds
@@ -72,6 +73,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param accumulate_grads_on: if specified, accumulate gradients on this device. By default, this will use the same
      device as model parameters. One can specify a different device (e.g. 'cpu' vs 'cuda') to save device memory at
      the cost of extra time per step. If reuse_gradient_accumulators is True, this parameter has no effect.
+    :param client_mode: if True, runs training without incoming connections, in a firewall-compatible mode
     :param kwargs: additional parameters forwarded to DecentralizedAverager
     :note: if you are using CollaborativeOptimizer with a lr_scheduler, it is recommended to pass this scheduler
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
@@ -81,8 +83,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                  batch_size_per_step: Optional[int] = None, scheduler: Optional[LRSchedulerBase] = None,
                  min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
                  expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
-                 metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, verbose: bool = False,
-                 reuse_grad_buffers: bool = False, accumulate_grads_on: Optional[torch.device] = None, **kwargs):
+                 metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, step_tolerance: int = 1,
+                 reuse_grad_buffers: bool = False, accumulate_grads_on: Optional[torch.device] = None,
+                 client_mode: bool = False, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
         if reuse_grad_buffers and accumulate_grads_on is not None:
             logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
@@ -93,6 +96,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.expected_drift_peers, self.expected_drift_rate = expected_drift_peers, expected_drift_rate
         self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration
         self._grads, self.reuse_grad_buffers, self.accumulate_grads_on = None, reuse_grad_buffers, accumulate_grads_on
+        self.client_mode, self.step_tolerance = client_mode, step_tolerance
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
         self.averager = self._make_averager(**kwargs)
 
@@ -113,7 +117,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     def _make_averager(self, **kwargs):
         return TrainingAverager(self.opt, dht=self.dht, average_parameters=True, average_gradients=True,
-                                prefix=f"{self.prefix}_averaging", allreduce_timeout=self.averaging_timeout, **kwargs)
+                                prefix=f"{self.prefix}_averaging", allreduce_timeout=self.averaging_timeout,
+                                listen=not self.client_mode, **kwargs)
 
     @property
     def local_step(self) -> int:
@@ -121,7 +126,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     @property
     def is_synchronized(self) -> bool:
-        return self.local_step >= self.collaboration_state.optimizer_step
+        return self.local_step >= self.collaboration_state.optimizer_step - self.step_tolerance
 
     def is_alive(self) -> bool:
         return self.averager.is_alive()
@@ -149,6 +154,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         batch_size = batch_size if batch_size is not None else self.batch_size_per_step
 
         if not self.is_synchronized:
+            logger.log(self.status_loglevel, "Peer is out of sync.")
             self.load_state_from_peers()
             return
 
@@ -157,6 +163,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                            f"but metadata expired in {self.metadata_expiration} s.")
 
         self.accumulate_grads_(batch_size)
+
         with self.lock_local_progress:
             self.local_samples_accumulated += batch_size
             self.local_steps_accumulated += 1
@@ -166,7 +173,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not self.collaboration_state.ready_for_step:
             return
 
-        logger.log(self.status_loglevel, "Averaging parameters and gradients with peers...")
+        logger.log(self.status_loglevel, f"Beginning global optimizer step {self.collaboration_state.optimizer_step}")
         self.collaboration_state = self.fetch_collaboration_state()
         self.collaboration_state_updated.set()
 
@@ -177,26 +184,32 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         with self.performance_ema.pause(), self.lock_collaboration_state:
             # divide accumulators by local steps to recover the true average grad w.r.t. local_samples_accumulated
             self.apply_accumulated_grads_(scale_by=1. / self.local_steps_accumulated)
+            current_step, group_info = self.averager.local_step, None
 
             if self.collaboration_state.num_peers > 1:
                 mean_samples_per_worker = self.target_batch_size / self.collaboration_state.num_peers
                 weight = self.local_samples_accumulated / mean_samples_per_worker
-                output = self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
+                try:
+                    group_info = self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
+                    if group_info:
+                        logger.log(self.status_loglevel, f"Averaged tensors successfully with {len(group_info)} peers")
+                except Exception as e:
+                    logger.log(self.status_loglevel, f"Skipped averaging: averaging round failed with {e}.")
+
             else:
                 logger.log(self.status_loglevel, f"Skipped averaging: collaboration consists of "
                                                  f"{self.collaboration_state.num_peers} peer(s).")
-                output = None
-                self.averager.local_step += 1
 
             self.opt.step()
             self.reset_accumulated_grads_()
             self.local_samples_accumulated = self.local_steps_accumulated = 0
-            self.collaboration_state.register_step()
+            self.collaboration_state.register_step(current_step + 1)
+            self.averager.local_step = current_step + 1
             self.collaboration_state_updated.set()
             self.update_scheduler()
 
             logger.log(self.status_loglevel, f"Optimizer step: done!")
-            return output
+            return group_info
 
     def _grad_buffers(self) -> Iterator[torch.Tensor]:
         """ pytorch-internal gradient buffers """
