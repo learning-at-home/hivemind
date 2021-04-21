@@ -24,18 +24,29 @@ if __name__ == '__main__':
                         help="coordinator will fetch keys from DHT once in this many seconds")
     parser.add_argument('--experiment_prefix', type=str, required=True,
                         help="a prefix where peers store their metrics for aggregation")
-    parser.add_argument('--wandb_project', type=str, required=True,
-                        help="Weights & Biases project name to publish learning curves")
+    parser.add_argument('--wandb_project', type=str, required=False,
+                        help="learning curves will be published there. Specify this for only one coordinator")
+    parser.add_argument('--initial_peers', type=str, required=False,
+                        help="you might want to have several initial peers so that if one dies, new workers still "
+                             "can join the collaboration via alive initial peers' addresses")
 
     args = parser.parse_args()
     if args.address is None:
         logger.warning("No address specified. Attempting to infer address from DNS.")
         args.address = get_ip(GoogleDnsProvider)
 
-    dht = hivemind.DHT(start=True, listen_on=args.listen_on, endpoint=f"{args.address}:*")
+    if args.initial_peers is None:
+        dht = hivemind.DHT(start=True, listen_on=args.listen_on, endpoint=f"{args.address}:*")
+    else:
+        args.initial_peers = list(map(str.strip, args.initial_peers.split(',')))
+        dht = hivemind.DHT(start=True, listen_on=args.listen_on, endpoint=f"{args.address}:*",
+                           initial_peers=args.initial_peers)
+
     logger.info(f"Running DHT root at {args.address}:{dht.port}")
 
-    wandb.init(project=args.wandb_project)
+    if args.wandb_project is not None:
+        wandb.init(project=args.wandb_project)
+
     current_step = 0
 
     while True:
@@ -56,12 +67,13 @@ if __name__ == '__main__':
                     alive_peers += 1
                     sum_perf += perf
                     num_samples += samples
-                wandb.log({
-                    "loss": sum_loss / alive_peers,
-                    "alive peers": alive_peers,
-                    "samples": num_samples,
-                    "performance": sum_perf
-                })
+                if args.wandb_project is not None:
+                    wandb.log({
+                        "loss": sum_loss / alive_peers,
+                        "alive peers": alive_peers,
+                        "samples": num_samples,
+                        "performance": sum_perf
+                    })
                 logger.info(f"Step #{current_step}\tloss = {sum_loss / alive_peers:.5f}")
         logger.debug("Peer is still alive...")
         time.sleep(args.refresh_period)
