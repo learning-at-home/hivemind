@@ -51,13 +51,15 @@ if __name__ == '__main__':
                 sum_loss = 0
                 num_samples = 0
                 sum_perf = 0
-                for step, perf, samples, loss in metrics:
+                sum_mini_steps = 0
+                for step, perf, samples, loss, mini_steps in metrics:
                     sum_loss += loss
                     alive_peers += 1
                     sum_perf += perf
                     num_samples += samples
+                    sum_mini_steps += mini_steps
                 wandb.log({
-                    "loss": sum_loss / alive_peers,
+                    "loss": sum_loss / sum_mini_steps,
                     "alive peers": alive_peers,
                     "samples": num_samples,
                     "performance": sum_perf
