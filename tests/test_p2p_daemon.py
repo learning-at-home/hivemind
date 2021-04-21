@@ -41,7 +41,7 @@ async def test_daemon_killed_on_del():
     child_pid = p2p_daemon._child.pid
     assert is_process_running(child_pid)
 
-    p2p_daemon.__del__()
+    await p2p_daemon.shutdown()
     assert not is_process_running(child_pid)
 
 
@@ -53,10 +53,10 @@ async def test_daemon_replica_does_not_affect_primary():
     child_pid = p2p_daemon._child.pid
     assert is_process_running(child_pid)
 
-    p2p_replica.__del__()
+    await p2p_replica.shutdown()
     assert is_process_running(child_pid)
 
-    p2p_daemon.__del__()
+    await p2p_daemon.shutdown()
     assert not is_process_running(child_pid)
 
 
@@ -129,10 +129,10 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
         assert not handler_cancelled
 
     await server.stop_listening()
-    server_primary.__del__()
+    await server_primary.shutdown()
     assert not is_process_running(server_pid)
 
-    client_primary.__del__()
+    await client_primary.shutdown()
     assert not is_process_running(client_pid)
 
 
@@ -160,10 +160,10 @@ async def test_call_peer_single_process(test_input, handle, handler_name="handle
     result = await client.call_peer_handler(server.id, handler_name, test_input)
     assert result == handle(test_input)
 
-    server.__del__()
+    await server.shutdown()
     assert not is_process_running(server_pid)
 
-    client.__del__()
+    await client.shutdown()
     assert not is_process_running(client_pid)
 
 
@@ -178,7 +178,7 @@ async def run_server(handler_name, server_side, client_side, response_received):
         await asyncio.sleep(0.5)
 
     await server.stop_listening()
-    server.__del__()
+    await server.shutdown()
     assert not is_process_running(server_pid)
 
 
@@ -209,7 +209,7 @@ async def test_call_peer_different_processes():
     assert np.allclose(result, handle_square(test_input))
     response_received.value = 1
 
-    client.__del__()
+    await client.shutdown()
     assert not is_process_running(client_pid)
 
     proc.join()
@@ -233,8 +233,13 @@ async def test_call_peer_numpy(test_input, handle, replicate, handler_name="hand
     client = await replicate_if_needed(client_primary, replicate)
 
     await asyncio.sleep(1)
+
     result = await client.call_peer_handler(server.id, handler_name, test_input)
     assert np.allclose(result, handle(test_input))
+
+    await server.stop_listening()
+    await server_primary.shutdown()
+    await client_primary.shutdown()
 
 
 @pytest.mark.parametrize(
@@ -274,7 +279,7 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     await server_replica2.add_stream_handler(handler_name + "2", partial(handler, key="replica2"))
 
     client = await P2P.create()
-    await asyncio.sleep(1)
+    await asyncio.sleep(2)
     result = await client.call_peer_handler(server_id, handler_name, "")
     assert result == "primary"
 
@@ -294,5 +299,5 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
         await client.call_peer_handler(server_id, handler_name + "2", "")
 
     await server_primary.stop_listening()
-    server_primary.__del__()
-    client.__del__()
+    await server_primary.shutdown()
+    await client.shutdown()
