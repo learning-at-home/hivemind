@@ -381,9 +381,9 @@ class DHTNode:
                     cached_value.expiration_time <= rejected_expiration):  # cache would be rejected
                 self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
         elif is_dictionary and key_id in self.protocol.cache:  # there can be other keys and we should update
-            for subkey, stored_value_bytes, expiration_time, valid in zip(
+            for subkey, stored_value_bytes, expiration_time, accepted in zip(
                     subkeys, binary_values, expirations, store_ok):
-                if valid:
+                if accepted:
                     self.protocol.cache.store_subkey(key_id, subkey, stored_value_bytes, expiration_time)
             self._schedule_for_refresh(key_id, refresh_time=get_dht_time())  # fetch new key in background (asap)
 
