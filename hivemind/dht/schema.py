@@ -87,7 +87,7 @@ class SchemaValidator(RecordValidatorBase):
         if parsed_value != deserialized_record[key_alias]:
             logger.warning(
                 f"Value {deserialized_record[key_alias]} needed type conversions to match "
-                f" the schema: {parsed_value}. The type conversions are not allowed")
+                f" the schema: {parsed_value}. Type conversions are not allowed")
             return False
         return True
 
