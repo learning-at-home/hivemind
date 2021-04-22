@@ -47,7 +47,7 @@ async def test_expecting_regular_value(dht_nodes_with_schema):
     assert not await bob.store(b'experiment_name', b'foo_bar', get_dht_time() + 10,
                                subkey=b'subkey')
 
-    # Validate despite https://pydantic-docs.helpmanual.io/usage/models/#data-conversion
+    # Refuse records despite https://pydantic-docs.helpmanual.io/usage/models/#data-conversion
     assert not await bob.store(b'experiment_name', [], get_dht_time() + 10)
     assert not await bob.store(b'experiment_name', [1, 2, 3], get_dht_time() + 10)
 
@@ -68,13 +68,16 @@ async def test_expecting_dictionary(dht_nodes_with_schema):
     assert not await bob.store(b'n_batches', b'not_integer', get_dht_time() + 10, subkey=b'uid1')
     assert not await bob.store(b'n_batches', 666, get_dht_time() + 10, subkey=666)
 
-    # Validate despite https://pydantic-docs.helpmanual.io/usage/models/#data-conversion
+    # Refuse storing a plain dictionary bypassing the DictionaryDHTValue convention
+    assert not await bob.store(b'n_batches', {b'uid3': 779}, get_dht_time() + 10)
+
+    # Refuse records despite https://pydantic-docs.helpmanual.io/usage/models/#data-conversion
     assert not await bob.store(b'n_batches', 779.5, get_dht_time() + 10, subkey=b'uid3')
     assert not await bob.store(b'n_batches', 779.0, get_dht_time() + 10, subkey=b'uid3')
     assert not await bob.store(b'n_batches', [], get_dht_time() + 10)
     assert not await bob.store(b'n_batches', [(b'uid3', 779)], get_dht_time() + 10)
 
-    # Validate despite https://github.com/samuelcolvin/pydantic/issues/1268
+    # Refuse records despite https://github.com/samuelcolvin/pydantic/issues/1268
     assert not await bob.store(b'n_batches', '', get_dht_time() + 10)
 
     for peer in [alice, bob]:

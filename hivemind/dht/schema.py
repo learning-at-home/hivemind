@@ -68,6 +68,11 @@ class SchemaValidator(RecordValidatorBase):
             deserialized_subkey = DHTProtocol.serializer.loads(record.subkey)
             deserialized_record = {key_alias: {deserialized_subkey: deserialized_value}}
         else:
+            if isinstance(deserialized_value, dict):
+                logger.warning(
+                    f'Record {record} contains an improperly serialized dictionary (you must use '
+                    f'a DictionaryDHTValue of serialized values instead of a `dict` subclass)')
+                return False
             deserialized_record = {key_alias: deserialized_value}
 
         try:
