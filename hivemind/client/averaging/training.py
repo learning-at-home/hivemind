@@ -53,20 +53,22 @@ class TrainingAverager(DecentralizedAverager):
 
         local_tensors = list(self.local_tensors())
         with self.lock_averager_step:
-            # fill averager's tensors with current local tensors, scaled by peer's weight
+            # fill averager's tensors with current local tensors
             with self.get_tensors() as averaged_tensors:
-                assert len(local_tensors) == len(averaged_tensors)
+                assert len(local_tensors) == len(
+                    averaged_tensors), "The number of optimized parameters should not change."
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                    averaged_tensor[...] = local_tensor.detach().cpu().float()
+                    averaged_tensor[...] = local_tensor.cpu().float()
 
-            # find a group and hopefully average tensors with peers
+            # find a group and hopefully average tensors with peers, scaled by peer's weight
             gathered = super().step(**kwargs)
-
-            # load averaged tensors back into model
-            with self.get_tensors() as averaged_tensors:
-                assert len(averaged_tensors) == len(local_tensors)
-                for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                    local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
+            if gathered is not None:
+                # load averaged tensors back into model
+                with self.get_tensors() as averaged_tensors:
+                    assert len(averaged_tensors) == len(
+                        local_tensors), "The number of optimized parameters should not change."
+                    for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
+                        local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
 
             self.local_step += 1
             return gathered
