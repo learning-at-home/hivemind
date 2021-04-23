@@ -1,16 +1,16 @@
 import codecs
 import glob
+import hashlib
 import os
 import re
 import subprocess
-import urllib.request
 import tarfile
 import tempfile
-import hashlib
+import urllib.request
 
 from packaging import version
 from pkg_resources import parse_requirements
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 from setuptools.command.develop import develop
 from setuptools.command.install import install
 
@@ -49,12 +49,11 @@ def proto_compile(output_path):
 
 def libp2p_build_install():
     try:
-        proc = subprocess.Popen(['go', 'version'],
-                                stdout=subprocess.PIPE)
+        proc = subprocess.Popen(['go', 'version'], stdout=subprocess.PIPE)
         result, _ = proc.communicate()
         result = result.decode('ascii', 'replace')
-        _, _, v, _ = result.split(' ')
-        v = v.lstrip('go')
+        m = re.search(r'^go version go([\d.]+)', result)
+        v = m.group(1)
 
         if version.parse(v) < version.parse("1.13"):
             raise EnvironmentError(f'newer version of go required: must be >= 1.13, found {version}')
@@ -65,13 +64,13 @@ def libp2p_build_install():
     with tempfile.TemporaryDirectory() as tempdir:
         url = f'https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz'
         dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')
-        urllib.request.urlretrieve(url, os.path.join(tempdir, dest))
+        urllib.request.urlretrieve(url, dest)
 
         tar = tarfile.open(dest, 'r:gz')
         tar.extractall(tempdir)
         tar.close()
 
-        result = subprocess.run(['go', 'build', '-o', os.path.join(here, "hivemind/hivemind_cli", "p2pd")],
+        result = subprocess.run(['go', 'build', '-o', os.path.join(here, "hivemind", "hivemind_cli", "p2pd")],
                                 cwd=os.path.join(tempdir, f'go-libp2p-daemon-{P2PD_VERSION[1:]}', 'p2pd'))
 
         if result.returncode:
@@ -80,13 +79,15 @@ def libp2p_build_install():
 
 
 def libp2p_download_install():
-    install_path = os.path.join(here, 'hivemind/hivemind_cli/')
+    install_path = os.path.join(here, 'hivemind', 'hivemind_cli')
     binary_path = os.path.join(install_path, 'p2pd')
     if 'p2pd' not in os.listdir(install_path) or md5(binary_path) != P2PD_CHECKSUM:
         print('Downloading Peer to Peer Daemon')
         url = f'https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd'
         urllib.request.urlretrieve(url, binary_path)
         os.chmod(binary_path, 0o777)
+        if md5(binary_path) != P2PD_CHECKSUM:
+            raise RuntimeError(f'Downloaded p2pd binary from {url} does not match with md5 checksum')
 
 
 class Install(install):

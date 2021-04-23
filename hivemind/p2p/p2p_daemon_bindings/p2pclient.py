@@ -1,10 +1,20 @@
-from typing import AsyncIterator, Iterable, Sequence, Tuple
+"""
+Originally taken from: https://github.com/mhchia/py-libp2p-daemon-bindings
+Licence: MIT
+Author: Kevin Mai-Husan Chia
+"""
 
 import asyncio
-from hivemind.p2p.p2p_daemon_bindings.control import ControlClient, DaemonConnector, StreamHandler
 from contextlib import asynccontextmanager
+from typing import AsyncIterator, Iterable, Sequence, Tuple
+
 from multiaddr import Multiaddr
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerInfo, StreamInfo, ID
+
+from hivemind.p2p.p2p_daemon_bindings.control import (ControlClient,
+                                                      DaemonConnector,
+                                                      StreamHandler)
+from hivemind.p2p.p2p_daemon_bindings.datastructures import (ID, PeerInfo,
+                                                             StreamInfo)
 
 
 class Client:

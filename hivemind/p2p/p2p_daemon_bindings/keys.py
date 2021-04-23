@@ -1,3 +1,9 @@
+"""
+Originally taken from: https://github.com/mhchia/py-libp2p-daemon-bindings
+Licence: MIT
+Author: Kevin Mai-Husan Chia
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, unique

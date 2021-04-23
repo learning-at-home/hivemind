@@ -1,29 +1,29 @@
 import asyncio
 import copy
-from pathlib import Path
+import dataclasses
 import pickle
 import subprocess
 import typing as tp
+from pathlib import Path
 
 import google.protobuf
 from multiaddr import Multiaddr
+
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import ID, StreamInfo
-
-from hivemind.utils.networking import find_open_port
 from hivemind.utils.logging import get_logger
-
+from hivemind.utils.networking import find_open_port
 
 logger = get_logger(__name__)
 
 
+@dataclasses.dataclass(frozen=False)
 class P2PContext(object):
-    def __init__(self, ours_id, ours_port, handle_name):
-        self.peer_id = None
-        self.peer_addr = None
-        self.ours_id = ours_id
-        self.ours_port = ours_port
-        self.handle_name = handle_name
+    ours_id: str
+    ours_port: int
+    handle_name: str
+    peer_id: ID = None
+    peer_addr: Multiaddr = None
 
 
 class P2P(object):
@@ -47,6 +47,7 @@ class P2P(object):
 
     def __init__(self):
         self._child = None
+        self._alive = False
         self._listen_task = None
         self._server_stopped = asyncio.Event()
 
@@ -67,7 +68,7 @@ class P2P(object):
                 self._initialize(proc_args)
                 await self._identify_client(P2P.RETRY_DELAY * (2 ** try_count))
             except Exception as e:
-                logger.debug(f"Failed to initialize p2p daemon: {e}", RuntimeWarning)
+                logger.debug(f"Failed to initialize p2p daemon: {e}")
                 self._kill_child()
                 if try_count == P2P.NUM_RETRIES - 1:
                     raise
@@ -82,6 +83,7 @@ class P2P(object):
         # There is no child under control
         # Use external already running p2pd
         self._child = None
+        self._alive = True
         self._assign_daemon_ports(host_port, daemon_listen_port)
         self._client_listen_port = find_open_port()
         self._client = p2pclient.Client(
@@ -101,6 +103,7 @@ class P2P(object):
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, encoding="utf8"
         )
+        self._alive = True
         self._client_listen_port = find_open_port()
         self._client = p2pclient.Client(
             Multiaddr(f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}'),
@@ -148,10 +151,10 @@ class P2P(object):
         return bytes(buffer)
 
     @staticmethod
-    async def receive_raw_data(reader):
-        header = await P2P.receive_exactly(reader, P2P.HEADER_LEN)
+    async def receive_raw_data(reader: asyncio.StreamReader):
+        header = await reader.readexactly(P2P.HEADER_LEN)
         content_length = int.from_bytes(header, P2P.BYTEORDER)
-        data = await P2P.receive_exactly(reader, content_length)
+        data = await reader.readexactly(content_length)
         return data
 
     @staticmethod
@@ -268,12 +271,13 @@ class P2P(object):
 
     @property
     def is_alive(self):
-        return self._child.is_alive
+        return self._alive
 
     async def shutdown(self, timeout=None):
         await asyncio.get_event_loop().run_in_executor(None, self._kill_child)
 
     def _kill_child(self):
+        self._alive = False
         if self._child is not None and self._child.poll() is None:
             self._child.kill()
             self._child.wait()

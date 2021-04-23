@@ -1,3 +1,9 @@
+"""
+Originally taken from: https://github.com/mhchia/py-libp2p-daemon-bindings
+Licence: MIT
+Author: Kevin Mai-Husan Chia
+"""
+
 import asyncio
 
 from google.protobuf.message import Message as PBMessage
