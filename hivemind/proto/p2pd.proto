@@ -1,3 +1,7 @@
+//Originally taken from: https://github.com/mhchia/py-libp2p-daemon-bindings
+//Licence: MIT
+//Author: Kevin Mai-Husan Chia
+
 syntax = "proto2";
 
 package p2pclient.p2pd.pb;

@@ -1,3 +1,9 @@
+"""
+Originally taken from: https://github.com/mhchia/py-libp2p-daemon-bindings
+Licence: MIT
+Author: Kevin Mai-Husan Chia
+"""
+
 import logging
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterable, Sequence, Tuple
 

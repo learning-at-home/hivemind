@@ -1,13 +1,18 @@
+"""
+Originally taken from: https://github.com/mhchia/py-libp2p-daemon-bindings
+Licence: MIT
+Author: Kevin Mai-Husan Chia
+"""
+
 import hashlib
-from typing import Union, List, Sequence, Any
+from typing import Any, List, Sequence, Union
 
 import base58
 import multihash
-
 from multiaddr import Multiaddr, protocols
-from hivemind.proto import p2pd_pb2
 
 from hivemind.p2p.p2p_daemon_bindings.keys import PublicKey
+from hivemind.proto import p2pd_pb2
 
 # NOTE: On inlining...
 # See: https://github.com/libp2p/specs/issues/138
@@ -32,7 +37,7 @@ if ENABLE_INLINING:
             return self._digest
 
     multihash.FuncReg.register(
-        IDENTITY_MULTIHASH_CODE, "identity", hash_new=lambda: IdentityHash()
+        IDENTITY_MULTIHASH_CODE, "identity", hash_new=IdentityHash
     )
 
 
