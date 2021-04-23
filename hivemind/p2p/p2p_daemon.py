@@ -50,9 +50,6 @@ class P2P(object):
     HEADER_LEN = 8
     BYTEORDER = 'big'
 
-    class IncompleteRead(Exception):
-        pass
-
     class InterruptedError(Exception):
         pass
 
@@ -63,16 +60,27 @@ class P2P(object):
         self._server_stopped = asyncio.Event()
 
     @classmethod
-    async def create(cls, *args, quic=1, tls=1, conn_manager=1, dht_client=1,
-                     nat_port_map=True, auto_nat=True, bootstrap=True,
+    async def create(cls, *args, quic=1, tls=1, conn_manager=1, dht_mode='dht_server', force_reachability=None,
+                     nat_port_map=True, auto_nat=True, bootstrap=False, boostrap_peers=None, use_global_ipfs=False,
                      host_port: int = None, daemon_listen_port: int = None, **kwargs):
+        if bootstrap and boostrap_peers is None and not use_global_ipfs:
+            raise AttributeError('Trying to create with bootstrap node without bootstrap nodes list. '
+                                 'It is very dangerous, because p2pd connects to global ipfs and it is very unstable. '
+                                 'If you really want this, pass use_global_ipfs=True')
+        if boostrap_peers is not None and use_global_ipfs:
+            raise AttributeError('Non empty boostrap_nodes and use_global_ipfs=True are incompatible.'
+                                 'Choose one option: your nodes list (preferable) or global ipfs (very unstable)')
+
         self = cls()
         p2pd_path = Path(__file__).resolve().parents[1] / P2P.P2PD_RELATIVE_PATH
+        bpeers = cls._make_bootstrap_peers(boostrap_peers)
+        dht = cls._make_dht_mode(dht_mode)
+        freachability = cls._make_force_reachability(force_reachability)
         proc_args = self._make_process_args(
             str(p2pd_path), *args,
             quic=quic, tls=tls, connManager=conn_manager,
-            dhtClient=dht_client, natPortMap=nat_port_map,
-            autonat=auto_nat, b=bootstrap, **kwargs)
+            natPortMap=nat_port_map, autonat=auto_nat,
+            b=bootstrap, **{**bpeers, **dht, **freachability, **kwargs})
         self._assign_daemon_ports(host_port, daemon_listen_port)
         for try_count in range(self.NUM_RETRIES):
             try:
@@ -102,6 +110,16 @@ class P2P(object):
             Multiaddr(f'/ip4/127.0.0.1/tcp/{self._client_listen_port}'))
         await self._identify_client(0)
         return self
+
+    async def wait_peers_at_least(self, peers_num, attempts=3):
+        while attempts:
+            peers = await self._client.list_peers()
+            if len(peers) >= peers_num:
+                return
+            attempts -= 1
+            await asyncio.sleep(1)
+
+        raise RuntimeError('Not enough peers')
 
     def _initialize(self, proc_args: tp.List[str]) -> None:
         proc_args = copy.deepcopy(proc_args)
@@ -152,16 +170,6 @@ class P2P(object):
         await P2P.send_raw_data(protobuf.SerializeToString(), writer)
 
     @staticmethod
-    async def receive_exactly(reader, n_bytes, max_bytes=1 << 16):
-        buffer = bytearray()
-        while len(buffer) < n_bytes:
-            data = await reader.read(min(max_bytes, n_bytes - len(buffer)))
-            if len(data) == 0:
-                raise P2P.IncompleteRead()
-            buffer.extend(data)
-        return bytes(buffer)
-
-    @staticmethod
     async def receive_raw_data(reader: asyncio.StreamReader):
         header = await reader.readexactly(P2P.HEADER_LEN)
         content_length = int.from_bytes(header, P2P.BYTEORDER)
@@ -183,7 +191,7 @@ class P2P(object):
         async def do_handle_stream(stream_info, reader, writer):
             try:
                 request = await P2P.receive_data(reader)
-            except P2P.IncompleteRead:
+            except asyncio.exceptions.IncompleteReadError:
                 logger.debug("Incomplete read while receiving request from peer")
                 writer.close()
                 return
@@ -210,7 +218,7 @@ class P2P(object):
             try:
                 try:
                     request = await P2P.receive_protobuf(in_proto_type, reader)
-                except P2P.IncompleteRead:
+                except asyncio.exceptions.IncompleteReadError:
                     logger.debug("Incomplete read while receiving request from peer")
                     return
                 except google.protobuf.message.DecodeError as error:
@@ -303,3 +311,27 @@ class P2P(object):
             for key, value in kwargs.items()
         )
         return proc_args
+
+    @staticmethod
+    def _make_bootstrap_peers(nodes):
+        if nodes is None:
+            return {}
+        return {'bootstrapPeers': ','.join(nodes)}
+
+    @staticmethod
+    def _make_dht_mode(dht_mode):
+        if dht_mode == 'dht':
+            return {'dht': 1}
+        if dht_mode == 'dht_server':
+            return {'dhtServer': 1}
+        if dht_mode == 'dht_client':
+            return {'dhtClient': 1}
+        return {'dht': 0}
+
+    @staticmethod
+    def _make_force_reachability(force_reachability):
+        if force_reachability == 'public':
+            return {'forceReachabilityPublic': 1}
+        if force_reachability == 'private':
+            return {'forceReachabilityPrivate': 1}
+        return {}
