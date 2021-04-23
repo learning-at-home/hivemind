@@ -2,6 +2,7 @@ import asyncio
 import multiprocessing as mp
 import subprocess
 from functools import partial
+from typing import List
 
 from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
 
@@ -32,6 +33,17 @@ async def replicate_if_needed(p2p: P2P, replicate: bool):
     return await P2P.replicate(p2p._daemon_listen_port, p2p._host_port) if replicate else p2p
 
 
+def bootstrap_addr(host_port, id_):
+    return f'/ip4/127.0.0.1/tcp/{host_port}/p2p/{id_}'
+
+
+def boostrap_from(daemons: List[P2P]) -> List[str]:
+    return [
+        bootstrap_addr(d._host_port, d.id)
+        for d in daemons
+    ]
+
+
 @pytest.mark.asyncio
 async def test_daemon_killed_on_del():
     p2p_daemon = await P2P.create()
@@ -41,6 +53,22 @@ async def test_daemon_killed_on_del():
 
     await p2p_daemon.shutdown()
     assert not is_process_running(child_pid)
+
+
+@pytest.mark.asyncio
+async def test_server_client_connection():
+    server = await P2P.create()
+    peers = await server._client.list_peers()
+    assert len(peers) == 0
+
+    nodes = boostrap_from([server])
+    client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
+    await client.wait_peers_at_least(1)
+
+    peers = await client._client.list_peers()
+    assert len(peers) == 1
+    peers = await server._client.list_peers()
+    assert len(peers) == 1
 
 
 @pytest.mark.asyncio
@@ -99,7 +127,8 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
                                    dht_pb2.PingResponse)
     assert is_process_running(server_pid)
 
-    client_primary = await P2P.create()
+    nodes = boostrap_from([server])
+    client_primary = await P2P.create(bootstrap=True, boostrap_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
     client_pid = client_primary._child.pid
     assert is_process_running(client_pid)
@@ -111,7 +140,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
         peer=dht_pb2.NodeInfo(node_id=server.id.encode(), rpc_port=server._host_port),
         sender_endpoint=handle_name, available=True)
 
-    await asyncio.sleep(1)
+    await client.wait_peers_at_least(1)
     libp2p_server_id = ID.from_base58(server.id)
     stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
 
@@ -150,14 +179,17 @@ async def test_call_peer_single_process(test_input, handle, handler_name="handle
     await server.add_stream_handler(handler_name, handle)
     assert is_process_running(server_pid)
 
-    client = await P2P.create()
+    nodes = boostrap_from([server])
+    client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
-    await asyncio.sleep(1)
+    await client.wait_peers_at_least(1)
+
     result = await client.call_peer_handler(server.id, handler_name, test_input)
     assert result == handle(test_input)
 
+    await server.stop_listening()
     await server.shutdown()
     assert not is_process_running(server_pid)
 
@@ -172,6 +204,7 @@ async def run_server(handler_name, server_side, client_side, response_received):
     assert is_process_running(server_pid)
 
     server_side.send(server.id)
+    server_side.send(server._host_port)
     while response_received.value == 0:
         await asyncio.sleep(0.5)
 
@@ -196,12 +229,15 @@ async def test_call_peer_different_processes():
     proc = mp.Process(target=server_target, args=(handler_name, server_side, client_side, response_received))
     proc.start()
 
-    client = await P2P.create()
+    peer_id = client_side.recv()
+    peer_port = client_side.recv()
+
+    nodes = [bootstrap_addr(peer_port, peer_id)]
+    client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
-    await asyncio.sleep(1)
-    peer_id = client_side.recv()
+    await client.wait_peers_at_least(1)
 
     result = await client.call_peer_handler(peer_id, handler_name, test_input)
     assert np.allclose(result, handle_square(test_input))
@@ -227,10 +263,12 @@ async def test_call_peer_numpy(test_input, handle, replicate, handler_name="hand
     server_primary = await P2P.create()
     server = await replicate_if_needed(server_primary, replicate)
     await server.add_stream_handler(handler_name, handle)
-    client_primary = await P2P.create()
+
+    nodes = boostrap_from([server])
+    client_primary = await P2P.create(bootstrap=True, boostrap_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
 
-    await asyncio.sleep(1)
+    await client.wait_peers_at_least(1)
 
     result = await client.call_peer_handler(server.id, handler_name, test_input)
     assert np.allclose(result, handle(test_input))
@@ -252,10 +290,12 @@ async def test_call_peer_error(replicate, handler_name="handle"):
     server_primary = await P2P.create()
     server = await replicate_if_needed(server_primary, replicate)
     await server.add_stream_handler(handler_name, handle_add)
-    client_primary = await P2P.create()
+
+    nodes = boostrap_from([server])
+    client_primary = await P2P.create(bootstrap=True, boostrap_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
 
-    await asyncio.sleep(1)
+    await client.wait_peers_at_least(1)
     result = await client.call_peer_handler(server.id, handler_name,
                                             [np.zeros((2, 3)), np.zeros((3, 2))])
     assert type(result) == ValueError
@@ -266,7 +306,7 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     def handler(arg, key):
         return key
 
-    server_primary = await P2P.create()
+    server_primary = await P2P.create(bootstrap=False)
     server_id = server_primary.id
     await server_primary.add_stream_handler(handler_name, partial(handler, key="primary"))
 
@@ -276,8 +316,10 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     server_replica2 = await replicate_if_needed(server_primary, True)
     await server_replica2.add_stream_handler(handler_name + "2", partial(handler, key="replica2"))
 
-    client = await P2P.create()
-    await asyncio.sleep(2)
+    nodes = boostrap_from([server_primary])
+    client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
+    await client.wait_peers_at_least(1)
+
     result = await client.call_peer_handler(server_id, handler_name, "")
     assert result == "primary"
 
@@ -291,9 +333,9 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     await server_replica2.stop_listening()
 
     # Primary does not handle replicas protocols
-    with pytest.raises(P2P.IncompleteRead):
+    with pytest.raises(asyncio.exceptions.IncompleteReadError):
         await client.call_peer_handler(server_id, handler_name + "1", "")
-    with pytest.raises(P2P.IncompleteRead):
+    with pytest.raises(asyncio.exceptions.IncompleteReadError):
         await client.call_peer_handler(server_id, handler_name + "2", "")
 
     await server_primary.stop_listening()

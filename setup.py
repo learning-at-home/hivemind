@@ -15,7 +15,7 @@ from setuptools.command.develop import develop
 from setuptools.command.install import install
 
 P2PD_VERSION = 'v0.3.1'
-P2PD_CHECKSUM = '5094d094740f4e375afe80a5683b1bb2'
+P2PD_CHECKSUM = '8810097959db720208cdc9f2945804a4'
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -86,6 +86,7 @@ def libp2p_download_install():
         url = f'https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd'
         urllib.request.urlretrieve(url, binary_path)
         os.chmod(binary_path, 0o777)
+        print(md5(binary_path))
         if md5(binary_path) != P2PD_CHECKSUM:
             raise RuntimeError(f'Downloaded p2pd binary from {url} does not match with md5 checksum')
 
