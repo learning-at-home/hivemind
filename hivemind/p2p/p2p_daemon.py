@@ -191,7 +191,7 @@ class P2P(object):
         async def do_handle_stream(stream_info, reader, writer):
             try:
                 request = await P2P.receive_data(reader)
-            except asyncio.exceptions.IncompleteReadError:
+            except asyncio.IncompleteReadError:
                 logger.debug("Incomplete read while receiving request from peer")
                 writer.close()
                 return
@@ -218,7 +218,7 @@ class P2P(object):
             try:
                 try:
                     request = await P2P.receive_protobuf(in_proto_type, reader)
-                except asyncio.exceptions.IncompleteReadError:
+                except asyncio.IncompleteReadError:
                     logger.debug("Incomplete read while receiving request from peer")
                     return
                 except google.protobuf.message.DecodeError as error:
