@@ -187,6 +187,7 @@ class AllReduceProtocol:
         self.return_deltas = return_deltas
         # for endpoint in self.client_mode_endpoints:
         #     self.averaged_tensor_parts[endpoint] = torch.tensor([])
+        self.registered_from.update(self.client_mode_endpoints)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.endpoint}, group_size={self.group_size})"
@@ -223,8 +224,6 @@ class AllReduceProtocol:
         assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
         logger.debug(f"{self} - accumulating tensor part from {source}")
 
-        # self.accumulator.add_(remote_part, alpha=weight)
-        # self.denominator += weight
         self._accumulate_pieces(remote_part, weight)
         self.accumulated_from.add(source)
 
@@ -238,8 +237,6 @@ class AllReduceProtocol:
     def register_averaged_part(self, source: Endpoint, averaged_part: Part):
         assert not self.future.done(), f"already finished allreduce: {self.future}"
         assert source in self.local_tensor_parts, "the provider of averaged part is not from my group"
-        # TODO:
-        # assert source not in self.averaged_tensor_parts, "already registered the average from this peer"
         assert source not in self.registered_from, "already registered the average from this peer"
         averaged_part_shapes = tuple(t.shape for t in averaged_part)
         averaged_part_dtypes = tuple(t.dtype for t in averaged_part)
@@ -395,7 +392,6 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                                         ) -> Iterable[runtime_pb2.Tensor]:
         """ accumulate_part using streams of serialized tensors. Used to prevent duplicate work in serialization """
         try:
-            # tensor_part = deserialize_torch_tensor(combine_from_streaming(stream_messages))
             tensor_part = self._deserialize_from_chunks(stream_messages)
         except RuntimeError as e:
             raise AllreduceException(f"Could not deserialize tensor part from {source} for streaming {e}")
