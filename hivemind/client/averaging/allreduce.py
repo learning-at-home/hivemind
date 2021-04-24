@@ -8,12 +8,12 @@ from hivemind.utils import Endpoint, get_logger, ChannelCache, anext
 from hivemind.utils import split_for_streaming, combine_from_streaming
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.proto import averaging_pb2_grpc, runtime_pb2, averaging_pb2
-from hivemind.proto.runtime_pb2 import CompressionType
 from collections import OrderedDict
 
 # flavour types
 GroupID = bytes
 TensorID = int
+CompressionType = Any
 Part = Tuple[torch.Tensor, ...]
 logger = get_logger(__name__)
 
@@ -22,19 +22,23 @@ class TensorPartContainer:
     def __init__(self, tensors: Sequence[torch.Tensor], part_sizes: Tuple[int, ...], endpoints: Sequence[Endpoint],
                  compression_type: Sequence[CompressionType] = None):
         assert len(endpoints) == len(part_sizes), "length of part_sizes mismatch with endpoints"
-        assert len(compression_type) == len(tensors), "length of compression type mismatch with number of tensors"
+        if compression_type is not None:
+            assert len(compression_type) == len(tensors), "length of compression type mismatch with number of tensors"
 
         # Sort tensors descending by size
         tensor_ids, tensors = zip(*sorted(enumerate(tensors), key=lambda idx_tensor: -idx_tensor[-1].numel()))
         # Sort peers ascending by part_size
         endpoints, part_sizes = zip(*sorted(zip(endpoints, part_sizes), key=lambda peer_size: peer_size[-1]))
 
-        pieces, piece_ids = self._split_into_parts(tensors, tensor_ids=tensor_ids, part_sizes=part_sizes)
+        parts, part_ids = self._split_into_parts(tensors, tensor_ids=tensor_ids, part_sizes=part_sizes)
         self._orig_shapes = {idx: tensor.shape for idx, tensor in zip(tensor_ids, tensors)}
 
-        self._make_views(pieces, piece_ids, endpoints)
+        self._make_views(parts, part_ids, endpoints)
         self.endpoints = tuple(endpoints)
-        self._compression_type = compression_type
+        if compression_type:
+            self._compression_type = compression_type
+        else:
+            self._compression_type = None
 
     def _make_views(self, pieces, piece_ids, endpoints):
         self._peer_tensor_id_view: Dict[Endpoint, Tuple[TensorID, ...]] = dict()
@@ -79,14 +83,21 @@ class TensorPartContainer:
         return tuple(piece.dtype for piece in self.get_part(peer))
 
     def get_part_compression_type(self, peer: Endpoint) -> Tuple[CompressionType, ...]:
+        if self._compression_type is None:
+            return None
         return tuple(self._compression_type[tensor_id] for tensor_id in self._peer_tensor_id_view[peer])
 
     @property
-    def tensors(self) -> Tuple[torch.Tensor, ...]:
-        part_keys, pieces = self._piece_view.items()
+    def tensors(self) -> Sequence[torch.Tensor]:
+        part_keys, pieces = zip(*self._piece_view.items())
         _, piece_ids = zip(*part_keys)
-        # TODO: sort tensors dy ids
-        return self._restore_from_parts(piece_ids, pieces, self._orig_shapes)
+
+        tensor_ids = sorted(self._orig_shapes.keys())
+        restored = self._restore_from_parts(piece_ids, pieces)
+        restored = [restored.get(idx, torch.tensor([])) for idx in tensor_ids]
+        shapes = [self._orig_shapes[idx] for idx in tensor_ids]
+
+        return list(map(torch.Tensor.reshape, restored, shapes))
 
     @staticmethod
     def _split_into_parts(tensors: Sequence[torch.Tensor],
@@ -95,7 +106,7 @@ class TensorPartContainer:
         """ combines averaged_tensors into one tensor and splits them into equal pieces of size group_size """
         tensors = tuple(map(torch.Tensor.flatten, tensors))
         enumerated_tensors = zip(tensor_ids, tensors)
-        pieces, piece_ids = [], []
+        peer_parts, peer_part_ids = [], []
 
         for part_size in part_sizes:
             part, part_ids = [], []
@@ -113,7 +124,6 @@ class TensorPartContainer:
                         break
                 else:
                     residue = part_size - accum_size
-                    print(accum_size, tensor_size, part_size, residue)
                     shards = tensor[:residue], tensor[residue:]
 
                     part.append(shards[0])
@@ -122,25 +132,21 @@ class TensorPartContainer:
                     break
 
             part = tuple(part)
-            pieces.append(part)
-            piece_ids.append(part_ids)
-        return pieces, piece_ids
+            peer_parts.append(part)
+            peer_part_ids.append(part_ids)
+        return peer_parts, peer_part_ids
 
     @staticmethod
     def _restore_from_parts(piece_ids: Sequence[TensorID],
-                            pieces: Sequence[torch.Tensor],
-                            tensor_shapes: Dict[TensorID, torch.Size]) -> Tuple[torch.Tensor, ...]:
+                            pieces: Sequence[torch.Tensor]) -> Dict[TensorID, torch.Tensor]:
         """ restores the original tensor shapes from pieces obtained by split_into_pieces """
-        restored, restored_ids, shapes = [], [], []
+        restored, shapes = dict(), []
         for tensor_id in piece_ids:
-            if tensor_id not in restored_ids:
+            if tensor_id not in restored:
                 tensor = torch.cat([tensor for tid, tensor in zip(piece_ids, pieces) if tid == tensor_id])
+                restored[tensor_id] = tensor
 
-                restored_ids.append(tensor_id)
-                restored.append(tensor)
-                shapes.append(tensor_shapes[tensor_id])
-
-        return tuple(map(torch.Tensor.reshape, restored, shapes))
+        return restored
 
 
 class AllReduceProtocol:
