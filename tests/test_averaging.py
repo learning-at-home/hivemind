@@ -5,7 +5,8 @@ import numpy as np
 import torch
 import pytest
 import hivemind
-from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts
+from hivemind.client.averaging.allreduce import AllReduceProtocol
+from hivemind.client.averaging.allreduce import TensorPartContainer
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.key_manager import GroupKeyManager
 from hivemind.utils import Endpoint
@@ -225,8 +226,8 @@ async def test_allreduce_protocol():
                    for our, ref in zip(averaged_tensors, reference_tensors))
 
 
-@pytest.mark.forked
-def test_partitioning():
+def _get_test_tensors():
+    test_tensors = []
     for _ in range(100):
         tensors = []
         for _ in range(random.randint(1, 5)):
@@ -236,17 +237,24 @@ def test_partitioning():
             tensors.append(make_tensor(shape))
 
         total_size = sum(map(torch.Tensor.numel, tensors))
-        if total_size == 0:
-            continue
-        num_chunks = random.randint(1, min(100, sum(x.numel() for x in tensors)))
-        part_sizes = load_balance_peers(total_size, [None] * num_chunks)
-        chunks = split_into_parts(tensors, part_sizes)
-        assert len(chunks) == num_chunks
-        shapes = [tensor.shape for tensor in tensors]
-        restored = restore_from_parts(chunks, shapes)
-        assert len(restored) == len(tensors)
-        assert all(new.shape == old.shape for new, old in zip(restored, tensors))
-        assert all(torch.allclose(new, old) for new, old in zip(restored, tensors))
+        if total_size != 0:
+            test_tensors.append(tensors)
+    return test_tensors
+
+@pytest.mark.forked
+@pytest.mark.parametrize("tensors", _get_test_tensors())
+def test_partitioning(tensors):
+
+    total_size = sum(map(torch.Tensor.numel, tensors))
+    num_chunks = random.randint(1, min(100, sum(x.numel() for x in tensors)))
+    part_sizes = load_balance_peers(total_size, [None] * num_chunks)
+
+    tensor_container = TensorPartContainer(tensors, part_sizes, range(len(part_sizes)))
+    restored = tensor_container.tensors
+
+    assert len(restored) == len(tensors)
+    assert tuple(new.shape for new in restored) == tuple(old.shape for old in  tensors)
+    assert all(torch.allclose(new, old) for new, old in zip(restored, tensors))
 
 
 def get_cost(vector_size, partitions, throughputs):
