@@ -22,10 +22,17 @@ RUN conda install python~=3.8 pip && \
     pip install --no-cache-dir torch torchvision torchaudio && \
     conda clean --all
 
+COPY requirements.txt hivemind/requirements.txt
+COPY requirements-dev.txt hivemind/requirements-dev.txt
+COPY examples/albert/requirements.txt hivemind/examples/albert/requirements.txt
+RUN pip install --no-cache-dir -r hivemind/requirements.txt && \
+    pip install --no-cache-dir -r hivemind/requirements-dev.txt && \
+    pip install --no-cache-dir -r hivemind/examples/albert/requirements.txt && \
+    rm -rf ~/.cache/pip
+
 COPY . hivemind/
 RUN cd hivemind && \
-    pip install --no-cache-dir -e .[dev] && \
-    pip install --no-cache-dir -r examples/albert/requirements.txt && \
+    pip install --no-cache-dir .[dev] && \
     conda clean --all && rm -rf ~/.cache/pip
 
 CMD bash
