@@ -83,7 +83,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                  batch_size_per_step: Optional[int] = None, scheduler: Optional[LRSchedulerBase] = None,
                  min_refresh_period: float = 0.5, max_refresh_period: float = 30, default_refresh_period: float = 3,
                  expected_drift_peers: float = 3, expected_drift_rate: float = 0.2, performance_ema_alpha: float = 0.1,
-                 metadata_expiration: float = 30.0, averaging_timeout: Optional[float] = None, step_tolerance: int = 1,
+                 metadata_expiration: float = 60.0, averaging_timeout: Optional[float] = None, step_tolerance: int = 1,
                  reuse_grad_buffers: bool = False, accumulate_grads_on: Optional[torch.device] = None,
                  client_mode: bool = False, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
