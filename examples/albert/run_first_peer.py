@@ -109,12 +109,12 @@ class CheckpointHandler:
             return False
 
     def upload_checkpoint(self):
-        self.model.save_pretrained(f"{self.upload_model_as}/collaborative-albert.bin")
+        self.model.save_pretrained(self.upload_model_as)
         torch.save(self.collaborative_optimizer.opt.state_dict(), f"{self.upload_model_as}/optimizer_state.pt")
         self.previous_timestamp = time.time()
         try:
             subprocess.run("git add --all".split(), check=True, cwd=self.upload_model_as)
-            subprocess.run("git commit -m 'Updating'".split(), check=True, cwd=self.upload_model_as)
+            subprocess.run("git commit -m Updating".split(), check=True, cwd=self.upload_model_as)
             subprocess.run("git push".split(), check=True, cwd=self.upload_model_as)
         except subprocess.CalledProcessError:
             logger.warning("Error while uploading model")
@@ -129,7 +129,7 @@ if __name__ == '__main__':
         coordinator_args.address = get_ip(GoogleDnsProvider)
 
     dht = hivemind.DHT(start=True, listen_on=coordinator_args.dht_listen_on,
-        endpoint=f"{coordinator_args.address}:*", initial_peers=coordinator_args.initial_peers)
+                       endpoint=f"{coordinator_args.address}:*", initial_peers=coordinator_args.initial_peers)
 
     logger.info(f"Running DHT root at {coordinator_args.address}:{dht.port}")
 
@@ -150,9 +150,8 @@ if __name__ == '__main__':
 
                 if checkpoint_handler.is_time_to_save_state(current_step):
                     checkpoint_handler.save_state(current_step)
-
-                if checkpoint_handler.is_time_to_upload():
-                    checkpoint_handler.upload_checkpoint()
+                    if checkpoint_handler.is_time_to_upload():
+                        checkpoint_handler.upload_checkpoint()
 
                 alive_peers = 0
                 num_batches = 0
