@@ -5,13 +5,15 @@ import torch
 
 from hivemind import RemoteExpert, background_server
 
+CUSTOM_EXPERTS_PATH = os.path.join(os.path.dirname(__file__), 'test_utils', 'custom_networks.py')
+
 
 @pytest.mark.forked
 def test_custom_expert(hid_dim=16):
     with background_server(
             expert_cls='perceptron', num_experts=2, device='cpu',
             hidden_dim=hid_dim, num_handlers=2, no_dht=True,
-            custom_module_path=os.path.join(os.path.dirname(__file__), 'custom_networks.py')) as (server_endpoint, _):
+            custom_module_path=CUSTOM_EXPERTS_PATH) as (server_endpoint, _):
         expert0 = RemoteExpert('expert.0', server_endpoint)
         expert1 = RemoteExpert('expert.1', server_endpoint)
 
@@ -32,7 +34,7 @@ def test_multihead_expert(hid_dim=16):
     with background_server(
             expert_cls='multihead', num_experts=2, device='cpu',
             hidden_dim=hid_dim, num_handlers=2, no_dht=True,
-            custom_module_path=os.path.join(os.path.dirname(__file__), 'custom_networks.py')) as (server_endpoint, _):
+            custom_module_path=CUSTOM_EXPERTS_PATH) as (server_endpoint, _):
         expert0 = RemoteExpert('expert.0', server_endpoint)
         expert1 = RemoteExpert('expert.1', server_endpoint)
 
