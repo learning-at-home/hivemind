@@ -93,18 +93,17 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
                 time_to_nearest_interval = max(0.0, averaging_period - current_time % averaging_period)
                 time.sleep(time_to_nearest_interval)
 
-            with lock_parameters:
+            if verbose:
+                logger.info(f"Starting a new averaging round with current parameters.")
+            try:
+                group_info = averager.step(lock_parameters, **kwargs)
                 if verbose:
-                    logger.info(f"Starting a new averaging round with current parameters.")
-                try:
-                    group_info = averager.step(**kwargs)
-                    if verbose:
-                        if group_info is not None:
-                            logger.info(f"Finished averaging round in with {len(group_info)} peers.")
-                        else:
-                            logger.warning(f"Averaging round failed: could not find group.")
-                except Exception as e:
-                    logger.error(f"Averaging round failed: caught {e}.")
+                    if group_info is not None:
+                        logger.info(f"Finished averaging round in with {len(group_info)} peers.")
+                    else:
+                        logger.warning(f"Averaging round failed: could not find group.")
+            except Exception as e:
+                logger.error(f"Averaging round failed: caught {e}.")
 
 
 class DecentralizedSGD(DecentralizedOptimizer):
