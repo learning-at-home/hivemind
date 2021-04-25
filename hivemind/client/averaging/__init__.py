@@ -274,8 +274,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 _ = self._running_groups.pop(group_id, None)
                 self._pending_group_assembled.set()
                 if not future.done():
-                    logger.warning("Internal sanity check failed: averager.step left future pending.")
-                    future.set_result(None)
+                    future.set_exception(RuntimeError("Internal sanity check failed: averager.step left future pending."
+                                                      " Please report this to hivemind issues."))
 
     async def _make_allreduce_runner(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> AllReduceRunner:
         """ Use a group description found by Matchmaking to form AllreduceRunner """
