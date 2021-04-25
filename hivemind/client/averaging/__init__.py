@@ -259,13 +259,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
             except (AllreduceException, MatchmakingException, AssertionError, StopAsyncIteration, InternalError,
                     asyncio.CancelledError, asyncio.InvalidStateError, grpc.RpcError, grpc.aio.AioRpcError) as e:
-                exc_info = repr(e) if len(repr(e).strip()) > 0 else repr(type(e))  # print Cancelled/StopIteration
                 time_elapsed = get_dht_time() - start_time
                 if not allow_retries or (timeout is not None and timeout < time_elapsed):
-                    logger.warning(f"Averager caught {exc_info}")
-                    future.set_result(None)
+                    logger.exception(f"Averager caught {repr(e)}")
+                    future.set_exception(e)
                 else:
-                    logger.warning(f"Averager caught {exc_info}, retrying")
+                    logger.warning(f"Averager caught {repr(e)}, retrying")
 
             except BaseException as e:
                 future.set_exception(e)
@@ -291,9 +290,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 return AllReduceRunner(group_id=group_info.group_id, tensors=averaged_tensors, endpoint=self.endpoint,
                                        ordered_group_endpoints=group_info.endpoints, part_sizes=part_sizes,
                                        weights=weights, gathered=user_gathered, return_deltas=True, **kwargs)
-        except BaseException as e:
-            exc_info = repr(e) if len(repr(e).strip()) > 0 else repr(type(e))  # print Cancelled/StopIteration correctly
-            raise MatchmakingException(f"Unable to create allreduce runner ({exc_info}), group_info: {group_info}")
+        except Exception as e:
+            raise MatchmakingException(f"Unable to create allreduce runner ({e}), group_info: {group_info}")
 
     def update_tensors(self, allreduce_group: AllReduceRunner):
         """
