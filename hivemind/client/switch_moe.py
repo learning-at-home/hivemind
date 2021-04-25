@@ -82,7 +82,10 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
             try:
                 self._expert_info = next((expert.info for experts_i in chosen_experts for expert in experts_i))
             except grpc.RpcError as e:
-                logger.warning(f"Failed to get RemoteMixtureOfExperts.output_shape: {e}")
+                logger.warning(f"Failed to get RemoteSwitchMixtureOfExperts.output_shape: {e}")
+            except StopIteration:
+                raise RuntimeError("No responding experts found during beam search. Check that UID prefixes and "
+                                   "the grid size are consistent with running Server instances.")
 
         expert_mask, *expert_outputs = _RemoteCallMany.apply(
             DUMMY, chosen_experts, self.k_min, self.backward_k_min, self.timeout_after_k_min, self.forward_timeout,
