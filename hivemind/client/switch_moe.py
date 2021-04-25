@@ -96,8 +96,8 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         # compute expert probabilities as product across grid dimensions
         expert_probs = self.compute_expert_scores(grid_softmax, chosen_experts)
-        masked_logits = torch.full((1,), float('-inf'), device=expert_probs.device, dtype=expert_probs.dtype)
-        expert_probs = torch.where(expert_mask, expert_probs, masked_logits)
+        masked_probs = torch.zeros((1,), device=expert_probs.device, dtype=expert_probs.dtype)
+        expert_probs = torch.where(expert_mask, expert_probs, masked_probs)
 
         # multiply outputs by expert probabilities
         averaged_outputs_flat = [
@@ -127,7 +127,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
                              for dim_size in self.beam_search.grid_size]
 
         # out of chosen_experts, select those for which expert_mask is True
-        for (sample_idx, expert_idx) in expert_mask.nonzero().numpy():
+        for (sample_idx, expert_idx) in expert_mask.nonzero().cpu().numpy():
             expert = batch_experts[sample_idx][expert_idx]
             expert_indices = expert.uid[len(self.beam_search.uid_prefix):]
             expert_indices = list(map(int, expert_indices.split(UID_DELIMITER)))
