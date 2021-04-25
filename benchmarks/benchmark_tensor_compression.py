@@ -1,5 +1,6 @@
-import time
 import argparse
+import time
+
 import torch
 
 from hivemind.proto.runtime_pb2 import CompressionType
