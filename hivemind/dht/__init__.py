@@ -23,6 +23,7 @@ import hivemind
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
+from hivemind.dht.validation import CompositeValidator
 from hivemind.utils.networking import Hostname, Endpoint, strip_port
 from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, get_dht_time
 
@@ -49,12 +50,14 @@ class DHT(mp.Process):
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 expiration: float = 300, **kwargs):
+                 expiration: float = 300, record_validator: CompositeValidator = None, **kwargs):
         super().__init__()
         assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
         self.default_expiration = expiration
+        self._record_validator = (
+            record_validator if record_validator is not None else CompositeValidator())
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
@@ -70,7 +73,8 @@ class DHT(mp.Process):
         async def _run():
             node = await DHTNode.create(
                 initial_peers=list(self.initial_peers), listen_on=self.listen_on, parallel_rpc=self.parallel_rpc,
-                num_workers=self.max_workers or 1, **self.kwargs)
+                num_workers=self.max_workers or 1, record_validator=self._record_validator,
+                **self.kwargs)
             if node.port is not None:
                 self._port.value = node.port
             self.ready.set()
@@ -189,6 +193,12 @@ class DHT(mp.Process):
             logger.exception(f'Caught an exception when running a coroutine: {e}')
             if not future.done():
                 future.set_exception(e)
+
+    def extend_validator(self, **kwargs) -> None:
+        self.run_coroutine(partial(self._extend_validator, **kwargs))
+
+    async def _extend_validator(self, node: DHTNode, **kwargs) -> None:
+        node.protocol.record_validator.extend(**kwargs)
 
     def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
         """

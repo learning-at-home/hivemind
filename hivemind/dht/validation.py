@@ -1,5 +1,6 @@
 import dataclasses
 from abc import ABC, abstractmethod
+from typing import Dict
 
 
 @dataclasses.dataclass(init=True, repr=True, frozen=True)
@@ -51,4 +52,31 @@ class RecordValidatorBase(ABC):
         strip_value() is called before the DHT returns the record by the application's request.
         """
 
+        return record.value
+
+
+class CompositeValidator(RecordValidatorBase):
+    def __init__(self, validators: Dict[str, RecordValidatorBase]=None):
+        self._validators = validators if validators is not None else {}
+
+    def extend(self, validators: Dict[str, RecordValidatorBase]) -> None:
+        for key, val in validators.items():
+            self._validators.setdefault(key, val)
+
+    def validate(self, record: DHTRecord) -> bool:
+        for i, (_, val) in enumerate(sorted(self._validators.items(), reverse=True)):
+            if not val.validate(record):
+                return False
+            if i < len(self._validators) - 1:
+                record = dataclasses.replace(record, value=val.strip_value(record))
+        return True
+
+    def sign_value(self, record: DHTRecord) -> bytes:
+        for _, val in sorted(self._validators.items()):
+            record = dataclasses.replace(record, value=val.sign_value(record))
+        return record.value
+
+    def strip_value(self, record: DHTRecord) -> bytes:
+        for _, val in sorted(self._validators.items(), reverse=True):
+            record = dataclasses.replace(record, value=val.strip_value(record))
         return record.value
