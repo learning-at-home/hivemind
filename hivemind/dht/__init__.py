@@ -17,6 +17,7 @@ import asyncio
 import ctypes
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import List, Optional, Sequence, Union, Callable, Awaitable, TypeVar
 
 import hivemind
@@ -195,7 +196,7 @@ class DHT(mp.Process):
                 future.set_exception(e)
 
     def set_validators_if_not_present(self, validators: Dict[str, RecordValidatorBase]) -> None:
-        self.run_coroutine(partial(self._set_validators_if_not_present, validators=validators))
+        self.run_coroutine(partial(DHT._set_validators_if_not_present, validators=validators))
 
     async def _set_validators_if_not_present(
             self, node: DHTNode, validators: Dict[str, RecordValidatorBase]) -> None:
