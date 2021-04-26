@@ -60,23 +60,23 @@ class CompositeValidator(RecordValidatorBase):
         self._validators = validators if validators is not None else {}
 
     def set_if_not_present(self, validators: Dict[str, RecordValidatorBase]) -> None:
-        for key, val in validators.items():
-            self._validators.setdefault(key, val)
+        for key, validator in validators.items():
+            self._validators.setdefault(key, validator)
 
     def validate(self, record: DHTRecord) -> bool:
-        for i, (_, val) in enumerate(sorted(self._validators.items(), reverse=True)):
-            if not val.validate(record):
+        for i, (_, validator) in enumerate(sorted(self._validators.items(), reverse=True)):
+            if not validator.validate(record):
                 return False
             if i < len(self._validators) - 1:
-                record = dataclasses.replace(record, value=val.strip_value(record))
+                record = dataclasses.replace(record, value=validator.strip_value(record))
         return True
 
     def sign_value(self, record: DHTRecord) -> bytes:
-        for _, val in sorted(self._validators.items()):
-            record = dataclasses.replace(record, value=val.sign_value(record))
+        for _, validator in sorted(self._validators.items()):
+            record = dataclasses.replace(record, value=validator.sign_value(record))
         return record.value
 
     def strip_value(self, record: DHTRecord) -> bytes:
-        for _, val in sorted(self._validators.items(), reverse=True):
-            record = dataclasses.replace(record, value=val.strip_value(record))
+        for _, validator in sorted(self._validators.items(), reverse=True):
+            record = dataclasses.replace(record, value=validator.strip_value(record))
         return record.value

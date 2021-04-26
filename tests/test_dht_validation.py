@@ -21,17 +21,14 @@ class LoggingValidatorWrapper(RecordValidatorBase):
 
     def validate(self, record: DHTRecord) -> bool:
         self._log.append((self._name, 'validate'))
-        print(self._name, 'validate', record.value)
         return self._wrapped.validate(record)
 
     def sign_value(self, record: DHTRecord) -> bytes:
         self._log.append((self._name, 'sign_value'))
-        print(self._name, 'sign_value')
         return self._wrapped.sign_value(record)
 
     def strip_value(self, record: DHTRecord) -> bytes:
         self._log.append((self._name, 'strip_value'))
-        print(self._name, 'strip_value')
         return self._wrapped.strip_value(record)
 
 
