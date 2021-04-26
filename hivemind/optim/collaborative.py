@@ -193,8 +193,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                     group_info = self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
                     if group_info:
                         logger.log(self.status_loglevel, f"Averaged tensors successfully with {len(group_info)} peers")
-                except Exception as e:
-                    logger.log(self.status_loglevel, f"Skipped averaging: averaging round failed with {e}.")
+                except BaseException as e:
+                    logger.log(self.status_loglevel, f"Skipped averaging: averaging round failed with {repr(e)}.")
 
             else:
                 logger.log(self.status_loglevel, f"Skipped averaging: collaboration consists of "
