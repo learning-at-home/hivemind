@@ -39,7 +39,7 @@ class CollaborationArguments:
     trainer_uuid: str = uuid.uuid4().hex  # this peer's name - used when publishing metadata to DHT, default = random
 
     # optional tweaks
-    target_group_size: int = 64  # maximum group size for all-reduce
+    target_group_size: int = 256  # maximum group size for all-reduce
     metadata_expiration: float = 30  # peer's metadata will be removed if not updated in this many seconds
     statistics_expiration: float = 600  # statistics will be removed if not updated in this many seconds
     dht_listen_on: str = '[::]:*'  # network interface used for incoming DHT communication. Default: all ipv6

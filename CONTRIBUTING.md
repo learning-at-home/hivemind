@@ -122,9 +122,9 @@ Currently, hivemind has three benchmark scripts for evaluating the impact of cod
 performance-sensitive parts of the library. If you make a change that might introduce a regression, you may be asked by
 the maintainers to provide the benchmarking results for your branch and a comparison with the master branch.
 
-* `tests/benchmark_averaging.py` measures the performance of decentralized parameter averaging across the DHT.
-* `tests/benchmark_dht.py` measures the performance of core DHT operations.
-* `tests/benchmark_throughput.py` measures the performance of a server hosting several expert layers under heavy load
+* `benchmarks/benchmark_averaging.py` measures the performance of decentralized parameter averaging across the DHT.
+* `benchmarks/benchmark_dht.py` measures the performance of core DHT operations.
+* `benchmarks/benchmark_throughput.py` measures the performance of a server hosting several expert layers under heavy load
   from multiple clients.
 
 Example benchmark runs are available in

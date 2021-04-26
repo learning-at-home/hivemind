@@ -5,7 +5,7 @@ hivemind.
 
 ### Server throughput
 
-You can use [this benchmark](https://github.com/learning-at-home/hivemind/blob/master/tests/benchmark_throughput.py) to
+You can use [this benchmark](https://github.com/learning-at-home/hivemind/blob/master/benchmarks/benchmark_throughput.py) to
 check the performance impact of your changes to hivemind.client and server. The benchmark will start one server without
 DHT with several experts, and then spawn trainer processes that load the server with requests. The two main statistics
 in this benchmark samples/s and startup time.
@@ -59,7 +59,7 @@ Cached:    3.2 GB
 
 ### DHT performance
 
-In turn, [this benchmark](https://github.com/learning-at-home/hivemind/blob/master/tests/benchmark_dht.py) can be used
+In turn, [this benchmark](https://github.com/learning-at-home/hivemind/blob/master/benchmarks/benchmark_dht.py) can be used
 to measure performance impact of changes to hivemind.dht. It spawns a DHT with `num_peers` participants, then chooses
 one peer that will declare `num_experts` total experts in batches of `expert_batch_size`. Then, another peer will
 consecutively get all peers and check if they are there.
