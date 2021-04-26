@@ -59,7 +59,7 @@ class CompositeValidator(RecordValidatorBase):
     def __init__(self, validators: Dict[str, RecordValidatorBase]=None):
         self._validators = validators if validators is not None else {}
 
-    def extend(self, validators: Dict[str, RecordValidatorBase]) -> None:
+    def set_if_not_present(self, validators: Dict[str, RecordValidatorBase]) -> None:
         for key, val in validators.items():
             self._validators.setdefault(key, val)
 

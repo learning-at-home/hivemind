@@ -194,11 +194,12 @@ class DHT(mp.Process):
             if not future.done():
                 future.set_exception(e)
 
-    def extend_validator(self, **kwargs) -> None:
-        self.run_coroutine(partial(self._extend_validator, **kwargs))
+    def set_validators_if_not_present(self, validators: Dict[str, RecordValidatorBase]) -> None:
+        self.run_coroutine(partial(self._set_validators_if_not_present, validators=validators))
 
-    async def _extend_validator(self, node: DHTNode, **kwargs) -> None:
-        node.protocol.record_validator.extend(**kwargs)
+    async def _set_validators_if_not_present(
+            self, node: DHTNode, validators: Dict[str, RecordValidatorBase]) -> None:
+        node.protocol.record_validator.set_if_not_present(validators)
 
     def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
         """
