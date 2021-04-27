@@ -16,17 +16,6 @@ import pytest
 from hivemind.p2p import P2P
 from hivemind.proto import dht_pb2, runtime_pb2
 
-RUNNING = 'running'
-NOT_RUNNING = 'not running'
-CHECK_PID_CMD = '''
-if ps -p {0} > /dev/null;
-then
-    echo "{1}"
-else
-    echo "{2}"
-fi
-'''
-
 
 def is_process_running(pid: int) -> bool:
     return subprocess.run(["ps", "-p", str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
