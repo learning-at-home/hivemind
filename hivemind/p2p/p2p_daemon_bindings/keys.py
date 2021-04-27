@@ -1,7 +1,7 @@
 """
-Originally taken from: https://github.com/mhchia/py-libp2p-daemon-bindings
+Originally taken from: https://github.com/libp2p/py-libp2p
 Licence: MIT
-Author: Kevin Mai-Husan Chia
+Author: Kevin Mai-Husan Chia and others
 """
 
 from abc import ABC, abstractmethod
