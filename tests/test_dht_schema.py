@@ -1,18 +1,18 @@
 import re
 
-import pydantic
 import pytest
-from pydantic import conint
+from pydantic import BaseModel, StrictInt, conint
 from typing import Dict
 
 from hivemind.dht import get_dht_time
 from hivemind.dht.node import DHTNode, LOCALHOST
 from hivemind.dht.schema import SchemaValidator, conbytes
+from hivemind.dht.validation import DHTRecord, RecordValidatorBase
 
 
 @pytest.fixture
 async def dht_nodes_with_schema():
-    class Schema(pydantic.BaseModel):
+    class Schema(BaseModel):
         experiment_name: bytes
         n_batches: Dict[bytes, conint(ge=0, strict=True)]
         signed_data: Dict[conbytes(regex=rb'.*\[owner:.+\]'), bytes]
@@ -30,10 +30,10 @@ async def dht_nodes_with_schema():
 async def test_keys_outside_schema(dht_nodes_with_schema):
     alice, bob = dht_nodes_with_schema
 
-    assert await bob.store(b'unknown_key', b'foo_bar', get_dht_time() + 10)
+    assert not await bob.store(b'unknown_key', b'foo_bar', get_dht_time() + 10)
 
     for peer in [alice, bob]:
-        assert (await peer.get(b'unknown_key', latest=True)).value == b'foo_bar'
+        assert (await peer.get(b'unknown_key', latest=True)) is None
 
 
 @pytest.mark.forked
@@ -103,3 +103,33 @@ async def test_expecting_public_keys(dht_nodes_with_schema):
         dictionary = (await peer.get(b'signed_data', latest=True)).value
         assert (len(dictionary) == 1 and
                 dictionary[b'uid[owner:public-key]'].value == b'foo_bar')
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_merging_schema_validators(dht_nodes_with_schema):
+    alice, bob = dht_nodes_with_schema
+
+    class TrivialValidator(RecordValidatorBase):
+        def validate(self, record: DHTRecord) -> bool:
+            return True
+
+    second_validator = TrivialValidator()
+    # Can't merge with the validator of the different type
+    assert not alice.protocol.record_validator.merge_with(second_validator)
+
+    class SecondSchema(BaseModel):
+        some_new_field: StrictInt
+
+    second_validator = SchemaValidator(SecondSchema)
+    assert alice.protocol.record_validator.merge_with(second_validator)
+    assert bob.protocol.record_validator.merge_with(second_validator)
+
+    assert await bob.store(b'experiment_name', b'foo_bar', get_dht_time() + 10)
+    assert await bob.store(b'some_new_field', 777, get_dht_time() + 10)
+    assert not await bob.store(b'unknown_key', 777, get_dht_time() + 10)
+
+    for peer in [alice, bob]:
+        assert (await peer.get(b'experiment_name', latest=True)).value == b'foo_bar'
+        assert (await peer.get(b'some_new_field', latest=True)).value == 777
+        assert (await peer.get(b'unknown_key', latest=True)) is None

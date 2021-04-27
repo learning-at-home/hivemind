@@ -24,7 +24,7 @@ import hivemind
 from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
-from hivemind.dht.validation import CompositeValidator
+from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.utils.networking import Hostname, Endpoint, strip_port
 from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, get_dht_time
 
@@ -51,14 +51,14 @@ class DHT(mp.Process):
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 expiration: float = 300, record_validator: CompositeValidator = None, **kwargs):
+                 expiration: float = 300, record_validators: List[RecordValidatorBase] = None,
+                 **kwargs):
         super().__init__()
         assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
         self.default_expiration = expiration
-        self._record_validator = (
-            record_validator if record_validator is not None else CompositeValidator())
+        self._record_validator = CompositeValidator(record_validators)
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
@@ -195,12 +195,17 @@ class DHT(mp.Process):
             if not future.done():
                 future.set_exception(e)
 
-    def set_validators_if_not_present(self, validators: Dict[str, RecordValidatorBase]) -> None:
-        self.run_coroutine(partial(DHT._set_validators_if_not_present, validators=validators))
+    def append_validators(self, record_validators: List[RecordValidatorBase]) -> None:
+        if not self.ready.is_set():
+            raise RuntimeError(
+                "Can't append new validators before the DHT process has started. "
+                "Consider adding them to the initial list via DHT.__init__(record_validators=...)")
 
-    async def _set_validators_if_not_present(
-            self, node: DHTNode, validators: Dict[str, RecordValidatorBase]) -> None:
-        node.protocol.record_validator.set_if_not_present(validators)
+        self.run_coroutine(partial(DHT._append_validators, record_validators=record_validators))
+
+    async def _append_validators(
+            self, node: DHTNode, record_validators: List[RecordValidatorBase]) -> None:
+        node.protocol.record_validator.extend(record_validators)
 
     def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
         """

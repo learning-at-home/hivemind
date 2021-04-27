@@ -30,15 +30,16 @@ class SchemaValidator(RecordValidatorBase):
         """
 
         self._alias_to_name = {}
+
         for field in schema.__fields__.values():
             field.alias = self._key_id_to_str(DHTID.generate(source=field.name.encode()).to_bytes())
             self._alias_to_name[field.alias] = field.name
 
             # Because validate() interface provides one key at a time
             field.required = False
+        schema.Config.extra = pydantic.Extra.forbid
 
-        schema.Config.extra = pydantic.Extra.allow
-        self._schema = schema
+        self._schemas = [schema]
 
     def validate(self, record: DHTRecord) -> bool:
         """
@@ -75,19 +76,26 @@ class SchemaValidator(RecordValidatorBase):
                 return False
             deserialized_record = {key_alias: deserialized_value}
 
-        try:
-            parsed_record = self._schema.parse_obj(deserialized_record)
-        except pydantic.ValidationError as e:
+        parsed_record = None
+        validation_errors = []
+        for schema in self._schemas:
+            try:
+                parsed_record = schema.parse_obj(deserialized_record)
+                break
+            except pydantic.ValidationError as e:
+                validation_errors.append(e)
+        if parsed_record is None:
             readable_record = {self._alias_to_name.get(key_alias, key_alias):
                                deserialized_record[key_alias]}
-            logger.warning(f"Record {readable_record} doesn't match the schema: {e}")
+            logger.warning(
+                f"Record {readable_record} doesn't match the schemas: {validation_errors}")
             return False
 
         parsed_value = parsed_record.dict(by_alias=True)[key_alias]
         if parsed_value != deserialized_record[key_alias]:
             logger.warning(
                 f"Value {deserialized_record[key_alias]} needed type conversions to match "
-                f" the schema: {parsed_value}. Type conversions are not allowed")
+                f"the schema: {parsed_value}. Type conversions are not allowed")
             return False
         return True
 
@@ -99,6 +107,14 @@ class SchemaValidator(RecordValidatorBase):
         """
 
         return binascii.hexlify(key_id).decode()
+
+    def merge_with(self, other: RecordValidatorBase) -> bool:
+        if not isinstance(other, SchemaValidator):
+            return False
+
+        self._alias_to_name.update(other._alias_to_name)
+        self._schemas.extend(other._schemas)
+        return True
 
 
 def conbytes(*, regex: bytes=None, **kwargs) -> Type[pydantic.BaseModel]:

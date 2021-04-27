@@ -1,9 +1,9 @@
 import dataclasses
 from functools import partial
-from typing import List, Tuple
+from typing import Dict
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 
 import hivemind
 from hivemind.dht.crypto import RSASignatureValidator
@@ -13,105 +13,81 @@ from hivemind.dht.schema import SchemaValidator
 from hivemind.dht.validation import DHTRecord, CompositeValidator, RecordValidatorBase
 
 
-class LoggingValidatorWrapper(RecordValidatorBase):
-    def __init__(self, wrapped: RecordValidatorBase, name: str, log: List[Tuple[str, str]]):
-        self._wrapped = wrapped
-        self._log = log
-        self._name = name
-
-    def validate(self, record: DHTRecord) -> bool:
-        self._log.append((self._name, 'validate'))
-        return self._wrapped.validate(record)
-
-    def sign_value(self, record: DHTRecord) -> bytes:
-        self._log.append((self._name, 'sign_value'))
-        return self._wrapped.sign_value(record)
-
-    def strip_value(self, record: DHTRecord) -> bytes:
-        self._log.append((self._name, 'strip_value'))
-        return self._wrapped.strip_value(record)
-
-
 class SchemaA(BaseModel):
     field_a: bytes
 
 
 class SchemaB(BaseModel):
-    field_b: bytes
+    field_b: Dict[bytes, StrictInt]
 
 
 @pytest.fixture
-def logging_validators():
-    log = []
-    log_as = partial(LoggingValidatorWrapper, log=log)
-
+def validators_for_app():
     # Each application may add its own validator set
-    validator_sets = [
-        {
-            '10-schema-app-A': log_as(SchemaValidator(SchemaA), 'schema-val-A'),
-            '20-signature': log_as(RSASignatureValidator(), 'signature-val-A'),
-        },
-        {
-            '10-schema-app-B': log_as(SchemaValidator(SchemaB), 'schema-val-B'),
-            '20-signature': log_as(RSASignatureValidator(), 'signature-val-B'),
-        },
-    ]
-
-    return log, validator_sets
+    return {
+        'A': [RSASignatureValidator(), SchemaValidator(SchemaA)],
+        'B': [SchemaValidator(SchemaB), RSASignatureValidator()],
+    }
 
 
-def test_composite_validator(logging_validators):
-    log, validator_sets = logging_validators
-    validator = CompositeValidator(validator_sets[0])
-    validator.set_if_not_present(validator_sets[1])
+def test_composite_validator(validators_for_app):
+    validator = CompositeValidator(validators_for_app['A'])
+    assert ([type(item) for item in validator._validators] ==
+        [SchemaValidator, RSASignatureValidator])
 
-    record = DHTRecord(key=DHTID.generate(source=b'field_a').to_bytes(),
-                       subkey=DHTProtocol.IS_REGULAR_VALUE,
-                       value=DHTProtocol.serializer.dumps(b'value'),
+    validator.extend(validators_for_app['B'])
+    assert ([type(item) for item in validator._validators] ==
+        [SchemaValidator, RSASignatureValidator])
+    assert len(validator._validators[0]._schemas) == 2
+
+    public_key = validators_for_app['A'][0].ownership_marker
+    record = DHTRecord(key=DHTID.generate(source=b'field_b').to_bytes(),
+                       subkey=DHTProtocol.serializer.dumps(public_key),
+                       value=DHTProtocol.serializer.dumps(777),
                        expiration_time=hivemind.get_dht_time() + 10)
 
-    log.clear()
     signed_record = dataclasses.replace(record, value=validator.sign_value(record))
-    assert log == [
-        ('schema-val-A', 'sign_value'),
-        ('schema-val-B', 'sign_value'),
-        ('signature-val-A', 'sign_value'),
-    ]
-
-    log.clear()
+    # Expect only one signature since two RSASignatureValidatos have been merged
+    assert signed_record.value.count(b'[signature:') == 1
+    # Expect successful validation since the second SchemaValidator has been merged to the first
     assert validator.validate(signed_record)
-    assert log == [
-        ('signature-val-A', 'validate'),
-        ('signature-val-A', 'strip_value'),
-        ('schema-val-B', 'validate'),
-        ('schema-val-B', 'strip_value'),
-        ('schema-val-A', 'validate'),
-    ]
-
-    log.clear()
     assert validator.strip_value(signed_record) == record.value
-    assert log == [
-        ('signature-val-A', 'strip_value'),
-        ('schema-val-B', 'strip_value'),
-        ('schema-val-A', 'strip_value'),
-    ]
 
+    record = DHTRecord(key=DHTID.generate(source=b'unknown_key').to_bytes(),
+                       subkey=DHTProtocol.IS_REGULAR_VALUE,
+                       value=DHTProtocol.serializer.dumps(777),
+                       expiration_time=hivemind.get_dht_time() + 10)
 
-async def dummy_dht_coro(self, node, validators):
-    node.protocol.record_validator.set_if_not_present(validators)
+    signed_record = dataclasses.replace(record, value=validator.sign_value(record))
+    assert signed_record.value.count(b'[signature:') == 0
+    # Expect failed validation since `unknown_key` is not a part of any schema
+    assert not validator.validate(signed_record)
 
 
 @pytest.mark.forked
-def test_dht_set_validators_if_not_present(logging_validators):
-    log, validator_sets = logging_validators
+def test_dht_set_validators_if_not_present(validators_for_app):
     # One app may create a DHT with its validators
-    dht = hivemind.DHT(start=True, record_validator=CompositeValidator(validator_sets[0]))
-    # Other apps may use the existing DHT and add their own validators
-    dht.set_validators_if_not_present(validator_sets[1])
+    dht = hivemind.DHT(start=False, record_validators=validators_for_app['A'])
+
+    # While the DHT process is not started, you can't send a command to append new validators
+    with pytest.raises(RuntimeError):
+        dht.append_validators(validators_for_app['B'])
+    dht.run_in_background(await_ready=True)
+
+    # After starting the process, other apps may append new validators to the existing DHT
+    dht.append_validators(validators_for_app['B'])
 
     assert dht.store(b'field_a', b'bytes_value', hivemind.get_dht_time() + 10)
     assert dht.get(b'field_a', latest=True).value == b'bytes_value'
 
-    # This record does not pass the SchemaValidator
     assert not dht.store(b'field_a', 666, hivemind.get_dht_time() + 10)
     assert dht.get(b'field_a', latest=True).value == b'bytes_value'
+
+    public_key = validators_for_app['A'][0].ownership_marker
+    assert dht.store(b'field_b', 777, hivemind.get_dht_time() + 10, subkey=public_key)
+    dictionary = dht.get(b'field_b', latest=True).value
+    assert (len(dictionary) == 1 and
+            dictionary[public_key].value == 777)
+
+    assert not dht.store(b'unknown_key', 666, hivemind.get_dht_time() + 10)
+    assert dht.get(b'unknown_key', latest=True) is None
