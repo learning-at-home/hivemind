@@ -4,6 +4,10 @@ import subprocess
 from functools import partial
 from typing import List
 
+import torch
+
+from hivemind.utils.compression import serialize_torch_tensor, construct_torch_tensor, deserialize_torch_tensor
+
 from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
 
 from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
@@ -12,7 +16,7 @@ import numpy as np
 import pytest
 
 from hivemind.p2p import P2P
-from hivemind.proto import dht_pb2
+from hivemind.proto import dht_pb2, runtime_pb2
 
 RUNNING = 'running'
 NOT_RUNNING = 'not running'
@@ -27,8 +31,7 @@ fi
 
 
 def is_process_running(pid: int) -> bool:
-    cmd = CHECK_PID_CMD.format(pid, RUNNING, NOT_RUNNING)
-    return subprocess.check_output(cmd, shell=True).decode('utf-8').strip() == RUNNING
+    return subprocess.run(["ps", "-p", str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 
 async def replicate_if_needed(p2p: P2P, replicate: bool):
@@ -65,7 +68,7 @@ async def test_server_client_connection():
 
     nodes = boostrap_from([server])
     client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
-    await client.wait_peers_at_least(1)
+    await client.wait_for_at_least_n_peers(1)
 
     peers = await client._client.list_peers()
     assert len(peers) == 1
@@ -97,6 +100,27 @@ def handle_add(args):
     for i in range(1, len(args)):
         result = result + args[i]
     return result
+
+
+def handle_square_torch(x):
+    tensor = runtime_pb2.Tensor()
+    tensor.ParseFromString(x)
+    tensor = deserialize_torch_tensor(tensor)
+    result = tensor ** 2
+    return serialize_torch_tensor(result).SerializeToString()
+
+
+def handle_add_torch(args):
+    tensor = runtime_pb2.Tensor()
+    tensor.ParseFromString(args[0])
+    result = deserialize_torch_tensor(tensor)
+
+    for i in range(1, len(args)):
+        tensor = runtime_pb2.Tensor()
+        tensor.ParseFromString(args[i])
+        result = result + deserialize_torch_tensor(tensor)
+
+    return serialize_torch_tensor(result).SerializeToString()
 
 
 @pytest.mark.parametrize(
@@ -142,7 +166,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
         peer=dht_pb2.NodeInfo(node_id=server.id.encode(), rpc_port=server._host_port),
         sender_endpoint=handle_name, available=True)
 
-    await client.wait_peers_at_least(1)
+    await client.wait_for_at_least_n_peers(1)
     libp2p_server_id = ID.from_base58(server.id)
     stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
 
@@ -186,7 +210,7 @@ async def test_call_peer_single_process(test_input, handle, handler_name="handle
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
-    await client.wait_peers_at_least(1)
+    await client.wait_for_at_least_n_peers(1)
 
     result = await client.call_peer_handler(server.id, handler_name, test_input)
     assert result == handle(test_input)
@@ -222,7 +246,7 @@ def server_target(handler_name, server_side, client_side, response_received):
 @pytest.mark.asyncio
 async def test_call_peer_different_processes():
     handler_name = "square"
-    test_input = np.random.randn(2, 3)
+    test_input = 2
 
     server_side, client_side = mp.Pipe()
     response_received = mp.Value(np.ctypeslib.as_ctypes_type(np.int32))
@@ -239,10 +263,10 @@ async def test_call_peer_different_processes():
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
-    await client.wait_peers_at_least(1)
+    await client.wait_for_at_least_n_peers(1)
 
     result = await client.call_peer_handler(peer_id, handler_name, test_input)
-    assert np.allclose(result, handle_square(test_input))
+    assert np.allclose(result, test_input ** 2)
     response_received.value = 1
 
     await client.shutdown()
@@ -252,32 +276,67 @@ async def test_call_peer_different_processes():
 
 
 @pytest.mark.parametrize(
-    "test_input,handle,replicate",
+    "test_input,expected",
     [
-        pytest.param(np.random.randn(2, 3), handle_square, False, id="square_primary"),
-        pytest.param(np.random.randn(2, 3), handle_square, True, id="square_replica"),
-        pytest.param([np.random.randn(2, 3), np.random.randn(2, 3)], handle_add, False, id="add_primary"),
-        pytest.param([np.random.randn(2, 3), np.random.randn(2, 3)], handle_add, True, id="add_replica"),
+        pytest.param(torch.tensor([2]), torch.tensor(4)),
+        pytest.param(
+            torch.tensor([[1.0, 2.0], [0.5, 0.1]]),
+            torch.tensor([[1.0, 2.0], [0.5, 0.1]]) ** 2),
     ]
 )
 @pytest.mark.asyncio
-async def test_call_peer_numpy(test_input, handle, replicate, handler_name="handle"):
-    server_primary = await P2P.create()
-    server = await replicate_if_needed(server_primary, replicate)
+async def test_call_peer_torch_square(test_input, expected, handler_name="handle"):
+    handle = handle_square_torch
+    server = await P2P.create()
     await server.add_stream_handler(handler_name, handle)
 
     nodes = boostrap_from([server])
-    client_primary = await P2P.create(bootstrap=True, boostrap_peers=nodes)
-    client = await replicate_if_needed(client_primary, replicate)
+    client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
 
-    await client.wait_peers_at_least(1)
+    await client.wait_for_at_least_n_peers(1)
 
-    result = await client.call_peer_handler(server.id, handler_name, test_input)
-    assert np.allclose(result, handle(test_input))
+    inp = serialize_torch_tensor(test_input).SerializeToString()
+    resultPb = await client.call_peer_handler(server.id, handler_name, inp)
+    result = runtime_pb2.Tensor()
+    result.ParseFromString(resultPb)
+    result = deserialize_torch_tensor(result)
+    assert torch.allclose(result, expected)
 
     await server.stop_listening()
-    await server_primary.shutdown()
-    await client_primary.shutdown()
+    await server.shutdown()
+    await client.shutdown()
+
+
+@pytest.mark.parametrize(
+    "test_input,expected",
+    [
+        pytest.param([torch.tensor([1]), torch.tensor([2])], torch.tensor([3])),
+        pytest.param(
+            [torch.tensor([[0.1, 0.2], [0.3, 0.4]]), torch.tensor([[1.1, 1.2], [1.3, 1.4]])],
+            torch.tensor([[1.2, 1.4], [1.6, 1.8]])),
+    ]
+)
+@pytest.mark.asyncio
+async def test_call_peer_torch_add(test_input, expected, handler_name="handle"):
+    handle = handle_add_torch
+    server = await P2P.create()
+    await server.add_stream_handler(handler_name, handle)
+
+    nodes = boostrap_from([server])
+    client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
+
+    await client.wait_for_at_least_n_peers(1)
+
+    inp = [serialize_torch_tensor(i).SerializeToString() for i in test_input]
+    resultPb = await client.call_peer_handler(server.id, handler_name, inp)
+    result = runtime_pb2.Tensor()
+    result.ParseFromString(resultPb)
+    result = deserialize_torch_tensor(result)
+    assert torch.allclose(result, expected)
+
+    await server.stop_listening()
+    await server.shutdown()
+    await client.shutdown()
 
 
 @pytest.mark.parametrize(
@@ -291,16 +350,21 @@ async def test_call_peer_numpy(test_input, handle, replicate, handler_name="hand
 async def test_call_peer_error(replicate, handler_name="handle"):
     server_primary = await P2P.create()
     server = await replicate_if_needed(server_primary, replicate)
-    await server.add_stream_handler(handler_name, handle_add)
+    await server.add_stream_handler(handler_name, handle_add_torch)
 
     nodes = boostrap_from([server])
     client_primary = await P2P.create(bootstrap=True, boostrap_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
 
-    await client.wait_peers_at_least(1)
-    result = await client.call_peer_handler(server.id, handler_name,
-                                            [np.zeros((2, 3)), np.zeros((3, 2))])
-    assert type(result) == ValueError
+    await client.wait_for_at_least_n_peers(1)
+
+    inp = [serialize_torch_tensor(i).SerializeToString() for i in [torch.zeros((2, 3)), torch.zeros((3, 2))]]
+    result = await client.call_peer_handler(server.id, handler_name, inp)
+    assert type(result) == str
+
+    await server.stop_listening()
+    await server_primary.shutdown()
+    await client_primary.shutdown()
 
 
 @pytest.mark.asyncio
@@ -320,7 +384,7 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
 
     nodes = boostrap_from([server_primary])
     client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
-    await client.wait_peers_at_least(1)
+    await client.wait_for_at_least_n_peers(1)
 
     result = await client.call_peer_handler(server_id, handler_name, "")
     assert result == "primary"

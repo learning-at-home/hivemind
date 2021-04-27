@@ -1,7 +1,6 @@
 import asyncio
 import copy
 import dataclasses
-import pickle
 import subprocess
 import typing as tp
 from pathlib import Path
@@ -11,6 +10,7 @@ from multiaddr import Multiaddr
 
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import ID, StreamInfo
+from hivemind.utils import MSGPackSerializer
 from hivemind.utils.logging import get_logger
 from hivemind.utils.networking import find_open_port
 
@@ -111,12 +111,11 @@ class P2P(object):
         await self._identify_client(0)
         return self
 
-    async def wait_peers_at_least(self, peers_num, attempts=3):
-        while attempts:
+    async def wait_for_at_least_n_peers(self, n_peers, attempts=3):
+        for _ in range(attempts):
             peers = await self._client.list_peers()
-            if len(peers) >= peers_num:
+            if len(peers) >= n_peers:
                 return
-            attempts -= 1
             await asyncio.sleep(1)
 
         raise RuntimeError('Not enough peers')
@@ -159,13 +158,14 @@ class P2P(object):
 
     @staticmethod
     async def send_data(data, writer):
-        await P2P.send_raw_data(pickle.dumps(data), writer)
+        raw_data = MSGPackSerializer.dumps(data)
+        await P2P.send_raw_data(raw_data, writer)
 
     @staticmethod
     async def send_protobuf(protobuf, out_proto_type, writer):
         if type(protobuf) != out_proto_type:
             error = TypeError('Unary handler returned protobuf of wrong type.')
-            await P2P.send_raw_data(pickle.dumps(error), writer)
+            await P2P.send_raw_data(MSGPackSerializer.dumps(error), writer)
             raise error
         await P2P.send_raw_data(protobuf.SerializeToString(), writer)
 
@@ -178,7 +178,7 @@ class P2P(object):
 
     @staticmethod
     async def receive_data(reader):
-        return pickle.loads(await P2P.receive_raw_data(reader))
+        return MSGPackSerializer.loads(await P2P.receive_raw_data(reader))
 
     @staticmethod
     async def receive_protobuf(in_proto_type, reader):
@@ -199,7 +199,7 @@ class P2P(object):
                 result = handle(request)
                 await P2P.send_data(result, writer)
             except Exception as exc:
-                await P2P.send_data(exc, writer)
+                await P2P.send_data(str(exc), writer)
             finally:
                 writer.close()
 
@@ -234,7 +234,7 @@ class P2P(object):
                 except P2P.InterruptedError:
                     pass
                 except Exception as exc:
-                    await P2P.send_data(exc, writer)
+                    await P2P.send_data(str(exc), writer)
                 finally:
                     pending_task = pending.pop()
                     pending_task.cancel()

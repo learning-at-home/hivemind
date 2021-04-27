@@ -35,7 +35,7 @@ def test_raise_if_failed_not_raises():
     raise_if_failed(resp)
 
 
-pairs_int_varint_valid = (
+pairs_int_serialized_valid = (
     (0, b"\x00"),
     (1, b"\x01"),
     (128, b"\x80\x01"),
@@ -43,7 +43,7 @@ pairs_int_varint_valid = (
     (2 ** 64 - 1, b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\x01"),
 )
 
-pairs_int_varint_overflow = (
+pairs_int_serialized_overflow = (
     (2 ** 64, b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x02"),
     (2 ** 64 + 1, b"\x81\x80\x80\x80\x80\x80\x80\x80\x80\x02"),
     (
@@ -67,15 +67,15 @@ class MockReaderWriter(MockReader, MockWriter):
     pass
 
 
-@pytest.mark.parametrize("integer, var_integer", pairs_int_varint_valid)
+@pytest.mark.parametrize("integer, serialized_integer", pairs_int_serialized_valid)
 @pytest.mark.asyncio
-async def test_write_unsigned_varint(integer, var_integer):
+async def test_write_unsigned_varint(integer, serialized_integer):
     s = MockWriter()
     await write_unsigned_varint(s, integer)
-    assert s.getvalue() == var_integer
+    assert s.getvalue() == serialized_integer
 
 
-@pytest.mark.parametrize("integer", tuple(i[0] for i in pairs_int_varint_overflow))
+@pytest.mark.parametrize("integer", tuple(i[0] for i in pairs_int_serialized_overflow))
 @pytest.mark.asyncio
 async def test_write_unsigned_varint_overflow(integer):
     s = MockWriter()
@@ -91,18 +91,18 @@ async def test_write_unsigned_varint_negative(integer):
         await write_unsigned_varint(s, integer)
 
 
-@pytest.mark.parametrize("integer, var_integer", pairs_int_varint_valid)
+@pytest.mark.parametrize("integer, serialized_integer", pairs_int_serialized_valid)
 @pytest.mark.asyncio
-async def test_read_unsigned_varint(integer, var_integer):
-    s = MockReader(var_integer)
+async def test_read_unsigned_varint(integer, serialized_integer):
+    s = MockReader(serialized_integer)
     result = await read_unsigned_varint(s)
     assert result == integer
 
 
-@pytest.mark.parametrize("var_integer", tuple(i[1] for i in pairs_int_varint_overflow))
+@pytest.mark.parametrize("serialized_integer", tuple(i[1] for i in pairs_int_serialized_overflow))
 @pytest.mark.asyncio
-async def test_read_unsigned_varint_overflow(var_integer):
-    s = MockReader(var_integer)
+async def test_read_unsigned_varint_overflow(serialized_integer):
+    s = MockReader(serialized_integer)
     with pytest.raises(ValueError):
         await read_unsigned_varint(s)
 
