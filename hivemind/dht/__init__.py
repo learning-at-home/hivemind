@@ -18,7 +18,7 @@ import ctypes
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import List, Optional, Sequence, Union, Callable, Awaitable, TypeVar
+from typing import Iterable, List, Optional, Sequence, Union, Callable, Awaitable, TypeVar
 
 import hivemind
 from hivemind.client import RemoteExpert
@@ -51,7 +51,7 @@ class DHT(mp.Process):
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 expiration: float = 300, record_validators: List[RecordValidatorBase] = None,
+                 expiration: float = 300, record_validators: Iterable[RecordValidatorBase] = (),
                  **kwargs):
         super().__init__()
         assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
@@ -195,16 +195,16 @@ class DHT(mp.Process):
             if not future.done():
                 future.set_exception(e)
 
-    def append_validators(self, record_validators: List[RecordValidatorBase]) -> None:
+    def add_validators(self, record_validators: Iterable[RecordValidatorBase]) -> None:
         if not self.ready.is_set():
             raise RuntimeError(
                 "Can't append new validators before the DHT process has started. "
                 "Consider adding them to the initial list via DHT.__init__(record_validators=...)")
 
-        self.run_coroutine(partial(DHT._append_validators, record_validators=record_validators))
+        self.run_coroutine(partial(DHT._add_validators, record_validators=record_validators))
 
-    async def _append_validators(
-            self, node: DHTNode, record_validators: List[RecordValidatorBase]) -> None:
+    async def _add_validators(
+            self, node: DHTNode, record_validators: Iterable[RecordValidatorBase]) -> None:
         node.protocol.record_validator.extend(record_validators)
 
     def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:

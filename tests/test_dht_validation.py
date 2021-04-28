@@ -71,11 +71,11 @@ def test_dht_set_validators_if_not_present(validators_for_app):
 
     # While the DHT process is not started, you can't send a command to append new validators
     with pytest.raises(RuntimeError):
-        dht.append_validators(validators_for_app['B'])
+        dht.add_validators(validators_for_app['B'])
     dht.run_in_background(await_ready=True)
 
-    # After starting the process, other apps may append new validators to the existing DHT
-    dht.append_validators(validators_for_app['B'])
+    # After starting the process, other apps may add new validators to the existing DHT
+    dht.add_validators(validators_for_app['B'])
 
     assert dht.store(b'field_a', b'bytes_value', hivemind.get_dht_time() + 10)
     assert dht.get(b'field_a', latest=True).value == b'bytes_value'
