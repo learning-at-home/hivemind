@@ -161,6 +161,6 @@ message PSResponse {
   repeated bytes peerIDs = 2;
 }
 
-message P2PRPCError {
+message RPCError {
   required string message = 1;
 }

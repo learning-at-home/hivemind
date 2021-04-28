@@ -117,7 +117,7 @@ def handle_add_torch(args):
 def handle_add_torch_with_exc(args):
     try:
         return handle_add_torch(args)
-    except:
+    except Exception:
         return b'something went wrong :('
 
 
@@ -175,7 +175,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
         await asyncio.sleep(1)
         assert handler_cancelled
     else:
-        result, err = await P2P.receive_protobuf_with_error(dht_pb2.PingResponse, reader)
+        result, err = await P2P.receive_protobuf_or_error(dht_pb2.PingResponse, reader)
         assert err is None
         assert result == expected_response
         assert not handler_cancelled
@@ -211,7 +211,7 @@ async def test_call_unary_handler_error(handle_name="handle"):
     stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
 
     await P2P.send_protobuf(ping_request, dht_pb2.PingRequest, writer)
-    result, err = await P2P.receive_protobuf_with_error(dht_pb2.PingResponse, reader)
+    result, err = await P2P.receive_protobuf_or_error(dht_pb2.PingResponse, reader)
     assert result is None
     assert err.message == 'boom'
 
