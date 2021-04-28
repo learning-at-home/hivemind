@@ -6,6 +6,7 @@ from typing import List
 
 import torch
 
+from hivemind.utils import MSGPackSerializer
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 
 from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
@@ -79,14 +80,16 @@ async def test_daemon_replica_does_not_affect_primary():
 
 
 def handle_square(x):
-    return x ** 2
+    x = MSGPackSerializer.loads(x)
+    return MSGPackSerializer.dumps(x ** 2)
 
 
 def handle_add(args):
+    args = MSGPackSerializer.loads(args)
     result = args[0]
     for i in range(1, len(args)):
         result = result + args[i]
-    return result
+    return MSGPackSerializer.dumps(result)
 
 
 def handle_square_torch(x):
@@ -98,6 +101,7 @@ def handle_square_torch(x):
 
 
 def handle_add_torch(args):
+    args = MSGPackSerializer.loads(args)
     tensor = runtime_pb2.Tensor()
     tensor.ParseFromString(args[0])
     result = deserialize_torch_tensor(tensor)
@@ -108,6 +112,13 @@ def handle_add_torch(args):
         result = result + deserialize_torch_tensor(tensor)
 
     return serialize_torch_tensor(result).SerializeToString()
+
+
+def handle_add_torch_with_exc(args):
+    try:
+        return handle_add_torch(args)
+    except:
+        return b'something went wrong :('
 
 
 @pytest.mark.parametrize(
@@ -157,14 +168,15 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
     libp2p_server_id = ID.from_base58(server.id)
     stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
 
-    await P2P.send_raw_data(ping_request.SerializeToString(), writer)
+    await P2P.send_protobuf(ping_request, dht_pb2.PingRequest, writer)
 
     if should_cancel:
         writer.close()
         await asyncio.sleep(1)
         assert handler_cancelled
     else:
-        result = await P2P.receive_protobuf(dht_pb2.PingResponse, reader)
+        result, err = await P2P.receive_protobuf_with_error(dht_pb2.PingResponse, reader)
+        assert err is None
         assert result == expected_response
         assert not handler_cancelled
 
@@ -176,17 +188,49 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
     assert not is_process_running(client_pid)
 
 
+@pytest.mark.asyncio
+async def test_call_unary_handler_error(handle_name="handle"):
+    async def error_handler(request, context):
+        raise ValueError('boom')
+
+    server = await P2P.create()
+    server_pid = server._child.pid
+    await server.add_unary_handler(handle_name, error_handler, dht_pb2.PingRequest, dht_pb2.PingResponse)
+    assert is_process_running(server_pid)
+
+    nodes = boostrap_from([server])
+    client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
+    client_pid = client._child.pid
+    assert is_process_running(client_pid)
+    await client.wait_for_at_least_n_peers(1)
+
+    ping_request = dht_pb2.PingRequest(
+        peer=dht_pb2.NodeInfo(node_id=client.id.encode(), rpc_port=client._host_port),
+        validate=True)
+    libp2p_server_id = ID.from_base58(server.id)
+    stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
+
+    await P2P.send_protobuf(ping_request, dht_pb2.PingRequest, writer)
+    result, err = await P2P.receive_protobuf_with_error(dht_pb2.PingResponse, reader)
+    assert result is None
+    assert err.message == 'boom'
+
+    await server.stop_listening()
+    await server.shutdown()
+    await client.shutdown()
+
+
 @pytest.mark.parametrize(
-    "test_input,handle",
+    "test_input,expected,handle",
     [
-        pytest.param(10, handle_square, id="square_integer"),
-        pytest.param((1, 2), handle_add, id="add_integers"),
-        pytest.param(([1, 2, 3], [12, 13]), handle_add, id="add_lists"),
-        pytest.param(2, lambda x: x ** 3, id="lambda")
+        pytest.param(10, 100, handle_square, id="square_integer"),
+        pytest.param((1, 2), 3, handle_add, id="add_integers"),
+        pytest.param(([1, 2, 3], [12, 13]), [1, 2, 3, 12, 13], handle_add, id="add_lists"),
+        pytest.param(2, 8, lambda x: MSGPackSerializer.dumps(MSGPackSerializer.loads(x) ** 3), id="lambda")
     ]
 )
 @pytest.mark.asyncio
-async def test_call_peer_single_process(test_input, handle, handler_name="handle"):
+async def test_call_peer_single_process(test_input, expected, handle, handler_name="handle"):
     server = await P2P.create()
     server_pid = server._child.pid
     await server.add_stream_handler(handler_name, handle)
@@ -199,8 +243,10 @@ async def test_call_peer_single_process(test_input, handle, handler_name="handle
 
     await client.wait_for_at_least_n_peers(1)
 
-    result = await client.call_peer_handler(server.id, handler_name, test_input)
-    assert result == handle(test_input)
+    test_input_msgp = MSGPackSerializer.dumps(test_input)
+    result_msgp = await client.call_peer_handler(server.id, handler_name, test_input_msgp)
+    result = MSGPackSerializer.loads(result_msgp)
+    assert result == expected
 
     await server.stop_listening()
     await server.shutdown()
@@ -252,7 +298,9 @@ async def test_call_peer_different_processes():
 
     await client.wait_for_at_least_n_peers(1)
 
-    result = await client.call_peer_handler(peer_id, handler_name, test_input)
+    test_input_msgp = MSGPackSerializer.dumps(2)
+    result_msgp = await client.call_peer_handler(peer_id, handler_name, test_input_msgp)
+    result = MSGPackSerializer.loads(result_msgp)
     assert np.allclose(result, test_input ** 2)
     response_received.value = 1
 
@@ -283,9 +331,9 @@ async def test_call_peer_torch_square(test_input, expected, handler_name="handle
     await client.wait_for_at_least_n_peers(1)
 
     inp = serialize_torch_tensor(test_input).SerializeToString()
-    resultPb = await client.call_peer_handler(server.id, handler_name, inp)
+    result_pb = await client.call_peer_handler(server.id, handler_name, inp)
     result = runtime_pb2.Tensor()
-    result.ParseFromString(resultPb)
+    result.ParseFromString(result_pb)
     result = deserialize_torch_tensor(result)
     assert torch.allclose(result, expected)
 
@@ -315,9 +363,10 @@ async def test_call_peer_torch_add(test_input, expected, handler_name="handle"):
     await client.wait_for_at_least_n_peers(1)
 
     inp = [serialize_torch_tensor(i).SerializeToString() for i in test_input]
-    resultPb = await client.call_peer_handler(server.id, handler_name, inp)
+    inp_msgp = MSGPackSerializer.dumps(inp)
+    result_pb = await client.call_peer_handler(server.id, handler_name, inp_msgp)
     result = runtime_pb2.Tensor()
-    result.ParseFromString(resultPb)
+    result.ParseFromString(result_pb)
     result = deserialize_torch_tensor(result)
     assert torch.allclose(result, expected)
 
@@ -337,7 +386,7 @@ async def test_call_peer_torch_add(test_input, expected, handler_name="handle"):
 async def test_call_peer_error(replicate, handler_name="handle"):
     server_primary = await P2P.create()
     server = await replicate_if_needed(server_primary, replicate)
-    await server.add_stream_handler(handler_name, handle_add_torch)
+    await server.add_stream_handler(handler_name, handle_add_torch_with_exc)
 
     nodes = boostrap_from([server])
     client_primary = await P2P.create(bootstrap=True, boostrap_peers=nodes)
@@ -346,8 +395,9 @@ async def test_call_peer_error(replicate, handler_name="handle"):
     await client.wait_for_at_least_n_peers(1)
 
     inp = [serialize_torch_tensor(i).SerializeToString() for i in [torch.zeros((2, 3)), torch.zeros((3, 2))]]
-    result = await client.call_peer_handler(server.id, handler_name, inp)
-    assert type(result) == str
+    inp_msgp = MSGPackSerializer.dumps(inp)
+    result = await client.call_peer_handler(server.id, handler_name, inp_msgp)
+    assert result == b'something went wrong :('
 
     await server.stop_listening()
     await server_primary.shutdown()
@@ -361,35 +411,35 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
 
     server_primary = await P2P.create(bootstrap=False)
     server_id = server_primary.id
-    await server_primary.add_stream_handler(handler_name, partial(handler, key="primary"))
+    await server_primary.add_stream_handler(handler_name, partial(handler, key=b'primary'))
 
     server_replica1 = await replicate_if_needed(server_primary, True)
-    await server_replica1.add_stream_handler(handler_name + "1", partial(handler, key="replica1"))
+    await server_replica1.add_stream_handler(handler_name + '1', partial(handler, key=b'replica1'))
 
     server_replica2 = await replicate_if_needed(server_primary, True)
-    await server_replica2.add_stream_handler(handler_name + "2", partial(handler, key="replica2"))
+    await server_replica2.add_stream_handler(handler_name + '2', partial(handler, key=b'replica2'))
 
     nodes = boostrap_from([server_primary])
     client = await P2P.create(bootstrap=True, boostrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
-    result = await client.call_peer_handler(server_id, handler_name, "")
-    assert result == "primary"
+    result = await client.call_peer_handler(server_id, handler_name, b'1')
+    assert result == b"primary"
 
-    result = await client.call_peer_handler(server_id, handler_name + "1", "")
-    assert result == "replica1"
+    result = await client.call_peer_handler(server_id, handler_name + '1', b'2')
+    assert result == b"replica1"
 
-    result = await client.call_peer_handler(server_id, handler_name + "2", "")
-    assert result == "replica2"
+    result = await client.call_peer_handler(server_id, handler_name + '2', b'3')
+    assert result == b"replica2"
 
     await server_replica1.stop_listening()
     await server_replica2.stop_listening()
 
     # Primary does not handle replicas protocols
     with pytest.raises(asyncio.IncompleteReadError):
-        await client.call_peer_handler(server_id, handler_name + "1", "")
+        await client.call_peer_handler(server_id, handler_name + '1', b'')
     with pytest.raises(asyncio.IncompleteReadError):
-        await client.call_peer_handler(server_id, handler_name + "2", "")
+        await client.call_peer_handler(server_id, handler_name + '2', b'')
 
     await server_primary.stop_listening()
     await server_primary.shutdown()
