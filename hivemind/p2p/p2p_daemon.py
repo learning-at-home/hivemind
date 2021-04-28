@@ -51,8 +51,8 @@ class P2P(object):
     HEADER_LEN = 8
     BYTEORDER = 'big'
     PB_HEADER_LEN = 1
-    RESULT_MESSAGE = int(0).to_bytes(PB_HEADER_LEN, BYTEORDER)
-    ERROR_MESSAGE = int(1).to_bytes(PB_HEADER_LEN, BYTEORDER)
+    RESULT_MESSAGE = b'\x00'
+    ERROR_MESSAGE = b'\x01'
 
     class InterruptedError(Exception):
         pass
@@ -172,19 +172,14 @@ class P2P(object):
         await P2P.send_raw_data(protobuf.SerializeToString(), writer)
 
     @staticmethod
-    async def send_protobuf_with_error(protobuf, out_proto_type, writer):
+    async def send_protobuf_or_error(protobuf, out_proto_type, writer):
         if type(protobuf) != out_proto_type:
             raise TypeError('Unary handler returned protobuf of wrong type.')
-        if out_proto_type == p2pd_pb2.P2PRPCError:
+        if out_proto_type == p2pd_pb2.RPCError:
             await P2P.send_raw_data(P2P.ERROR_MESSAGE, writer)
         else:
             await P2P.send_raw_data(P2P.RESULT_MESSAGE, writer)
 
-        await P2P.send_raw_data(protobuf.SerializeToString(), writer)
-
-    @staticmethod
-    async def send_error_protobuf(protobuf, out_proto_type, writer):
-        await P2P.send_raw_data(P2P.RESULT_MESSAGE, writer)
         await P2P.send_raw_data(protobuf.SerializeToString(), writer)
 
     @staticmethod
@@ -205,14 +200,14 @@ class P2P(object):
         return protobuf
 
     @staticmethod
-    async def receive_protobuf_with_error(in_proto_type, reader):
+    async def receive_protobuf_or_error(in_proto_type, reader):
         msg_type = await P2P.receive_raw_data(reader)
         if msg_type == P2P.RESULT_MESSAGE:
             protobuf = in_proto_type()
             protobuf.ParseFromString(await P2P.receive_raw_data(reader))
             return protobuf, None
         elif msg_type == P2P.ERROR_MESSAGE:
-            protobuf = p2pd_pb2.P2PRPCError()
+            protobuf = p2pd_pb2.RPCError()
             protobuf.ParseFromString(await P2P.receive_raw_data(reader))
             return None, protobuf
         else:
@@ -222,7 +217,7 @@ class P2P(object):
     def _handle_stream(handle):
         async def do_handle_stream(stream_info, reader, writer):
             try:
-                request = await P2P.receive_raw_data(reader) # receive raw data
+                request = await P2P.receive_raw_data(reader)
             except asyncio.IncompleteReadError:
                 logger.debug("Incomplete read while receiving request from peer")
                 writer.close()
@@ -260,12 +255,12 @@ class P2P(object):
                                                    return_when=asyncio.FIRST_COMPLETED)
                 try:
                     result = done.pop().result()
-                    await P2P.send_protobuf_with_error(result, out_proto_type, writer)
+                    await P2P.send_protobuf_or_error(result, out_proto_type, writer)
                 except P2P.InterruptedError:
                     pass
                 except Exception as exc:
-                    error = p2pd_pb2.P2PRPCError(message=str(exc))
-                    await P2P.send_protobuf_with_error(error, p2pd_pb2.P2PRPCError, writer)
+                    error = p2pd_pb2.RPCError(message=str(exc))
+                    await P2P.send_protobuf_or_error(error, p2pd_pb2.RPCError, writer)
                 finally:
                     pending_task = pending.pop()
                     pending_task.cancel()
