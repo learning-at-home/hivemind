@@ -1,8 +1,8 @@
 import re
 
 import pytest
-from pydantic import BaseModel, StrictInt, conint
-from typing import Dict
+from pydantic import BaseModel, StrictFloat, StrictInt, conint
+from typing import Dict, List
 
 from hivemind.dht import get_dht_time
 from hivemind.dht.node import DHTNode, LOCALHOST
@@ -119,17 +119,25 @@ async def test_merging_schema_validators(dht_nodes_with_schema):
     assert not alice.protocol.record_validator.merge_with(second_validator)
 
     class SecondSchema(BaseModel):
-        some_new_field: StrictInt
+        some_field: StrictInt
+        another_field: str
 
-    second_validator = SchemaValidator(SecondSchema)
-    assert alice.protocol.record_validator.merge_with(second_validator)
-    assert bob.protocol.record_validator.merge_with(second_validator)
+    class ThirdSchema(BaseModel):
+        another_field: StrictInt  # Allow it to be a StrictInt as well
+
+    for schema in [SecondSchema, ThirdSchema]:
+        new_validator = SchemaValidator(schema)
+        for peer in [alice, bob]:
+            assert peer.protocol.record_validator.merge_with(new_validator)
 
     assert await bob.store(b'experiment_name', b'foo_bar', get_dht_time() + 10)
-    assert await bob.store(b'some_new_field', 777, get_dht_time() + 10)
+    assert await bob.store(b'some_field', 777, get_dht_time() + 10)
+    assert await bob.store(b'another_field', 'string_value', get_dht_time() + 10)
+    assert await bob.store(b'another_field', 42, get_dht_time() + 10)
     assert not await bob.store(b'unknown_key', 777, get_dht_time() + 10)
 
     for peer in [alice, bob]:
         assert (await peer.get(b'experiment_name', latest=True)).value == b'foo_bar'
-        assert (await peer.get(b'some_new_field', latest=True)).value == 777
+        assert (await peer.get(b'some_field', latest=True)).value == 777
+        assert (await peer.get(b'another_field', latest=True)).value == 42
         assert (await peer.get(b'unknown_key', latest=True)) is None

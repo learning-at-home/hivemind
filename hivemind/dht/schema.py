@@ -81,23 +81,23 @@ class SchemaValidator(RecordValidatorBase):
         for schema in self._schemas:
             try:
                 parsed_record = schema.parse_obj(deserialized_record)
-                break
             except pydantic.ValidationError as e:
                 validation_errors.append(e)
-        if parsed_record is None:
-            readable_record = {self._alias_to_name.get(key_alias, key_alias):
-                               deserialized_record[key_alias]}
-            logger.warning(
-                f"Record {readable_record} doesn't match the schemas: {validation_errors}")
-            return False
+                continue
 
-        parsed_value = parsed_record.dict(by_alias=True)[key_alias]
-        if parsed_value != deserialized_record[key_alias]:
-            logger.warning(
-                f"Value {deserialized_record[key_alias]} needed type conversions to match "
-                f"the schema: {parsed_value}. Type conversions are not allowed")
-            return False
-        return True
+            parsed_value = parsed_record.dict(by_alias=True)[key_alias]
+            if parsed_value != deserialized_record[key_alias]:
+                validation_errors.append(ValueError(
+                    f"Value {deserialized_record[key_alias]} needed type conversions to match "
+                    f"the schema: {parsed_value}. Type conversions are not allowed"))
+            else:
+                return True
+
+        readable_record = {self._alias_to_name.get(key_alias, key_alias):
+                           deserialized_record[key_alias]}
+        logger.warning(
+            f"Record {readable_record} doesn't match with all schemas: {validation_errors}")
+        return False
 
     @staticmethod
     def _key_id_to_str(key_id: bytes) -> str:
