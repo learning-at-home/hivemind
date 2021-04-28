@@ -160,3 +160,7 @@ message PSResponse {
   repeated string topics = 1;
   repeated bytes peerIDs = 2;
 }
+
+message P2PRPCError {
+  required string message = 1;
+}
