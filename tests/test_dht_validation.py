@@ -65,7 +65,7 @@ def test_composite_validator(validators_for_app):
 
 
 @pytest.mark.forked
-def test_dht_set_validators_if_not_present(validators_for_app):
+def test_dht_add_validators(validators_for_app):
     # One app may create a DHT with its validators
     dht = hivemind.DHT(start=False, record_validators=validators_for_app['A'])
 

@@ -96,7 +96,7 @@ class SchemaValidator(RecordValidatorBase):
         readable_record = {self._alias_to_name.get(key_alias, key_alias):
                            deserialized_record[key_alias]}
         logger.warning(
-            f"Record {readable_record} doesn't match with all schemas: {validation_errors}")
+            f"Record {readable_record} doesn't match any of the schemas: {validation_errors}")
         return False
 
     @staticmethod
