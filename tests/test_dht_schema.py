@@ -27,17 +27,6 @@ async def dht_nodes_with_schema():
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_keys_outside_schema(dht_nodes_with_schema):
-    alice, bob = dht_nodes_with_schema
-
-    assert not await bob.store(b'unknown_key', b'foo_bar', get_dht_time() + 10)
-
-    for peer in [alice, bob]:
-        assert (await peer.get(b'unknown_key', latest=True)) is None
-
-
-@pytest.mark.forked
-@pytest.mark.asyncio
 async def test_expecting_regular_value(dht_nodes_with_schema):
     alice, bob = dht_nodes_with_schema
 
@@ -107,6 +96,34 @@ async def test_expecting_public_keys(dht_nodes_with_schema):
 
 @pytest.mark.forked
 @pytest.mark.asyncio
+async def test_keys_outside_schema(dht_nodes_with_schema):
+    class Schema(BaseModel):
+        some_field: StrictInt
+
+    class MergedSchema(BaseModel):
+        another_field: StrictInt
+
+    for allow_extra_keys in [False, True]:
+        validator = SchemaValidator(Schema, allow_extra_keys=allow_extra_keys)
+        assert validator.merge_with(SchemaValidator(MergedSchema, allow_extra_keys=False))
+
+        alice = await DHTNode.create(record_validator=validator)
+        bob = await DHTNode.create(
+            record_validator=validator, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+
+        store_ok = await bob.store(b'unknown_key', b'foo_bar', get_dht_time() + 10)
+        assert store_ok == allow_extra_keys
+
+        for peer in [alice, bob]:
+            result = await peer.get(b'unknown_key', latest=True)
+            if allow_extra_keys:
+                assert result.value == b'foo_bar'
+            else:
+                assert result is None
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
 async def test_merging_schema_validators(dht_nodes_with_schema):
     alice, bob = dht_nodes_with_schema
 
@@ -126,18 +143,22 @@ async def test_merging_schema_validators(dht_nodes_with_schema):
         another_field: StrictInt  # Allow it to be a StrictInt as well
 
     for schema in [SecondSchema, ThirdSchema]:
-        new_validator = SchemaValidator(schema)
+        new_validator = SchemaValidator(schema, allow_extra_keys=False)
         for peer in [alice, bob]:
             assert peer.protocol.record_validator.merge_with(new_validator)
 
     assert await bob.store(b'experiment_name', b'foo_bar', get_dht_time() + 10)
     assert await bob.store(b'some_field', 777, get_dht_time() + 10)
-    assert await bob.store(b'another_field', 'string_value', get_dht_time() + 10)
+    assert not await bob.store(b'some_field', 'string_value', get_dht_time() + 10)
     assert await bob.store(b'another_field', 42, get_dht_time() + 10)
-    assert not await bob.store(b'unknown_key', 777, get_dht_time() + 10)
+    assert await bob.store(b'another_field', 'string_value', get_dht_time() + 10)
+
+    # Unkown keys are allowed since the first schema is created with allow_extra_keys=True
+    assert await bob.store(b'unknown_key', 999, get_dht_time() + 10)
 
     for peer in [alice, bob]:
         assert (await peer.get(b'experiment_name', latest=True)).value == b'foo_bar'
         assert (await peer.get(b'some_field', latest=True)).value == 777
-        assert (await peer.get(b'another_field', latest=True)).value == 42
-        assert (await peer.get(b'unknown_key', latest=True)) is None
+        assert (await peer.get(b'another_field', latest=True)).value == 'string_value'
+
+        assert (await peer.get(b'unknown_key', latest=True)).value == 999

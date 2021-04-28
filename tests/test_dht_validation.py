@@ -25,8 +25,8 @@ class SchemaB(BaseModel):
 def validators_for_app():
     # Each application may add its own validator set
     return {
-        'A': [RSASignatureValidator(), SchemaValidator(SchemaA)],
-        'B': [SchemaValidator(SchemaB), RSASignatureValidator()],
+        'A': [RSASignatureValidator(), SchemaValidator(SchemaA, allow_extra_keys=False)],
+        'B': [SchemaValidator(SchemaB, allow_extra_keys=False), RSASignatureValidator()],
     }
 
 
