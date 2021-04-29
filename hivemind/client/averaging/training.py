@@ -83,7 +83,7 @@ class TrainingAverager(DecentralizedAverager):
 
                     if use_old_local_tensors:
                         # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents
-                        # from loosing local updates that might have occurred during averaging
+                        # losing local updates that might have occurred during averaging
                         for averaged_tensor, local_tensor, old_local_tensor in zip(averaged_tensors, local_tensors,
                                                                                    old_local_tensors):
                             local_tensor[...] += averaged_tensor.to(dtype=local_tensor.dtype,
