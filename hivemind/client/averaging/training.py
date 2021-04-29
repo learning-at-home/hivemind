@@ -78,8 +78,8 @@ class TrainingAverager(DecentralizedAverager):
             if gathered is not None:
                 # load averaged tensors back into model
                 with data_lock, self.get_tensors() as averaged_tensors:
-                    assert len(averaged_tensors) == len(
-                        local_tensors), "The number of optimized parameters should not change."
+                    if len(averaged_tensors) != len(local_tensors):
+                        raise RuntimeError("The number of optimized parameters should not change.")
 
                     if use_old_local_tensors:
                         # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents
