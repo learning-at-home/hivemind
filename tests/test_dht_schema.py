@@ -2,7 +2,7 @@ import re
 
 import pytest
 from pydantic import BaseModel, StrictFloat, StrictInt, conint
-from typing import Dict, List
+from typing import Dict
 
 from hivemind.dht import get_dht_time
 from hivemind.dht.node import DHTNode, LOCALHOST
@@ -120,6 +120,27 @@ async def test_keys_outside_schema(dht_nodes_with_schema):
                 assert result.value == b'foo_bar'
             else:
                 assert result is None
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_prefix():
+    class Schema(BaseModel):
+        field: StrictInt
+
+    validator = SchemaValidator(Schema, allow_extra_keys=False, prefix='prefix')
+
+    alice = await DHTNode.create(record_validator=validator)
+    bob = await DHTNode.create(
+        record_validator=validator, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+
+    assert await bob.store(b'prefix_field', 777, get_dht_time() + 10)
+    assert not await bob.store(b'prefix_field', 'string_value', get_dht_time() + 10)
+    assert not await bob.store(b'field', 777, get_dht_time() + 10)
+
+    for peer in [alice, bob]:
+        assert (await peer.get(b'prefix_field', latest=True)).value == 777
+        assert (await peer.get(b'field', latest=True)) is None
 
 
 @pytest.mark.forked

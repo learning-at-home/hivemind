@@ -1,6 +1,6 @@
 import binascii
 import re
-from typing import Any, Dict, Type
+from typing import Any, Dict, Optional, Type
 
 import pydantic
 
@@ -19,7 +19,8 @@ class SchemaValidator(RecordValidatorBase):
     This allows to enforce types, min/max values, require a subkey to contain a public key, etc.
     """
 
-    def __init__(self, schema: pydantic.BaseModel, *, allow_extra_keys: bool=True):
+    def __init__(self, schema: pydantic.BaseModel, *,
+                 allow_extra_keys: bool=True, prefix: Optional[str]=None):
         """
         :param schema: The Pydantic model (a subclass of pydantic.BaseModel).
 
@@ -32,11 +33,15 @@ class SchemaValidator(RecordValidatorBase):
 
             If a SchemaValidator is merged with another SchemaValidator, this option applies to
             keys that are not defined in each of the schemas.
+
+        :param prefix: (optional) Add ``prefix + '_'`` to the names of all schema fields.
         """
 
         self._alias_to_name = {}
 
         for field in schema.__fields__.values():
+            if prefix is not None:
+                field.name = prefix + '_' + field.name
             field.alias = self._key_id_to_str(DHTID.generate(source=field.name.encode()).to_bytes())
             self._alias_to_name[field.alias] = field.name
 
