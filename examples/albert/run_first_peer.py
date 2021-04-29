@@ -57,7 +57,7 @@ class CoordinatorArguments(BaseTrainingArguments):
 
 
 class CheckpointHandler:
-    def __init__(self, coordinator_args_dict: Dict[str, Any], dht: hivemind.DHT):
+    def __init__(self, experiment_prefix: str, coordinator_args_dict: Dict[str, Any], dht: hivemind.DHT):
         self.save_checkpoint_step_interval = coordinator_args_dict.pop('save_checkpoint_step_interval')
         self.repo_path = coordinator_args_dict.pop('repo_path')
         self.upload_interval = coordinator_args_dict.pop('upload_interval')
@@ -87,7 +87,7 @@ class CheckpointHandler:
             coordinator_args_dict.pop('batch_size_lead')
 
         self.collaborative_optimizer = hivemind.CollaborativeOptimizer(
-            opt=opt, dht=dht, prefix=coordinator_args_dict.pop('experiment_prefix'),
+            opt=opt, dht=dht, prefix=experiment_prefix,
             compression_type=hivemind.utils.CompressionType.Value(coordinator_args_dict.pop('compression')),
             throughput=coordinator_args_dict.pop('bandwidth'),
             target_batch_size=adjusted_target_batch_size, client_mode=coordinator_args_dict.pop('client_mode'),
@@ -130,7 +130,7 @@ class CheckpointHandler:
 
 if __name__ == '__main__':
     parser = HfArgumentParser(CoordinatorArguments)
-    coordinator_args = parser.parse_args_into_dataclasses()
+    coordinator_args = parser.parse_args_into_dataclasses()[0]
     coordinator_args_dict = asdict(coordinator_args)
 
     coordinator_address = coordinator_args_dict.pop('address')
@@ -150,7 +150,7 @@ if __name__ == '__main__':
     current_step = 0
     experiment_prefix = coordinator_args_dict.pop('experiment_prefix')
     refresh_period = coordinator_args_dict.pop('refresh_period')
-    checkpoint_handler = CheckpointHandler(coordinator_args_dict, dht)
+    checkpoint_handler = CheckpointHandler(experiment_prefix, coordinator_args_dict, dht)
 
     while True:
         metrics_dict = dht.get(experiment_prefix + '_metrics', latest=True)
