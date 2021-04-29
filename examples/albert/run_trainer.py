@@ -2,13 +2,15 @@
 
 import logging
 import os
+import uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-import uuid
 
-from datasets import load_from_disk
+import hivemind
+import torch
 import transformers
+from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from transformers import (set_seed, HfArgumentParser, TrainingArguments,
                           DataCollatorForLanguageModeling, AlbertTokenizerFast, AlbertConfig, AlbertForPreTraining)
@@ -16,9 +18,9 @@ from transformers.optimization import get_linear_schedule_with_warmup
 from transformers.trainer_utils import is_main_process
 from transformers.trainer import Trainer
 from torch_optimizer import Lamb
-import torch
 
-import hivemind
+import metrics_utils
+
 
 logger = logging.getLogger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
@@ -190,15 +192,18 @@ class CollaborativeCallback(transformers.TrainerCallback):
             if self.collaborative_optimizer.local_step != self.last_reported_collaboration_step:
                 self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
 
-                statistics = [self.collaborative_optimizer.local_step,
-                              self.collaborative_optimizer.performance_ema.samples_per_second,
-                              self.samples,
-                              self.loss,
-                              self.steps]
+                samples_per_second = self.collaborative_optimizer.performance_ema.samples_per_second
+                statistics = metrics_utils.LocalMetrics(
+                    step=self.collaborative_optimizer.local_step,
+                    samples_per_second=samples_per_second,
+                    samples_accumulated=self.samples,
+                    loss=self.loss,
+                    mini_steps=self.steps)
                 self.loss = 0
                 self.steps = 0
-                self.dht.store(self.collaborative_optimizer.prefix + "_metrics", subkey=self.trainer_uuid,
-                               value=statistics, expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
+                self.dht.store(key=self.collaborative_optimizer.prefix + "_metrics",
+                               subkey=self.trainer_uuid, value=statistics.dict(),
+                               expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
                                return_future=True)
         self.samples = self.collaborative_optimizer.local_samples_accumulated
 
@@ -273,7 +278,8 @@ def main():
     dht = hivemind.DHT(
         initial_peers=collaboration_args_dict.pop('initial_peers'),
         listen=not collaboration_args_dict['client_mode'], listen_on=collaboration_args_dict.pop('dht_listen_on'),
-        endpoint=collaboration_args_dict.pop('endpoint'), start=True)
+        endpoint=collaboration_args_dict.pop('endpoint'), start=True,
+        record_validators=[metrics_utils.make_schema_validator(args.experiment_prefix)])
 
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     trainer_uuid = collaboration_args_dict.pop('trainer_uuid')
