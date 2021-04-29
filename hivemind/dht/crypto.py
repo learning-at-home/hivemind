@@ -86,3 +86,30 @@ class RSASignatureValidator(RecordValidatorBase):
 
     def _serialize_record(self, record: DHTRecord) -> bytes:
         return MSGPackSerializer.dumps(dataclasses.astuple(record))
+
+    @property
+    def priority(self) -> int:
+        # On validation, this validator must be executed before validators
+        # that deserialize the record
+        return 10
+
+    def merge_with(self, other: RecordValidatorBase) -> bool:
+        if not isinstance(other, RSASignatureValidator):
+            return False
+
+        # Ignore another RSASignatureValidator instance (it doesn't make sense to have several
+        # instances of this class) and report successful merge
+        return True
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Serializes the private key to make the class instances picklable
+        state['_private_key'] = self._private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.OpenSSH,
+            encryption_algorithm=serialization.NoEncryption())
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._private_key = serialization.load_ssh_private_key(self._private_key, password=None)
