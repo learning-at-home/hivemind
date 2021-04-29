@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from sklearn.datasets import load_digits
 
 from hivemind import RemoteExpert, RemoteMixtureOfExperts, RemoteSwitchMixtureOfExperts, background_server, DHT, \
-    DecentralizedSGD, CollaborativeAdaptiveOptimizer, DecentralizedAdam
+    DecentralizedSGD, DecentralizedAdam
 
 
 @pytest.mark.forked
