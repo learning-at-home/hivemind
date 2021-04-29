@@ -29,7 +29,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     :param target_group_size: maximum group size for averaging (see DecentralizedAverager)
     :param timeout: if DecentralizedAverager step is unable to form group in this many seconds, cancel step
     :param kwargs: additional parameters passed to TrainingAverager
-    :note: if you're using optimizer with adaptive learning rates (such as adam second momentum), make sure to specify
+    :note: if you're using an optimizer with adaptive learning rates (such as Adam), make sure to specify
       necessary fields' names in `average_opt_statistics`. Otherwise you may encounter poor convergence.
     :note: the base optimizer cannot add param groups after the DecentralizedOptimizer is created
     """
