@@ -16,9 +16,9 @@ def test_rsa_signature_validator():
                              expiration_time=get_dht_time() + 10)
     protected_records = [
         dataclasses.replace(plain_record,
-                            key=plain_record.key + sender_validator.ownership_marker),
+                            key=plain_record.key + sender_validator.local_public_key),
         dataclasses.replace(plain_record,
-                            subkey=plain_record.subkey + sender_validator.ownership_marker),
+                            subkey=plain_record.subkey + sender_validator.local_public_key),
     ]
 
     # test 1: Non-protected record (no signature added)

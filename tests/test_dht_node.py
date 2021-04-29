@@ -466,7 +466,7 @@ async def test_dhtnode_signatures():
         record_validator=RSASignatureValidator(), initial_peers=[f"{LOCALHOST}:{alice.port}"])
 
     key = b'key'
-    subkey = b'protected_subkey' + bob.protocol.record_validator.ownership_marker
+    subkey = b'protected_subkey' + bob.protocol.record_validator.local_public_key
 
     assert await bob.store(key, b'true_value', hivemind.get_dht_time() + 10, subkey=subkey)
     assert (await alice.get(key, latest=True)).value[subkey].value == b'true_value'

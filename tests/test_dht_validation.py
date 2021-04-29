@@ -40,9 +40,9 @@ def test_composite_validator(validators_for_app):
         [SchemaValidator, RSASignatureValidator])
     assert len(validator._validators[0]._schemas) == 2
 
-    public_key = validators_for_app['A'][0].ownership_marker
+    local_public_key = validators_for_app['A'][0].local_public_key
     record = DHTRecord(key=DHTID.generate(source=b'field_b').to_bytes(),
-                       subkey=DHTProtocol.serializer.dumps(public_key),
+                       subkey=DHTProtocol.serializer.dumps(local_public_key),
                        value=DHTProtocol.serializer.dumps(777),
                        expiration_time=hivemind.get_dht_time() + 10)
 
@@ -83,11 +83,11 @@ def test_dht_add_validators(validators_for_app):
     assert not dht.store(b'field_a', 666, hivemind.get_dht_time() + 10)
     assert dht.get(b'field_a', latest=True).value == b'bytes_value'
 
-    public_key = validators_for_app['A'][0].ownership_marker
-    assert dht.store(b'field_b', 777, hivemind.get_dht_time() + 10, subkey=public_key)
+    local_public_key = validators_for_app['A'][0].local_public_key
+    assert dht.store(b'field_b', 777, hivemind.get_dht_time() + 10, subkey=local_public_key)
     dictionary = dht.get(b'field_b', latest=True).value
     assert (len(dictionary) == 1 and
-            dictionary[public_key].value == 777)
+            dictionary[local_public_key].value == 777)
 
     assert not dht.store(b'unknown_key', 666, hivemind.get_dht_time() + 10)
     assert dht.get(b'unknown_key', latest=True) is None

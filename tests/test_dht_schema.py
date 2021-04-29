@@ -6,7 +6,7 @@ from typing import Dict
 
 from hivemind.dht import get_dht_time
 from hivemind.dht.node import DHTNode, LOCALHOST
-from hivemind.dht.schema import SchemaValidator, conbytes
+from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator, conbytes
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
 
 
@@ -15,7 +15,7 @@ async def dht_nodes_with_schema():
     class Schema(BaseModel):
         experiment_name: bytes
         n_batches: Dict[bytes, conint(ge=0, strict=True)]
-        signed_data: Dict[conbytes(regex=rb'.*\[owner:.+\]'), bytes]
+        signed_data: Dict[BytesWithPublicKey, bytes]
 
     validator = SchemaValidator(Schema)
 

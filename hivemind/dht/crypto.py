@@ -22,32 +22,32 @@ class RSASignatureValidator(RecordValidatorBase):
     the corresponding private key (so only the owner can change them).
     """
 
-    def __init__(self,
-                 marker_format: bytes=b'[owner:_key_]',
-                 signature_format: bytes=b'[signature:_value_]'):
-        self._marker_re = re.compile(re.escape(marker_format).replace(b'_key_', rb'(.+?)'))
+    PUBLIC_KEY_FORMAT = b'[owner:_key_]'
+    SIGNATURE_FORMAT = b'[signature:_value_]'
 
-        self._signature_format = signature_format
-        self._signature_re = re.compile(re.escape(signature_format).replace(b'_value_', rb'(.+?)'))
+    PUBLIC_KEY_REGEX = re.escape(PUBLIC_KEY_FORMAT).replace(b'_key_', rb'(.+?)')
+    _public_key_re = re.compile(PUBLIC_KEY_REGEX)
+    _signature_re = re.compile(re.escape(SIGNATURE_FORMAT).replace(b'_value_', rb'(.+?)'))
 
+    def __init__(self):
         self._private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
         serialized_public_key = self._private_key.public_key().public_bytes(
             encoding=serialization.Encoding.OpenSSH, format=serialization.PublicFormat.OpenSSH)
-        self._ownership_marker = marker_format.replace(b'_key_', serialized_public_key)
+        self._local_public_key = self.PUBLIC_KEY_FORMAT.replace(b'_key_', serialized_public_key)
 
         self._padding = padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
                                     salt_length=padding.PSS.MAX_LENGTH)
         self._hash_algorithm = hashes.SHA256()
 
     @property
-    def ownership_marker(self) -> bytes:
-        return self._ownership_marker
+    def local_public_key(self) -> bytes:
+        return self._local_public_key
 
     def validate(self, record: DHTRecord) -> bool:
-        public_keys = self._marker_re.findall(record.key)
+        public_keys = self._public_key_re.findall(record.key)
         if record.subkey is not None:
-            public_keys += self._marker_re.findall(record.subkey)
+            public_keys += self._public_key_re.findall(record.subkey)
         if not public_keys:
             return True  # The record is not protected with a public key
 
@@ -73,13 +73,13 @@ class RSASignatureValidator(RecordValidatorBase):
             return False
 
     def sign_value(self, record: DHTRecord) -> bytes:
-        if self._ownership_marker not in record.key and self._ownership_marker not in record.subkey:
+        if self._local_public_key not in record.key and self._local_public_key not in record.subkey:
             return record.value
 
         signature = self._private_key.sign(self._serialize_record(record),
                                            self._padding, self._hash_algorithm)
         signature = base64.b64encode(signature)
-        return record.value + self._signature_format.replace(b'_value_', signature)
+        return record.value + self.SIGNATURE_FORMAT.replace(b'_value_', signature)
 
     def strip_value(self, record: DHTRecord) -> bytes:
         return self._signature_re.sub(b'', record.value)

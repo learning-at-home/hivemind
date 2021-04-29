@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, Type
 
 import pydantic
 
+from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID, DHTKey
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
@@ -175,3 +176,6 @@ def conbytes(*, regex: bytes=None, **kwargs) -> Type[pydantic.BaseModel]:
             return value
 
     return ConstrainedBytesWithRegex
+
+
+BytesWithPublicKey = conbytes(regex=b'.*' + RSASignatureValidator.PUBLIC_KEY_REGEX + b'.*')
