@@ -1,7 +1,7 @@
-from typing import Optional, Sequence
+from typing import Sequence
 
 from hivemind.optim.collaborative import CollaborativeOptimizer
-from hivemind import DHT, TrainingAverager
+from hivemind import TrainingAverager
 
 
 class CollaborativeAdaptiveOptimizer(CollaborativeOptimizer):
