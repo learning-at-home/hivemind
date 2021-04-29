@@ -21,7 +21,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     :param dht: a running hivemind DHT daemon connected to other peers
     :param average_parameters: whether to average model parameters
     :param average_gradients: whether to average gradients
-    :param average_opt_statistics: if specified, average optimizer statistics with corresponding names in statedict
+    :param average_opt_statistics: if specified, average optimizer states with corresponding names in state_dict
     :param averaging_steps_period: performs averaging after this many optimizer steps
     :param averaging_time_period: if specified, optimizer will attempt to average weights at regular intervals of this
       many seconds. (averaging step will only occur if the optimizer ran `averaging_steps_period` steps in that interval)
