@@ -34,9 +34,9 @@ if __name__ == '__main__':
         logger.warning("No address specified. Attempting to infer address from DNS.")
         args.address = get_ip(GoogleDnsProvider)
 
-    dht = hivemind.DHT(
-        start=True, listen_on=args.listen_on, endpoint=f"{args.address}:*",
-        record_validators=[metrics_utils.make_schema_validator(args.experiment_prefix)])
+    validators, local_public_key = metrics_utils.make_validators(args.experiment_prefix)
+    dht = hivemind.DHT(start=True, listen_on=args.listen_on, endpoint=f"{args.address}:*",
+                       record_validators=validators)
     logger.info(f"Running DHT root at {args.address}:{dht.port}")
 
     wandb.init(project=args.wandb_project)

@@ -1,5 +1,9 @@
+from typing import Dict, List, Tuple
+
+from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.schema import SchemaValidator
-from pydantic import BaseModel, StrictFloat, UUID4, confloat, conint
+from hivemind.dht.validation import RecordValidatorBase
+from pydantic import BaseModel, StrictFloat, confloat, conint
 
 
 class LocalMetrics(BaseModel):
@@ -11,8 +15,11 @@ class LocalMetrics(BaseModel):
 
 
 class MetricSchema(BaseModel):
-    metrics: Dict[UUID4, LocalMetrics]
+    metrics: Dict[BytesWithPublicKey, LocalMetrics]
 
 
-def make_schema_validator(experiment_prefix: str) -> SchemaValidator:
-    return SchemaValidator(MetricSchema, prefix=experiment_prefix)
+def make_validators(experiment_prefix: str) -> Tuple[List[RecordValidatorBase], bytes]:
+    signature_validator = RSASignatureValidator()
+    validators = [SchemaValidator(MetricSchema, prefix=experiment_prefix),
+                  signature_validator]
+    return validators, signature_validator.local_public_key

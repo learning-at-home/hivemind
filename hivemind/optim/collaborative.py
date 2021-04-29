@@ -41,6 +41,7 @@ class CollaborationState:
 
 
 class LocalTrainingProgress(BaseModel):
+    endpoint: Endpoint
     step: conint(ge=0, strict=True)
     samples_accumulated: conint(ge=0, strict=True)
     samples_per_second: confloat(ge=0.0, strict=True)
@@ -49,7 +50,7 @@ class LocalTrainingProgress(BaseModel):
 
 
 class TrainingProgressSchema(BaseModel):
-    progress: Dict[Endpoint, Optional[LocalTrainingProgress]]
+    progress: Dict[BytesWithPublicKey, Optional[LocalTrainingProgress]]
 
 
 class CollaborativeOptimizer(DecentralizedOptimizerBase):
@@ -102,7 +103,11 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                  reuse_grad_buffers: bool = False, accumulate_grads_on: Optional[torch.device] = None,
                  client_mode: bool = False, verbose: bool = False, **kwargs):
         super().__init__(opt, dht)
-        dht.add_validators([SchemaValidator(TrainingProgressSchema, prefix=prefix)])
+
+        signature_validator = RSASignatureValidator()
+        self._local_public_key = signature_validator.local_public_key
+        dht.add_validators([SchemaValidator(TrainingProgressSchema, prefix=prefix),
+                            signature_validator])
 
         if reuse_grad_buffers and accumulate_grads_on is not None:
             logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
@@ -280,13 +285,14 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.should_report_progress.clear()
             with self.lock_local_progress:
                 local_state_info = LocalTrainingProgress(
+                    endpoint=self.averager.endpoint,
                     step=self.local_step,
                     samples_accumulated=self.local_samples_accumulated,
                     samples_per_second=self.performance_ema.samples_per_second,
                     time=get_dht_time(),
                     client_mode=not self.averager.listen)
 
-            self.dht.store(key=self.training_progress_key, subkey=self.averager.endpoint,
+            self.dht.store(key=self.training_progress_key, subkey=self._local_public_key,
                            value=local_state_info.dict(),
                            expiration_time=current_time + self.metadata_expiration,
                            return_future=True)
@@ -369,7 +375,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         logger.debug("Shutting down averager...")
         self.averager.shutdown()
         logger.debug("Sending goodbye to peers...")
-        self.dht.store(self.training_progress_key, subkey=self.averager.endpoint, value=None,
+        self.dht.store(self.training_progress_key, subkey=self._local_public_key, value=None,
                        expiration_time=get_dht_time() + self.metadata_expiration)
         logger.debug(f"{self.__class__.__name__} is shut down.")
 
