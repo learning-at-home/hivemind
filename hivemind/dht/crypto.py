@@ -29,8 +29,17 @@ class RSASignatureValidator(RecordValidatorBase):
     _public_key_re = re.compile(PUBLIC_KEY_REGEX)
     _signature_re = re.compile(re.escape(SIGNATURE_FORMAT).replace(b'_value_', rb'(.+?)'))
 
-    def __init__(self):
-        self._private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    _cached_private_key = None
+
+    def __init__(self, *, ignore_cached_key=False):
+        if self._cached_private_key is None or ignore_cached_key:
+            # Since generating a private key takes ~100 ms, we cache it for future validator
+            # instances in the same process (unless ignore_cached_key=True)
+            self._private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            if not ignore_cached_key:
+                RSASignatureValidator._cached_private_key = self._private_key
+        else:
+            self._private_key = RSASignatureValidator._cached_private_key
 
         serialized_public_key = self._private_key.public_key().public_bytes(
             encoding=serialization.Encoding.OpenSSH, format=serialization.PublicFormat.OpenSSH)

@@ -174,7 +174,7 @@ async def test_merging_schema_validators(dht_nodes_with_schema):
     assert await bob.store(b'another_field', 42, get_dht_time() + 10)
     assert await bob.store(b'another_field', 'string_value', get_dht_time() + 10)
 
-    # Unkown keys are allowed since the first schema is created with allow_extra_keys=True
+    # Unknown keys are allowed since the first schema is created with allow_extra_keys=True
     assert await bob.store(b'unknown_key', 999, get_dht_time() + 10)
 
     for peer in [alice, bob]:
