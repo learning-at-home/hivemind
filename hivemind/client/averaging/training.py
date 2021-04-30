@@ -1,7 +1,8 @@
 """ An extension of averager that supports common optimization use cases. """
 from itertools import chain
 from threading import Lock
-from typing import Sequence, Dict, Iterator
+from typing import Sequence, Dict, Iterator, Optional
+from contextlib import nullcontext
 
 import torch
 
@@ -30,6 +31,7 @@ class TrainingAverager(DecentralizedAverager):
     :note: you can use extra_tensors for averaging tensors that are updated outside of opt.step (e.g. batchnorm stats)
     :param kwargs: any additional parameters will be forwarded to DecentralizedAverager
     """
+
     def __init__(self, opt: torch.optim.Optimizer, *, average_parameters: bool, average_gradients: bool,
                  average_opt_statistics: Sequence[str] = (), extra_tensors: Sequence[torch.Tensor] = (),
                  initialize_optimizer: bool = True, **kwargs):
@@ -46,27 +48,51 @@ class TrainingAverager(DecentralizedAverager):
         super().__init__(averaged_tensors=averaged_tensors, **kwargs)
 
     @torch.no_grad()
-    def step(self, wait: bool = True, **kwargs):
-        """ Average optimizer weights and gradients with peers. """
+    def step(self, data_lock: Optional[Lock] = None, wait: bool = True, **kwargs):
+        """ Average optimizer weights and gradients with peers.
+        :param data_lock: averager locks it when model parameters are modified. Otherwise it's assumed that no model
+        modifications occur during averaging step
+        :param wait: if True waits, otherwise returns Future
+        """
         if not wait:
-            return run_in_background(self.step, wait=True, **kwargs)
+            return run_in_background(self.step, data_lock, wait=True, **kwargs)
+
+        # if data_lock is supplied, tensors might change during averaging, so we need to copy them
+        use_old_local_tensors = data_lock is not None
+        if data_lock is None:
+            data_lock = nullcontext()
 
         local_tensors = list(self.local_tensors())
         with self.lock_averager_step:
-            # fill averager's tensors with current local tensors, scaled by peer's weight
-            with self.get_tensors() as averaged_tensors:
-                assert len(local_tensors) == len(averaged_tensors)
+            # fill averager's tensors with current local tensors
+            with data_lock, self.get_tensors() as averaged_tensors:
+                if use_old_local_tensors:
+                    old_local_tensors = tuple(x.cpu().float().clone() for x in local_tensors)
+                assert len(local_tensors) == len(
+                    averaged_tensors), "The number of optimized parameters should not change."
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                    averaged_tensor[...] = local_tensor.detach().cpu().float()
+                    averaged_tensor[...] = local_tensor.cpu().float()
 
-            # find a group and hopefully average tensors with peers
+            # find a group and hopefully average tensors with peers, scaled by peer's weight
             gathered = super().step(**kwargs)
+            if gathered is not None:
+                # load averaged tensors back into model
+                with data_lock, self.get_tensors() as averaged_tensors:
+                    if len(averaged_tensors) != len(local_tensors):
+                        raise RuntimeError("The number of optimized parameters should not change.")
 
-            # load averaged tensors back into model
-            with self.get_tensors() as averaged_tensors:
-                assert len(averaged_tensors) == len(local_tensors)
-                for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                    local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
+                    if use_old_local_tensors:
+                        # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents
+                        # losing local updates that might have occurred during averaging
+                        for averaged_tensor, local_tensor, old_local_tensor in zip(averaged_tensors, local_tensors,
+                                                                                   old_local_tensors):
+                            local_tensor[...] += averaged_tensor.to(dtype=local_tensor.dtype,
+                                                                    device=local_tensor.device) - \
+                                                 old_local_tensor.to(dtype=local_tensor.dtype,
+                                                                     device=local_tensor.device)
+                    else:
+                        for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
+                            local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
 
             self.local_step += 1
             return gathered
