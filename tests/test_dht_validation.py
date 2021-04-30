@@ -41,7 +41,7 @@ def test_composite_validator(validators_for_app):
     assert len(validator._validators[0]._schemas) == 2
 
     local_public_key = validators_for_app['A'][0].local_public_key
-    record = DHTRecord(key=DHTID.generate(source=b'field_b').to_bytes(),
+    record = DHTRecord(key=DHTID.generate(source='field_b').to_bytes(),
                        subkey=DHTProtocol.serializer.dumps(local_public_key),
                        value=DHTProtocol.serializer.dumps(777),
                        expiration_time=hivemind.get_dht_time() + 10)
@@ -53,7 +53,7 @@ def test_composite_validator(validators_for_app):
     assert validator.validate(signed_record)
     assert validator.strip_value(signed_record) == record.value
 
-    record = DHTRecord(key=DHTID.generate(source=b'unknown_key').to_bytes(),
+    record = DHTRecord(key=DHTID.generate(source='unknown_key').to_bytes(),
                        subkey=DHTProtocol.IS_REGULAR_VALUE,
                        value=DHTProtocol.serializer.dumps(777),
                        expiration_time=hivemind.get_dht_time() + 10)
@@ -77,17 +77,17 @@ def test_dht_add_validators(validators_for_app):
     # After starting the process, other apps may add new validators to the existing DHT
     dht.add_validators(validators_for_app['B'])
 
-    assert dht.store(b'field_a', b'bytes_value', hivemind.get_dht_time() + 10)
-    assert dht.get(b'field_a', latest=True).value == b'bytes_value'
+    assert dht.store('field_a', b'bytes_value', hivemind.get_dht_time() + 10)
+    assert dht.get('field_a', latest=True).value == b'bytes_value'
 
-    assert not dht.store(b'field_a', 666, hivemind.get_dht_time() + 10)
-    assert dht.get(b'field_a', latest=True).value == b'bytes_value'
+    assert not dht.store('field_a', 666, hivemind.get_dht_time() + 10)
+    assert dht.get('field_a', latest=True).value == b'bytes_value'
 
     local_public_key = validators_for_app['A'][0].local_public_key
-    assert dht.store(b'field_b', 777, hivemind.get_dht_time() + 10, subkey=local_public_key)
-    dictionary = dht.get(b'field_b', latest=True).value
+    assert dht.store('field_b', 777, hivemind.get_dht_time() + 10, subkey=local_public_key)
+    dictionary = dht.get('field_b', latest=True).value
     assert (len(dictionary) == 1 and
             dictionary[local_public_key].value == 777)
 
-    assert not dht.store(b'unknown_key', 666, hivemind.get_dht_time() + 10)
-    assert dht.get(b'unknown_key', latest=True) is None
+    assert not dht.store('unknown_key', 666, hivemind.get_dht_time() + 10)
+    assert dht.get('unknown_key', latest=True) is None

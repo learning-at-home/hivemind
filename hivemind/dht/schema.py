@@ -43,7 +43,7 @@ class SchemaValidator(RecordValidatorBase):
         for field in schema.__fields__.values():
             if prefix is not None:
                 field.name = f'{prefix}_{field.name}'
-            field.alias = self._key_id_to_str(DHTID.generate(source=field.name.encode()).to_bytes())
+            field.alias = self._key_id_to_str(DHTID.generate(source=field.name).to_bytes())
             self._alias_to_name[field.alias] = field.name
 
             # Because validate() interface provides one key at a time
