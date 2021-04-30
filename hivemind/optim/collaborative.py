@@ -11,6 +11,8 @@ from pydantic import BaseModel, StrictBool, confloat, conint
 
 from hivemind.client.averaging.training import TrainingAverager
 from hivemind.dht import DHT
+from hivemind.dht.crypto import RSASignatureValidator
+from hivemind.dht.schema import SchemaValidator
 from hivemind.optim.base import DecentralizedOptimizerBase
 from hivemind.optim.performance_ema import PerformanceEMA
 from hivemind.utils import Endpoint, ValueWithExpiration, get_dht_time, get_logger

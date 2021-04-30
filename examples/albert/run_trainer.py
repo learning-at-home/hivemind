@@ -274,7 +274,8 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
-    validators, local_public_key = metrics_utils.make_validators(args.experiment_prefix)
+    validators, local_public_key = metrics_utils.make_validators(
+        collaboration_args_dict['experiment_prefix'])
     dht = hivemind.DHT(
         start=True, initial_peers=collaboration_args_dict.pop('initial_peers'),
         listen=not collaboration_args_dict['client_mode'],
