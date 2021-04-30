@@ -210,8 +210,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.collaboration_state_updated.set()
             self.update_scheduler()
 
-            logger.log(self.status_loglevel, f"Optimizer step: done! "
-                                             f"Your current contribution: {self.samples_processed} samples")
+            logger.log(self.status_loglevel, f"Optimizer step: done!")
+            logger.info(f"Your current contribution: {self.samples_processed} samples")
+
             return group_info
 
     def _grad_buffers(self) -> Iterator[torch.Tensor]:

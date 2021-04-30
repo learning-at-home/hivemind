@@ -90,15 +90,15 @@ class BaseTrainingArguments:
 class CollaborationArguments(BaseTrainingArguments):
     trainer_uuid: str = field(
         default=uuid.uuid4().hex,
-        metadata={"help": "this peer's name - used when publishing metadata to DHT, default = random"}
+        metadata={"help": "This peer's name - used when publishing metadata to DHT, default = random"}
     )
     statistics_expiration: float = field(
         default=600,
-        metadata={"help": "statistics will be removed if not updated in this many seconds"}
+        metadata={"help": "Statistics will be removed if not updated in this many seconds"}
     )
     endpoint: Optional[str] = field(
         default=None,
-        metadata={"help": "this node's IP for inbound connections, used when running from behind a proxy"}
+        metadata={"help": "This node's IP for inbound connections, used when running from behind a proxy"}
     )
 
 

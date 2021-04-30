@@ -1,17 +1,18 @@
 #!/usr/bin/env python
 
-import time
-import subprocess
-import wandb
 from dataclasses import dataclass, field, asdict
+import subprocess
+import time
 from typing import Optional, Any, Dict
+
+import torch
+from torch_optimizer import Lamb
+from transformers import AlbertForPreTraining, AlbertConfig, HfArgumentParser
+import wandb
 from whatsmyip.providers import GoogleDnsProvider
 from whatsmyip.ip import get_ip
 
 import hivemind
-import torch
-from torch_optimizer import Lamb
-from transformers import AlbertForPreTraining, AlbertConfig, HfArgumentParser
 from hivemind.utils.logging import get_logger
 from arguments import BaseTrainingArguments
 
@@ -21,6 +22,11 @@ logger = get_logger(__name__)
 
 @dataclass
 class CoordinatorArguments(BaseTrainingArguments):
+    """
+    Note: You might want to have several initial peers so that if one dies,
+    new workers still can join the collaboration via alive initial peers' addresses.
+    Specify initial_peers argument for that purpose
+    """
     address: Optional[str] = field(
         default=None,
         metadata={"help": "This machine's network address. Use public IP for global experiments, "
@@ -44,16 +50,12 @@ class CoordinatorArguments(BaseTrainingArguments):
     )
     repo_path: Optional[str] = field(
         default=None,
-        metadata={"help":  "Path to HuggingFace repo in which coordinator will upload the model and optimizer states"}
+        metadata={"help": "Path to HuggingFace repo in which coordinator will upload the model and optimizer states"}
     )
     upload_interval: Optional[float] = field(
         default=None,
-        metadata={"help":  "Coordinator will upload model once in this many seconds"}
+        metadata={"help": "Coordinator will upload model once in this many seconds"}
     )
-
-    # Note: You might want to have several initial peers so that if one dies,
-    # new workers still can join the collaboration via alive initial peers' addresses.
-    # Specify initial_peers argument for that purpose
 
 
 class CheckpointHandler:
@@ -122,7 +124,8 @@ class CheckpointHandler:
         try:
             subprocess.run("git add --all", shell=True, check=True, cwd=self.repo_path)
             current_step = self.collaborative_optimizer.collaboration_state.optimizer_step
-            subprocess.run(f"git commit -m 'Step {current_step}, loss {round(current_loss, 3)}'", shell=True, check=True, cwd=self.repo_path)
+            subprocess.run(f"git commit -m 'Step {current_step}, loss {round(current_loss, 3)}'",
+                           shell=True, check=True, cwd=self.repo_path)
             subprocess.run("git push", shell=True, check=True, cwd=self.repo_path)
         except subprocess.CalledProcessError as e:
             logger.warning("Error while uploading model:", e.output)
