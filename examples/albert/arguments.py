@@ -105,11 +105,11 @@ class CollaborationArguments(BaseTrainingArguments):
 @dataclass
 class DatasetArguments:
     dataset_path: Optional[str] = field(
-        default='./data/albert_tokenized_wikitext',
+        default='data/albert_tokenized_wikitext',
         metadata={"help": "Path to the tokenized dataset"}
     )
     tokenizer_path: Optional[str] = field(
-        default='./data/tokenizer',
+        default='data/tokenizer',
         metadata={"help": "Path to the tokenizer"}
     )
     config_path: Optional[str] = field(
@@ -117,7 +117,7 @@ class DatasetArguments:
         metadata={"help": "Path to the model config"}
     )
     cache_dir: Optional[str] = field(
-        default='./data',
+        default='data',
         metadata={"help": "Path to the cache"}
     )
 
@@ -146,4 +146,4 @@ class AlbertTrainingArguments(TrainingArguments):
     save_total_limit: int = 2
     save_steps: int = 500
 
-    output_dir: str = './outputs'
+    output_dir: str = 'outputs'
