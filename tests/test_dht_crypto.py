@@ -1,4 +1,6 @@
 import dataclasses
+import pickle
+import multiprocessing as mp
 
 import pytest
 
@@ -52,6 +54,50 @@ def test_cached_key():
 
     third_validator = RSASignatureValidator(ignore_cached_key=True)
     assert first_validator.local_public_key != third_validator.local_public_key
+
+
+def test_validator_instance_is_pickable():
+    # Needs to be pickable because the validator instance may be sent between processes
+
+    original_validator = RSASignatureValidator()
+    unpickled_validator = pickle.loads(pickle.dumps(original_validator))
+
+    # To check that the private key was pickled and unpickled correctly, we sign a record
+    # with the original public key using the unpickled validator and then validate the signature
+
+    record = DHTRecord(key=b'key', subkey=b'subkey' + original_validator.local_public_key,
+                       value=b'value', expiration_time=get_dht_time() + 10)
+    signed_record = dataclasses.replace(record, value=unpickled_validator.sign_value(record))
+
+    assert b'[signature:' in signed_record.value
+    assert original_validator.validate(signed_record)
+    assert unpickled_validator.validate(signed_record)
+
+
+def get_signed_record(conn: mp.connection.Connection) -> DHTRecord:
+    validator = conn.recv()
+    record = conn.recv()
+
+    record = dataclasses.replace(record, value=validator.sign_value(record))
+
+    conn.send(record)
+
+
+def test_signing_in_different_process():
+    parent_conn, child_conn = mp.Pipe()
+    process = mp.Process(target=get_signed_record, args=[child_conn])
+    process.start()
+
+    validator = RSASignatureValidator()
+    parent_conn.send(validator)
+
+    record = DHTRecord(key=b'key', subkey=b'subkey' + validator.local_public_key,
+                       value=b'value', expiration_time=get_dht_time() + 10)
+    parent_conn.send(record)
+
+    signed_record = parent_conn.recv()
+    assert b'[signature:' in signed_record.value
+    assert validator.validate(signed_record)
 
 
 @pytest.mark.forked

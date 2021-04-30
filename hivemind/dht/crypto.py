@@ -45,6 +45,9 @@ class RSASignatureValidator(RecordValidatorBase):
             encoding=serialization.Encoding.OpenSSH, format=serialization.PublicFormat.OpenSSH)
         self._local_public_key = self.PUBLIC_KEY_FORMAT.replace(b'_key_', serialized_public_key)
 
+        self._init_signature_params()
+
+    def _init_signature_params(self) -> None:
         self._padding = padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
                                     salt_length=padding.PSS.MAX_LENGTH)
         self._hash_algorithm = hashes.SHA256()
@@ -122,3 +125,4 @@ class RSASignatureValidator(RecordValidatorBase):
     def __setstate__(self, state):
         self.__dict__.update(state)
         self._private_key = serialization.load_ssh_private_key(self._private_key, password=None)
+        self._init_signature_params()
