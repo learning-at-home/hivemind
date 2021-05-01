@@ -9,7 +9,7 @@ import hivemind
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID
-from hivemind.dht.schema import SchemaValidator
+from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import DHTRecord, CompositeValidator, RecordValidatorBase
 
 
@@ -18,7 +18,7 @@ class SchemaA(BaseModel):
 
 
 class SchemaB(BaseModel):
-    field_b: Dict[bytes, StrictInt]
+    field_b: Dict[BytesWithPublicKey, StrictInt]
 
 
 @pytest.fixture

@@ -4,20 +4,22 @@ import pytest
 from pydantic import BaseModel, StrictFloat, StrictInt, conint
 from typing import Dict
 
+import hivemind
 from hivemind.dht import get_dht_time
 from hivemind.dht.node import DHTNode, LOCALHOST
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator, conbytes
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
 
 
+class SampleSchema(BaseModel):
+    experiment_name: bytes
+    n_batches: Dict[bytes, conint(ge=0, strict=True)]
+    signed_data: Dict[BytesWithPublicKey, bytes]
+
+
 @pytest.fixture
 async def dht_nodes_with_schema():
-    class Schema(BaseModel):
-        experiment_name: bytes
-        n_batches: Dict[bytes, conint(ge=0, strict=True)]
-        signed_data: Dict[BytesWithPublicKey, bytes]
-
-    validator = SchemaValidator(Schema)
+    validator = SchemaValidator(SampleSchema)
 
     alice = await DHTNode.create(record_validator=validator)
     bob = await DHTNode.create(
@@ -183,3 +185,16 @@ async def test_merging_schema_validators(dht_nodes_with_schema):
         assert (await peer.get('another_field', latest=True)).value == 'string_value'
 
         assert (await peer.get('unknown_key', latest=True)).value == 999
+
+
+@pytest.mark.forked
+def test_sending_validator_instance_between_processes():
+    alice = hivemind.DHT(start=True)
+    bob = hivemind.DHT(start=True, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+
+    alice.add_validators([SchemaValidator(SampleSchema)])
+    bob.add_validators([SchemaValidator(SampleSchema)])
+
+    assert bob.store('experiment_name', b'foo_bar', get_dht_time() + 10)
+    assert not bob.store('experiment_name', 777, get_dht_time() + 10)
+    assert alice.get('experiment_name', latest=True).value == b'foo_bar'

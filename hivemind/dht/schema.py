@@ -1,5 +1,6 @@
 import binascii
 import re
+from contextlib import contextmanager
 from typing import Any, Dict, Optional, Type
 
 import pydantic
@@ -30,6 +31,8 @@ class SchemaValidator(RecordValidatorBase):
             ``confloat(strict=True, ge=0.0)`` instead of ``confloat(ge=0.0)``, etc.).
             See the validate() docstring for details.
 
+            The model will be patched to adjust it for the schema validation.
+
         :param allow_extra_keys: Whether to allow keys that are not defined in the schema.
 
             If a SchemaValidator is merged with another SchemaValidator, this option applies to
@@ -38,17 +41,22 @@ class SchemaValidator(RecordValidatorBase):
         :param prefix: (optional) Add ``prefix + '_'`` to the names of all schema fields.
         """
 
+        self._patch_schema(schema)
+        self._schemas = [schema]
+
         self._key_id_to_field_name = {}
         for field in schema.__fields__.values():
             raw_key = f'{prefix}_{field.name}' if prefix is not None else field.name
             self._key_id_to_field_name[DHTID.generate(source=raw_key).to_bytes()] = field.name
-
-            # Because validate() interface provides one key at a time
-            field.required = False
-        schema.Config.extra = pydantic.Extra.forbid
-
-        self._schemas = [schema]
         self._allow_extra_keys = allow_extra_keys
+
+    @staticmethod
+    def _patch_schema(schema: pydantic.BaseModel):
+        # We set required=False because the validate() interface provides only one key at a time
+        for field in schema.__fields__.values():
+            field.required = False
+
+        schema.Config.extra = pydantic.Extra.forbid
 
     def validate(self, record: DHTRecord) -> bool:
         """
@@ -132,10 +140,17 @@ class SchemaValidator(RecordValidatorBase):
         if not isinstance(other, SchemaValidator):
             return False
 
-        self._key_id_to_field_name.update(other._key_id_to_field_name)
         self._schemas.extend(other._schemas)
+        self._key_id_to_field_name.update(other._key_id_to_field_name)
         self._allow_extra_keys = self._allow_extra_keys or other._allow_extra_keys
         return True
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+        # If unpickling happens in another process, the previous model modifications may be lost
+        for schema in self._schemas:
+            self._patch_schema(schema)
 
 
 def conbytes(*, regex: bytes=None, **kwargs) -> Type[pydantic.BaseModel]:
