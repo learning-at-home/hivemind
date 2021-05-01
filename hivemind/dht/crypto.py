@@ -64,13 +64,13 @@ class RSASignatureValidator(RecordValidatorBase):
             return True  # The record is not protected with a public key
 
         if len(set(public_keys)) > 1:
-            logger.debug(f"Key and subkey can't contain different public keys in {record}")
+            logger.warning(f"Key and subkey can't contain different public keys in {record}")
             return False
         public_key = serialization.load_ssh_public_key(public_keys[0])
 
         signatures = self._signature_re.findall(record.value)
         if len(signatures) != 1:
-            logger.debug(f"Record should have exactly one signature in {record}")
+            logger.warning(f"Record should have exactly one signature in {record}")
             return False
         signature = base64.b64decode(signatures[0])
 
@@ -81,7 +81,7 @@ class RSASignatureValidator(RecordValidatorBase):
                               self._padding, self._hash_algorithm)
             return True
         except InvalidSignature:
-            logger.debug(f'Signature is invalid in {record}')
+            logger.warning(f'Signature is invalid in {record}')
             return False
 
     def sign_value(self, record: DHTRecord) -> bytes:
