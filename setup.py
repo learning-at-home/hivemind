@@ -92,7 +92,7 @@ def libp2p_download_install():
 class Install(install):
     def run(self):
         libp2p_download_install()
-        # proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
+        proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
 
