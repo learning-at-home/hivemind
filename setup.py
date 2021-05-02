@@ -3,6 +3,7 @@ import glob
 import hashlib
 import os
 import re
+import shlex
 import subprocess
 import tarfile
 import tempfile
@@ -16,6 +17,8 @@ from setuptools.command.install import install
 
 P2PD_VERSION = 'v0.3.1'
 P2PD_CHECKSUM = '8810097959db720208cdc9f2945804a4'
+LIBP2P_TAR_URL = f'https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz'
+
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -62,20 +65,18 @@ def libp2p_build_install():
         raise FileNotFoundError('could not find golang installation')
 
     with tempfile.TemporaryDirectory() as tempdir:
-        url = f'https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz'
         dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')
-        urllib.request.urlretrieve(url, dest)
+        urllib.request.urlretrieve(LIBP2P_TAR_URL, dest)
 
-        tar = tarfile.open(dest, 'r:gz')
-        tar.extractall(tempdir)
-        tar.close()
+        with tarfile.open(dest, 'r:gz') as tar:
+            tar.extractall(tempdir)
 
-        result = subprocess.run(['go', 'build', '-o', os.path.join(here, "hivemind", "hivemind_cli", "p2pd")],
-                                cwd=os.path.join(tempdir, f'go-libp2p-daemon-{P2PD_VERSION[1:]}', 'p2pd'))
+        result = subprocess.run(f'go build -o {shlex.quote(os.path.join(here, "hivemind", "hivemind_cli", "p2pd"))}',
+                                cwd=os.path.join(tempdir, f'go-libp2p-daemon-{P2PD_VERSION[1:]}', 'p2pd'), shell=True)
 
         if result.returncode:
             raise RuntimeError('Failed to build or install libp2p-daemon:'
-                               f' exited with status code :{result.returncode}')
+                               f' exited with status code: {result.returncode}')
 
 
 def libp2p_download_install():
@@ -86,7 +87,6 @@ def libp2p_download_install():
         url = f'https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd'
         urllib.request.urlretrieve(url, binary_path)
         os.chmod(binary_path, 0o777)
-        print(md5(binary_path))
         if md5(binary_path) != P2PD_CHECKSUM:
             raise RuntimeError(f'Downloaded p2pd binary from {url} does not match with md5 checksum')
 
@@ -94,7 +94,7 @@ def libp2p_download_install():
 class Install(install):
     def run(self):
         libp2p_download_install()
-        proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
+        # proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
 
