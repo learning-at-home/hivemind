@@ -58,14 +58,15 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
         self.local_step, self.averaging_step_period = 0, averaging_steps_period
         self.dht = dht
 
+        self.scheduler = None if scheduler_cls is None else scheduler_cls(opt)
         self.averager = TrainingAverager(opt, average_parameters=average_parameters,
                                          average_gradients=average_gradients,
                                          average_opt_statistics=average_opt_statistics,
+                                         scheduler=self.scheduler,
                                          dht=dht, start=True, prefix=prefix,
                                          target_group_size=target_group_size, **kwargs)
 
         self.lock_parameters, self.update_event, self.stop_event = Lock(), Event(), Event()
-        self.scheduler = None if scheduler_cls is None else scheduler_cls(opt)
         self.local_epoch = 0
         self.report_progress_expiration = report_progress_expiration
         self.max_allowed_epoch_difference = max_allowed_epoch_difference
