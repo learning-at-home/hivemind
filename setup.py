@@ -52,7 +52,7 @@ def proto_compile(output_path):
 
 def libp2p_build_install():
     try:
-        result = subprocess.run("go version", capture_output=True).stdout.decode('ascii', 'replace')
+        result = subprocess.run("go version", capture_output=True, shell=True).stdout.decode('ascii', 'replace')
         m = re.search(r'^go version go([\d.]+)', result)
         v = m.group(1)
 
