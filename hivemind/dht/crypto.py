@@ -26,8 +26,8 @@ class RSASignatureValidator(RecordValidatorBase):
     SIGNATURE_FORMAT = b'[signature:_value_]'
 
     PUBLIC_KEY_REGEX = re.escape(PUBLIC_KEY_FORMAT).replace(b'_key_', rb'(.+?)')
-    _public_key_re = re.compile(PUBLIC_KEY_REGEX)
-    _signature_re = re.compile(re.escape(SIGNATURE_FORMAT).replace(b'_value_', rb'(.+?)'))
+    _PUBLIC_KEY_RE = re.compile(PUBLIC_KEY_REGEX)
+    _SIGNATURE_RE = re.compile(re.escape(SIGNATURE_FORMAT).replace(b'_value_', rb'(.+?)'))
 
     _cached_private_key = None
 
@@ -57,9 +57,9 @@ class RSASignatureValidator(RecordValidatorBase):
         return self._local_public_key
 
     def validate(self, record: DHTRecord) -> bool:
-        public_keys = self._public_key_re.findall(record.key)
+        public_keys = self._PUBLIC_KEY_RE.findall(record.key)
         if record.subkey is not None:
-            public_keys += self._public_key_re.findall(record.subkey)
+            public_keys += self._PUBLIC_KEY_RE.findall(record.subkey)
         if not public_keys:
             return True  # The record is not protected with a public key
 
@@ -68,7 +68,7 @@ class RSASignatureValidator(RecordValidatorBase):
             return False
         public_key = serialization.load_ssh_public_key(public_keys[0])
 
-        signatures = self._signature_re.findall(record.value)
+        signatures = self._SIGNATURE_RE.findall(record.value)
         if len(signatures) != 1:
             logger.warning(f"Record should have exactly one signature in {record}")
             return False
@@ -94,7 +94,7 @@ class RSASignatureValidator(RecordValidatorBase):
         return record.value + self.SIGNATURE_FORMAT.replace(b'_value_', signature)
 
     def strip_value(self, record: DHTRecord) -> bytes:
-        return self._signature_re.sub(b'', record.value)
+        return self._SIGNATURE_RE.sub(b'', record.value)
 
     def _serialize_record(self, record: DHTRecord) -> bytes:
         return MSGPackSerializer.dumps(dataclasses.astuple(record))

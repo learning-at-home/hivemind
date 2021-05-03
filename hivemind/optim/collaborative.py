@@ -47,7 +47,7 @@ class TrainingState(BaseModel):
     step: conint(ge=0, strict=True)
     samples_accumulated: conint(ge=0, strict=True)
     samples_per_second: confloat(ge=0.0, strict=True)
-    current_time: StrictFloat
+    time: StrictFloat
     client_mode: StrictBool
 
 
@@ -292,7 +292,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                     step=self.local_step,
                     samples_accumulated=self.local_samples_accumulated,
                     samples_per_second=self.performance_ema.samples_per_second,
-                    current_time=get_dht_time(),
+                    time=current_time,
                     client_mode=not self.averager.listen)
 
             self.dht.store(key=self.training_progress_key, subkey=self._local_public_key,
@@ -344,7 +344,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             if state.step == global_optimizer_step:
                 total_samples_accumulated += state.samples_accumulated
                 estimated_current_samples += (state.samples_accumulated +
-                                              max(0, current_time - state.current_time) * state.samples_per_second)
+                                              max(0, current_time - state.time) * state.samples_per_second)
             # note: we deliberately count only valid peers for samples_accumulated, but all peers for performance;
             # the rationale behind this is that outdated peers will synchronize and begin contributing shortly.
 
