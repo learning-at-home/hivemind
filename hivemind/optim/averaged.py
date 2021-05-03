@@ -34,13 +34,13 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
       from other peer.
     :param total_steps_in_epoch: how many total steps must be to increase local_epoch by one
     :param average_opt_statistics: if specified, average optimizer states with corresponding names in state_dict
-    :param scheduler_cls: lambda with opt in argument which returns learning rate scheduler
+    :param scheduler_cls: a function which takes an optimizer and returns a learning rate scheduler
     :param averaging_steps_period: performs averaging after this many optimizer steps
     :param averaging_time_period: if specified, optimizer will attempt to average weights at regular intervals of this
       many seconds. (averaging step will only occur if the optimizer ran `averaging_steps_period` steps in that interval)
     :param  report_progress_expiration: decentralized state time to live in dht
     :param timeout: if DecentralizedAverager step is unable to form group in this many seconds, cancel step
-    :param verbose: verbose info
+    :param verbose: if True, outputs additional information during averaging
     :param kwargs: additional parameters passed to TrainingAverager
     :note: if you're using an optimizer with adaptive learning rates (such as Adam), make sure to specify
       necessary fields' names in `average_opt_statistics`. Otherwise you may encounter poor convergence.
