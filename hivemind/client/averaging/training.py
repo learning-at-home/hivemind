@@ -10,7 +10,6 @@ from hivemind.client.averaging import DecentralizedAverager
 from hivemind.utils import nested_flatten, nested_pack, get_logger, run_in_background
 
 logger = get_logger(__name__)
-LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
 
 
 class TrainingAverager(DecentralizedAverager):
@@ -26,7 +25,7 @@ class TrainingAverager(DecentralizedAverager):
     :param average_parameters: whether or not to average model parameters in self.step(...)
     :param average_gradients: whether or not to average model gradients in self.step(...)
     :param average_opt_statistics: if specified, average optimizer statistics with corresponding names in statedict
-    :param scheduler: if specified, averager puts scheduler state to current state
+    :param scheduler: if specified, averager keeps scheduler state
     :param initialize_optimizer: if True, this will run a speculative optimizer step with
       zero gradients to initialize all tensors. If False, please initialize the optimizer state manually.
     :param extra_tensors: if specified, these extra tensors will also be averaged and shared in load_state_from_peers.
@@ -35,7 +34,7 @@ class TrainingAverager(DecentralizedAverager):
     """
 
     def __init__(self, opt: torch.optim.Optimizer, *, average_parameters: bool, average_gradients: bool,
-                 average_opt_statistics: Sequence[str] = (), scheduler: Optional[LRSchedulerBase] = None,
+                 average_opt_statistics: Sequence[str] = (), scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
                  extra_tensors: Sequence[torch.Tensor] = (), initialize_optimizer: bool = True, **kwargs):
 
         self.opt, self.extra_tensors, self.local_step = opt, tuple(extra_tensors), 0
@@ -161,9 +160,9 @@ class TrainingAverager(DecentralizedAverager):
             load_optimizer_state(self.opt, metadata['optimizer_metadata'], loaded_opt_tensors)
 
         self.local_step = max(self.local_step, metadata['step'])
-        if self.scheduler:
+        if self.scheduler is not None:
             if 'scheduler_state' not in metadata:
-                logger.warning("Scheduler is initialized, but there is no key 'scheduler_state' found in state")
+                logger.warning("Scheduler was passed, but there is no key 'scheduler_state' found in state")
             else:
                 self.scheduler.load_state_dict(metadata['scheduler_state'])
 
