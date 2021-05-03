@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 class RSASignatureValidator(RecordValidatorBase):
     """
     Introduces a notion of *protected records* whose key/subkey contains substring
-    "[owner:ssh-rsa ...]" (the format can be changed) with an RSA public key of the owner.
+    "[owner:ssh-rsa ...]" with an RSA public key of the owner.
 
     If this validator is used, changes to such records always must be signed with
     the corresponding private key (so only the owner can change them).

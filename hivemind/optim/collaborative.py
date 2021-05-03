@@ -42,17 +42,17 @@ class CollaborationState:
         self.eta_next_step = float('inf')
 
 
-class LocalTrainingProgress(BaseModel):
+class TrainingState(BaseModel):
     endpoint: Endpoint
     step: conint(ge=0, strict=True)
     samples_accumulated: conint(ge=0, strict=True)
     samples_per_second: confloat(ge=0.0, strict=True)
-    time: StrictFloat
+    current_time: StrictFloat
     client_mode: StrictBool
 
 
 class TrainingProgressSchema(BaseModel):
-    progress: Dict[BytesWithPublicKey, Optional[LocalTrainingProgress]]
+    progress: Dict[BytesWithPublicKey, Optional[TrainingState]]
 
 
 class CollaborativeOptimizer(DecentralizedOptimizerBase):
@@ -287,12 +287,12 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.should_report_progress.clear()
             with self.lock_local_progress:
                 current_time = get_dht_time()
-                local_state_info = LocalTrainingProgress(
+                local_state_info = TrainingState(
                     endpoint=self.averager.endpoint,
                     step=self.local_step,
                     samples_accumulated=self.local_samples_accumulated,
                     samples_per_second=self.performance_ema.samples_per_second,
-                    time=get_dht_time(),
+                    current_time=get_dht_time(),
                     client_mode=not self.averager.listen)
 
             self.dht.store(key=self.training_progress_key, subkey=self._local_public_key,
@@ -326,7 +326,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                                       num_peers=0, num_clients=0, eta_next_step=current_time + local_eta_next_step,
                                       next_fetch_time=current_time + self.default_refresh_period)
 
-        valid_peer_states = [LocalTrainingProgress.parse_obj(peer_state.value)
+        valid_peer_states = [TrainingState.parse_obj(peer_state.value)
                              for peer_state in response.values()
                              if peer_state.value is not None]
 
@@ -343,9 +343,8 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             total_samples_per_second += state.samples_per_second
             if state.step == global_optimizer_step:
                 total_samples_accumulated += state.samples_accumulated
-                estimated_current_samples += (
-                    state.samples_accumulated +
-                    max(0, current_time - state.time) * state.samples_per_second)
+                estimated_current_samples += (state.samples_accumulated +
+                                              max(0, current_time - state.current_time) * state.samples_per_second)
             # note: we deliberately count only valid peers for samples_accumulated, but all peers for performance;
             # the rationale behind this is that outdated peers will synchronize and begin contributing shortly.
 

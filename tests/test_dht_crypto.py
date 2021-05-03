@@ -56,8 +56,8 @@ def test_cached_key():
     assert first_validator.local_public_key != third_validator.local_public_key
 
 
-def test_validator_instance_is_pickable():
-    # Needs to be pickable because the validator instance may be sent between processes
+def test_validator_instance_is_picklable():
+    # Needs to be picklable because the validator instance may be sent between processes
 
     original_validator = RSASignatureValidator()
     unpickled_validator = pickle.loads(pickle.dumps(original_validator))
