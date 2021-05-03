@@ -5,7 +5,6 @@ Author: Kevin Mai-Husan Chia
 """
 
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 from typing import (AsyncIterator, Awaitable, Callable, Dict, Iterable,
                     Sequence, Tuple)
@@ -55,9 +54,7 @@ class DaemonConnector:
     async def open_connection(self) -> (asyncio.StreamReader, asyncio.StreamWriter):
         if self.proto_code == protocols.P_UNIX:
             control_path = self.control_maddr.value_for_protocol(protocols.P_UNIX)
-            self.logger.debug(
-                "DaemonConnector %s opens connection to %s", self, self.control_maddr
-            )
+            self.logger.debug(f"DaemonConnector {self} opens connection to {self.control_maddr}")
             return await asyncio.open_unix_connection(control_path)
         elif self.proto_code == protocols.P_IP4:
             host = self.control_maddr.value_for_protocol(protocols.P_IP4)
@@ -72,8 +69,9 @@ class DaemonConnector:
 class ControlClient:
     DEFAULT_LISTEN_MADDR = "/unix/tmp/p2pclient.sock"
 
-    def __init__(self, daemon_connector: DaemonConnector,
-                 listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR)) -> None:
+    def __init__(
+            self, daemon_connector: DaemonConnector, listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR)
+    ) -> None:
         self.listen_maddr: Multiaddr = listen_maddr
         self.daemon_connector: DaemonConnector = daemon_connector
         self.handlers: Dict[str, StreamHandler] = {}
@@ -104,7 +102,7 @@ class ControlClient:
             server = await asyncio.start_server(self._handler, port=port, host=host)
         else:
             raise ValueError(
-                f"protocol not supported: protocol={protocols.protocol_with_code(proto_code)}"
+                f"Protocol not supported: {protocols.protocol_with_code(self.proto_code)}"
             )
 
         async with server:

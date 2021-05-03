@@ -19,7 +19,7 @@ from hivemind.utils.networking import find_open_port
 logger = get_logger(__name__)
 
 
-P2PD_RELATIVE_PATH = 'hivemind_cli/p2pd'
+P2PD_FILENAME = 'p2pd'
 NUM_RETRIES = 3
 RETRY_DELAY = 0.4
 
@@ -106,11 +106,11 @@ class P2P:
             'It is very dangerous, because p2pd connects to global ipfs and it is very unstable. ' \
             'If you really want this, pass use_global_ipfs=True'
         assert not (bootstrap_peers is not None and use_global_ipfs), \
-            'Non empty boostrap_nodes and use_global_ipfs=True are incompatible.' \
+            'Non empty bootstrap_nodes and use_global_ipfs=True are incompatible.' \
             'Choose one option: your nodes list (preferable) or global ipfs (very unstable)'
 
         self = cls()
-        with path(cli, 'p2pd') as p:
+        with path(cli, P2PD_FILENAME) as p:
             p2pd_path = p
         bootstrap_peers = cls._make_bootstrap_peers(bootstrap_peers)
         dht = cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0})
