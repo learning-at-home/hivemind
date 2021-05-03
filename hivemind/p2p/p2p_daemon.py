@@ -73,21 +73,21 @@ class P2P:
                      daemon_listen_port: int = None, **kwargs):
         """
         Start a new p2pd process and connect to it.
-        @param args:
-        @param quic: Enables the QUIC transport
-        @param tls: Enables TLS1.3 channel security protocol
-        @param conn_manager: Enables the Connection Manager
-        @param dht_mode: DHT mode (dht_client/dht_server/dht)
-        @param force_reachability: Force reachability mode (public/private)
-        @param nat_port_map: Enables NAT port mapping
-        @param auto_nat: Enables the AutoNAT service
-        @param bootstrap: Connects to bootstrap peers and bootstraps the dht if enabled
-        @param bootstrap_peers: List of bootstrap peers; defaults to the IPFS DHT peers
-        @param use_global_ipfs: Bootstrap to global ipfs (works only if bootstrap=True and bootstrap_peers=None)
-        @param host_port: port for p2p network
-        @param daemon_listen_port: port for connection daemon and client binding
-        @param kwargs:
-        @return: new wrapper for p2p daemon
+        :param args:
+        :param quic: Enables the QUIC transport
+        :param tls: Enables TLS1.3 channel security protocol
+        :param conn_manager: Enables the Connection Manager
+        :param dht_mode: DHT mode (dht_client/dht_server/dht)
+        :param force_reachability: Force reachability mode (public/private)
+        :param nat_port_map: Enables NAT port mapping
+        :param auto_nat: Enables the AutoNAT service
+        :param bootstrap: Connects to bootstrap peers and bootstraps the dht if enabled
+        :param bootstrap_peers: List of bootstrap peers; defaults to the IPFS DHT peers
+        :param use_global_ipfs: Bootstrap to global ipfs (works only if bootstrap=True and bootstrap_peers=None)
+        :param host_port: port for p2p network
+        :param daemon_listen_port: port for connection daemon and client binding
+        :param kwargs:
+        :return: new wrapper for p2p daemon
         """
 
         assert not (bootstrap and bootstrap_peers is None and not use_global_ipfs), \
@@ -129,9 +129,9 @@ class P2P:
     async def replicate(cls, daemon_listen_port: int, host_port: int):
         """
         Connect to existing p2p daemon
-        @param host_port: port for p2p network
-        @param daemon_listen_port: port for connection daemon and client binding
-        @return: new wrapper for existing p2p daemon
+        :param daemon_listen_port: port for connection daemon and client binding
+        :param host_port: port for p2p network
+        :return: new wrapper for existing p2p daemon
         """
 
         self = cls()
