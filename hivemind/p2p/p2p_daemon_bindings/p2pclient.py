@@ -13,7 +13,7 @@ from multiaddr import Multiaddr
 from hivemind.p2p.p2p_daemon_bindings.control import (ControlClient,
                                                       DaemonConnector,
                                                       StreamHandler)
-from hivemind.p2p.p2p_daemon_bindings.datastructures import (ID, PeerInfo,
+from hivemind.p2p.p2p_daemon_bindings.datastructures import (PeerID, PeerInfo,
                                                              StreamInfo)
 
 
@@ -37,13 +37,13 @@ class Client:
         async with self.control.listen():
             yield self
 
-    async def identify(self) -> Tuple[ID, Tuple[Multiaddr, ...]]:
+    async def identify(self) -> Tuple[PeerID, Tuple[Multiaddr, ...]]:
         """
         Get current node peer id and list of addresses
         """
         return await self.control.identify()
 
-    async def connect(self, peer_id: ID, maddrs: Iterable[Multiaddr]) -> None:
+    async def connect(self, peer_id: PeerID, maddrs: Iterable[Multiaddr]) -> None:
         """
         Connect to p2p node with specified addresses and peer id.
         :peer_id: node peer id you want connect to
@@ -57,7 +57,7 @@ class Client:
         """
         return await self.control.list_peers()
 
-    async def disconnect(self, peer_id: ID) -> None:
+    async def disconnect(self, peer_id: PeerID) -> None:
         """
         Disconnect from node with specified peer id
         :peer_id:
@@ -65,7 +65,7 @@ class Client:
         await self.control.disconnect(peer_id=peer_id)
 
     async def stream_open(
-        self, peer_id: ID, protocols: Sequence[str]
+        self, peer_id: PeerID, protocols: Sequence[str]
     ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
         """
         Open a stream to call other peer (with peer_id) handler for specified protocols
