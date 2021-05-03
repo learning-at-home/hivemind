@@ -4,88 +4,86 @@ Licence: MIT
 Author: Kevin Mai-Husan Chia
 """
 
-import logging
-from typing import AsyncIterator, Awaitable, Callable, Dict, Iterable, Sequence, Tuple
-
 import asyncio
+import logging
 from contextlib import asynccontextmanager
+from typing import (AsyncIterator, Awaitable, Callable, Dict, Iterable,
+                    Sequence, Tuple)
+
 from multiaddr import Multiaddr, protocols
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerInfo, StreamInfo, ID
+
+from hivemind.p2p.p2p_daemon_bindings.datastructures import (PeerID, PeerInfo,
+                                                             StreamInfo)
+from hivemind.p2p.p2p_daemon_bindings.utils import (DispatchFailure,
+                                                    raise_if_failed,
+                                                    read_pbmsg_safe,
+                                                    write_pbmsg)
 from hivemind.proto import p2pd_pb2 as p2pd_pb
-from hivemind.p2p.p2p_daemon_bindings.utils import DispatchFailure, read_pbmsg_safe, write_pbmsg, raise_if_failed
+from hivemind.utils.logging import get_logger
 
 StreamHandler = Callable[[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
 
-_supported_conn_protocols = (
+SUPPORT_CONN_PROTOCOLS = (
     protocols.P_IP4,
     # protocols.P_IP6,
     protocols.P_UNIX,
+)
+SUPPORTED_PROTOS = (
+    protocols.protocol_with_code(proto) for proto in SUPPORT_CONN_PROTOCOLS
 )
 
 
 def parse_conn_protocol(maddr: Multiaddr) -> int:
     proto_codes = set(proto.code for proto in maddr.protocols())
-    proto_cand = proto_codes.intersection(_supported_conn_protocols)
+    proto_cand = proto_codes.intersection(SUPPORT_CONN_PROTOCOLS)
     if len(proto_cand) != 1:
-        supported_protos = (
-            protocols.protocol_with_code(proto) for proto in _supported_conn_protocols
-        )
         raise ValueError(
-            f"connection protocol should be only one protocol out of {supported_protos}"
+            f"connection protocol should be only one protocol out of {SUPPORTED_PROTOS}"
             f", maddr={maddr}"
         )
     return tuple(proto_cand)[0]
 
 
 class DaemonConnector:
-    control_maddr: Multiaddr
-    logger = logging.getLogger("p2pclient.DaemonConnector")
     DEFAULT_CONTROL_MADDR = "/unix/tmp/p2pd.sock"
 
-    def __init__(self, control_maddr: Multiaddr = None) -> None:
-        if control_maddr is None:
-            control_maddr = Multiaddr(self.DEFAULT_CONTROL_MADDR)
-        self.control_maddr = control_maddr
+    def __init__(self, control_maddr: Multiaddr = Multiaddr(DEFAULT_CONTROL_MADDR)) -> None:
+        self.control_maddr: Multiaddr = control_maddr
+        self.proto_code: int = parse_conn_protocol(self.control_maddr)
+        self.logger = get_logger(__name__)
 
     async def open_connection(self) -> (asyncio.StreamReader, asyncio.StreamWriter):
-        proto_code = parse_conn_protocol(self.control_maddr)
-        if proto_code == protocols.P_UNIX:
+        if self.proto_code == protocols.P_UNIX:
             control_path = self.control_maddr.value_for_protocol(protocols.P_UNIX)
             self.logger.debug(
                 "DaemonConnector %s opens connection to %s", self, self.control_maddr
             )
             return await asyncio.open_unix_connection(control_path)
-        elif proto_code == protocols.P_IP4:
+        elif self.proto_code == protocols.P_IP4:
             host = self.control_maddr.value_for_protocol(protocols.P_IP4)
             port = int(self.control_maddr.value_for_protocol(protocols.P_TCP))
             return await asyncio.open_connection(host, port)
         else:
             raise ValueError(
-                f"protocol not supported: protocol={protocols.protocol_with_code(proto_code)}"
+                f"Protocol not supported: {protocols.protocol_with_code(self.proto_code)}"
             )
 
 
 class ControlClient:
-    listen_maddr: Multiaddr
-    daemon_connector: DaemonConnector
-    handlers: Dict[str, StreamHandler]
-    logger = logging.getLogger("p2pclient.ControlClient")
     DEFAULT_LISTEN_MADDR = "/unix/tmp/p2pclient.sock"
 
-    def __init__(
-        self, daemon_connector: DaemonConnector, listen_maddr: Multiaddr = None
-    ) -> None:
-        if listen_maddr is None:
-            listen_maddr = Multiaddr(self.DEFAULT_LISTEN_MADDR)
-        self.listen_maddr = listen_maddr
-        self.daemon_connector = daemon_connector
-        self.handlers = {}
+    def __init__(self, daemon_connector: DaemonConnector,
+                 listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR)) -> None:
+        self.listen_maddr: Multiaddr = listen_maddr
+        self.daemon_connector: DaemonConnector = daemon_connector
+        self.handlers: Dict[str, StreamHandler] = {}
+        self.logger = get_logger(__name__)
 
     async def _handler(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         pb_stream_info = p2pd_pb.StreamInfo()  # type: ignore
         await read_pbmsg_safe(reader, pb_stream_info)
-        stream_info = StreamInfo.from_pb(pb_stream_info)
-        self.logger.info("New incoming stream: %s", stream_info)
+        stream_info = StreamInfo.from_protobuf(pb_stream_info)
+        self.logger.debug(f"New incoming stream: {stream_info}")
         try:
             handler = self.handlers[stream_info.proto]
         except KeyError as e:
@@ -110,14 +108,12 @@ class ControlClient:
             )
 
         async with server:
-            self.logger.info(
-                "DaemonConnector %s starts listening to %s", self, self.listen_maddr
-            )
+            self.logger.info(f"DaemonConnector {self} starts listening to {self.listen_maddr}")
             yield self
 
-        self.logger.info("DaemonConnector %s closed", self)
+        self.logger.info(f"DaemonConnector {self} closed")
 
-    async def identify(self) -> Tuple[ID, Tuple[Multiaddr, ...]]:
+    async def identify(self) -> Tuple[PeerID, Tuple[Multiaddr, ...]]:
         reader, writer = await self.daemon_connector.open_connection()
         req = p2pd_pb.Request(type=p2pd_pb.Request.IDENTIFY)
         await write_pbmsg(writer, req)
@@ -131,11 +127,11 @@ class ControlClient:
         maddrs_bytes = resp.identify.addrs
 
         maddrs = tuple(Multiaddr(maddr_bytes) for maddr_bytes in maddrs_bytes)
-        peer_id = ID(peer_id_bytes)
+        peer_id = PeerID(peer_id_bytes)
 
         return peer_id, maddrs
 
-    async def connect(self, peer_id: ID, maddrs: Iterable[Multiaddr]) -> None:
+    async def connect(self, peer_id: PeerID, maddrs: Iterable[Multiaddr]) -> None:
         reader, writer = await self.daemon_connector.open_connection()
 
         maddrs_bytes = [i.to_bytes() for i in maddrs]
@@ -159,10 +155,10 @@ class ControlClient:
         writer.close()
         raise_if_failed(resp)
 
-        peers = tuple(PeerInfo.from_pb(pinfo) for pinfo in resp.peers)
+        peers = tuple(PeerInfo.from_protobuf(pinfo) for pinfo in resp.peers)
         return peers
 
-    async def disconnect(self, peer_id: ID) -> None:
+    async def disconnect(self, peer_id: PeerID) -> None:
         disconnect_req = p2pd_pb.DisconnectRequest(peer=peer_id.to_bytes())
         req = p2pd_pb.Request(
             type=p2pd_pb.Request.DISCONNECT, disconnect=disconnect_req
@@ -175,7 +171,7 @@ class ControlClient:
         raise_if_failed(resp)
 
     async def stream_open(
-        self, peer_id: ID, protocols: Sequence[str]
+        self, peer_id: PeerID, protocols: Sequence[str]
     ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
         reader, writer = await self.daemon_connector.open_connection()
 
@@ -192,7 +188,7 @@ class ControlClient:
         raise_if_failed(resp)
 
         pb_stream_info = resp.streamInfo
-        stream_info = StreamInfo.from_pb(pb_stream_info)
+        stream_info = StreamInfo.from_protobuf(pb_stream_info)
 
         return stream_info, reader, writer
 

@@ -5,21 +5,27 @@ import os
 import subprocess
 import time
 import uuid
-from contextlib import asynccontextmanager, AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import NamedTuple
 
+import pytest
 from google.protobuf.message import EncodeError
 from multiaddr import Multiaddr, protocols
 
-import pytest
-
 from hivemind import find_open_port
-from hivemind.p2p.p2p_daemon_bindings.control import parse_conn_protocol, DaemonConnector, ControlClient
+from hivemind.p2p.p2p_daemon_bindings.control import (ControlClient,
+                                                      DaemonConnector,
+                                                      parse_conn_protocol)
+from hivemind.p2p.p2p_daemon_bindings.datastructures import (PeerID, PeerInfo,
+                                                             StreamInfo)
 from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
-from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure, raise_if_failed, write_unsigned_varint, \
-    read_unsigned_varint, read_pbmsg_safe, write_pbmsg
+from hivemind.p2p.p2p_daemon_bindings.utils import (ControlFailure,
+                                                    raise_if_failed,
+                                                    read_pbmsg_safe,
+                                                    read_unsigned_varint,
+                                                    write_pbmsg,
+                                                    write_unsigned_varint)
 from hivemind.proto import p2pd_pb2 as p2pd_pb
-from hivemind.p2p.p2p_daemon_bindings.datastructures import ID, StreamInfo, PeerInfo
 
 
 def test_raise_if_failed_raises():
@@ -134,7 +140,7 @@ def peer_id_bytes():
 
 @pytest.fixture(scope="module")
 def peer_id(peer_id_bytes):
-    return ID(peer_id_bytes)
+    return PeerID(peer_id_bytes)
 
 
 @pytest.fixture(scope="module")
@@ -147,13 +153,13 @@ def test_peer_id(peer_id_string, peer_id_bytes, peer_id):
     assert peer_id.to_bytes() == peer_id_bytes
     assert peer_id.to_string() == peer_id_string
     # test initialized with string
-    peer_id_2 = ID.from_base58(peer_id_string)
+    peer_id_2 = PeerID.from_base58(peer_id_string)
     assert peer_id_2.to_bytes() == peer_id_bytes
     assert peer_id_2.to_string() == peer_id_string
     # test equal
     assert peer_id == peer_id_2
     # test not equal
-    peer_id_3 = ID.from_base58("QmbmfNDEth7Ucvjuxiw3SP3E4PoJzbk7g4Ge6ZDigbCsNp")
+    peer_id_3 = PeerID.from_base58("QmbmfNDEth7Ucvjuxiw3SP3E4PoJzbk7g4Ge6ZDigbCsNp")
     assert peer_id != peer_id_3
 
 
@@ -165,12 +171,12 @@ def test_stream_info(peer_id, maddr):
     assert si.addr == maddr
     assert si.proto == proto
     # test case: `StreamInfo.to_pb`
-    pb_si = si.to_pb()
+    pb_si = si.to_protobuf()
     assert pb_si.peer == peer_id.to_bytes()
     assert pb_si.addr == maddr.to_bytes()
     assert pb_si.proto == si.proto
     # test case: `StreamInfo.from_pb`
-    si_1 = StreamInfo.from_pb(pb_si)
+    si_1 = StreamInfo.from_protobuf(pb_si)
     assert si_1.peer_id == peer_id
     assert si_1.addr == maddr
     assert si_1.proto == proto
@@ -183,7 +189,7 @@ def test_peer_info(peer_id, maddr):
     assert pi.addrs == [maddr]
     # test case: `PeerInfo.from_pb`
     pi_pb = p2pd_pb.PeerInfo(id=peer_id.to_bytes(), addrs=[maddr.to_bytes()])
-    pi_1 = PeerInfo.from_pb(pi_pb)
+    pi_1 = PeerInfo.from_protobuf(pi_pb)
     assert pi.peer_id == pi_1.peer_id
     assert pi.addrs == pi_1.addrs
 
@@ -317,7 +323,7 @@ def num_p2pds():
 
 @pytest.fixture(scope="module")
 def peer_id_random():
-    return ID.from_base58("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNK1")
+    return PeerID.from_base58("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNK1")
 
 
 @pytest.fixture
