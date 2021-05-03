@@ -5,7 +5,7 @@ Author: Kevin Mai-Husan Chia
 """
 
 import hashlib
-from typing import Any, List, Optional, Sequence, Union
+from typing import Any, Sequence, Union
 
 import base58
 import multihash
