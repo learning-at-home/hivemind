@@ -38,7 +38,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     :param averaging_steps_period: performs averaging after this many optimizer steps
     :param averaging_time_period: if specified, optimizer will attempt to average weights at regular intervals of this
       many seconds. (averaging step will only occur if the optimizer ran `averaging_steps_period` steps in that interval)
-    :param  report_progress_expiration: decentralized state time to live in dht
+    :param report_progress_expiration: decentralized state time to live in dht
     :param timeout: if DecentralizedAverager step is unable to form group in this many seconds, cancel step
     :param verbose: if True, outputs additional information during averaging
     :param kwargs: additional parameters passed to TrainingAverager
