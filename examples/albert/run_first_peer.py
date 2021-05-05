@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import argparse
 from dataclasses import dataclass, field, asdict
 import subprocess
 import time
@@ -12,9 +13,11 @@ import wandb
 from whatsmyip.providers import GoogleDnsProvider
 from whatsmyip.ip import get_ip
 
+from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
 import hivemind
 from hivemind.utils.logging import get_logger
-from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
+import metrics_utils
+
 
 
 logger = get_logger(__name__)
@@ -139,8 +142,10 @@ if __name__ == '__main__':
         logger.warning("No address specified. Attempting to infer address from DNS.")
         coordinator_args.address = get_ip(GoogleDnsProvider)
 
+    validators, local_public_key = metrics_utils.make_validators(args.experiment_prefix)
     dht = hivemind.DHT(start=True, listen_on=coordinator_args.dht_listen_on,
-                       endpoint=f"{coordinator_args.address}:*", initial_peers=coordinator_args.initial_peers)
+                       endpoint=f"{coordinator_args.address}:*", initial_peers=coordinator_args.initial_peers,
+                       record_validators=validators)
 
     logger.info(f"Running DHT root at {coordinator_args.address}:{dht.port}")
 
@@ -155,8 +160,9 @@ if __name__ == '__main__':
         metrics_dict = dht.get(experiment_prefix + '_metrics', latest=True)
         if metrics_dict is not None:
             metrics_dict = metrics_dict.value
-            metrics = [metrics_dict[peer].value for peer in metrics_dict]
-            latest_step = max(metrics)[0]
+            metrics = [metrics_utils.LocalMetrics.parse_obj(metrics_dict[peer].value)
+                       for peer in metrics_dict]
+            latest_step = max(item.step for item in metrics)
             if latest_step != current_step:
                 current_step = latest_step
                 alive_peers = 0
@@ -165,12 +171,12 @@ if __name__ == '__main__':
                 num_samples = 0
                 sum_perf = 0
                 sum_mini_steps = 0
-                for step, perf, samples, loss, mini_steps in metrics:
-                    sum_loss += loss
+                for item in metrics:
+                    sum_loss += item.loss
                     alive_peers += 1
-                    sum_perf += perf
-                    num_samples += samples
-                    sum_mini_steps += mini_steps
+                    sum_perf += item.samples_per_second
+                    num_samples += item.samples_accumulated
+                    sum_mini_steps += item.mini_steps
                 if coordinator_args.wandb_project is not None:
                     wandb.log({
                         "loss": sum_loss / sum_mini_steps,
@@ -178,10 +184,10 @@ if __name__ == '__main__':
                         "samples": num_samples,
                         "performance": sum_perf
                     })
-                logger.info(f"Step #{current_step}\tloss = {sum_loss / sum_mini_steps:.3f}")
                 if checkpoint_handler.is_time_to_save_state(current_step):
                     checkpoint_handler.save_state(current_step)
                     if checkpoint_handler.is_time_to_upload():
                         checkpoint_handler.upload_checkpoint(sum_loss / sum_mini_steps)
+                logger.info(f"Step #{current_step}\tloss = {sum_loss / alive_peers:.5f}")
         logger.debug("Peer is still alive...")
         time.sleep(coordinator_args.refresh_period)
