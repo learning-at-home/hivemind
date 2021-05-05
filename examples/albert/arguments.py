@@ -1,6 +1,5 @@
 from typing import Optional, List
 from dataclasses import dataclass, field
-import uuid
 
 from transformers import TrainingArguments
 
@@ -94,10 +93,6 @@ class CollaborativeOptimizerArguments:
 
 @dataclass
 class CollaborationArguments(AveragerArguments, CollaborativeOptimizerArguments, BaseTrainingArguments):
-    trainer_uuid: str = field(
-        default=uuid.uuid4().hex,
-        metadata={"help": "This peer's name - used when publishing metadata to DHT, default = random"}
-    )
     statistics_expiration: float = field(
         default=600,
         metadata={"help": "Statistics will be removed if not updated in this many seconds"}

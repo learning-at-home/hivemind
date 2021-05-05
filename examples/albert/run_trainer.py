@@ -6,7 +6,6 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Any
 
-import hivemind
 import torch
 import transformers
 from datasets import load_from_disk

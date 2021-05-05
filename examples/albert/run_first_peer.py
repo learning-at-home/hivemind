@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import argparse
 from dataclasses import dataclass, field, asdict
 import subprocess
 import time
@@ -17,7 +16,6 @@ from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, Av
 import hivemind
 from hivemind.utils.logging import get_logger
 import metrics_utils
-
 
 
 logger = get_logger(__name__)
