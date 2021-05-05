@@ -178,7 +178,7 @@ if __name__ == '__main__':
                         "samples": num_samples,
                         "performance": sum_perf
                     })
-                logger.info(f"Step #{current_step}\tloss = {sum_loss / sum_mini_steps:.5f}")
+                logger.info(f"Step #{current_step}\tloss = {sum_loss / sum_mini_steps:.3f}")
                 if checkpoint_handler.is_time_to_save_state(current_step):
                     checkpoint_handler.save_state(current_step)
                     if checkpoint_handler.is_time_to_upload():
