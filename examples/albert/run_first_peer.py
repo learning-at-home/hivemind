@@ -142,7 +142,8 @@ if __name__ == '__main__':
         logger.warning("No address specified. Attempting to infer address from DNS.")
         coordinator_args.address = get_ip(GoogleDnsProvider)
 
-    validators, local_public_key = metrics_utils.make_validators(args.experiment_prefix)
+    experiment_prefix = coordinator_args.experiment_prefix
+    validators, local_public_key = metrics_utils.make_validators(experiment_prefix)
     dht = hivemind.DHT(start=True, listen_on=coordinator_args.dht_listen_on,
                        endpoint=f"{coordinator_args.address}:*", initial_peers=coordinator_args.initial_peers,
                        record_validators=validators)
@@ -153,7 +154,7 @@ if __name__ == '__main__':
         wandb.init(project=coordinator_args.wandb_project)
 
     current_step = 0
-    experiment_prefix = coordinator_args.experiment_prefix
+
     checkpoint_handler = CheckpointHandler(coordinator_args, collab_optimizer_args, averager_args, dht)
 
     while True:
