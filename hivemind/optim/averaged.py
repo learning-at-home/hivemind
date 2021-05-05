@@ -32,13 +32,13 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     :param average_gradients: whether to average gradients
     :param max_allowed_epoch_difference: if max_epoch has difference with local_epoch more than that, we download state
       from other peer.
-    :param total_steps_in_epoch: how many total steps must be to increase local_epoch by one
+    :param total_steps_in_epoch: the number of optimizer steps for a single training epoch
     :param average_opt_statistics: if specified, average optimizer states with corresponding names in state_dict
     :param scheduler_cls: a function which takes an optimizer and returns a learning rate scheduler
     :param averaging_steps_period: performs averaging after this many optimizer steps
     :param averaging_time_period: if specified, optimizer will attempt to average weights at regular intervals of this
       many seconds. (averaging step will only occur if the optimizer ran `averaging_steps_period` steps in that interval)
-    :param  report_progress_expiration: decentralized state time to live in dht
+    :param report_progress_expiration: decentralized state time to live in dht
     :param timeout: if DecentralizedAverager step is unable to form group in this many seconds, cancel step
     :param verbose: if True, outputs additional information during averaging
     :param kwargs: additional parameters passed to TrainingAverager
