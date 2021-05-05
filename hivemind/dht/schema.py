@@ -82,14 +82,14 @@ class SchemaValidator(RecordValidatorBase):
 
         if record.key not in self._key_id_to_field_name:
             if not self._allow_extra_keys:
-                logger.warning(f"Record {record} has a key ID that is not defined in any of the "
-                               f"schemas (therefore, the raw key is unknown)")
+                logger.debug(f"Record {record} has a key ID that is not defined in any of the "
+                             f"schemas (therefore, the raw key is unknown)")
             return self._allow_extra_keys
 
         try:
             record = self._deserialize_record(record)
         except ValueError as e:
-            logger.warning(e)
+            logger.debug(e)
             return False
         [field_name] = list(record.keys())
 
@@ -111,7 +111,7 @@ class SchemaValidator(RecordValidatorBase):
             else:
                 return True
 
-        logger.warning(f"Record {record} doesn't match any of the schemas: {validation_errors}")
+        logger.debug(f"Record {record} doesn't match any of the schemas: {validation_errors}")
         return False
 
     def _deserialize_record(self, record: DHTRecord) -> Dict[str, Any]:
