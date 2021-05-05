@@ -124,7 +124,7 @@ class CheckpointHandler:
         try:
             subprocess.run("git add --all", shell=True, check=True, cwd=self.repo_path)
             current_step = self.collaborative_optimizer.collaboration_state.optimizer_step
-            subprocess.run(f"git commit -m 'Step {current_step}, loss {round(current_loss, 3)}'",
+            subprocess.run(f"git commit -m 'Step {current_step}, loss {current_loss:.3f}'",
                            shell=True, check=True, cwd=self.repo_path)
             subprocess.run("git push", shell=True, check=True, cwd=self.repo_path)
         except subprocess.CalledProcessError as e:
