@@ -4,3 +4,4 @@ torch_optimizer>=0.1.0
 wandb>=0.10.26
 sentencepiece
 whatsmyip
+nltk>=3.6.2
