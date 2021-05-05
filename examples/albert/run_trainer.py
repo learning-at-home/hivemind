@@ -5,10 +5,11 @@ import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-import uuid
 
-from datasets import load_from_disk
+import hivemind
+import torch
 import transformers
+from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from transformers import (set_seed, HfArgumentParser, TrainingArguments,
                           DataCollatorForLanguageModeling, AlbertTokenizerFast, AlbertConfig, AlbertForPreTraining)
@@ -16,9 +17,9 @@ from transformers.optimization import get_linear_schedule_with_warmup
 from transformers.trainer_utils import is_main_process
 from transformers.trainer import Trainer
 from torch_optimizer import Lamb
-import torch
 
-import hivemind
+import metrics_utils
+
 
 logger = logging.getLogger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
@@ -35,7 +36,6 @@ class CollaborationArguments:
     averaging_timeout: float = 30.0  # give up on averaging step after this many seconds
     target_batch_size: int = 4096  # perform optimizer step after all peers collectively accumulate this many samples
     client_mode: bool = False  # if True, runs training without incoming connections, in a firewall-compatible mode
-    trainer_uuid: str = uuid.uuid4().hex  # this peer's name - used when publishing metadata to DHT, default = random
 
     # optional tweaks
     target_group_size: int = 256  # maximum group size for all-reduce
@@ -165,11 +165,12 @@ def get_optimizer_and_scheduler(training_args, model):
 
 class CollaborativeCallback(transformers.TrainerCallback):
     def __init__(self, dht: hivemind.DHT, optimizer: hivemind.CollaborativeOptimizer,
-                 model: torch.nn.Module, trainer_uuid: str, statistics_expiration: float):
+                 model: torch.nn.Module, local_public_key: bytes, statistics_expiration: float):
         super().__init__()
         self.model = model
         self.dht, self.collaborative_optimizer = dht, optimizer
-        self.trainer_uuid, self.statistics_expiration = trainer_uuid, statistics_expiration
+        self.local_public_key = local_public_key
+        self.statistics_expiration = statistics_expiration
         self.last_reported_collaboration_step = -1
         self.previous_state = self.get_current_state()
         self.samples = 0
@@ -190,15 +191,18 @@ class CollaborativeCallback(transformers.TrainerCallback):
             if self.collaborative_optimizer.local_step != self.last_reported_collaboration_step:
                 self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
 
-                statistics = [self.collaborative_optimizer.local_step,
-                              self.collaborative_optimizer.performance_ema.samples_per_second,
-                              self.samples,
-                              self.loss,
-                              self.steps]
+                samples_per_second = self.collaborative_optimizer.performance_ema.samples_per_second
+                statistics = metrics_utils.LocalMetrics(
+                    step=self.collaborative_optimizer.local_step,
+                    samples_per_second=samples_per_second,
+                    samples_accumulated=self.samples,
+                    loss=self.loss,
+                    mini_steps=self.steps)
                 self.loss = 0
                 self.steps = 0
-                self.dht.store(self.collaborative_optimizer.prefix + "_metrics", subkey=self.trainer_uuid,
-                               value=statistics, expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
+                self.dht.store(key=self.collaborative_optimizer.prefix + "_metrics",
+                               subkey=self.local_public_key, value=statistics.dict(),
+                               expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
                                return_future=True)
         self.samples = self.collaborative_optimizer.local_samples_accumulated
 
@@ -270,13 +274,15 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
+    validators, local_public_key = metrics_utils.make_validators(
+        collaboration_args_dict['experiment_prefix'])
     dht = hivemind.DHT(
-        initial_peers=collaboration_args_dict.pop('initial_peers'),
-        listen=not collaboration_args_dict['client_mode'], listen_on=collaboration_args_dict.pop('dht_listen_on'),
-        endpoint=collaboration_args_dict.pop('endpoint'), start=True)
+        start=True, initial_peers=collaboration_args_dict.pop('initial_peers'),
+        listen=not collaboration_args_dict['client_mode'],
+        listen_on=collaboration_args_dict.pop('dht_listen_on'),
+        endpoint=collaboration_args_dict.pop('endpoint'), record_validators=validators)
 
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
-    trainer_uuid = collaboration_args_dict.pop('trainer_uuid')
     statistics_expiration = collaboration_args_dict.pop('statistics_expiration')
     adjusted_target_batch_size = collaboration_args_dict.pop('target_batch_size') \
                                  - collaboration_args_dict.pop('batch_size_lead')
@@ -292,7 +298,7 @@ def main():
     class TrainerWithIndependentShuffling(Trainer):
         def get_train_dataloader(self) -> DataLoader:
             """ Shuffle data independently for each peer to avoid duplicating batches [important for quality] """
-            torch.manual_seed(hash(trainer_uuid))
+            torch.manual_seed(hash(local_public_key))
             return super().get_train_dataloader()
 
     trainer = TrainerWithIndependentShuffling(
@@ -300,7 +306,8 @@ def main():
         train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
         eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
         optimizers=(collaborative_optimizer, NoOpScheduler(collaborative_optimizer)),
-        callbacks=[CollaborativeCallback(dht, collaborative_optimizer, model, trainer_uuid, statistics_expiration)]
+        callbacks=[CollaborativeCallback(
+            dht, collaborative_optimizer, model, local_public_key, statistics_expiration)]
     )
     trainer.remove_callback(transformers.trainer_callback.PrinterCallback)
     trainer.remove_callback(transformers.trainer_callback.ProgressCallback)
