@@ -7,13 +7,21 @@ from transformers import TrainingArguments
 
 @dataclass
 class BaseTrainingArguments:
-    # Primary parameters
-    experiment_prefix: str = field(metadata={
-        "help": "A unique 'name' of this experiment, used to store metadata on the DHT"})
+    experiment_prefix: str = field(
+        metadata={"help": "A unique 'name' of this experiment, used to store metadata on the DHT"}
+    )
     initial_peers: List[str] = field(
         default_factory=list,
         metadata={"help": "One or more peers (comma-separated) that will welcome you into the collaboration"}
     )
+    dht_listen_on: str = field(
+        default="[::]:*",
+        metadata={"help": "Network interface used for incoming DHT communication. Default: all ipv6"}
+    )
+
+
+@dataclass
+class AveragerArguments:
     averaging_expiration: float = field(
         default=5.0,
         metadata={"help": "Averaging group will wait for stragglers for at most this many seconds"}
@@ -22,39 +30,9 @@ class BaseTrainingArguments:
         default=30.0,
         metadata={"help": "Give up on averaging step after this many seconds"}
     )
-    target_batch_size: int = field(
-        default=4096,
-        metadata={"help": "Perform optimizer step after all peers collectively accumulate this many samples"}
-    )
-    client_mode: bool = field(
-        default=False,
-        metadata={"help": "Of True, runs training without incoming connections, in a firewall-compatible mode"}
-    )
-
-    # Optional tweaks
-    target_group_size: int = field(
-        default=256,
-        metadata={"help": "Maximum group size for all-reduce"}
-    )
-    metadata_expiration: float = field(
-        default=30,
-        metadata={"help": "Peer's metadata will be removed if not updated in this many seconds"}
-    )
-    dht_listen_on: str = field(
-        default="[::]:*",
-        metadata={"help": "Network interface used for incoming DHT communication. Default: all ipv6"}
-    )
     listen_on: str = field(
         default="[::]:*",
         metadata={"help": "Network interface used for incoming averager communication. Default: all ipv6"}
-    )
-    batch_size_lead: int = field(
-        default=0,
-        metadata={"help": "Optional: begin looking for group in advance, this many samples before target_batch_size"}
-    )
-    compression: str = field(
-        default="FLOAT16",
-        metadata={"help": "Use this compression when averaging parameters/gradients"}
     )
     min_refresh_period: float = field(
         default=0.5,
@@ -76,18 +54,46 @@ class BaseTrainingArguments:
         default=0.2,
         metadata={"help": "Trainer assumes that this fraction of current size can join per step"}
     )
-    bandwidth: float = field(
-        default=100.0,
-        metadata={"help": "Available network bandwidth, in mbps (used for load balancing in all-reduce)"}
-    )
     performance_ema_alpha: float = field(
         default=0.1,
         metadata={"help": "Uses this alpha for moving average estimate of samples per second"}
     )
+    target_group_size: int = field(
+        default=256,
+        metadata={"help": "Maximum group size for all-reduce"}
+    )
+    metadata_expiration: float = field(
+        default=30,
+        metadata={"help": "Peer's metadata will be removed if not updated in this many seconds"}
+    )
 
 
 @dataclass
-class CollaborationArguments(BaseTrainingArguments):
+class CollaborativeOptimizerArguments:
+    target_batch_size: int = field(
+        default=4096,
+        metadata={"help": "Perform optimizer step after all peers collectively accumulate this many samples"}
+    )
+    client_mode: bool = field(
+        default=False,
+        metadata={"help": "Of True, runs training without incoming connections, in a firewall-compatible mode"}
+    )
+    batch_size_lead: int = field(
+        default=0,
+        metadata={"help": "Optional: begin looking for group in advance, this many samples before target_batch_size"}
+    )
+    bandwidth: float = field(
+        default=100.0,
+        metadata={"help": "Available network bandwidth, in mbps (used for load balancing in all-reduce)"}
+    )
+    compression: str = field(
+        default="FLOAT16",
+        metadata={"help": "Use this compression when averaging parameters/gradients"}
+    )
+
+
+@dataclass
+class CollaborationArguments(AveragerArguments, CollaborativeOptimizerArguments, BaseTrainingArguments):
     trainer_uuid: str = field(
         default=uuid.uuid4().hex,
         metadata={"help": "This peer's name - used when publishing metadata to DHT, default = random"}

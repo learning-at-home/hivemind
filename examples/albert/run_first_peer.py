@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field, asdict
 import subprocess
 import time
-from typing import Optional, Any, Dict
+from typing import Optional
 
 import torch
 from torch_optimizer import Lamb
@@ -14,7 +14,7 @@ from whatsmyip.ip import get_ip
 
 import hivemind
 from hivemind.utils.logging import get_logger
-from arguments import BaseTrainingArguments
+from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
 
 
 logger = get_logger(__name__)
@@ -59,13 +59,14 @@ class CoordinatorArguments(BaseTrainingArguments):
 
 
 class CheckpointHandler:
-    def __init__(self, experiment_prefix: str, coordinator_args_dict: Dict[str, Any], dht: hivemind.DHT):
-        self.save_checkpoint_step_interval = coordinator_args_dict.pop('save_checkpoint_step_interval')
-        self.repo_path = coordinator_args_dict.pop('repo_path')
-        self.upload_interval = coordinator_args_dict.pop('upload_interval')
+    def __init__(self, coordinator_args: CoordinatorArguments, collab_optimizer_args: CollaborativeOptimizerArguments,
+                 averager_args: AveragerArguments, dht: hivemind.DHT):
+        self.save_checkpoint_step_interval = coordinator_args.save_checkpoint_step_interval
+        self.repo_path = coordinator_args.repo_path
+        self.upload_interval = coordinator_args.upload_interval
         self.previous_step = -1
 
-        config = AlbertConfig.from_pretrained(coordinator_args_dict.pop('model_config_path'))
+        config = AlbertConfig.from_pretrained(coordinator_args.model_config_path)
         self.model = AlbertForPreTraining(config)
 
         no_decay = ["bias", "LayerNorm.weight"]
@@ -85,15 +86,14 @@ class CheckpointHandler:
             lr=0.00176, weight_decay=0.01, clamp_value=10000.0, debias=True,
         )
 
-        adjusted_target_batch_size = coordinator_args_dict.pop('target_batch_size') - \
-            coordinator_args_dict.pop('batch_size_lead')
+        adjusted_target_batch_size = collab_optimizer_args.target_batch_size - collab_optimizer_args.batch_size_lead
 
         self.collaborative_optimizer = hivemind.CollaborativeOptimizer(
             opt=opt, dht=dht, prefix=experiment_prefix,
-            compression_type=hivemind.utils.CompressionType.Value(coordinator_args_dict.pop('compression')),
-            throughput=coordinator_args_dict.pop('bandwidth'),
-            target_batch_size=adjusted_target_batch_size, client_mode=coordinator_args_dict.pop('client_mode'),
-            verbose=True, start=True, **coordinator_args_dict
+            compression_type=hivemind.utils.CompressionType.Value(collab_optimizer_args.compression),
+            throughput=collab_optimizer_args.bandwidth,
+            target_batch_size=adjusted_target_batch_size, client_mode=collab_optimizer_args.client_mode,
+            verbose=True, start=True, **asdict(averager_args)
         )
         self.previous_timestamp = time.time()
 
@@ -132,28 +132,24 @@ class CheckpointHandler:
 
 
 if __name__ == '__main__':
-    parser = HfArgumentParser(CoordinatorArguments)
-    coordinator_args = parser.parse_args_into_dataclasses()[0]
-    coordinator_args_dict = asdict(coordinator_args)
+    parser = HfArgumentParser((CoordinatorArguments, CollaborativeOptimizerArguments, AveragerArguments))
+    coordinator_args, collab_optimizer_args, averager_args = parser.parse_args_into_dataclasses()
 
-    coordinator_address = coordinator_args_dict.pop('address')
-    if coordinator_address is None:
+    if coordinator_args.address is None:
         logger.warning("No address specified. Attempting to infer address from DNS.")
-        coordinator_address = get_ip(GoogleDnsProvider)
+        coordinator_args.address = get_ip(GoogleDnsProvider)
 
-    dht = hivemind.DHT(start=True, listen_on=coordinator_args_dict.pop('dht_listen_on'),
-                       endpoint=f"{coordinator_address}:*", initial_peers=coordinator_args_dict.pop('initial_peers'))
+    dht = hivemind.DHT(start=True, listen_on=coordinator_args.dht_listen_on,
+                       endpoint=f"{coordinator_args.address}:*", initial_peers=coordinator_args.initial_peers)
 
-    logger.info(f"Running DHT root at {coordinator_address}:{dht.port}")
+    logger.info(f"Running DHT root at {coordinator_args.address}:{dht.port}")
 
-    wandb_project = coordinator_args_dict.pop('wandb_project')
-    if wandb_project is not None:
-        wandb.init(project=wandb_project)
+    if coordinator_args.wandb_project is not None:
+        wandb.init(project=coordinator_args.wandb_project)
 
     current_step = 0
-    experiment_prefix = coordinator_args_dict.pop('experiment_prefix')
-    refresh_period = coordinator_args_dict.pop('refresh_period')
-    checkpoint_handler = CheckpointHandler(experiment_prefix, coordinator_args_dict, dht)
+    experiment_prefix = coordinator_args.experiment_prefix
+    checkpoint_handler = CheckpointHandler(coordinator_args, collab_optimizer_args, averager_args, dht)
 
     while True:
         metrics_dict = dht.get(experiment_prefix + '_metrics', latest=True)
@@ -175,7 +171,7 @@ if __name__ == '__main__':
                     sum_perf += perf
                     num_samples += samples
                     sum_mini_steps += mini_steps
-                if wandb_project is not None:
+                if coordinator_args.wandb_project is not None:
                     wandb.log({
                         "loss": sum_loss / sum_mini_steps,
                         "alive peers": alive_peers,
@@ -188,4 +184,4 @@ if __name__ == '__main__':
                     if checkpoint_handler.is_time_to_upload():
                         checkpoint_handler.upload_checkpoint(sum_loss / sum_mini_steps)
         logger.debug("Peer is still alive...")
-        time.sleep(refresh_period)
+        time.sleep(coordinator_args.refresh_period)
