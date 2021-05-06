@@ -1,9 +1,11 @@
 import binascii
 import re
-from typing import Any, Dict, Type
+from contextlib import contextmanager
+from typing import Any, Dict, Optional, Type
 
 import pydantic
 
+from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID, DHTKey
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
@@ -19,7 +21,8 @@ class SchemaValidator(RecordValidatorBase):
     This allows to enforce types, min/max values, require a subkey to contain a public key, etc.
     """
 
-    def __init__(self, schema: pydantic.BaseModel, *, allow_extra_keys: bool=True):
+    def __init__(self, schema: pydantic.BaseModel, *,
+                 allow_extra_keys: bool=True, prefix: Optional[str]=None):
         """
         :param schema: The Pydantic model (a subclass of pydantic.BaseModel).
 
@@ -28,24 +31,32 @@ class SchemaValidator(RecordValidatorBase):
             ``confloat(strict=True, ge=0.0)`` instead of ``confloat(ge=0.0)``, etc.).
             See the validate() docstring for details.
 
+            The model will be patched to adjust it for the schema validation.
+
         :param allow_extra_keys: Whether to allow keys that are not defined in the schema.
 
             If a SchemaValidator is merged with another SchemaValidator, this option applies to
             keys that are not defined in each of the schemas.
+
+        :param prefix: (optional) Add ``prefix + '_'`` to the names of all schema fields.
         """
 
-        self._alias_to_name = {}
-
-        for field in schema.__fields__.values():
-            field.alias = self._key_id_to_str(DHTID.generate(source=field.name.encode()).to_bytes())
-            self._alias_to_name[field.alias] = field.name
-
-            # Because validate() interface provides one key at a time
-            field.required = False
-        schema.Config.extra = pydantic.Extra.forbid
-
+        self._patch_schema(schema)
         self._schemas = [schema]
+
+        self._key_id_to_field_name = {}
+        for field in schema.__fields__.values():
+            raw_key = f'{prefix}_{field.name}' if prefix is not None else field.name
+            self._key_id_to_field_name[DHTID.generate(source=raw_key).to_bytes()] = field.name
         self._allow_extra_keys = allow_extra_keys
+
+    @staticmethod
+    def _patch_schema(schema: pydantic.BaseModel):
+        # We set required=False because the validate() interface provides only one key at a time
+        for field in schema.__fields__.values():
+            field.required = False
+
+        schema.Config.extra = pydantic.Extra.forbid
 
     def validate(self, record: DHTRecord) -> bool:
         """
@@ -69,12 +80,18 @@ class SchemaValidator(RecordValidatorBase):
            .. [3] https://pydantic-docs.helpmanual.io/usage/types/#strict-types
         """
 
+        if record.key not in self._key_id_to_field_name:
+            if not self._allow_extra_keys:
+                logger.debug(f"Record {record} has a key ID that is not defined in any of the "
+                             f"schemas (therefore, the raw key is unknown)")
+            return self._allow_extra_keys
+
         try:
             record = self._deserialize_record(record)
         except ValueError as e:
-            logger.warning(e)
+            logger.debug(e)
             return False
-        [key_alias] = list(record.keys())
+        [field_name] = list(record.keys())
 
         n_outside_schema = 0
         validation_errors = []
@@ -82,54 +99,33 @@ class SchemaValidator(RecordValidatorBase):
             try:
                 parsed_record = schema.parse_obj(record)
             except pydantic.ValidationError as e:
-                if self._is_failed_due_to_extra_field(e):
-                    n_outside_schema += 1
-                else:
+                if not self._is_failed_due_to_extra_field(e):
                     validation_errors.append(e)
                 continue
 
-            parsed_value = parsed_record.dict(by_alias=True)[key_alias]
-            if parsed_value != record[key_alias]:
+            parsed_value = parsed_record.dict(by_alias=True)[field_name]
+            if parsed_value != record[field_name]:
                 validation_errors.append(ValueError(
-                    f"Value {record[key_alias]} needed type conversions to match "
+                    f"The record {record} needed type conversions to match "
                     f"the schema: {parsed_value}. Type conversions are not allowed"))
             else:
                 return True
 
-        readable_record = {self._alias_to_name.get(key_alias, key_alias): record[key_alias]}
-
-        if n_outside_schema == len(self._schemas):
-            if not self._allow_extra_keys:
-                logger.warning(f"Record {readable_record} contains a field that "
-                               f"is not defined in each of the schemas")
-            return self._allow_extra_keys
-
-        logger.warning(
-            f"Record {readable_record} doesn't match any of the schemas: {validation_errors}")
+        logger.debug(f"Record {record} doesn't match any of the schemas: {validation_errors}")
         return False
 
-    @staticmethod
-    def _deserialize_record(record: DHTRecord) -> Dict[str, Any]:
-        key_alias = SchemaValidator._key_id_to_str(record.key)
+    def _deserialize_record(self, record: DHTRecord) -> Dict[str, Any]:
+        field_name = self._key_id_to_field_name[record.key]
         deserialized_value = DHTProtocol.serializer.loads(record.value)
         if record.subkey not in DHTProtocol.RESERVED_SUBKEYS:
             deserialized_subkey = DHTProtocol.serializer.loads(record.subkey)
-            return {key_alias: {deserialized_subkey: deserialized_value}}
+            return {field_name: {deserialized_subkey: deserialized_value}}
         else:
             if isinstance(deserialized_value, dict):
                 raise ValueError(
                     f'Record {record} contains an improperly serialized dictionary (you must use '
                     f'a DictionaryDHTValue of serialized values instead of a `dict` subclass)')
-            return {key_alias: deserialized_value}
-
-    @staticmethod
-    def _key_id_to_str(key_id: bytes) -> str:
-        """
-        Represent ``key_id`` as a ``str`` since Pydantic does not support field aliases
-        of type ``bytes``.
-        """
-
-        return binascii.hexlify(key_id).decode()
+            return {field_name: deserialized_value}
 
     @staticmethod
     def _is_failed_due_to_extra_field(exc: pydantic.ValidationError):
@@ -144,10 +140,17 @@ class SchemaValidator(RecordValidatorBase):
         if not isinstance(other, SchemaValidator):
             return False
 
-        self._alias_to_name.update(other._alias_to_name)
         self._schemas.extend(other._schemas)
+        self._key_id_to_field_name.update(other._key_id_to_field_name)
         self._allow_extra_keys = self._allow_extra_keys or other._allow_extra_keys
         return True
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+        # If unpickling happens in another process, the previous model modifications may be lost
+        for schema in self._schemas:
+            self._patch_schema(schema)
 
 
 def conbytes(*, regex: bytes=None, **kwargs) -> Type[pydantic.BaseModel]:
@@ -170,3 +173,6 @@ def conbytes(*, regex: bytes=None, **kwargs) -> Type[pydantic.BaseModel]:
             return value
 
     return ConstrainedBytesWithRegex
+
+
+BytesWithPublicKey = conbytes(regex=b'.*' + RSASignatureValidator.PUBLIC_KEY_REGEX + b'.*')
