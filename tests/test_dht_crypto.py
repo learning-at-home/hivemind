@@ -9,12 +9,13 @@ from hivemind.dht import get_dht_time
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.node import LOCALHOST
 from hivemind.dht.validation import DHTRecord
+from hivemind.utils.crypto import RSAPrivateKey
 
 
 def test_rsa_signature_validator():
     receiver_validator = RSASignatureValidator()
-    sender_validator = RSASignatureValidator(ignore_cached_key=True)
-    mallory_validator = RSASignatureValidator(ignore_cached_key=True)
+    sender_validator = RSASignatureValidator(RSAPrivateKey())
+    mallory_validator = RSASignatureValidator(RSAPrivateKey())
 
     plain_record = DHTRecord(key=b'key', subkey=b'subkey', value=b'value',
                              expiration_time=get_dht_time() + 10)
@@ -52,7 +53,7 @@ def test_cached_key():
     second_validator = RSASignatureValidator()
     assert first_validator.local_public_key == second_validator.local_public_key
 
-    third_validator = RSASignatureValidator(ignore_cached_key=True)
+    third_validator = RSASignatureValidator(RSAPrivateKey())
     assert first_validator.local_public_key != third_validator.local_public_key
 
 
@@ -105,10 +106,10 @@ def test_signing_in_different_process():
 async def test_dhtnode_signatures():
     alice = await hivemind.DHTNode.create(record_validator=RSASignatureValidator())
     bob = await hivemind.DHTNode.create(
-        record_validator=RSASignatureValidator(ignore_cached_key=True),
+        record_validator=RSASignatureValidator(RSAPrivateKey()),
         initial_peers=[f"{LOCALHOST}:{alice.port}"])
     mallory = await hivemind.DHTNode.create(
-        record_validator=RSASignatureValidator(ignore_cached_key=True),
+        record_validator=RSASignatureValidator(RSAPrivateKey()),
         initial_peers=[f"{LOCALHOST}:{alice.port}"])
 
     key = b'key'
