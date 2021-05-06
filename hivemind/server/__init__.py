@@ -71,10 +71,10 @@ class Server(threading.Thread):
     @classmethod
     def create(cls, listen_on='0.0.0.0:*', num_experts: int = None, expert_uids: str = None, expert_pattern: str = None,
                expert_cls='ffn', hidden_dim=1024, optim_cls=torch.optim.Adam, scheduler: str = 'none',
-               num_warmup_steps=None, num_total_steps=None, clip_grad_norm=None, num_handlers=None, max_batch_size=4096,
-               device=None, no_dht=False, initial_peers=(), dht_port=None, checkpoint_dir: Optional[Path] = None,
-               compression=CompressionType.NONE, stats_report_interval: Optional[int] = None, custom_module_path=None,
-               *, start: bool, **kwargs) -> Server:
+               num_warmup_steps=None, num_total_steps=None, clip_grad_norm=None, num_handlers=None, min_batch_size=1,
+               max_batch_size=4096, device=None, no_dht=False, initial_peers=(), dht_port=None,
+               checkpoint_dir: Optional[Path] = None, compression=CompressionType.NONE,
+               stats_report_interval: Optional[int] = None, custom_module_path=None, *, start: bool) -> Server:
         """
         Instantiate a server with several identical experts. See argparse comments below for details
         :param listen_on: network interface with address and (optional) port, e.g. "127.0.0.1:1337" or "[::]:80"
@@ -85,6 +85,7 @@ class Server(threading.Thread):
         :param expert_cls: expert type from hivemind.server.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
         :param hidden_dim: main dimension for expert_cls
         :param num_handlers: server will use this many parallel processes to handle incoming requests
+        :param min_batch_size: total num examples in the same batch will be greater than this value
         :param max_batch_size: total num examples in the same batch will not exceed this value
         :param device: all experts will use this device in torch notation; default: cuda if available else cpu
 
@@ -112,9 +113,6 @@ class Server(threading.Thread):
         """
         if custom_module_path is not None:
             add_custom_models_from_file(custom_module_path)
-
-        if len(kwargs) != 0:
-            logger.info("Ignored kwargs:", kwargs)
         assert expert_cls in name_to_block
 
         if no_dht:
@@ -172,6 +170,7 @@ class Server(threading.Thread):
                                                          num_warmup_steps=num_warmup_steps,
                                                          num_total_steps=num_total_steps,
                                                          clip_grad_norm=clip_grad_norm,
+                                                         min_batch_size=min_batch_size,
                                                          max_batch_size=max_batch_size)
 
         if checkpoint_dir is not None:
