@@ -80,7 +80,6 @@ class ExpertBackend:
         self.update_count = 0
         self.examples_processed = 0
 
-    @torch.no_grad()
     def forward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
         Apply forward pass to an aggregated batch of requests. Used by Runtime, do not call this manually;
@@ -100,7 +99,8 @@ class ExpertBackend:
         if args[0].shape[0] == 0:
             raise RuntimeError("Batch should contain more than 0 samples")
 
-        outputs = self.expert(*args, **kwargs)
+        with torch.no_grad():
+            outputs = self.expert(*args, **kwargs)
 
         # Note: TaskPool requires function to accept and return a flat tuple of values, we pack/unpack it on client side
         return tuple(nested_flatten(outputs))
