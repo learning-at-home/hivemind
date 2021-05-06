@@ -10,7 +10,7 @@ import concurrent.futures
 import asyncio
 
 import grpc
-from grpc._cython.cygrpc import InternalError
+import grpc._cython.cygrpc
 
 from hivemind.client.averaging.group_info import GroupInfo
 from hivemind.client.averaging.key_manager import GroupKeyManager, GroupKey
@@ -200,7 +200,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             if call is not None:
                 call.cancel()
             return None
-        except (grpc.RpcError, grpc.aio.AioRpcError, InternalError, StopAsyncIteration) as e:
+        except (grpc.RpcError, grpc.aio.AioRpcError, grpc._cython.cygrpc.InternalError, StopAsyncIteration) as e:
             logger.warning(f"{self} - failed to request potential leader {leader}: {e}")
             return None
 
