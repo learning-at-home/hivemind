@@ -23,8 +23,8 @@ Task = namedtuple("Task", ("future", "args"))
 class TaskPoolBase(mp.context.ForkProcess, metaclass=ABCMeta):
     """ A pool that accepts tasks and forms batches for parallel processing, interacts with Runtime """
 
-    def __init__(self, process_func: callable, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, process_func: callable, daemon=True, **kwargs):
+        super().__init__(daemon=daemon, **kwargs)
         self.process_func = process_func
         self._priority = mp.Value(ctypes.c_double, 1.0)  # higher priority = the more urgent to process this pool
 
