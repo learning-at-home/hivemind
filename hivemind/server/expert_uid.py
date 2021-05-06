@@ -62,8 +62,8 @@ def generate_uids_from_pattern(num_experts: int, expert_pattern: Optional[str], 
                     uid.append(str(random.randint(slice_start, slice_end - 1)))
                 else:
                     raise ValueError("Block must be either fixed or a range [from:to]")
-            except KeyboardInterrupt as e:
-                raise e
+            except KeyboardInterrupt:
+                raise
             except Exception as e:
                 raise ValueError(f"Expert pattern {expert_pattern} has invalid block {block}, {e}")
         return UID_DELIMITER.join(uid)
