@@ -142,7 +142,12 @@ class CollaborativeCallback(transformers.TrainerCallback):
                                subkey=self.local_public_key, value=statistics.dict(),
                                expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
                                return_future=True)
+
+                logger.info(f"Step {self.collaborative_optimizer.local_step}")
                 logger.info(f"Your current contribution: {self.total_samples_processed} samples")
+                logger.info(f"Loss of your model: {self.loss/self.steps}")
+
+
         self.samples = self.collaborative_optimizer.local_samples_accumulated
 
         return control
