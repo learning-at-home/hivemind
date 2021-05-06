@@ -52,7 +52,10 @@ class ConnectionHandler(mp.context.ForkProcess):
             await server.wait_for_termination()
             logger.debug(f"ConnectionHandler terminated: (pid={os.getpid()})")
 
-        loop.run_until_complete(_run())
+        try:
+            loop.run_until_complete(_run())
+        except KeyboardInterrupt:
+            logger.debug('Caught KeyboardInterrupt, shutting down')
 
     async def info(self, request: runtime_pb2.ExpertUID, context: grpc.ServicerContext):
         return runtime_pb2.ExpertInfo(serialized_info=pickle.dumps(self.experts[request.uid].get_info()))
