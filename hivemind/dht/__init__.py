@@ -69,25 +69,23 @@ class DHT(mp.Process):
     def run(self) -> None:
         """ Serve DHT forever. This function will not return until DHT node is shut down """
         loop = switch_to_uvloop()
-        pipe_awaiter = ThreadPoolExecutor(max_workers=1)
 
-        async def _run():
-            node = await DHTNode.create(
-                initial_peers=list(self.initial_peers), listen_on=self.listen_on, parallel_rpc=self.parallel_rpc,
-                num_workers=self.max_workers or 1, record_validator=self._record_validator,
-                **self.kwargs)
-            if node.port is not None:
-                self._port.value = node.port
-            self.ready.set()
+        with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
+            async def _run():
+                node = await DHTNode.create(
+                    initial_peers=list(self.initial_peers), listen_on=self.listen_on, parallel_rpc=self.parallel_rpc,
+                    num_workers=self.max_workers or 1, record_validator=self._record_validator,
+                    **self.kwargs)
+                if node.port is not None:
+                    self._port.value = node.port
+                self.ready.set()
 
-            while True:
-                method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
-                asyncio.create_task(getattr(self, method)(node, *args, **kwargs))
+                while True:
+                    method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
+                    asyncio.create_task(getattr(self, method)(node, *args, **kwargs))
 
-        try:
-            loop.run_until_complete(_run())
-        except KeyboardInterrupt:
-            logger.debug("Caught KeyboardInterrupt, shutting down")
+            coro = _run()
+            loop.run_until_complete(coro)
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
@@ -96,7 +94,7 @@ class DHT(mp.Process):
         """
         self.start()
         if await_ready and not self.ready.wait(timeout=timeout):
-            raise TimeoutError(f"Server didn't notify .ready in {timeout} seconds")
+            raise TimeoutError(f"DHT didn't notify .ready in {timeout} seconds")
 
     def shutdown(self) -> None:
         """ Shut down a running dht process """
