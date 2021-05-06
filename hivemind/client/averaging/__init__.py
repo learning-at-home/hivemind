@@ -158,7 +158,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return f"{self.__class__.__name__}({self.endpoint})"
 
     def run(self):
-        """ DAED HELL SALAD """
+        """
+        Run averager function in a background thread; this is needed to avoid a heisenbug with broken OMP on fork
+        Turns out, using a non-main thread creates a separate OMP pool that works even if the original pool is corrupted
+        Read more: https://github.com/pytorch/pytorch/issues/17199
+        """
         thread = threading.Thread(target=self._run_internal, daemon=True)
         thread.start()
         thread.join()
