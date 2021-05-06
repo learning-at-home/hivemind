@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+message AccessToken {
+    string username = 1;
+    bytes public_key = 2;
+    string expiration_time = 3;
+    bytes signature = 4;
+}
+
+message RequestAuthInfo {
+    AccessToken client_access_token = 1;
+    bytes service_public_key = 2;
+    double time = 3;
+    bytes nonce = 4;
+    bytes signature = 5;
+}
+
+message ResponseAuthInfo {
+    AccessToken service_access_token = 1;
+    bytes nonce = 2;
+    bytes signature = 3;
+}
