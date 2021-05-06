@@ -136,6 +136,11 @@ class CollaborativeCallback(transformers.TrainerCallback):
                     samples_accumulated=self.samples,
                     loss=self.loss,
                     mini_steps=self.steps)
+                logger.info(f"Step {self.collaborative_optimizer.local_step}")
+                logger.info(f"Your current contribution: {self.total_samples_processed} samples")
+                if self.steps:
+                    logger.info(f"Loss of your model: {self.loss/self.steps}")
+
                 self.loss = 0
                 self.steps = 0
                 self.dht.store(key=self.collaborative_optimizer.prefix + "_metrics",
@@ -143,9 +148,6 @@ class CollaborativeCallback(transformers.TrainerCallback):
                                expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
                                return_future=True)
 
-                logger.info(f"Step {self.collaborative_optimizer.local_step}")
-                logger.info(f"Your current contribution: {self.total_samples_processed} samples")
-                logger.info(f"Loss of your model: {self.loss/self.steps}")
 
 
         self.samples = self.collaborative_optimizer.local_samples_accumulated
