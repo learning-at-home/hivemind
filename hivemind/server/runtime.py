@@ -118,8 +118,6 @@ class Runtime(threading.Thread):
                 logger.debug("Waiting for inputs from task pools")
                 ready_fds = selector.select()
                 ready_objects = {key.data for (key, events) in ready_fds}
-                if self.SHUTDOWN_TRIGGER in ready_objects:
-                    break  # someone asked us to shutdown, break from the loop
 
                 logger.debug("Choosing the pool with highest priority")
                 pool = max(ready_objects, key=lambda pool: pool.priority)

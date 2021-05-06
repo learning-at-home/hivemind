@@ -67,7 +67,6 @@ class TaskPool(TaskPoolBase):
     :param timeout: wait for a subsequent task for at most this many seconds
     :param pool_size: store at most this many unprocessed tasks in a queue
     :param prefetch_batches: prepare up to this many *batches* in background for faster off-loading to runtime
-    :param uid: pool identifier used for shared array allocation
     :param start: if True, start automatically at the end of __init__
     """
 
