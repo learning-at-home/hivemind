@@ -74,12 +74,13 @@ class ExpertBackend:
 
         self.backward_schema = (self.forward_schema, self.outputs_schema)  # inputs to backward
         self.grad_inputs_schema = self.forward_schema  # outputs from backward
-        self.forward_pool = TaskPool(self.forward, uid=f'{self.name}_forward', **kwargs)
-        self.backward_pool = TaskPool(self.backward, uid=f'{self.name}_backward', **kwargs)
+        self.forward_pool = TaskPool(self.forward, name=f'{self.name}_forward', **kwargs)
+        self.backward_pool = TaskPool(self.backward, name=f'{self.name}_backward', **kwargs)
 
         self.update_count = 0
         self.examples_processed = 0
 
+    @torch.no_grad()
     def forward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
         Apply forward pass to an aggregated batch of requests. Used by Runtime, do not call this manually;
@@ -99,8 +100,7 @@ class ExpertBackend:
         if args[0].shape[0] == 0:
             raise RuntimeError("Batch should contain more than 0 samples")
 
-        with torch.no_grad():
-            outputs = self.expert(*args, **kwargs)
+        outputs = self.expert(*args, **kwargs)
 
         # Note: TaskPool requires function to accept and return a flat tuple of values, we pack/unpack it on client side
         return tuple(nested_flatten(outputs))

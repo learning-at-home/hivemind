@@ -65,6 +65,10 @@ class Server(threading.Thread):
             self.checkpoint_saver = None
         self.runtime = Runtime(self.experts, **kwargs)
 
+        if self.dht and self.experts:
+            self.dht_handler_thread = DHTHandlerThread(experts=self.experts, dht=self.dht, endpoint=self.listen_on,
+                                                       update_period=self.update_period)
+
         if start:
             self.run_in_background(await_ready=True)
 
@@ -195,9 +199,7 @@ class Server(threading.Thread):
                 self.dht.run_in_background(await_ready=True)
 
             if self.experts:
-                dht_handler_thread = DHTHandlerThread(
-                    experts=self.experts, dht=self.dht, endpoint=self.listen_on, update_period=self.update_period)
-                dht_handler_thread.start()
+                self.dht_handler_thread.start()
         if self.checkpoint_saver is not None:
             self.checkpoint_saver.start()
 
@@ -206,16 +208,10 @@ class Server(threading.Thread):
                 process.start()
             process.ready.wait()
 
-        self.runtime.run()
-
-        for process in self.conn_handlers:
-            process.join()
-        if self.dht and self.experts:
-            dht_handler_thread.stop.set()
-            dht_handler_thread.join()
-        if self.checkpoint_saver is not None:
-            self.checkpoint_saver.stop.set()
-            self.checkpoint_saver.join()
+        try:
+            self.runtime.run()
+        finally:
+            self.shutdown()
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
@@ -241,19 +237,32 @@ class Server(threading.Thread):
 
     def shutdown(self):
         """
-        Gracefully terminate a hivemind server, process-safe.
+        Gracefully terminate the server, process-safe.
         Please note that terminating server otherwise (e.g. by killing processes) may result in zombie processes.
         If you did already cause a zombie outbreak, your only option is to kill them with -9 (SIGKILL).
         """
         self.ready.clear()
+
         for process in self.conn_handlers:
             process.terminate()
+            process.join()
+        logger.debug("Connection handlers terminated")
+
+        if self.dht and self.experts:
+            self.dht_handler_thread.stop.set()
+            self.dht_handler_thread.join()
+
+        if self.checkpoint_saver is not None:
+            self.checkpoint_saver.stop.set()
+            self.checkpoint_saver.join()
 
         if self.dht is not None:
             self.dht.shutdown()
             self.dht.join()
 
-        self.runtime.shutdown()
+        logger.debug(f"Shutting down runtime")
+        self.runtime.stop.set()
+        logger.info("Server shutdown succesfully")
 
 
 @contextmanager
