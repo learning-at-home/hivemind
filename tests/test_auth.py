@@ -17,13 +17,13 @@ class MockAuthorizer(AuthorizerBase):
         super().__init__(local_private_key)
         self._username = username
 
-    async def get_access_token(self, local_public_key: RSAPublicKey) -> Tuple[AccessToken, RSAPublicKey]:
+    async def get_access_token(self) -> Tuple[AccessToken, RSAPublicKey]:
         if MockAuthorizer._auth_server_private_key is None:
             MockAuthorizer._auth_server_private_key = RSAPrivateKey()
             MockAuthorizer._auth_server_public_key = MockAuthorizer._auth_server_private_key.get_public_key()
 
         token = AccessToken(username=self._username,
-                            public_key=local_public_key.to_bytes(),
+                            public_key=self.local_public_key.to_bytes(),
                             expiration_time=str(datetime.utcnow() + timedelta(minutes=1)))
         token.signature = MockAuthorizer._auth_server_private_key.sign(self._access_token_to_bytes(token))
         return token, MockAuthorizer._auth_server_public_key

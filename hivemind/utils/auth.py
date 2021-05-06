@@ -4,7 +4,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 import grpc
@@ -23,8 +23,6 @@ class AuthorizedResponse:
 
 
 class AuthorizerBase(ABC):
-    _NONCE_STORAGE_DURATION = 60
-
     def __init__(self, local_private_key: Optional[RSAPrivateKey]=None):
         if local_private_key is None:
             local_private_key = RSAPrivateKey.process_wide()
@@ -37,24 +35,25 @@ class AuthorizerBase(ABC):
         self._recent_nonces = TimedStorage()
         self._recent_nonces_lock = threading.RLock()
 
-    async def authorize(self, *args, **kwargs) -> None:
-        if (self._local_access_token is not None and
-                not self._is_access_token_expired(self._local_access_token)):
-            return
-
-        self._local_access_token, self._auth_server_public_key = await self.get_access_token(
-            self._local_public_key, *args, **kwargs)
-
     @abstractmethod
-    async def get_access_token(
-            self, local_public_key: RSAPublicKey, *args, **kwargs) -> Tuple[AccessToken, RSAPublicKey]:
+    async def get_access_token(self) -> Tuple[AccessToken, RSAPublicKey]:
         ...
 
-    def _validate_access_token(self, access_token: AccessToken) -> bool:
+    _WORST_TIMEDELTA = timedelta(minutes=1)
+
+    async def _update_access_token(self) -> None:
+        worst_recv_time = datetime.utcnow() + self._WORST_TIMEDELTA
+        if (self._local_access_token is not None and
+                worst_recv_time < datetime.fromisoformat(self._local_access_token.expiration_time)):
+            return
+
+        self._local_access_token, self._auth_server_public_key = await self.get_access_token()
+
+    def _verify_access_token(self, access_token: AccessToken) -> bool:
         data = self._access_token_to_bytes(access_token)
         return (
             self._auth_server_public_key.verify(data, access_token.signature) and
-            not self._is_access_token_expired(access_token)
+            datetime.fromisoformat(access_token.expiration_time) >= datetime.utcnow()
         )
 
     @staticmethod
@@ -63,15 +62,12 @@ class AuthorizerBase(ABC):
                           access_token.public_key,
                           access_token.expiration_time.encode()])
 
-    def _is_access_token_expired(self, access_token: AccessToken) -> bool:
-        return datetime.fromisoformat(access_token.expiration_time) < datetime.utcnow()
-
     @property
     def local_public_key(self) -> RSAPublicKey:
         return self._local_public_key
 
     async def sign_request(self, request: AuthorizedRequest, service_public_key: Optional[RSAPublicKey]) -> None:
-        await self.authorize()
+        await self._update_access_token()
         auth = request.auth
 
         auth.client_access_token.CopyFrom(self._local_access_token)
@@ -85,10 +81,10 @@ class AuthorizerBase(ABC):
         auth.signature = self._local_private_key.sign(request.SerializeToString())
 
     async def validate_request(self, request: AuthorizedRequest) -> None:
-        await self.authorize()
+        await self._update_access_token()
         auth = request.auth
 
-        if not self._validate_access_token(auth.client_access_token):
+        if not self._verify_access_token(auth.client_access_token):
             raise AuthorizationError('Client failed to prove that it (still) has access to the network')
 
         client_public_key = RSAPublicKey.from_bytes(auth.client_access_token.public_key)
@@ -100,19 +96,18 @@ class AuthorizerBase(ABC):
         if auth.service_public_key and auth.service_public_key != self._local_public_key.to_bytes():
             raise AuthorizationError('Request is generated for a peer with another public key')
 
-        nonce_expiration = auth.time + self._NONCE_STORAGE_DURATION  # TODO: Check it
         with self._recent_nonces_lock:
             with self._recent_nonces.freeze():
                 current_time = get_dht_time()
-                if nonce_expiration < current_time:
-                    raise AuthorizationError('Request is too old to trust it')
+                if abs(auth.time - current_time) > self._WORST_TIMEDELTA.total_seconds():
+                    raise AuthorizationError('Clocks are not synchronized or a previous request is replayed again')
                 if auth.nonce in self._recent_nonces:
-                    raise AuthorizationError('An attacker replays a previous request again')
+                    raise AuthorizationError('Previous request is replayed again')
 
-            self._recent_nonces.store(auth.nonce, None, nonce_expiration)
+            self._recent_nonces.store(auth.nonce, None, current_time + self._WORST_TIMEDELTA.total_seconds() * 3)
 
     async def sign_response(self, response: AuthorizedResponse, request: AuthorizedRequest) -> None:
-        await self.authorize()
+        await self._update_access_token()
         auth = response.auth
 
         auth.service_access_token.CopyFrom(self._local_access_token)
@@ -122,10 +117,10 @@ class AuthorizerBase(ABC):
         auth.signature = self._local_private_key.sign(response.SerializeToString())
 
     async def validate_response(self, response: AuthorizedResponse, request: AuthorizedRequest) -> bool:
-        await self.authorize()
+        await self._update_access_token()
         auth = response.auth
 
-        if not self._validate_access_token(auth.service_access_token):
+        if not self._verify_access_token(auth.service_access_token):
             raise AuthorizationError('Service failed to prove that it (still) has access to the network')
 
         service_public_key = RSAPublicKey.from_bytes(auth.service_access_token.public_key)
