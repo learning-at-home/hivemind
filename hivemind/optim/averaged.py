@@ -119,7 +119,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     def _sync_if_needed(self):
         if not self.is_synchronized():
             logger.warning("Peer is out of sync.")
-            self.load_states_from_peers(**kwargs)
+            self.load_states_from_peers()
             return
 
     def zero_grad(self, *args, **kwargs):
