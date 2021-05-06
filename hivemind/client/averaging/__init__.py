@@ -276,7 +276,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                         future.set_exception(e)
                     else:
                         logger.warning(f"Averager caught {repr(e)}, retrying")
-                        raise e
+
                 finally:
                     _ = self._running_groups.pop(group_id, None)
                     self._pending_group_assembled.set()
