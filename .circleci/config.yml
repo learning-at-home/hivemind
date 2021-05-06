@@ -20,7 +20,6 @@ jobs:
           name: setup
       - run:
           command: pytest ./tests
-          no_output_timeout: 30m
           name: tests
   build-and-test-py38:
     docker:
@@ -41,7 +40,6 @@ jobs:
           name: setup
       - run:
           command: pytest ./tests
-          no_output_timeout: 30m
           name: tests
   build-and-test-py39:
     docker:
@@ -62,7 +60,6 @@ jobs:
           name: setup
       - run:
           command: pytest ./tests
-          no_output_timeout: 30m
           name: tests
 
 workflows:
