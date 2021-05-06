@@ -148,8 +148,6 @@ class CollaborativeCallback(transformers.TrainerCallback):
                                expiration_time=hivemind.get_dht_time() + self.statistics_expiration,
                                return_future=True)
 
-
-
         self.samples = self.collaborative_optimizer.local_samples_accumulated
 
         return control
