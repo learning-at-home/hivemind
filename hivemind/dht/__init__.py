@@ -85,10 +85,7 @@ class DHT(mp.Process):
                     asyncio.create_task(getattr(self, method)(node, *args, **kwargs))
 
             coro = _run()
-            try:
-                loop.run_until_complete(coro)
-            except KeyboardInterrupt:
-                logger.debug("Caught KeyboardInterrupt, shutting down")
+            loop.run_until_complete(coro)
 
     def run_in_background(self, await_ready=True, timeout=None):
         """

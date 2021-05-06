@@ -171,35 +171,34 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """ Serve DecentralizedAverager forever. This function will not return until the averager is shut down """
         loop = switch_to_uvloop()
         # initialize asyncio synchronization primitives in this event loop
-        pipe_awaiter = ThreadPoolExecutor(max_workers=1)
+        with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
+            async def _run():
+                grpc.aio.init_grpc_aio()
 
-        async def _run():
-            grpc.aio.init_grpc_aio()
+                if self.listen:
+                    server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
+                    averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
+                    found_port = server.add_insecure_port(self.listen_on)
+                    assert found_port != 0, f"Failed to listen to {self.listen_on}"
+                    self._port.value = found_port
+                    await server.start()
+                else:
+                    logger.info(f"The averager running in an experimental client mode, please report any bugs.")
 
-            if self.listen:
-                server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
-                averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
-                found_port = server.add_insecure_port(self.listen_on)
-                assert found_port != 0, f"Failed to listen to {self.listen_on}"
-                self._port.value = found_port
-                await server.start()
-            else:
-                logger.info(f"The averager running in an experimental client mode, please report any bugs.")
+                self._matchmaking = Matchmaking(self.endpoint, self.schema_hash, self.dht, **self.matchmaking_kwargs,
+                                                client_mode=not self.listen)
+                if self.listen:
+                    asyncio.create_task(self._declare_for_download_periodically())
 
-            self._matchmaking = Matchmaking(self.endpoint, self.schema_hash, self.dht, **self.matchmaking_kwargs,
-                                            client_mode=not self.listen)
-            if self.listen:
-                asyncio.create_task(self._declare_for_download_periodically())
+                self._pending_group_assembled = asyncio.Event()
+                self._pending_group_assembled.set()
+                self.ready.set()
 
-            self._pending_group_assembled = asyncio.Event()
-            self._pending_group_assembled.set()
-            self.ready.set()
+                while True:
+                    method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
+                    asyncio.create_task(getattr(self, method)(*args, **kwargs))
 
-            while True:
-                method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
-                asyncio.create_task(getattr(self, method)(*args, **kwargs))
-
-        loop.run_until_complete(_run())
+            loop.run_until_complete(_run())
 
     def run_in_background(self, await_ready=True, timeout=None):
         """
@@ -255,7 +254,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 try:
                     self._pending_group_assembled.clear()
                     data_for_gather = self.serializer.dumps([weight, self._throughput, self.listen, gather_binary])
-                    group_info = await self._matchmaking.look_for_group(timeout=timeout, data_for_gather=data_for_gather)
+                    group_info = await self._matchmaking.look_for_group(timeout=timeout,
+                                                                        data_for_gather=data_for_gather)
                     if group_info is None:
                         raise AllreduceException("Averaging step failed: could not find a group.")
                     group_id = group_info.group_id
@@ -294,7 +294,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """ Use a group description found by Matchmaking to form AllreduceRunner """
         try:
             weights, throughputs, modes, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
-            user_gathered = dict(zip(group_info.endpoints,  map(self.serializer.loads, user_gathered)))
+            user_gathered = dict(zip(group_info.endpoints, map(self.serializer.loads, user_gathered)))
 
             # compute optimal part sizes from peer throughputs
             incoming_throughputs = [thr if listen else 0.0 for thr, listen in zip(throughputs, modes)]
