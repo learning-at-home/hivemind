@@ -25,7 +25,7 @@ class AuthorizedResponse:
 class AuthorizerBase(ABC):
     _NONCE_STORAGE_DURATION = 60
 
-    def __init__(self, local_private_key: RSAPrivateKey):
+    def __init__(self, local_private_key: Optional[RSAPrivateKey]=None):
         if local_private_key is None:
             local_private_key = RSAPrivateKey.process_wide()
         self._local_private_key = local_private_key
