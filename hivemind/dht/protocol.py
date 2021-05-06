@@ -13,7 +13,7 @@ from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
 from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer, ChannelCache, ValueWithExpiration
 from hivemind.utils import get_dht_time, GRPC_KEEPALIVE_OPTIONS, MAX_DHT_TIME_DISCREPANCY_SECONDS
-from hivemind.utils.auth import AuthorizerBase, rpc_requires_auth
+from hivemind.utils.auth import AuthRole, AuthRPCWrapper, AuthorizerBase
 
 logger = get_logger(__name__)
 
@@ -61,7 +61,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
         if listen:  # set up server to process incoming rpc requests
             grpc.aio.init_grpc_aio()
             self.server = grpc.aio.server(**kwargs, options=GRPC_KEEPALIVE_OPTIONS)
-            dht_grpc.add_DHTServicer_to_server(self, self.server)
+            servicer = AuthRPCWrapper(self, AuthRole.SERVICER, self.authorizer)
+            dht_grpc.add_DHTServicer_to_server(servicer, self.server)
 
             self.port = self.server.add_insecure_port(listen_on)
             assert self.port != 0, f"Failed to listen to {listen_on}"
@@ -92,7 +93,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
     def _get_dht_stub(self, peer: Endpoint) -> dht_grpc.DHTStub:
         """ get a DHTStub that sends requests to a given peer """
-        return ChannelCache.get_stub(peer, dht_grpc.DHTStub, aio=True, options=self.channel_options)
+        stub = ChannelCache.get_stub(peer, dht_grpc.DHTStub, aio=True, options=self.channel_options)
+        return AuthRPCWrapper(stub, AuthRole.CLIENT, self.authorizer, service_public_key=None)
 
     async def call_ping(self, peer: Endpoint, validate: bool = False, strict: bool = True) -> Optional[DHTID]:
         """
@@ -147,7 +149,6 @@ class DHTProtocol(dht_grpc.DHTServicer):
         except grpc.aio.AioRpcError as error:
             logger.debug(f"DHTProtocol failed to ping {peer}: {error.code()}")
 
-    @rpc_requires_auth
     async def rpc_ping(self, request: dht_pb2.PingRequest, context: grpc.ServicerContext):
         """ Some node wants us to add it to our routing table. """
         response = dht_pb2.PingResponse(peer=self.node_info, sender_endpoint=context.peer(),
@@ -224,7 +225,6 @@ class DHTProtocol(dht_grpc.DHTServicer):
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
             return None
 
-    @rpc_requires_auth
     async def rpc_store(self, request: dht_pb2.StoreRequest, context: grpc.ServicerContext) -> dht_pb2.StoreResponse:
         """ Some node wants us to store this (key, value) pair """
         if request.peer:  # if requested, add peer to the routing table
@@ -309,7 +309,6 @@ class DHTProtocol(dht_grpc.DHTServicer):
             logger.debug(f"DHTProtocol failed to find at {peer}: {error.code()}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
 
-    @rpc_requires_auth
     async def rpc_find(self, request: dht_pb2.FindRequest, context: grpc.ServicerContext) -> dht_pb2.FindResponse:
         """
         Someone wants to find keys in the DHT. For all keys that we have locally, return value and expiration
