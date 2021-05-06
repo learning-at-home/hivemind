@@ -201,7 +201,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 call.cancel()
             return None
         except (grpc.RpcError, grpc.aio.AioRpcError, grpc._cython.cygrpc.InternalError, StopAsyncIteration) as e:
-            logger.warning(f"{self} - failed to request potential leader {leader}: {e}")
+            logger.error(f"{self} - failed to request potential leader {leader}: {e}")
             return None
 
         finally:
