@@ -177,7 +177,7 @@ class AllReduceProtocol:
                                                          ordered_group_endpoints)  # averaged pieces from all peers will be put here
 
         self.accumulators = OrderedDict((idx, torch.zeros_like(piece))
-                                        for idx, piece in zip(self.local_tensor_parts.get_part_with_ids(endpoint)))
+                                        for idx, piece in zip(*self.local_tensor_parts.get_part_with_ids(endpoint)))
         self.denominator = 0.0  # number of peers added to accumulator or sum of their weights
         self.accumulated_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
         self.registered_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
@@ -236,7 +236,7 @@ class AllReduceProtocol:
 
     def register_averaged_part(self, source: Endpoint, averaged_part: Part):
         assert not self.future.done(), f"already finished allreduce: {self.future}"
-        assert source in self.local_tensor_parts, "the provider of averaged part is not from my group"
+        assert source in self.ordered_group_endpoints, "the provider of averaged part is not from my group"
         assert source not in self.registered_from, "already registered the average from this peer"
         averaged_part_shapes = tuple(t.shape for t in averaged_part)
         averaged_part_dtypes = tuple(t.dtype for t in averaged_part)
@@ -295,7 +295,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                  weights: Tuple[float, ...],
                  gathered: Dict[Endpoint, Any],
                  return_deltas: bool = False):
-        if isinstance(compression_type, CompressionType):
+        if not isinstance(compression_type, (list, tuple)):
             compression_type = [compression_type, ] * len(tensors)
 
         super().__init__(group_id=group_id, tensors=tensors, endpoint=endpoint, part_sizes=part_sizes,
@@ -388,7 +388,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                     asyncio.create_task(self._send_error_to_peer(peer_endpoint, code))
             raise
 
-    async def accumulate_part_streaming(self, source: Endpoint, stream_messages: Iterable[runtime_pb2.Tensor]
+    async def accumulate_part_streaming(self, source: Endpoint, stream_messages: Iterable[averaging_pb2.AveragingData]
                                         ) -> Iterable[runtime_pb2.Tensor]:
         """ accumulate_part using streams of serialized tensors. Used to prevent duplicate work in serialization """
         try:
@@ -415,7 +415,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
-                tensor_chunks = (request.tensor_part, *[msg.tensor_part async for msg in stream])
+                tensor_chunks = (request, *[msg async for msg in stream])
                 averaged_chunks = iter(await self.accumulate_part_streaming(request.endpoint, tensor_chunks))
                 yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=next(averaged_chunks))
                 for averaged_chunk in averaged_chunks:
