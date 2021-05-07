@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import secrets
 import threading
@@ -61,9 +62,9 @@ class SignedTokenAuthorizer(AuthorizerBase):
 
         self._local_access_token = None
         self._auth_server_public_key = None
+        self._refresh_lock = asyncio.Lock()
 
         self._recent_nonces = TimedStorage()
-        self._recent_nonces_lock = threading.RLock()
 
     @abstractmethod
     async def get_access_token(self) -> Tuple[AccessToken, RSAPublicKey]:
@@ -72,12 +73,13 @@ class SignedTokenAuthorizer(AuthorizerBase):
     _WORST_TIMEDELTA = timedelta(minutes=1)
 
     async def _update_access_token(self) -> None:
-        worst_recv_time = datetime.now(timezone.utc) + self._WORST_TIMEDELTA
-        if (self._local_access_token is not None and
-                worst_recv_time < datetime.fromisoformat(self._local_access_token.expiration_time)):
-            return
+        async with self._refresh_lock:
+            worst_recv_time = datetime.now(timezone.utc) + self._WORST_TIMEDELTA
+            if (self._local_access_token is not None and
+                    worst_recv_time < datetime.fromisoformat(self._local_access_token.expiration_time)):
+                return
 
-        self._local_access_token, self._auth_server_public_key = await self.get_access_token()
+            self._local_access_token, self._auth_server_public_key = await self.get_access_token()
 
     def _verify_access_token(self, access_token: AccessToken) -> bool:
         data = self._access_token_to_bytes(access_token)
@@ -142,18 +144,17 @@ class SignedTokenAuthorizer(AuthorizerBase):
             logger.debug('Request is generated for a peer with another public key')
             return False
 
-        with self._recent_nonces_lock:
-            with self._recent_nonces.freeze():
-                current_time = get_dht_time()
-                if abs(auth.time - current_time) > self._WORST_TIMEDELTA.total_seconds():
-                    logger.debug('Clocks are not synchronized or a previous request is replayed again')
-                    return False
-                if auth.nonce in self._recent_nonces:
-                    logger.debug('Previous request is replayed again')
-                    return False
+        with self._recent_nonces.freeze():
+            current_time = get_dht_time()
+            if abs(auth.time - current_time) > self._WORST_TIMEDELTA.total_seconds():
+                logger.debug('Clocks are not synchronized or a previous request is replayed again')
+                return False
+            if auth.nonce in self._recent_nonces:
+                logger.debug('Previous request is replayed again')
+                return False
 
-            self._recent_nonces.store(auth.nonce, None, current_time + self._WORST_TIMEDELTA.total_seconds() * 3)
-            return True
+        self._recent_nonces.store(auth.nonce, None, current_time + self._WORST_TIMEDELTA.total_seconds() * 3)
+        return True
 
     async def sign_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> None:
         await self._update_access_token()
