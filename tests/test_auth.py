@@ -5,7 +5,7 @@ import pytest
 
 from hivemind.proto import dht_pb2
 from hivemind.proto.auth_pb2 import AccessToken
-from hivemind.utils.auth import AuthRPCWrapper, AuthRole, AuthorizationError, SignedTokenAuthorizer
+from hivemind.utils.auth import AuthRPCWrapper, AuthRole, SignedTokenAuthorizer
 from hivemind.utils.crypto import RSAPrivateKey, RSAPublicKey
 
 
@@ -37,12 +37,12 @@ async def test_valid_request_and_response():
     request = dht_pb2.PingRequest()
     request.peer.endpoint = '127.0.0.1:7777'
     await client_authorizer.sign_request(request, service_authorizer.local_public_key)
-    await service_authorizer.validate_request(request)
+    assert await service_authorizer.validate_request(request)
 
     response = dht_pb2.PingResponse()
     response.sender_endpoint = '127.0.0.1:31337'
     await service_authorizer.sign_response(response, request)
-    await client_authorizer.validate_response(response, request)
+    assert await client_authorizer.validate_response(response, request)
 
 
 @pytest.mark.asyncio
@@ -57,8 +57,7 @@ async def test_invalid_access_token():
     # Break the access token signature
     request.auth.client_access_token.signature = b'broken'
 
-    with pytest.raises(AuthorizationError):
-        await service_authorizer.validate_request(request)
+    assert not await service_authorizer.validate_request(request)
 
     response = dht_pb2.PingResponse()
     response.sender_endpoint = '127.0.0.1:31337'
@@ -67,8 +66,7 @@ async def test_invalid_access_token():
     # Break the access token signature
     response.auth.service_access_token.signature = b'broken'
 
-    with pytest.raises(AuthorizationError):
-        await client_authorizer.validate_response(response, request)
+    assert not await client_authorizer.validate_response(response, request)
 
 
 @pytest.mark.asyncio
@@ -83,8 +81,7 @@ async def test_invalid_signatures():
     # A man-in-the-middle attacker changes the request content
     request.peer.endpoint = '127.0.0.2:7777'
 
-    with pytest.raises(AuthorizationError):
-        await service_authorizer.validate_request(request)
+    assert not await service_authorizer.validate_request(request)
 
     response = dht_pb2.PingResponse()
     response.sender_endpoint = '127.0.0.1:31337'
@@ -93,8 +90,7 @@ async def test_invalid_signatures():
     # A man-in-the-middle attacker changes the response content
     response.sender_endpoint = '127.0.0.2:31337'
 
-    with pytest.raises(AuthorizationError):
-        await client_authorizer.validate_response(response, request)
+    assert not await client_authorizer.validate_response(response, request)
 
 
 @pytest.mark.asyncio
