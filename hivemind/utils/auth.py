@@ -4,7 +4,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 import grpc
@@ -72,7 +72,7 @@ class SignedTokenAuthorizer(AuthorizerBase):
     _WORST_TIMEDELTA = timedelta(minutes=1)
 
     async def _update_access_token(self) -> None:
-        worst_recv_time = datetime.utcnow() + self._WORST_TIMEDELTA
+        worst_recv_time = datetime.now(timezone.utc) + self._WORST_TIMEDELTA
         if (self._local_access_token is not None and
                 worst_recv_time < datetime.fromisoformat(self._local_access_token.expiration_time)):
             return
@@ -81,10 +81,23 @@ class SignedTokenAuthorizer(AuthorizerBase):
 
     def _verify_access_token(self, access_token: AccessToken) -> bool:
         data = self._access_token_to_bytes(access_token)
-        return (
-            self._auth_server_public_key.verify(data, access_token.signature) and
-            datetime.fromisoformat(access_token.expiration_time) >= datetime.utcnow()
-        )
+        if not self._auth_server_public_key.verify(data, access_token.signature):
+            logger.debug('Access token has invalid signature')
+            return False
+
+        try:
+            expiration_time = datetime.fromisoformat(access_token.expiration_time)
+        except ValueError:
+            logger.debug(f'datetime.fromisoformat() failed to parse expiration time: {access_token.expiration_time}')
+            return False
+        if expiration_time.tzinfo is None:
+            logger.debug(f'Expected to have timezone for expiration time: {access_token.expiration_time}')
+            return False
+        if expiration_time < datetime.now(timezone.utc):
+            logger.debug('Access token has expired')
+            return False
+
+        return True
 
     @staticmethod
     def _access_token_to_bytes(access_token: AccessToken) -> bytes:

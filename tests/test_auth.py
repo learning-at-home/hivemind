@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 import pytest
@@ -24,7 +24,7 @@ class MockAuthorizer(SignedTokenAuthorizer):
 
         token = AccessToken(username=self._username,
                             public_key=self.local_public_key.to_bytes(),
-                            expiration_time=str(datetime.utcnow() + timedelta(minutes=1)))
+                            expiration_time=str(datetime.now(timezone.utc) + timedelta(minutes=1)))
         token.signature = MockAuthorizer._auth_server_private_key.sign(self._access_token_to_bytes(token))
         return token, MockAuthorizer._auth_server_public_key
 
