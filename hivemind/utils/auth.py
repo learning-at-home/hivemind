@@ -14,29 +14,37 @@ from hivemind.utils.crypto import RSAPrivateKey, RSAPublicKey
 from hivemind.utils.timed_storage import TimedStorage, get_dht_time
 
 
-class AuthorizedRequest:
+class AuthorizedRequestBase:
+    """
+    Interface for protobufs with the ``RequestAuthInfo auth`` field. Used for type annotations only.
+    """
+
     auth: RequestAuthInfo
 
 
-class AuthorizedResponse:
+class AuthorizedResponseBase:
+    """
+    Interface for protobufs with the ``ResponseAuthInfo auth`` field. Used for type annotations only.
+    """
+
     auth: ResponseAuthInfo
 
 
 class AuthorizerBase(ABC):
     @abstractmethod
-    async def sign_request(self, request: AuthorizedRequest, service_public_key: Optional[RSAPublicKey]) -> None:
+    async def sign_request(self, request: AuthorizedRequestBase, service_public_key: Optional[RSAPublicKey]) -> None:
         ...
 
     @abstractmethod
-    async def validate_request(self, request: AuthorizedRequest) -> None:
+    async def validate_request(self, request: AuthorizedRequestBase) -> None:
         ...
 
     @abstractmethod
-    async def sign_response(self, response: AuthorizedResponse, request: AuthorizedRequest) -> None:
+    async def sign_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> None:
         ...
 
     @abstractmethod
-    async def validate_response(self, response: AuthorizedResponse, request: AuthorizedRequest) -> None:
+    async def validate_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> None:
         ...
 
 
@@ -84,7 +92,7 @@ class SignedTokenAuthorizer(AuthorizerBase):
     def local_public_key(self) -> RSAPublicKey:
         return self._local_public_key
 
-    async def sign_request(self, request: AuthorizedRequest, service_public_key: Optional[RSAPublicKey]) -> None:
+    async def sign_request(self, request: AuthorizedRequestBase, service_public_key: Optional[RSAPublicKey]) -> None:
         await self._update_access_token()
         auth = request.auth
 
@@ -98,7 +106,7 @@ class SignedTokenAuthorizer(AuthorizerBase):
         assert auth.signature == b''
         auth.signature = self._local_private_key.sign(request.SerializeToString())
 
-    async def validate_request(self, request: AuthorizedRequest) -> None:
+    async def validate_request(self, request: AuthorizedRequestBase) -> None:
         await self._update_access_token()
         auth = request.auth
 
@@ -124,7 +132,7 @@ class SignedTokenAuthorizer(AuthorizerBase):
 
             self._recent_nonces.store(auth.nonce, None, current_time + self._WORST_TIMEDELTA.total_seconds() * 3)
 
-    async def sign_response(self, response: AuthorizedResponse, request: AuthorizedRequest) -> None:
+    async def sign_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> None:
         await self._update_access_token()
         auth = response.auth
 
@@ -134,7 +142,7 @@ class SignedTokenAuthorizer(AuthorizerBase):
         assert auth.signature == b''
         auth.signature = self._local_private_key.sign(response.SerializeToString())
 
-    async def validate_response(self, response: AuthorizedResponse, request: AuthorizedRequest) -> None:
+    async def validate_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> None:
         await self._update_access_token()
         auth = response.auth
 
@@ -174,7 +182,7 @@ class AuthRPCWrapper:
         method = getattr(self._stub, name)
 
         @functools.wraps(method)
-        async def wrapped_rpc(request: AuthorizedRequest, *args, **kwargs):
+        async def wrapped_rpc(request: AuthorizedRequestBase, *args, **kwargs):
             if self._authorizer is not None:
                 if self._role == AuthRole.CLIENT:
                     await self._authorizer.sign_request(request, self._service_public_key)
