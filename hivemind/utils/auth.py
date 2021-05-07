@@ -5,7 +5,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Optional, Tuple
 
 import grpc
@@ -53,7 +53,7 @@ class AuthorizerBase(ABC):
         ...
 
 
-class SignedTokenAuthorizer(AuthorizerBase):
+class TokenAuthorizerBase(AuthorizerBase):
     def __init__(self, local_private_key: Optional[RSAPrivateKey]=None):
         if local_private_key is None:
             local_private_key = RSAPrivateKey.process_wide()
@@ -61,58 +61,35 @@ class SignedTokenAuthorizer(AuthorizerBase):
         self._local_public_key = local_private_key.get_public_key()
 
         self._local_access_token = None
-        self._auth_server_public_key = None
         self._refresh_lock = asyncio.Lock()
 
         self._recent_nonces = TimedStorage()
 
     @abstractmethod
-    async def get_access_token(self) -> Tuple[AccessToken, RSAPublicKey]:
+    async def get_token(self) -> AccessToken:
         ...
 
-    _WORST_TIMEDELTA = timedelta(minutes=1)
+    @abstractmethod
+    def is_token_valid(self, access_token: AccessToken) -> bool:
+        ...
 
-    async def _update_access_token(self) -> None:
-        async with self._refresh_lock:
-            worst_recv_time = datetime.now(timezone.utc) + self._WORST_TIMEDELTA
-            if (self._local_access_token is not None and
-                    worst_recv_time < datetime.fromisoformat(self._local_access_token.expiration_time)):
-                return
+    @abstractmethod
+    def does_token_need_refreshing(self, access_token: AccessToken) -> bool:
+        ...
 
-            self._local_access_token, self._auth_server_public_key = await self.get_access_token()
-
-    def _verify_access_token(self, access_token: AccessToken) -> bool:
-        data = self._access_token_to_bytes(access_token)
-        if not self._auth_server_public_key.verify(data, access_token.signature):
-            logger.debug('Access token has invalid signature')
-            return False
-
-        try:
-            expiration_time = datetime.fromisoformat(access_token.expiration_time)
-        except ValueError:
-            logger.debug(f'datetime.fromisoformat() failed to parse expiration time: {access_token.expiration_time}')
-            return False
-        if expiration_time.tzinfo is None:
-            logger.debug(f'Expected to have timezone for expiration time: {access_token.expiration_time}')
-            return False
-        if expiration_time < datetime.now(timezone.utc):
-            logger.debug('Access token has expired')
-            return False
-
-        return True
-
-    @staticmethod
-    def _access_token_to_bytes(access_token: AccessToken) -> bytes:
-        return b' '.join([access_token.username.encode(),
-                          access_token.public_key,
-                          access_token.expiration_time.encode()])
+    async def refresh_token_if_needed(self) -> None:
+        if self._local_access_token is None or self.does_token_need_refreshing(self._local_access_token):
+            async with self._refresh_lock:
+                if self._local_access_token is None or self.does_token_need_refreshing(self._local_access_token):
+                    self._local_access_token = await self.get_token()
+                    assert self.is_token_valid(self._local_access_token)
 
     @property
     def local_public_key(self) -> RSAPublicKey:
         return self._local_public_key
 
     async def sign_request(self, request: AuthorizedRequestBase, service_public_key: Optional[RSAPublicKey]) -> None:
-        await self._update_access_token()
+        await self.refresh_token_if_needed()
         auth = request.auth
 
         auth.client_access_token.CopyFrom(self._local_access_token)
@@ -125,11 +102,13 @@ class SignedTokenAuthorizer(AuthorizerBase):
         assert auth.signature == b''
         auth.signature = self._local_private_key.sign(request.SerializeToString())
 
+    _MAX_CLIENT_SERVICER_TIME_DIFF = timedelta(minutes=1)
+
     async def validate_request(self, request: AuthorizedRequestBase) -> bool:
-        await self._update_access_token()
+        await self.refresh_token_if_needed()
         auth = request.auth
 
-        if not self._verify_access_token(auth.client_access_token):
+        if not self.is_token_valid(auth.client_access_token):
             logger.debug('Client failed to prove that it (still) has access to the network')
             return False
 
@@ -146,18 +125,19 @@ class SignedTokenAuthorizer(AuthorizerBase):
 
         with self._recent_nonces.freeze():
             current_time = get_dht_time()
-            if abs(auth.time - current_time) > self._WORST_TIMEDELTA.total_seconds():
+            if abs(auth.time - current_time) > self._MAX_CLIENT_SERVICER_TIME_DIFF.total_seconds():
                 logger.debug('Clocks are not synchronized or a previous request is replayed again')
                 return False
             if auth.nonce in self._recent_nonces:
                 logger.debug('Previous request is replayed again')
                 return False
 
-        self._recent_nonces.store(auth.nonce, None, current_time + self._WORST_TIMEDELTA.total_seconds() * 3)
+        self._recent_nonces.store(auth.nonce, None,
+                                  current_time + self._MAX_CLIENT_SERVICER_TIME_DIFF.total_seconds() * 3)
         return True
 
     async def sign_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> None:
-        await self._update_access_token()
+        await self.refresh_token_if_needed()
         auth = response.auth
 
         auth.service_access_token.CopyFrom(self._local_access_token)
@@ -167,10 +147,10 @@ class SignedTokenAuthorizer(AuthorizerBase):
         auth.signature = self._local_private_key.sign(response.SerializeToString())
 
     async def validate_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> bool:
-        await self._update_access_token()
+        await self.refresh_token_if_needed()
         auth = response.auth
 
-        if not self._verify_access_token(auth.service_access_token):
+        if not self.is_token_valid(auth.service_access_token):
             logger.debug('Service failed to prove that it (still) has access to the network')
             return False
 
@@ -179,10 +159,6 @@ class SignedTokenAuthorizer(AuthorizerBase):
         auth.signature = b''
         if not service_public_key.verify(response.SerializeToString(), signature):
             logger.debug('Response has invalid signature')
-            return False
-
-        if request.auth.service_public_key and request.auth.service_public_key != auth.service_access_token.public_key:
-            logger.debug('Response is generated by a service different from the one we requested')
             return False
 
         if auth.nonce != request.auth.nonce:
