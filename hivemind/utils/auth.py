@@ -54,6 +54,11 @@ class AuthorizerBase(ABC):
 
 
 class TokenAuthorizerBase(AuthorizerBase):
+    """
+    Implements the authorization protocol for a moderated Hivemind network.
+    See https://github.com/learning-at-home/hivemind/issues/253
+    """
+
     def __init__(self, local_private_key: Optional[RSAPrivateKey]=None):
         if local_private_key is None:
             local_private_key = RSAPrivateKey.process_wide()
