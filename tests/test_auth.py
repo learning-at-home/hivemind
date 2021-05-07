@@ -5,11 +5,11 @@ import pytest
 
 from hivemind.proto import dht_pb2
 from hivemind.proto.auth_pb2 import AccessToken
-from hivemind.utils.auth import AuthRPCWrapper, AuthRole, AuthorizationError, AuthorizerBase
+from hivemind.utils.auth import AuthRPCWrapper, AuthRole, AuthorizationError, SignedTokenAuthorizer
 from hivemind.utils.crypto import RSAPrivateKey, RSAPublicKey
 
 
-class MockAuthorizer(AuthorizerBase):
+class MockAuthorizer(SignedTokenAuthorizer):
     _auth_server_private_key = None
     _auth_server_public_key = None
 
