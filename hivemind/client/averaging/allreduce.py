@@ -387,8 +387,9 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             raise
 
     async def accumulate_part_streaming(self, source: Endpoint, stream_messages: Iterable[averaging_pb2.AveragingData]
-                                        ) -> Iterable[averaging_pb2.AveragingData]:
+                                        ) -> Iterable[runtime_pb2.Tensor]:
         """ accumulate_part using streams of serialized tensors. Used to prevent duplicate work in serialization """
+        stream_messages = (msg.tensor_part for msg in stream_messages)
         try:
             tensor_part = deserialize_torch_tensor(combine_from_streaming(stream_messages))
         except RuntimeError as e:
@@ -410,7 +411,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
-                tensor_chunks = (request.tensor_part, *[msg.tensor_part async for msg in stream])
+                tensor_chunks = (request, *[msg async for msg in stream])
                 averaged_chunks = iter(await self.accumulate_part_streaming(request.endpoint, tensor_chunks))
                 yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=next(averaged_chunks))
                 for averaged_chunk in averaged_chunks:
