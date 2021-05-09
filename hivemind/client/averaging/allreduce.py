@@ -179,9 +179,9 @@ class AllReduceProtocol:
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
-        #todo
+        # todo
         self.accumulators = OrderedDict({
-            0:torch.zeros_like(self.local_tensor_parts[self.endpoint])
+            0: torch.zeros_like(self.local_tensor_parts[self.endpoint])
         })
         self.denominator = 0.0  # number of peers added to accumulator or sum of their weights
         self.accumulated_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
@@ -233,16 +233,13 @@ class AllReduceProtocol:
             for tensor_id, piece in zip(tensor_ids, remote_part):
                 self.accumulators[tensor_id].div_(self.denominator)
             average_result = tuple(self.accumulators.values())
-            #todo
-            # average_result = average_result[0]
             self.register_averaged_part(self.endpoint, average_result)
             self.averaged_part.set_result(average_result)
 
         return await self.averaged_part
 
-
     def register_averaged_part(self, source: Endpoint, averaged_part: Part):
-        #todo
+        # todo
         averaged_part = averaged_part[0]
         assert not self.future.done(), f"already finished allreduce: {self.future}"
         assert source in self.ordered_group_endpoints, "the provider of averaged part is not from my group"
@@ -338,17 +335,17 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
     async def _communicate_with_peer(self, peer_endpoint: Endpoint, local_part: Part) -> Part:
         """ Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors """
         if peer_endpoint == self.endpoint:
-            part = await self.accumulate_part(self.endpoint, (local_part,), weight=self.peer_weights[self.endpoint])
-            #todo
+            part = await self.accumulate_part(self.endpoint, local_part, weight=self.peer_weights[self.endpoint])
+            # todo
             return part[0]
-        serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
-        chunks = split_for_streaming(serialized_tensor_part, self.chunk_size_bytes)
-
         stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
-        await stream.write(averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING, group_id=self.group_id,
-                                                       endpoint=self.endpoint, tensor_part=next(chunks)))
-        for chunk in chunks:
-            await stream.write(averaging_pb2.AveragingData(tensor_part=chunk))
+
+        # todo
+        # compression_type = self.local_tensor_parts.get_part_compression_type(peer_endpoint)
+        compression_type = [self.compression_type]
+
+        for chunk in self._serialize_to_chunks(local_part, compression_type, self.chunk_size_bytes, header=True):
+            await stream.write(chunk)
         await stream.done_writing()
 
         outputs: Sequence[averaging_pb2.AveragingData] = [message async for message in stream]
@@ -359,13 +356,12 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                                      f" allreduce failed")
 
         try:
-            averaged_part = local_part + deserialize_torch_tensor(combine_from_streaming(
-                [message.tensor_part for message in outputs]))
+            delta_part = self._deserialize_from_chunks(outputs)
+            averaged_part = tuple(
+                local + delta for local, delta in zip(local_part, delta_part))
         except RuntimeError as e:
             raise AllreduceException(f"Could not deserialize averaged part from {peer_endpoint}: {e}")
 
-        #todo
-        averaged_part = [averaged_part]
         self.register_averaged_part(peer_endpoint, averaged_part)
         return averaged_part
 
@@ -379,7 +375,8 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         send allreduce requests to all peers and collect results, return the averaged tensor (or deltas)
         """
         try:
-            await asyncio.gather(self, *(self._communicate_with_peer(peer, self.local_tensor_parts[peer])
+            # todo
+            await asyncio.gather(self, *(self._communicate_with_peer(peer, [self.local_tensor_parts[peer]])
                                          for i, peer in enumerate(self.ordered_group_endpoints)
                                          if peer not in self.client_mode_endpoints))
             return await self
@@ -401,7 +398,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         except RuntimeError as e:
             raise AllreduceException(f"Could not deserialize tensor part from {source} for streaming {e}")
         averaged_part = await self.accumulate_part(source, (tensor_part,), weight=self.peer_weights[source])
-        #todo
+        # todo
         averaged_part = averaged_part[0]
         serialized_tensor = serialize_torch_tensor(averaged_part - tensor_part, self.compression_type,
                                                    allow_inplace=False)
