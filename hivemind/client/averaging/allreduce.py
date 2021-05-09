@@ -335,9 +335,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
     async def _communicate_with_peer(self, peer_endpoint: Endpoint, local_part: Part) -> Part:
         """ Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors """
         if peer_endpoint == self.endpoint:
-            part = await self.accumulate_part(self.endpoint, local_part, weight=self.peer_weights[self.endpoint])
-            # todo
-            return part[0]
+            return await self.accumulate_part(self.endpoint, local_part, weight=self.peer_weights[self.endpoint])
         stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
 
         # todo
@@ -392,17 +390,27 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
     async def accumulate_part_streaming(self, source: Endpoint, stream_messages: Iterable[averaging_pb2.AveragingData]
                                         ) -> Iterable[runtime_pb2.Tensor]:
         """ accumulate_part using streams of serialized tensors. Used to prevent duplicate work in serialization """
-        stream_messages = (msg.tensor_part for msg in stream_messages)
         try:
-            tensor_part = deserialize_torch_tensor(combine_from_streaming(stream_messages))
+            tensor_part = self._deserialize_from_chunks(stream_messages)
         except RuntimeError as e:
             raise AllreduceException(f"Could not deserialize tensor part from {source} for streaming {e}")
-        averaged_part = await self.accumulate_part(source, (tensor_part,), weight=self.peer_weights[source])
+        averaged_part = await self.accumulate_part(source, tensor_part, weight=self.peer_weights[source])
+
+        delta_part = tuple(
+            averaged - tensor for averaged, tensor in zip(averaged_part, tensor_part))
+        # delta_part = delta_part[0]
+        # serialized_tensor = serialize_torch_tensor(delta_part, self.compression_type,
+        #                                            allow_inplace=False)
+        # stream_chunks = tuple(split_for_streaming(serialized_tensor, self.chunk_size_bytes))
+
         # todo
-        averaged_part = averaged_part[0]
-        serialized_tensor = serialize_torch_tensor(averaged_part - tensor_part, self.compression_type,
-                                                   allow_inplace=False)
-        stream_chunks = tuple(split_for_streaming(serialized_tensor, self.chunk_size_bytes))
+        # compression_type = self.local_tensor_parts.get_part_compression_type(peer_endpoint)
+        compression_type = [self.compression_type]
+
+        stream_chunks = self._serialize_to_chunks(delta_part, compression_type, self.chunk_size_bytes)
+
+        # todo
+        stream_chunks = [chunk.tensor_part for chunk in stream_chunks]
         return stream_chunks
 
     async def rpc_aggregate_part(self, stream: AsyncIterator[averaging_pb2.AveragingData], context: grpc.ServicerContext
