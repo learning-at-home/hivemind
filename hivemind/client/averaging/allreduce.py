@@ -172,7 +172,6 @@ class AllReduceProtocol:
         self.compression_type = compression_type
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
-        self.return_deltas = return_deltas
 
         self.accumulator = torch.zeros_like(self.local_tensor_parts[self.endpoint])
         self.denominator = 0.0  # number of peers added to accumulator or sum of their weights
@@ -181,6 +180,7 @@ class AllReduceProtocol:
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
+        self.return_deltas = return_deltas
         for endpoint in self.client_mode_endpoints:
             self.averaged_tensor_parts[endpoint] = torch.tensor([])
         self.registered_from.update(self.client_mode_endpoints)
@@ -216,7 +216,7 @@ class AllReduceProtocol:
         """ Add vector part to accumulator, wait for all other vectors to be added, then return the average part """
         assert not self.averaged_part.done(), f"already finished averaging part: {self.averaged_part}"
         assert not self.future.done(), f"already finished allreduce: {self.future}"
-        assert source in self.local_tensor_parts, "unexpected source, not a part of current group"
+        assert source in self.ordered_group_endpoints, "unexpected source, not a part of current group"
         assert source not in self.accumulated_from, "duplicate source, already received that part"
         assert not self.endpoint in self.client_mode_endpoints, f"{self.endpoint} is in client mode"
         assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
@@ -236,13 +236,15 @@ class AllReduceProtocol:
 
     def register_averaged_part(self, source: Endpoint, averaged_part: torch.Tensor):
         assert not self.future.done(), f"already finished allreduce: {self.future}"
-        assert source in self.local_tensor_parts, "the provider of averaged part is not from my group"
-        assert source not in self.averaged_tensor_parts, "already registered the average from this peer"
+        assert source in self.ordered_group_endpoints, "the provider of averaged part is not from my group"
+        assert source not in self.registered_from, "already registered the average from this peer"
         assert averaged_part.shape == self.local_tensor_parts[source].shape, "averaged part shape mismatch"
         assert averaged_part.dtype == self.local_tensor_parts[source].dtype, "averaged part dtype mismatch"
         logger.debug(f"{self} - receiving averaged tensor part from {source}")
+
         self.averaged_tensor_parts[source] = averaged_part
-        if len(self.averaged_tensor_parts) == len(self.local_tensor_parts):
+        self.registered_from.add(source)
+        if len(self.registered_from) == len(self.local_tensor_parts):
             ordered_averaged_parts = [self.averaged_tensor_parts[endpoint] for endpoint in self.ordered_group_endpoints]
             outputs = restore_from_parts(ordered_averaged_parts, self.tensor_shapes)
 
