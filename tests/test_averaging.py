@@ -206,7 +206,7 @@ async def test_allreduce_protocol():
         sender_allreduce = allreduce_protocols[peers.index(sender)]
         recipient_allreduce = allreduce_protocols[peers.index(recipient)]
         averaged_part = await recipient_allreduce.accumulate_part(
-            source=sender, remote_part=sender_allreduce.local_tensor_parts[recipient])
+            source=sender, remote_part=(sender_allreduce.local_tensor_parts[recipient],))
         sender_allreduce.register_averaged_part(source=recipient, averaged_part=averaged_part)
 
     await asyncio.wait({_accumulate(sender, recipient) for sender in peers for recipient in peers

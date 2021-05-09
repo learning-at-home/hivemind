@@ -179,12 +179,14 @@ class AllReduceProtocol:
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
-
-        self.accumulator = torch.zeros_like(self.local_tensor_parts[self.endpoint])
+        #todo
+        self.accumulators = OrderedDict({
+            0:torch.zeros_like(self.local_tensor_parts[self.endpoint])
+        })
         self.denominator = 0.0  # number of peers added to accumulator or sum of their weights
         self.accumulated_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
         self.registered_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
-        self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
+        self.averaged_part: asyncio.Future[Part] = asyncio.Future()  # will be set to [accumulator / group size]
 
         self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
         self.return_deltas = return_deltas
@@ -205,19 +207,6 @@ class AllReduceProtocol:
     def group_size(self):
         return len(self.ordered_group_endpoints)
 
-    def _accumulate_pieces(self, pieces: Part, weight: float = 1.0):
-        # TODO: mock it
-        tensor_ids, _ = self.local_tensor_parts.get_part_with_ids(self.endpoint)
-        assert len(pieces) == len(tensor_ids)
-
-        self.denominator += weight
-        for tensor_id, piece in zip(tensor_ids, pieces):
-            accumulator = self.accumulators[tensor_id]
-            accumulator.add_(piece, alpha=weight)
-
-            if len(self.accumulated_from) == len(self.ordered_group_endpoints):
-                accumulator.div_(self.denominator)
-
     async def accumulate_part(self, source: Endpoint, remote_part: Part, weight: float = 1.0) \
             -> Part:
         """ Add vector part to accumulator, wait for all other vectors to be added, then return the average part """
@@ -229,17 +218,28 @@ class AllReduceProtocol:
         assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
         logger.debug(f"{self} - accumulating tensor part from {source}")
 
-        self.accumulator.add_(remote_part, alpha=weight)
-        self.denominator += weight
-        self.accumulated_from.add(source)
+        # TODO: unmock it
+        tensor_ids = [0]
+        # tensor_ids, _ = self.local_tensor_parts.get_part_with_ids(self.endpoint)
+        assert len(remote_part) == len(tensor_ids)
 
+        self.denominator += weight
+        for tensor_id, piece in zip(tensor_ids, remote_part):
+            self.accumulators[tensor_id].add_(piece, alpha=weight)
+
+        self.accumulated_from.add(source)
         assert len(self.accumulated_from) <= self.group_size
         if len(self.accumulated_from) == len(self.local_tensor_parts):
-            average_result = self.accumulator.div_(self.denominator)
+            for tensor_id, piece in zip(tensor_ids, remote_part):
+                self.accumulators[tensor_id].div_(self.denominator)
+            average_result = tuple(self.accumulators.values())
+            #todo
+            average_result = average_result[0]
             self.register_averaged_part(self.endpoint, average_result)
             self.averaged_part.set_result(average_result)
 
         return await self.averaged_part
+
 
     def register_averaged_part(self, source: Endpoint, averaged_part: Part):
         assert not self.future.done(), f"already finished allreduce: {self.future}"
@@ -336,7 +336,8 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
     async def _communicate_with_peer(self, peer_endpoint: Endpoint, local_part: Part) -> Part:
         """ Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors """
         if peer_endpoint == self.endpoint:
-            return await self.accumulate_part(self.endpoint, local_part, weight=self.peer_weights[self.endpoint])
+            #todo
+            return await self.accumulate_part(self.endpoint, (local_part,), weight=self.peer_weights[self.endpoint])
         serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
         chunks = split_for_streaming(serialized_tensor_part, self.chunk_size_bytes)
 
@@ -394,8 +395,8 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             tensor_part = deserialize_torch_tensor(combine_from_streaming(stream_messages))
         except RuntimeError as e:
             raise AllreduceException(f"Could not deserialize tensor part from {source} for streaming {e}")
-
-        averaged_part = await self.accumulate_part(source, tensor_part, weight=self.peer_weights[source])
+        #todo
+        averaged_part = await self.accumulate_part(source, (tensor_part,), weight=self.peer_weights[source])
         serialized_tensor = serialize_torch_tensor(averaged_part - tensor_part, self.compression_type,
                                                    allow_inplace=False)
         stream_chunks = tuple(split_for_streaming(serialized_tensor, self.chunk_size_bytes))
