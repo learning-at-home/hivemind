@@ -1,5 +1,5 @@
 import asyncio
-from typing import Sequence, Set, Dict, Tuple, List, Iterable, AsyncIterator, Any
+from typing import Sequence, Set, Dict, Tuple, List, Iterable, AsyncIterator, Any, Union
 
 import grpc
 import torch
@@ -161,8 +161,14 @@ class AllReduceProtocol:
            default (False) - return averaged_tensors by themselves
     """
 
-    def __init__(self, *, group_id: GroupID, tensors: Sequence[torch.Tensor], endpoint: Endpoint,
-                 ordered_group_endpoints: Sequence[Endpoint], part_sizes: Tuple[int, ...], return_deltas: bool = False,
+    def __init__(self,
+                 *,
+                 group_id: GroupID,
+                 tensors: Sequence[torch.Tensor],
+                 endpoint: Endpoint,
+                 ordered_group_endpoints: Sequence[Endpoint],
+                 part_sizes: Tuple[int, ...],
+                 return_deltas: bool = False,
                  compression_type: Sequence[CompressionType] = None):
         assert endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
         self.group_id, self.endpoint = group_id, endpoint
@@ -171,6 +177,7 @@ class AllReduceProtocol:
                                       if part_size == 0}
         self.compression_type = compression_type
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
+        self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
 
         self.accumulator = torch.zeros_like(self.local_tensor_parts[self.endpoint])
@@ -178,7 +185,7 @@ class AllReduceProtocol:
         self.accumulated_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
         self.registered_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
-        self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
+
         self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
         self.return_deltas = return_deltas
         for endpoint in self.client_mode_endpoints:
@@ -234,7 +241,7 @@ class AllReduceProtocol:
 
         return await self.averaged_part
 
-    def register_averaged_part(self, source: Endpoint, averaged_part: torch.Tensor):
+    def register_averaged_part(self, source: Endpoint, averaged_part: Part):
         assert not self.future.done(), f"already finished allreduce: {self.future}"
         assert source in self.ordered_group_endpoints, "the provider of averaged part is not from my group"
         assert source not in self.registered_from, "already registered the average from this peer"
@@ -379,8 +386,8 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                     asyncio.create_task(self._send_error_to_peer(peer_endpoint, code))
             raise
 
-    async def accumulate_part_streaming(self, source: Endpoint, stream_messages: Iterable[runtime_pb2.Tensor]
-                                        ) -> Iterable[runtime_pb2.Tensor]:
+    async def accumulate_part_streaming(self, source: Endpoint, stream_messages: Iterable[averaging_pb2.AveragingData]
+                                        ) -> Iterable[averaging_pb2.AveragingData]:
         """ accumulate_part using streams of serialized tensors. Used to prevent duplicate work in serialization """
         try:
             tensor_part = deserialize_torch_tensor(combine_from_streaming(stream_messages))
