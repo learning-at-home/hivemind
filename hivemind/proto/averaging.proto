@@ -28,6 +28,7 @@ enum MessageCode {
   INTERNAL_ERROR = 15;       // "I messed up, we will have to stop allreduce because of that."
   CANCELLED = 16;            // "[from peer during allreduce] I no longer want to participate in AllReduce."
   GROUP_DISBANDED = 17;      // "[from leader] The group is closed. Go find another group."
+  TENSOR_SEP = 18;           // "Look out for separation between tensors in my part for averaging!"
 }
 
 message JoinRequest {

@@ -204,6 +204,7 @@ class AllReduceProtocol:
 
     def _accumulate_pieces(self, pieces: Part, weight: float = 1.0):
         tensor_ids, _ = self.local_tensor_parts.get_part_with_ids(self.endpoint)
+        assert len(pieces) == len(tensor_ids)
 
         self.denominator += weight
         for tensor_id, piece in zip(tensor_ids, pieces):
@@ -310,25 +311,28 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
 
     def _serialize_to_chunks(self, local_part: Part, compression_type: Sequence[CompressionType],
-                             chunk_size_bytes: int) -> Iterable[averaging_pb2.AveragingData]:
+                             chunk_size_bytes: int, header=False) -> Iterable[averaging_pb2.AveragingData]:
         assert len(local_part) == len(compression_type)
 
-        for tensor, compression in zip(local_part, compression_type):
+        for i, (tensor, compression) in enumerate(zip(local_part, compression_type)):
             serialized_tensor = serialize_torch_tensor(tensor, compression, allow_inplace=False)
             chunks = split_for_streaming(serialized_tensor, chunk_size_bytes)
 
-            yield averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING, group_id=self.group_id,
-                                              endpoint=self.endpoint, tensor_part=next(chunks))
+            code = averaging_pb2.PART_FOR_AVERAGING if i == 0 else averaging_pb2.TENSOR_SEP
+            if header:
+                yield averaging_pb2.AveragingData(code=code, group_id=self.group_id,
+                                                  endpoint=self.endpoint, tensor_part=next(chunks))
             for chunk in chunks:
                 yield averaging_pb2.AveragingData(tensor_part=chunk)
 
     def _deserialize_from_chunks(self, chunks: Iterable[averaging_pb2.AveragingData]) -> Part:
         piece, averaged_pieces = [], []
         for chunk in chunks:
-            if chunk.code == averaging_pb2.AVERAGED_PART:
+            if chunk.code == averaging_pb2.TENSOR_SEP:
                 averaged_pieces.append(piece)
                 piece = []
             piece.append(chunk.tensor_part)
+        averaged_pieces.append(piece)
 
         averaged_part = []
         for piece in averaged_pieces:
@@ -342,7 +346,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
 
         compression_type = self.local_tensor_parts.get_part_compression_type(peer_endpoint)
-        for chunk in self._serialize_to_chunks(local_part, compression_type, self.chunk_size_bytes):
+        for chunk in self._serialize_to_chunks(local_part, compression_type, self.chunk_size_bytes, header=True):
             await stream.write(chunk)
         await stream.done_writing()
 
@@ -389,7 +393,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             raise
 
     async def accumulate_part_streaming(self, source: Endpoint, stream_messages: Iterable[averaging_pb2.AveragingData]
-                                        ) -> Iterable[runtime_pb2.Tensor]:
+                                        ) -> Iterable[averaging_pb2.AveragingData]:
         """ accumulate_part using streams of serialized tensors. Used to prevent duplicate work in serialization """
         try:
             tensor_part = self._deserialize_from_chunks(stream_messages)
@@ -398,7 +402,8 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
         averaged_part = await self.accumulate_part(source, tensor_part, weight=self.peer_weights[source])
         if not self.averaged_part_stream.done():
-            compression_type = self.local_tensor_parts.get_part_compression_type(source)
+            compression_type = self.local_tensor_parts.get_part_compression_type(self.endpoint)
+            assert self.local_tensor_parts.get_shapes(self.endpoint) == tuple(t.shape for t in averaged_part)
             stream_chunks = self._serialize_to_chunks(averaged_part, compression_type, self.chunk_size_bytes)
             self.averaged_part_stream.set_result(stream_chunks)
             return stream_chunks
@@ -416,10 +421,12 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
                 tensor_chunks = (request, *[msg async for msg in stream])
-                averaged_chunks = iter(await self.accumulate_part_streaming(request.endpoint, tensor_chunks))
-                yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=next(averaged_chunks))
+                averaged_chunks: Iterable[averaging_pb2.AveragingData] = iter(
+                    await self.accumulate_part_streaming(request.endpoint, tensor_chunks))
+                first_chunk = next(averaged_chunks)
+                yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=first_chunk.tensor_part)
                 for averaged_chunk in averaged_chunks:
-                    yield averaging_pb2.AveragingData(tensor_part=averaged_chunk)
+                    yield averaged_chunk
 
             except Exception as e:
                 self.set_exception(e)
