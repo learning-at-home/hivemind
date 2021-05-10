@@ -194,24 +194,11 @@ class AllReduceProtocol:
         self.compression_type = compression_type
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
 
-        # mock up of proper tensor spliting
-        parts = split_into_parts(tensors, part_sizes)
-        self.local_tensor_parts = TensorPartContainer(
-            parts=[(t,) for t in parts],
-            part_ids=[[i] for i in range(len(parts))],
-            tensor_shapes={i: part.shape for i, part in enumerate(parts)},
-            endpoints=ordered_group_endpoints,
-            # todo
-            compression_type=[self.compression_type[0]]*len(parts)
-        )
-
-        self.averaged_tensor_parts = TensorPartContainer(
-            parts=[(torch.zeros_like(t),) for t in parts],
-            part_ids=[[i] for i in range(len(parts))],
-            tensor_shapes={i: part.shape for i, part in enumerate(parts)},
-            endpoints=ordered_group_endpoints
-        )
-
+        self.local_tensor_parts = TensorPartContainer.build_from_tensors(tensors, part_sizes, ordered_group_endpoints,
+                                                                         compression_type=compression_type)
+        self.averaged_tensor_parts = TensorPartContainer.build_from_tensors([torch.zeros_like(t) for t in tensors],
+                                                                            part_sizes,
+                                                                            ordered_group_endpoints)
         self.accumulators = OrderedDict((idx, torch.zeros_like(piece))
                                         for idx, piece in zip(*self.local_tensor_parts.get_part_with_ids(endpoint)))
         self.denominator = 0.0  # number of peers added to accumulator or sum of their weights
@@ -282,13 +269,9 @@ class AllReduceProtocol:
         self.registered_from.add(source)
         if len(self.registered_from) == len(self.ordered_group_endpoints):
             outputs = self.averaged_tensor_parts.tensors
-            #todo
-            outputs = restore_from_parts(outputs, self.tensor_shapes)
 
             if self.return_deltas:
-                #todo
                 local_tensors = self.local_tensor_parts.tensors
-                local_tensors = restore_from_parts(local_tensors, self.tensor_shapes)
                 with torch.no_grad():
                     for averaged_tensor, original_tensor in zip(outputs, local_tensors):
                         averaged_tensor -= original_tensor
