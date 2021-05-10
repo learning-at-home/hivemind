@@ -19,11 +19,12 @@ logger = get_logger(__name__)
 
 
 class TensorPartContainer:
-    def __init__(self, tensors: Sequence[torch.Tensor], part_sizes: Tuple[int, ...], endpoints: Sequence[Endpoint],
-                 compression_type: Sequence[CompressionType] = None):
+    def build_from_tensors(self,
+                           tensors: Sequence[torch.Tensor],
+                           part_sizes: Tuple[int, ...],
+                           endpoints: Sequence[Endpoint],
+                           compression_type: Sequence[CompressionType] = None):
         assert len(endpoints) == len(part_sizes), "length of part_sizes mismatch with endpoints"
-        if compression_type is not None:
-            assert len(compression_type) == len(tensors), "length of compression type mismatch with number of tensors"
 
         # Sort tensors descending by size
         tensor_ids, tensors = zip(*sorted(enumerate(tensors), key=lambda idx_tensor: -idx_tensor[-1].numel()))
@@ -31,14 +32,29 @@ class TensorPartContainer:
         endpoints, part_sizes = zip(*sorted(zip(endpoints, part_sizes), key=lambda peer_size: peer_size[-1]))
 
         parts, part_ids = self._split_into_parts(tensors, tensor_ids=tensor_ids, part_sizes=part_sizes)
-        self._orig_shapes = {idx: tensor.shape for idx, tensor in zip(tensor_ids, tensors)}
+        tensor_shapes = {idx: tensor.shape for idx, tensor in zip(tensor_ids, tensors)}
 
-        self._make_views(parts, part_ids, endpoints)
-        self.endpoints = tuple(endpoints)
-        if compression_type:
+        self.__init__(parts, part_ids, tensor_shapes, endpoints, compression_type)
+
+    def __init__(self,
+                 parts: Sequence[Part],
+                 part_ids: Sequence[List[TensorID]],
+                 tensor_shapes: Sequence[torch.Size],
+                 endpoints: Sequence[Endpoint],
+                 compression_type: Sequence[CompressionType] = None):
+        assert len(parts) == len(endpoints)
+        assert len(parts) == len(part_ids)
+
+        if compression_type is not None:
+            assert len(compression_type) == len(tensor_shapes), \
+                "length of compression type mismatch with number of tensors"
             self._compression_type = compression_type
         else:
             self._compression_type = None
+
+        self._orig_shapes = tensor_shapes
+        self.endpoints = tuple(endpoints)
+        self._make_views(parts, part_ids, endpoints)
 
     def _make_views(self, pieces, piece_ids, endpoints):
         self._peer_tensor_id_view: Dict[Endpoint, Tuple[TensorID, ...]] = dict()
@@ -176,13 +192,19 @@ class AllReduceProtocol:
         self.client_mode_endpoints = {endpoint for endpoint, part_size in zip(self.ordered_group_endpoints, part_sizes)
                                       if part_size == 0}
         self.compression_type = compression_type
-        self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
+
+        parts = split_into_parts(tensors, part_sizes)
+        self.local_tensor_parts = TensorPartContainer(
+            parts = [(t,) for t in parts],
+            part_ids= [[i] for i in range(len(parts))],
+            tensor_shapes= [t.shape for t in tensors],
+            endpoints=ordered_group_endpoints,
+            compression_type=[self.compression_type]*len(tensors)
+        )
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
-        # todo
-        self.accumulators = OrderedDict({
-            0: torch.zeros_like(self.local_tensor_parts[self.endpoint])
-        })
+        self.accumulators = OrderedDict((idx, torch.zeros_like(piece))
+                                        for idx, piece in zip(*self.local_tensor_parts.get_part_with_ids(endpoint)))
         self.denominator = 0.0  # number of peers added to accumulator or sum of their weights
         self.accumulated_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
         self.registered_from: Set[Endpoint] = set()  # peers that we have accumulated our part from
@@ -219,8 +241,8 @@ class AllReduceProtocol:
         logger.debug(f"{self} - accumulating tensor part from {source}")
 
         # TODO: unmock it
-        tensor_ids = [0]
-        # tensor_ids, _ = self.local_tensor_parts.get_part_with_ids(self.endpoint)
+        # tensor_ids = [0]
+        tensor_ids, _ = self.local_tensor_parts.get_part_with_ids(self.endpoint)
         assert len(remote_part) == len(tensor_ids)
 
         self.denominator += weight
@@ -229,7 +251,7 @@ class AllReduceProtocol:
 
         self.accumulated_from.add(source)
         assert len(self.accumulated_from) <= self.group_size
-        if len(self.accumulated_from) == len(self.local_tensor_parts):
+        if len(self.accumulated_from) == len(self.ordered_group_endpoints):
             for tensor_id, piece in zip(tensor_ids, remote_part):
                 self.accumulators[tensor_id].div_(self.denominator)
             average_result = tuple(self.accumulators.values())
@@ -239,23 +261,27 @@ class AllReduceProtocol:
         return await self.averaged_part
 
     def register_averaged_part(self, source: Endpoint, averaged_part: Part):
-        # todo
-        averaged_part = averaged_part[0]
         assert not self.future.done(), f"already finished allreduce: {self.future}"
         assert source in self.ordered_group_endpoints, "the provider of averaged part is not from my group"
         assert source not in self.registered_from, "already registered the average from this peer"
-        assert averaged_part.shape == self.local_tensor_parts[source].shape, "averaged part shape mismatch"
-        assert averaged_part.dtype == self.local_tensor_parts[source].dtype, "averaged part dtype mismatch"
+        averaged_part_shapes = tuple(t.shape for t in averaged_part)
+        averaged_part_dtypes = tuple(t.dtype for t in averaged_part)
+        assert averaged_part_shapes == self.local_tensor_parts.get_shapes(source), \
+            f"averaged part shape mismatch {averaged_part_shapes} : {self.local_tensor_parts.get_shapes(source)}"
+        assert averaged_part_dtypes == self.local_tensor_parts.get_dtypes(source), "averaged part dtype mismatch"
         logger.debug(f"{self} - receiving averaged tensor part from {source}")
 
+        # todo
+        averaged_part = averaged_part[0]
         self.averaged_tensor_parts[source] = averaged_part
         self.registered_from.add(source)
-        if len(self.registered_from) == len(self.local_tensor_parts):
+        if len(self.registered_from) == len(self.ordered_group_endpoints):
             ordered_averaged_parts = [self.averaged_tensor_parts[endpoint] for endpoint in self.ordered_group_endpoints]
             outputs = restore_from_parts(ordered_averaged_parts, self.tensor_shapes)
 
             if self.return_deltas:
-                local_parts = [self.local_tensor_parts[peer] for peer in self.ordered_group_endpoints]
+                #todo
+                local_parts = [self.local_tensor_parts.get_part_with_ids(peer)[-1][0] for peer in self.ordered_group_endpoints]
                 with torch.no_grad():
                     original_tensors = restore_from_parts(local_parts, self.tensor_shapes)
                     for averaged_tensor, original_tensor in zip(outputs, original_tensors):
@@ -374,7 +400,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         """
         try:
             # todo
-            await asyncio.gather(self, *(self._communicate_with_peer(peer, [self.local_tensor_parts[peer]])
+            await asyncio.gather(self, *(self._communicate_with_peer(peer, self.local_tensor_parts.get_part(peer))
                                          for i, peer in enumerate(self.ordered_group_endpoints)
                                          if peer not in self.client_mode_endpoints))
             return await self

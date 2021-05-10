@@ -205,8 +205,9 @@ async def test_allreduce_protocol():
     async def _accumulate(sender: Endpoint, recipient: Endpoint):
         sender_allreduce = allreduce_protocols[peers.index(sender)]
         recipient_allreduce = allreduce_protocols[peers.index(recipient)]
+        remote_part=sender_allreduce.local_tensor_parts.get_part_with_ids(recipient)[-1]
         averaged_part = await recipient_allreduce.accumulate_part(
-            source=sender, remote_part=(sender_allreduce.local_tensor_parts[recipient],))
+            source=sender, remote_part=remote_part)
         averaged_part =averaged_part[0]
         sender_allreduce.register_averaged_part(source=recipient, averaged_part=[averaged_part])
 
