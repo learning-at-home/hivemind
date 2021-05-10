@@ -19,8 +19,8 @@ logger = get_logger(__name__)
 
 
 class TensorPartContainer:
-    def build_from_tensors(self,
-                           tensors: Sequence[torch.Tensor],
+    @staticmethod
+    def build_from_tensors(tensors: Sequence[torch.Tensor],
                            part_sizes: Tuple[int, ...],
                            endpoints: Sequence[Endpoint],
                            compression_type: Sequence[CompressionType] = None):
@@ -31,10 +31,10 @@ class TensorPartContainer:
         # Sort peers ascending by part_size
         endpoints, part_sizes = zip(*sorted(zip(endpoints, part_sizes), key=lambda peer_size: peer_size[-1]))
 
-        parts, part_ids = self._split_into_parts(tensors, tensor_ids=tensor_ids, part_sizes=part_sizes)
+        parts, part_ids = TensorPartContainer._split_into_parts(tensors, tensor_ids=tensor_ids, part_sizes=part_sizes)
         tensor_shapes = {idx: tensor.shape for idx, tensor in zip(tensor_ids, tensors)}
 
-        self.__init__(parts, part_ids, tensor_shapes, endpoints, compression_type)
+        return TensorPartContainer(parts, part_ids, tensor_shapes, endpoints, compression_type)
 
     def __init__(self,
                  parts: Sequence[Part],
@@ -194,6 +194,7 @@ class AllReduceProtocol:
         self.compression_type = compression_type
         self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
 
+        # mock up of proper tensor spliting
         parts = split_into_parts(tensors, part_sizes)
         self.local_tensor_parts = TensorPartContainer(
             parts=[(t,) for t in parts],
