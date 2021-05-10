@@ -192,17 +192,25 @@ class AllReduceProtocol:
         self.client_mode_endpoints = {endpoint for endpoint, part_size in zip(self.ordered_group_endpoints, part_sizes)
                                       if part_size == 0}
         self.compression_type = compression_type
+        self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
 
         parts = split_into_parts(tensors, part_sizes)
         self.local_tensor_parts = TensorPartContainer(
-            parts = [(t,) for t in parts],
-            part_ids= [[i] for i in range(len(parts))],
-            tensor_shapes= [t.shape for t in tensors],
+            parts=[(t,) for t in parts],
+            part_ids=[[i] for i in range(len(parts))],
+            tensor_shapes={i: part.shape for i, part in enumerate(parts)},
             endpoints=ordered_group_endpoints,
-            compression_type=[self.compression_type]*len(tensors)
+            # todo
+            compression_type=[self.compression_type[0]]*len(parts)
         )
-        self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
-        self.tensor_shapes = tuple(tensor.shape for tensor in tensors)
+
+        self.averaged_tensor_parts = TensorPartContainer(
+            parts=[(torch.zeros_like(t),) for t in parts],
+            part_ids=[[i] for i in range(len(parts))],
+            tensor_shapes={i: part.shape for i, part in enumerate(parts)},
+            endpoints=ordered_group_endpoints
+        )
+
         self.accumulators = OrderedDict((idx, torch.zeros_like(piece))
                                         for idx, piece in zip(*self.local_tensor_parts.get_part_with_ids(endpoint)))
         self.denominator = 0.0  # number of peers added to accumulator or sum of their weights
@@ -212,8 +220,8 @@ class AllReduceProtocol:
 
         self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
         self.return_deltas = return_deltas
-        for endpoint in self.client_mode_endpoints:
-            self.averaged_tensor_parts[endpoint] = torch.tensor([])
+        # for endpoint in self.client_mode_endpoints:
+        #     self.averaged_tensor_parts[endpoint] = torch.tensor([])
         self.registered_from.update(self.client_mode_endpoints)
 
     def __repr__(self):
@@ -271,20 +279,19 @@ class AllReduceProtocol:
         assert averaged_part_dtypes == self.local_tensor_parts.get_dtypes(source), "averaged part dtype mismatch"
         logger.debug(f"{self} - receiving averaged tensor part from {source}")
 
-        # todo
-        averaged_part = averaged_part[0]
-        self.averaged_tensor_parts[source] = averaged_part
+        self.averaged_tensor_parts.set_part(averaged_part, source)
         self.registered_from.add(source)
         if len(self.registered_from) == len(self.ordered_group_endpoints):
-            ordered_averaged_parts = [self.averaged_tensor_parts[endpoint] for endpoint in self.ordered_group_endpoints]
-            outputs = restore_from_parts(ordered_averaged_parts, self.tensor_shapes)
+            outputs = self.averaged_tensor_parts.tensors
+            #todo
+            outputs = restore_from_parts(outputs, self.tensor_shapes)
 
             if self.return_deltas:
                 #todo
-                local_parts = [self.local_tensor_parts.get_part_with_ids(peer)[-1][0] for peer in self.ordered_group_endpoints]
+                local_tensors = self.local_tensor_parts.tensors
+                local_tensors = restore_from_parts(local_tensors, self.tensor_shapes)
                 with torch.no_grad():
-                    original_tensors = restore_from_parts(local_parts, self.tensor_shapes)
-                    for averaged_tensor, original_tensor in zip(outputs, original_tensors):
+                    for averaged_tensor, original_tensor in zip(outputs, local_tensors):
                         averaged_tensor -= original_tensor
 
             self.future.set_result(outputs)
@@ -322,8 +329,10 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                  chunk_size_bytes: int, part_sizes: Tuple[int, ...], weights: Tuple[float, ...],
                  gathered: Dict[Endpoint, Any], return_deltas: bool = False):
         super().__init__(group_id=group_id, tensors=tensors, endpoint=endpoint, part_sizes=part_sizes,
-                         ordered_group_endpoints=ordered_group_endpoints, return_deltas=return_deltas)
-        self.compression_type, self.chunk_size_bytes, self.gathered = compression_type, chunk_size_bytes, gathered
+                         ordered_group_endpoints=ordered_group_endpoints, return_deltas=return_deltas,
+                         # todo
+                         compression_type=[compression_type]*len(tensors))
+        self.chunk_size_bytes, self.gathered =  chunk_size_bytes, gathered
         self.peer_weights = dict(zip(self.ordered_group_endpoints, weights))
 
     def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
@@ -364,10 +373,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             return await self.accumulate_part(self.endpoint, local_part, weight=self.peer_weights[self.endpoint])
         stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
 
-        # todo
-        # compression_type = self.local_tensor_parts.get_part_compression_type(peer_endpoint)
-        compression_type = [self.compression_type]
-
+        compression_type = self.local_tensor_parts.get_part_compression_type(peer_endpoint)
         for chunk in self._serialize_to_chunks(local_part, compression_type, self.chunk_size_bytes, header=True):
             await stream.write(chunk)
         await stream.done_writing()
@@ -399,7 +405,6 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         send allreduce requests to all peers and collect results, return the averaged tensor (or deltas)
         """
         try:
-            # todo
             await asyncio.gather(self, *(self._communicate_with_peer(peer, self.local_tensor_parts.get_part(peer))
                                          for i, peer in enumerate(self.ordered_group_endpoints)
                                          if peer not in self.client_mode_endpoints))
@@ -431,8 +436,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
         # todo
         # compression_type = self.local_tensor_parts.get_part_compression_type(peer_endpoint)
-        compression_type = [self.compression_type]
-
+        compression_type = self.local_tensor_parts.get_part_compression_type(self.endpoint)
         stream_chunks = self._serialize_to_chunks(delta_part, compression_type, self.chunk_size_bytes)
 
         # todo
