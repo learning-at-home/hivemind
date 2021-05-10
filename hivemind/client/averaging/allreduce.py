@@ -248,8 +248,6 @@ class AllReduceProtocol:
         assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
         logger.debug(f"{self} - accumulating tensor part from {source}")
 
-        # TODO: unmock it
-        # tensor_ids = [0]
         tensor_ids, _ = self.local_tensor_parts.get_part_with_ids(self.endpoint)
         assert len(remote_part) == len(tensor_ids)
 
@@ -324,15 +322,25 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
     A class that implements ButterflyAllReduceProtocol on top of a gRPC servicer
     """
 
-    def __init__(self, *, group_id: GroupID, tensors: Sequence[torch.Tensor], endpoint: Endpoint,
-                 ordered_group_endpoints: Sequence[Endpoint], compression_type: runtime_pb2.CompressionType,
-                 chunk_size_bytes: int, part_sizes: Tuple[int, ...], weights: Tuple[float, ...],
-                 gathered: Dict[Endpoint, Any], return_deltas: bool = False):
+    def __init__(self,
+                 *,
+                 group_id: GroupID,
+                 tensors: Sequence[torch.Tensor],
+                 endpoint: Endpoint,
+                 ordered_group_endpoints: Sequence[Endpoint],
+                 compression_type: Union[CompressionType, List[CompressionType]],
+                 chunk_size_bytes: int,
+                 part_sizes: Tuple[int, ...],
+                 weights: Tuple[float, ...],
+                 gathered: Dict[Endpoint, Any],
+                 return_deltas: bool = False):
+        if not isinstance(compression_type, (list, tuple)):
+            compression_type = [compression_type, ] * len(tensors)
+
         super().__init__(group_id=group_id, tensors=tensors, endpoint=endpoint, part_sizes=part_sizes,
                          ordered_group_endpoints=ordered_group_endpoints, return_deltas=return_deltas,
-                         # todo
-                         compression_type=[compression_type]*len(tensors))
-        self.chunk_size_bytes, self.gathered =  chunk_size_bytes, gathered
+                         compression_type=compression_type)
+        self.chunk_size_bytes, self.gathered = chunk_size_bytes, gathered
         self.peer_weights = dict(zip(self.ordered_group_endpoints, weights))
 
     def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
@@ -429,17 +437,10 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
         delta_part = tuple(
             averaged - tensor for averaged, tensor in zip(averaged_part, tensor_part))
-        # delta_part = delta_part[0]
-        # serialized_tensor = serialize_torch_tensor(delta_part, self.compression_type,
-        #                                            allow_inplace=False)
-        # stream_chunks = tuple(split_for_streaming(serialized_tensor, self.chunk_size_bytes))
 
-        # todo
-        # compression_type = self.local_tensor_parts.get_part_compression_type(peer_endpoint)
         compression_type = self.local_tensor_parts.get_part_compression_type(self.endpoint)
         stream_chunks = self._serialize_to_chunks(delta_part, compression_type, self.chunk_size_bytes)
 
-        # todo
         stream_chunks = [chunk.tensor_part for chunk in stream_chunks]
         return stream_chunks
 
