@@ -25,7 +25,7 @@ class TrainingAverager(DecentralizedAverager):
     :param average_parameters: whether or not to average model parameters in self.step(...)
     :param average_gradients: whether or not to average model gradients in self.step(...)
     :param average_opt_statistics: if specified, average optimizer statistics with corresponding names in statedict
-    :param scheduler: if specified, averager keeps scheduler state
+    :param scheduler: if specified, averager stores scheduler state
     :param initialize_optimizer: if True, this will run a speculative optimizer step with
       zero gradients to initialize all tensors. If False, please initialize the optimizer state manually.
     :param extra_tensors: if specified, these extra tensors will also be averaged and shared in load_state_from_peers.
