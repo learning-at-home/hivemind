@@ -127,7 +127,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.training_progress_key = f"{self.prefix}_progress"
         self.local_samples_accumulated = 0  # a number of local samples accumulated since last optimizer update
         self.local_steps_accumulated = 0  # a number of calls to step() since last optimizer update
-        self.samples_processed = 0
         self.performance_ema = PerformanceEMA(alpha=performance_ema_alpha)
         self.last_step_time = None
 
@@ -192,7 +191,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         with self.lock_local_progress:
             self.local_samples_accumulated += batch_size
             self.local_steps_accumulated += 1
-            self.samples_processed += batch_size
             self.performance_ema.update(num_processed=self.batch_size_per_step)
             self.should_report_progress.set()
 
@@ -235,7 +233,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.update_scheduler()
 
             logger.log(self.status_loglevel, f"Optimizer step: done!")
-            logger.info(f"Your current contribution: {self.samples_processed} samples")
 
             return group_info
 

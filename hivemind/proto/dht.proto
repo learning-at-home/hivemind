@@ -1,4 +1,5 @@
 syntax = "proto3";
+import "auth.proto";
 
 // this protocol defines how Hivemind nodes form a distributed hash table.
 // For more info, see https://learning-at-home.readthedocs.io/en/latest/modules/dht.html or help(hivemind.dht.DHTNode)
@@ -23,35 +24,40 @@ message NodeInfo {
 }
 
 message PingRequest {
-  NodeInfo peer = 1;                   // (optional) sender's own node info, same behavior as in DHT.rpc_ping
-  bool validate = 2;                   // set to True if sender wants to validate that he is accessible and synchronized
+  RequestAuthInfo auth = 1;
+  NodeInfo peer = 2;                   // (optional) sender's own node info, same behavior as in DHT.rpc_ping
+  bool validate = 3;                   // set to True if sender wants to validate that he is accessible and synchronized
 }
 
 message PingResponse {
-  NodeInfo peer = 1;                   // respondent's node id, for you to update routing table
-  string sender_endpoint = 2;          // echo sender's visible endpoint - used to infer his ip address
-  double dht_time = 3;                 // recipient's local DHT time - used to soft-synchronize peers
-  bool available = 4;                  // if validate = True, this flag asserts that the sender is available for ping
+  ResponseAuthInfo auth = 1;
+  NodeInfo peer = 2;                   // respondent's node id, for you to update routing table
+  string sender_endpoint = 3;          // echo sender's visible endpoint - used to infer his ip address
+  double dht_time = 4;                 // recipient's local DHT time - used to soft-synchronize peers
+  bool available = 5;                  // if validate = True, this flag asserts that the sender is available for ping
 }
 
 message StoreRequest {
+  RequestAuthInfo auth = 1;
   // three lists of the same length representing dht keys, dht values and expiration
-  repeated bytes keys = 1;             // keys in the form of DHTID.generate(raw_key).to_bytes()
-  repeated bytes subkeys = 2;          // serialized subkeys for DictionaryDHTValue type. None means no subkey
-  repeated bytes values = 3;           // serialized value for i-th key
-  repeated double expiration_time = 4; // expirations for i-th key (type = DHTExpiration)
-  repeated bool in_cache = 5;          // if in_cache[i], store i-th key in cache, else store normally
-  NodeInfo peer = 6;                   // (optional) sender's own node info, same behavior as in DHT.rpc_ping
+  repeated bytes keys = 2;             // keys in the form of DHTID.generate(raw_key).to_bytes()
+  repeated bytes subkeys = 3;          // serialized subkeys for DictionaryDHTValue type. None means no subkey
+  repeated bytes values = 4;           // serialized value for i-th key
+  repeated double expiration_time = 5; // expirations for i-th key (type = DHTExpiration)
+  repeated bool in_cache = 6;          // if in_cache[i], store i-th key in cache, else store normally
+  NodeInfo peer = 7;                   // (optional) sender's own node info, same behavior as in DHT.rpc_ping
 }
 
 message StoreResponse {
-  repeated bool store_ok = 1;          // for every key, True means store accepted, False means store rejected/failed
-  NodeInfo peer = 2;                   // respondent's node id, for you to update routing table
+  ResponseAuthInfo auth = 1;
+  repeated bool store_ok = 2;          // for every key, True means store accepted, False means store rejected/failed
+  NodeInfo peer = 3;                   // respondent's node id, for you to update routing table
 }
 
 message FindRequest {
-  repeated bytes keys = 1;             // a list of DHTID search keys encoded as bytes
-  NodeInfo peer = 2;                   // optional, same behavior as in DHT.ping
+  RequestAuthInfo auth = 1;
+  repeated bytes keys = 2;             // a list of DHTID search keys encoded as bytes
+  NodeInfo peer = 3;                   // optional, same behavior as in DHT.ping
 }
 
 enum ResultType {NOT_FOUND = 0; FOUND_REGULAR = 1; FOUND_DICTIONARY = 2;}
@@ -66,9 +72,8 @@ message FindResult {
   repeated string nearest_endpoints = 5;    // e.g. 123.123.123.123:1337 or [2a21:6с8:b192:2105]:8888
 }
 
-
 message FindResponse {
-  repeated FindResult results = 1;       // for each item, return value/expiration (if found) and nearest peers
-  NodeInfo peer = 2;                   // respondent's node id, for you to update routing table
+  ResponseAuthInfo auth = 1;
+  repeated FindResult results = 2;       // for each item, return value/expiration (if found) and nearest peers
+  NodeInfo peer = 3;                   // respondent's node id, for you to update routing table
 }
-
