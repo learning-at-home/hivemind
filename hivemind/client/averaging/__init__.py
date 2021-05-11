@@ -38,6 +38,8 @@ DataForGather = Any
 logger = get_logger(__name__)
 DEFAULT_CHUNK_SIZE_BYTES = 2 ** 16
 
+NODE, CLIENT, AUX = 0, 1, 2#TODO ENUM
+
 
 class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragingServicer):
     """
@@ -95,17 +97,22 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
                  throughput: Optional[float] = None, min_vector_size: int = 0,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', daemon: bool = True,
-                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
+                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None, auxiliary: bool = False, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
             "throughput must be a non-negative float32"
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
+        assert listen or not auxiliary, "auxiliary peers must accept incoming connections"
 
         super().__init__()
         self.dht = dht
         self.listen, self.listen_on, self.kwargs = listen, listen_on, kwargs
+        self.mode = NODE if self.listen else CLIENT
+        if auxiliary:
+            self.mode = AUX
+
         self.channel_options = channel_options
         self.daemon = daemon
 
@@ -237,6 +244,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :returns: on success, update averaged_tensors and return group info; on failure, return None
         """
         assert isinstance(weight, (int, float)) and weight > 0, f"Expected a positive int/float, got {type(weight)}"
+        #TODO if aux, check that weight is default and exactly zero
         future, _future = MPFuture.make_pair()
         gather_binary = self.serializer.dumps(gather)  # serialize here to avoid loading modules in the averager process
         self.pipe.send(('_step', [], dict(future=_future, gather_binary=gather_binary, weight=weight,
@@ -253,7 +261,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             while not future.done():
                 try:
                     self._pending_group_assembled.clear()
-                    data_for_gather = self.serializer.dumps([weight, self._throughput, self.listen, gather_binary])
+                    data_for_gather = self.serializer.dumps([weight, self._throughput, self.mode, gather_binary]) 
                     group_info = await self._matchmaking.look_for_group(timeout=timeout,
                                                                         data_for_gather=data_for_gather)
                     if group_info is None:
@@ -263,7 +271,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     self._running_groups[group_id] = allreduce_runner
                     self._pending_group_assembled.set()
                     await asyncio.wait_for(allreduce_runner.run(), self._allreduce_timeout)
-                    await loop.run_in_executor(None, self.update_tensors, allreduce_runner)
+                    if self.mode != AUX:
+                        await loop.run_in_executor(None, self.update_tensors, allreduce_runner)
 
                     # averaging is finished, exit the loop
                     future.set_result(allreduce_runner.gathered)
@@ -297,15 +306,15 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             user_gathered = dict(zip(group_info.endpoints, map(self.serializer.loads, user_gathered)))
 
             # compute optimal part sizes from peer throughputs
-            incoming_throughputs = [thr if listen else 0.0 for thr, listen in zip(throughputs, modes)]
+            incoming_throughputs = [thr if mode != CLIENT else 0.0 for thr, mode in zip(throughputs, modes)]  # TODO: replace with proper load balancing
             part_sizes = await asyncio.get_event_loop().run_in_executor(
                 None, load_balance_peers, self.total_size, incoming_throughputs, min_vector_size)
             async with self.get_tensors_async() as averaged_tensors:
                 return AllReduceRunner(group_id=group_info.group_id, tensors=averaged_tensors, endpoint=self.endpoint,
                                        ordered_group_endpoints=group_info.endpoints, part_sizes=part_sizes,
-                                       weights=weights, gathered=user_gathered, return_deltas=True, **kwargs)
+                                       weights=weights, gathered=user_gathered, return_deltas=True, modes=modes, **kwargs)
         except Exception as e:
-            raise MatchmakingException(f"Unable to create allreduce runner ({e}), group_info: {group_info}")
+            raise MatchmakingException(f"Unable to create allreduce runner ({e}), group_info: {weights, throughputs, modes, user_gathered}")
 
     def update_tensors(self, allreduce_group: AllReduceRunner):
         """
