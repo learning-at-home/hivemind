@@ -60,7 +60,7 @@ class Client:
     async def disconnect(self, peer_id: PeerID) -> None:
         """
         Disconnect from node with specified peer id
-        :peer_id:
+        :peer_id: node peer id you want disconnect from
         """
         await self.control.disconnect(peer_id=peer_id)
 
@@ -69,8 +69,8 @@ class Client:
     ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
         """
         Open a stream to call other peer (with peer_id) handler for specified protocols
-        :peer_id:
-        :protocols:
+        :peer_id: other peer id
+        :protocols: list of protocols for other peer handling
         :return: Returns tuple of stream info (info about connection to second peer) and reader/writer
         """
         return await self.control.stream_open(peer_id=peer_id, protocols=protocols)

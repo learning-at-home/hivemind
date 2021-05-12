@@ -11,7 +11,6 @@ import base58
 import multihash
 from multiaddr import Multiaddr, protocols
 
-from hivemind.p2p.p2p_daemon_bindings.keys import PublicKey
 from hivemind.proto import p2pd_pb2
 
 # NOTE: On inlining...
@@ -25,8 +24,6 @@ IDENTITY_MULTIHASH_CODE = 0x00
 if ENABLE_INLINING:
 
     class IdentityHash:
-        _digest: bytes
-
         def __init__(self) -> None:
             self._digest = bytearray()
 
@@ -44,8 +41,8 @@ if ENABLE_INLINING:
 class PeerID:
     def __init__(self, peer_id_bytes: bytes) -> None:
         self._bytes = peer_id_bytes
-        self._xor_id: int = int(sha256_digest(self._bytes).hex(), 16)
-        self._b58_str: str = base58.b58encode(self._bytes).decode()
+        self._xor_id = int(sha256_digest(self._bytes).hex(), 16)
+        self._b58_str = base58.b58encode(self._bytes).decode()
 
     @property
     def xor_id(self) -> int:
@@ -87,15 +84,6 @@ class PeerID:
         peer_id_bytes = base58.b58decode(base58_id)
         return cls(peer_id_bytes)
 
-    @classmethod
-    def from_pubkey(cls, key: PublicKey) -> "PeerID":
-        serialized_key = key.serialize()
-        algo = multihash.Func.sha2_256
-        if ENABLE_INLINING and len(serialized_key) <= MAX_INLINE_KEY_LENGTH:
-            algo = IDENTITY_MULTIHASH_CODE
-        mh_digest = multihash.digest(serialized_key, algo)
-        return cls(mh_digest.encode())
-
 
 def sha256_digest(data: Union[str, bytes]) -> bytes:
     if isinstance(data, str):
@@ -105,9 +93,9 @@ def sha256_digest(data: Union[str, bytes]) -> bytes:
 
 class StreamInfo:
     def __init__(self, peer_id: PeerID, addr: Multiaddr, proto: str) -> None:
-        self.peer_id: PeerID = peer_id
-        self.addr: Multiaddr = addr
-        self.proto: str = proto
+        self.peer_id = peer_id
+        self.addr = addr
+        self.proto = proto
 
     def __repr__(self) -> str:
         return (

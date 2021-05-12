@@ -30,6 +30,7 @@ SUPPORT_CONN_PROTOCOLS = (
 SUPPORTED_PROTOS = (
     protocols.protocol_with_code(proto) for proto in SUPPORT_CONN_PROTOCOLS
 )
+logger = get_logger(__name__)
 
 
 def parse_conn_protocol(maddr: Multiaddr) -> int:
@@ -47,14 +48,13 @@ class DaemonConnector:
     DEFAULT_CONTROL_MADDR = "/unix/tmp/p2pd.sock"
 
     def __init__(self, control_maddr: Multiaddr = Multiaddr(DEFAULT_CONTROL_MADDR)) -> None:
-        self.control_maddr: Multiaddr = control_maddr
-        self.proto_code: int = parse_conn_protocol(self.control_maddr)
-        self.logger = get_logger(__name__)
+        self.control_maddr = control_maddr
+        self.proto_code = parse_conn_protocol(self.control_maddr)
 
     async def open_connection(self) -> (asyncio.StreamReader, asyncio.StreamWriter):
         if self.proto_code == protocols.P_UNIX:
             control_path = self.control_maddr.value_for_protocol(protocols.P_UNIX)
-            self.logger.debug(f"DaemonConnector {self} opens connection to {self.control_maddr}")
+            logger.debug(f"DaemonConnector {self} opens connection to {self.control_maddr}")
             return await asyncio.open_unix_connection(control_path)
         elif self.proto_code == protocols.P_IP4:
             host = self.control_maddr.value_for_protocol(protocols.P_IP4)
@@ -72,16 +72,15 @@ class ControlClient:
     def __init__(
             self, daemon_connector: DaemonConnector, listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR)
     ) -> None:
-        self.listen_maddr: Multiaddr = listen_maddr
-        self.daemon_connector: DaemonConnector = daemon_connector
+        self.listen_maddr = listen_maddr
+        self.daemon_connector = daemon_connector
         self.handlers: Dict[str, StreamHandler] = {}
-        self.logger = get_logger(__name__)
 
     async def _handler(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         pb_stream_info = p2pd_pb.StreamInfo()  # type: ignore
         await read_pbmsg_safe(reader, pb_stream_info)
         stream_info = StreamInfo.from_protobuf(pb_stream_info)
-        self.logger.debug(f"New incoming stream: {stream_info}")
+        logger.debug(f"New incoming stream: {stream_info}")
         try:
             handler = self.handlers[stream_info.proto]
         except KeyError as e:
@@ -102,14 +101,14 @@ class ControlClient:
             server = await asyncio.start_server(self._handler, port=port, host=host)
         else:
             raise ValueError(
-                f"Protocol not supported: {protocols.protocol_with_code(self.proto_code)}"
+                f"Protocol not supported: {protocols.protocol_with_code(proto_code)}"
             )
 
         async with server:
-            self.logger.info(f"DaemonConnector {self} starts listening to {self.listen_maddr}")
+            logger.info(f"DaemonConnector {self} starts listening to {self.listen_maddr}")
             yield self
 
-        self.logger.info(f"DaemonConnector {self} closed")
+        logger.info(f"DaemonConnector {self} closed")
 
     async def identify(self) -> Tuple[PeerID, Tuple[Multiaddr, ...]]:
         reader, writer = await self.daemon_connector.open_connection()
