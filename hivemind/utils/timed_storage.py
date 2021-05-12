@@ -13,6 +13,7 @@ MAX_DHT_TIME_DISCREPANCY_SECONDS = 3  # max allowed difference between get_dht_t
 DHTExpiration = float
 ROOT = 0
 
+
 @dataclass(init=True, repr=True, frozen=True)
 class ValueWithExpiration(Generic[ValueType]):
     value: ValueType
@@ -37,10 +38,12 @@ class ValueWithExpiration(Generic[ValueType]):
         else:
             return False
 
+
 @dataclass(init=True, repr=True, order=True, frozen=True)
 class HeapEntry(Generic[KeyType]):
     expiration_time: DHTExpiration
     key: KeyType
+
 
 class TimedStorage(Generic[KeyType, ValueType]):
     """ A dictionary that maintains up to :maxsize: key-value-expiration tuples until their expiration_time """
