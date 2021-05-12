@@ -154,7 +154,7 @@ dht = hivemind.DHT(initial_peers=["localhost:1338"], listen=False, start=True)
 # note: listen=False means that your peer will operate in "client only" mode: 
 # this means that it can request other peers, but will not accept requests in return 
 
-expert1, expert4 = dht.get_experts(["expert.1", "expert.4"])
+expert1, expert4 = hivemind.get_experts(dht, ["expert.1", "expert.4"])
 assert expert1 is not None and expert4 is not None, "server hasn't declared experts (yet?)"
 ```
 

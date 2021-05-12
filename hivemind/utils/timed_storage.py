@@ -9,9 +9,10 @@ from dataclasses import dataclass
 KeyType = TypeVar('KeyType')
 ValueType = TypeVar('ValueType')
 get_dht_time = time.time  # a global (weakly synchronized) time
-MAX_DHT_TIME_DISCREPANCY_SECONDS = 3  # max allowed difference between get_dht_time for two DHT nodes. Enforced when joining DHT.(TODO)
+MAX_DHT_TIME_DISCREPANCY_SECONDS = 3  # max allowed difference between get_dht_time for two DHT nodes
 DHTExpiration = float
 ROOT = 0
+
 
 @dataclass(init=True, repr=True, frozen=True)
 class ValueWithExpiration(Generic[ValueType]):
@@ -37,10 +38,12 @@ class ValueWithExpiration(Generic[ValueType]):
         else:
             return False
 
+
 @dataclass(init=True, repr=True, order=True, frozen=True)
 class HeapEntry(Generic[KeyType]):
     expiration_time: DHTExpiration
     key: KeyType
+
 
 class TimedStorage(Generic[KeyType, ValueType]):
     """ A dictionary that maintains up to :maxsize: key-value-expiration tuples until their expiration_time """

@@ -48,7 +48,7 @@ def test_moe_training(max_steps: int = 100, threshold: float = 0.9, num_experts=
     all_expert_uids = [f'expert.{i}' for i in range(num_experts)]
     with background_server(expert_uids=all_expert_uids, device='cpu', optim_cls=SGD, hidden_dim=64, num_handlers=1) \
             as (server_endpoint, dht_endpoint):
-        dht = DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+        dht = DHT(start=True, initial_peers=[dht_endpoint])
 
         moe = RemoteMixtureOfExperts(in_features=64, grid_size=(num_experts,), dht=dht, uid_prefix='expert.', k_best=2)
         model = nn.Sequential(moe, nn.Linear(64, 2))
@@ -91,7 +91,7 @@ def test_switch_training(max_steps: int = 10, threshold: float = 0.9, num_expert
     all_expert_uids = [f'expert.{i}' for i in range(num_experts)]
     with background_server(expert_uids=all_expert_uids, device='cpu', optim_cls=SGD, hidden_dim=64,
                            num_handlers=1) as (server_endpoint, dht_endpoint):
-        dht = DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+        dht = DHT(start=True, initial_peers=[dht_endpoint])
 
         model = SwitchNetwork(dht, 64, 2, num_experts)
         opt = SGD(model.parameters(), lr=0.05)
