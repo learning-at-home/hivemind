@@ -452,6 +452,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                             current_tensor_parts.append(message.tensor_part)
                         if current_tensor_parts:
                             tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
+                        logger.info(f"Finished downloading state from {peer}")
                         future.set_result((metadata, tensors))
                         self.last_updated = get_dht_time()
                         return
@@ -463,7 +464,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         finally:
             if not future.done():
-                logger.warning("Averager could not load state from peers: all attempts failed.")
+                logger.warning("Averager could not load state from peers: all peers failed.")
                 future.set_result(None)
 
     def get_group_bits(self, wait: bool = True):
