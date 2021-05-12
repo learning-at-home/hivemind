@@ -15,7 +15,7 @@ def test_moe():
                        for _ in range(10)]
     with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn', num_handlers=1,
                            hidden_dim=16) as (server_endpoint, dht_endpoint):
-        dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+        dht = hivemind.DHT(start=True, initial_peers=[dht_endpoint])
 
         dmoe = hivemind.RemoteMixtureOfExperts(
             in_features=16, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix='ffn.')
@@ -31,7 +31,7 @@ def test_no_experts():
                        for _ in range(10)]
     with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='nop_delay', num_handlers=1,
                            hidden_dim=16) as (server_endpoint, dht_endpoint):
-        dht = hivemind.DHT(start=True, expiration=999, initial_peers=[dht_endpoint])
+        dht = hivemind.DHT(start=True, initial_peers=[dht_endpoint])
 
         dmoe = hivemind.RemoteSwitchMixtureOfExperts(
             in_features=16, grid_size=(4, 4, 4), dht=dht, uid_prefix='expert.', forward_timeout=0.1,
@@ -119,7 +119,7 @@ def test_remote_module_call(hidden_dim=16):
 @pytest.mark.forked
 def test_beam_search_correctness():
     all_expert_uids = [f'ffn.{5 + i}.{10 + j}.{15 + k}' for i in range(10) for j in range(10) for k in range(10)]
-    dht = hivemind.DHT(start=True, expiration=999)
+    dht = hivemind.DHT(start=True)
     assert all(hivemind.declare_experts(dht, all_expert_uids, endpoint='fake-endpoint'))
 
     dmoe = hivemind.RemoteMixtureOfExperts(
@@ -208,7 +208,7 @@ def test_client_anomaly_detection():
 
     experts['expert.3'].expert.ffn.weight.data[0, 0] = float('nan')
 
-    dht = hivemind.DHT(start=True, expiration=999)
+    dht = hivemind.DHT(start=True)
     server = hivemind.Server(dht, experts, num_connection_handlers=1)
     server.start()
     try:
