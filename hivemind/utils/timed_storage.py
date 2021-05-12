@@ -9,7 +9,7 @@ from dataclasses import dataclass
 KeyType = TypeVar('KeyType')
 ValueType = TypeVar('ValueType')
 get_dht_time = time.time  # a global (weakly synchronized) time
-MAX_DHT_TIME_DISCREPANCY_SECONDS = 3  # max allowed difference between get_dht_time for two DHT nodes.
+MAX_DHT_TIME_DISCREPANCY_SECONDS = 3  # max allowed difference between get_dht_time for two DHT nodes
 DHTExpiration = float
 ROOT = 0
 
