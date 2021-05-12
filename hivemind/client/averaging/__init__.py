@@ -464,7 +464,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         finally:
             if not future.done():
-                logger.warning("Averager could not load state from peers: all peers failed.")
+                logger.warning("Averager could not load state from peers: all requests have failed.")
                 future.set_result(None)
 
     def get_group_bits(self, wait: bool = True):
