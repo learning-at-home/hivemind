@@ -67,7 +67,7 @@ class Server(threading.Thread):
 
         if self.dht and self.experts:
             self.dht_handler_thread = DHTHandlerThread(experts=self.experts, dht=self.dht, endpoint=self.listen_on,
-                                                       update_period=self.update_period)
+                                                       update_period=self.update_period, daemon=True)
 
         if start:
             self.run_in_background(await_ready=True)

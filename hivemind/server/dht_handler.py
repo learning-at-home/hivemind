@@ -10,8 +10,8 @@ from hivemind.utils import Endpoint, get_dht_time, get_port
 
 
 class DHTHandlerThread(threading.Thread):
-    def __init__(self, experts, dht: DHT, endpoint: Endpoint, update_period: int = 5):
-        super().__init__()
+    def __init__(self, experts, dht: DHT, endpoint: Endpoint, update_period: int = 5, **kwargs):
+        super().__init__(**kwargs)
         assert get_port(endpoint) is not None
         self.endpoint = endpoint
         self.experts = experts
