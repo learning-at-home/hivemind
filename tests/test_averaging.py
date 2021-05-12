@@ -41,10 +41,7 @@ async def test_key_manager():
     assert len(q5) == 0
 
 
-@pytest.mark.forked
-@pytest.mark.parametrize("n_aux", [0, 1, 2])
-@pytest.mark.parametrize("n_clients", [0, 1, 2])
-def test_allreduce_once(n_clients, n_aux):
+def _test_allreduce_once(n_clients, n_aux):
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
 
     n_peers = 4
@@ -58,7 +55,7 @@ def test_allreduce_once(n_clients, n_aux):
     peer_tensors = [tensors1, tensors2, tensors3, tensors4]
     
     reference = [sum(tensors[i] for tensors, mode in zip(peer_tensors, modes)
-                 if mode != Mode.AUX) / (n_peers - n_aux) for i in range(len(tensors1))]
+                 if mode != Mode.AUX) / max(1, n_peers - n_aux) for i in range(len(tensors1))]
 
     averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
                                                 prefix='mygroup', listen=mode != Mode.CLIENT, listen_on='127.0.0.1:*',
@@ -82,6 +79,19 @@ def test_allreduce_once(n_clients, n_aux):
     for averager in averagers:
         averager.shutdown()
     dht.shutdown()
+
+
+@pytest.mark.forked
+@pytest.mark.parametrize("n_clients", [0, 1, 2])
+@pytest.mark.parametrize("n_aux", [0, 1, 2])
+def test_allreduce_once(n_clients, n_aux):
+    _test_allreduce_once(n_clients, n_aux)
+
+
+@pytest.mark.forked
+@pytest.mark.parametrize("n_clients, n_aux", [(0, 4), (1, 3), (0, 3)])
+def test_allreduce_once_edge_cases(n_clients, n_aux):
+    _test_allreduce_once(n_clients, n_aux)
 
 
 @pytest.mark.forked

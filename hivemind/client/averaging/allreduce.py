@@ -39,6 +39,7 @@ class AllReduceProtocol:
         self.ordered_group_endpoints, self.part_sizes = ordered_group_endpoints, part_sizes
         if modes is None:
             modes = [Mode.CLIENT if part_size == 0 else Mode.NODE for part_size in part_sizes]
+        assert any(mode != Mode.CLIENT for mode in modes), "Cannot run allreduce without reducers."
         self.peer_modes = dict(zip(ordered_group_endpoints, modes))
 
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
@@ -51,7 +52,11 @@ class AllReduceProtocol:
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
+        
         self.num_senders = len([mode for mode in modes if mode != Mode.AUX])
+
+        if self.num_senders == 0:
+            self.future.set_result(None)
         for endpoint, mode in self.peer_modes.items():
             if mode == Mode.CLIENT:
                 self.averaged_tensor_parts[endpoint] = torch.tensor([])
