@@ -422,47 +422,49 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         return future.result() if wait else future
 
     async def _load_state_from_peers(self, future: MPFuture):
-        key_manager = self._matchmaking.group_key_manager
-        peer_priority, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
-        peer_priority = {peer: float(info.value) for peer, info in peer_priority.items()
-                         if isinstance(info, ValueWithExpiration) and isinstance(info.value, (float, int))}
+        try:
+            key_manager = self._matchmaking.group_key_manager
+            peer_priority, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
+            peer_priority = {peer: float(info.value) for peer, info in peer_priority.items()
+                             if isinstance(info, ValueWithExpiration) and isinstance(info.value, (float, int))}
 
-        if not isinstance(peer_priority, dict) or len(peer_priority) == 0:
-            logger.info(f"Averager could not load state from peers: peer dict is absent or corrupted {peer_priority}.")
-            future.set_result(None)
-            return
+            if not isinstance(peer_priority, dict) or len(peer_priority) == 0:
+                logger.info(f"Averager could not load state from peers: peer dict empty or corrupted {peer_priority}.")
+                future.set_result(None)
+                return
 
-        metadata = None
-        for peer in sorted(peer_priority.keys(), key=peer_priority.get, reverse=True):
-            if peer != self.endpoint:
-                logger.info(f"Downloading parameters from peer {peer}")
-                stream = None
-                try:
-                    leader_stub = ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
-                    stream = leader_stub.rpc_download_state(averaging_pb2.DownloadRequest())
-                    current_tensor_parts, tensors = [], []
-                    async for message in stream:
-                        if message.metadata:
-                            metadata = self.serializer.loads(message.metadata)
-                        if message.tensor_part.dtype and current_tensor_parts:
-                            # tensor_part.dtype indicates the start of the new tensor, so we should wrap up this one
+            metadata = None
+            for peer in sorted(peer_priority.keys(), key=peer_priority.get, reverse=True):
+                if peer != self.endpoint:
+                    logger.info(f"Downloading parameters from peer {peer}")
+                    stream = None
+                    try:
+                        stub = ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
+                        stream = stub.rpc_download_state(averaging_pb2.DownloadRequest())
+                        current_tensor_parts, tensors = [], []
+                        async for message in stream:
+                            if message.metadata:
+                                metadata = self.serializer.loads(message.metadata)
+                            if message.tensor_part.dtype and current_tensor_parts:
+                                # tensor_part.dtype indicates the start of the new tensor, so we should wrap up this one
+                                tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
+                                current_tensor_parts = []
+                            current_tensor_parts.append(message.tensor_part)
+                        if current_tensor_parts:
                             tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
-                            current_tensor_parts = []
-                        current_tensor_parts.append(message.tensor_part)
-                    if current_tensor_parts:
-                        tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
-                    future.set_result((metadata, tensors))
-                    self.last_updated = get_dht_time()
-                    return
-                except grpc.aio.AioRpcError as e:
-                    logger.info(f"Failed to download state from {peer} - {e}")
-                finally:
-                    if stream is not None:
-                        await stream.code()
+                        future.set_result((metadata, tensors))
+                        self.last_updated = get_dht_time()
+                        return
+                    except BaseException as e:
+                        logger.warning(f"Failed to download state from {peer} - {repr(e)}")
+                    finally:
+                        if stream is not None:
+                            await stream.code()
 
-        else:
-            logger.warning("Averager could not load state from peers: found no active peers.")
-            future.set_result(None)
+        finally:
+            if not future.done():
+                logger.warning("Averager could not load state from peers: all attempts failed.")
+                future.set_result(None)
 
     def get_group_bits(self, wait: bool = True):
         """
