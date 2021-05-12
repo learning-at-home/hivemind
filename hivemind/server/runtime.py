@@ -92,12 +92,13 @@ class Runtime(threading.Thread):
     def shutdown(self):
         """ Gracefully terminate a running runtime. """
         logger.info("Shutting down")
+        self.ready.clear()
 
         if self.stats_report_interval is not None:
             self.stats_reporter.stop.set()
             self.stats_reporter.join()
 
-        # self.shutdown_send.send(self.SHUTDOWN_TRIGGER)  # trigger background thread to shutdown
+        self.shutdown_send.send(self.SHUTDOWN_TRIGGER)  # trigger background thread to shutdown
 
         logger.debug("Terminating pools")
         for pool in self.pools:
