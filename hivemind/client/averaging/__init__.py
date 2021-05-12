@@ -457,7 +457,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                         self.last_updated = get_dht_time()
                         return
                     except BaseException as e:
-                        logger.warning(f"Failed to download state from {peer} - {repr(e)}")
+                        logger.exception(f"Failed to download state from {peer} - {repr(e)}")
                     finally:
                         if stream is not None:
                             await stream.code()
