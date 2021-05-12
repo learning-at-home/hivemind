@@ -21,16 +21,14 @@ class DispatchFailure(Exception):
     pass
 
 
-async def write_unsigned_varint(
-    stream: asyncio.StreamWriter, integer: int, max_bits: int = DEFAULT_MAX_BITS
-) -> None:
-    max_int: int = 1 << max_bits
+async def write_unsigned_varint(stream: asyncio.StreamWriter, integer: int, max_bits: int = DEFAULT_MAX_BITS) -> None:
+    max_int = 1 << max_bits
     if integer < 0:
         raise ValueError(f"negative integer: {integer}")
     if integer >= max_int:
         raise ValueError(f"integer too large: {integer}")
     while True:
-        value: int = integer & 0x7F
+        value = integer & 0x7F
         integer >>= 7
         if integer != 0:
             value |= 0x80
@@ -40,13 +38,11 @@ async def write_unsigned_varint(
             break
 
 
-async def read_unsigned_varint(
-    stream: asyncio.StreamReader, max_bits: int = DEFAULT_MAX_BITS
-) -> int:
-    max_int: int = 1 << max_bits
-    iteration: int = 0
-    result: int = 0
-    has_next: bool = True
+async def read_unsigned_varint(stream: asyncio.StreamReader, max_bits: int = DEFAULT_MAX_BITS) -> int:
+    max_int = 1 << max_bits
+    iteration = 0
+    result = 0
+    has_next = True
     while has_next:
         data = await stream.readexactly(1)
         c = data[0]
@@ -55,13 +51,13 @@ async def read_unsigned_varint(
         has_next = (c & 0x80) != 0
         iteration += 1
         if result >= max_int:
-            raise ValueError(f"varint overflowed: {result}")
+            raise ValueError(f"Varint overflowed: {result}")
     return result
 
 
 def raise_if_failed(response: p2pd_pb.Response) -> None:
     if response.type == p2pd_pb.Response.ERROR:
-        raise ControlFailure(f"connect failed. msg={response.error.msg}")
+        raise ControlFailure(f"Connect failed. msg={response.error.msg}")
 
 
 async def write_pbmsg(stream: asyncio.StreamWriter, pbmsg: PBMessage) -> None:

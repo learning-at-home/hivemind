@@ -68,10 +68,10 @@ def libp2p_build_install():
         v = m.group(1)
 
         if version.parse(v) < version.parse("1.13"):
-            raise EnvironmentError(f'newer version of go required: must be >= 1.13, found {version}')
+            raise EnvironmentError(f'Newer version of go required: must be >= 1.13, found {version}')
 
     except FileNotFoundError:
-        raise FileNotFoundError('could not find golang installation')
+        raise FileNotFoundError('Could not find golang installation')
 
     with tempfile.TemporaryDirectory() as tempdir:
         dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')

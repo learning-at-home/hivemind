@@ -15,9 +15,13 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
 
 import numpy as np
 import pytest
+import torch
 
 from hivemind.p2p import P2P
+from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
 from hivemind.proto import dht_pb2, runtime_pb2
+from hivemind.utils import MSGPackSerializer
+from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 
 
 def is_process_running(pid: int) -> bool:
@@ -33,10 +37,7 @@ def bootstrap_addr(host_port, id_):
 
 
 def bootstrap_from(daemons: List[P2P]) -> List[str]:
-    return [
-        bootstrap_addr(d._host_port, d.id)
-        for d in daemons
-    ]
+    return [bootstrap_addr(d._host_port, d.id) for d in daemons]
 
 
 @pytest.mark.asyncio
