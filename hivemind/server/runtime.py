@@ -41,6 +41,7 @@ class Runtime(threading.Thread):
 
     :param stats_report_interval: interval to collect and log statistics about runtime performance
     """
+    SHUTDOWN_TRIGGER = "RUNTIME SHUTDOWN TRIGGERED"
 
     def __init__(self, expert_backends: Dict[str, ExpertBackend], prefetch_batches=64, sender_threads: int = 1,
                  device: torch.device = None, stats_report_interval: Optional[int] = None):
@@ -48,8 +49,8 @@ class Runtime(threading.Thread):
         self.expert_backends = expert_backends
         self.pools = tuple(chain(*(expert.get_pools() for expert in expert_backends.values())))
         self.device, self.prefetch_batches, self.sender_threads = device, prefetch_batches, sender_threads
+        self.shutdown_recv, self.shutdown_send = mp.Pipe(duplex=False)
         self.ready = mp.Event()  # event is set iff server is currently running and ready to accept batches
-        self.stop = threading.Event()
 
         self.stats_report_interval = stats_report_interval
         if self.stats_report_interval is not None:
@@ -96,7 +97,7 @@ class Runtime(threading.Thread):
             self.stats_reporter.stop.set()
             self.stats_reporter.join()
 
-        self.stop.set()  # trigger background thread to shutdown
+        self.shutdown_send.send(self.SHUTDOWN_TRIGGER)  # trigger background thread to shutdown
 
         logger.debug("Terminating pools")
         for pool in self.pools:
@@ -110,21 +111,20 @@ class Runtime(threading.Thread):
         Chooses pool according to priority, then copies exposed batch and frees the buffer
         """
         with DefaultSelector() as selector:
+            selector.register(self.shutdown_recv, EVENT_READ, self.SHUTDOWN_TRIGGER)
             for pool in self.pools:
                 selector.register(pool.batch_receiver, EVENT_READ, pool)
 
-            while not self.stop.is_set():
+            while True:
                 # wait until at least one batch_receiver becomes available
-                logger.debug("Waiting for inputs from task pools")
                 ready_fds = selector.select()
                 ready_objects = {key.data for (key, events) in ready_fds}
+                if self.SHUTDOWN_TRIGGER in ready_objects:
+                    break  # someone asked us to shutdown, break from the loop
 
-                logger.debug("Choosing the pool with highest priority")
                 pool = max(ready_objects, key=lambda pool: pool.priority)
 
-                logger.debug(f"Loading batch from {pool.name}")
                 batch_index, batch_tensors = pool.load_batch_to_runtime(timeout, self.device)
-                logger.debug(f"Loaded batch from {pool.name}")
                 yield pool, batch_index, batch_tensors
 
 
