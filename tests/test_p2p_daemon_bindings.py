@@ -127,33 +127,27 @@ async def test_read_write_unsigned_varint_max_bits_edge(max_bits):
 
 
 def test_peer_id():
-    # test initialized with bytes
     assert PEER_ID.to_bytes() == PEER_ID_BYTES
     assert PEER_ID.to_string() == PEER_ID_STRING
-    # test initialized with string
+
     peer_id_2 = PeerID.from_base58(PEER_ID_STRING)
     assert peer_id_2.to_bytes() == PEER_ID_BYTES
     assert peer_id_2.to_string() == PEER_ID_STRING
-    # test equal
     assert PEER_ID == peer_id_2
-    # test not equal
     peer_id_3 = PeerID.from_base58("QmbmfNDEth7Ucvjuxiw3SP3E4PoJzbk7g4Ge6ZDigbCsNp")
     assert PEER_ID != peer_id_3
 
 
 def test_stream_info():
     proto = "123"
-    # test case: `StreamInfo.__init__`
     si = StreamInfo(PEER_ID, MADDR, proto)
     assert si.peer_id == PEER_ID
     assert si.addr == MADDR
     assert si.proto == proto
-    # test case: `StreamInfo.to_pb`
     pb_si = si.to_protobuf()
     assert pb_si.peer == PEER_ID.to_bytes()
     assert pb_si.addr == MADDR.to_bytes()
     assert pb_si.proto == si.proto
-    # test case: `StreamInfo.from_pb`
     si_1 = StreamInfo.from_protobuf(pb_si)
     assert si_1.peer_id == PEER_ID
     assert si_1.addr == MADDR
@@ -162,10 +156,8 @@ def test_stream_info():
 
 def test_peer_info():
     pi = PeerInfo(PEER_ID, [MADDR])
-    # test case: `PeerInfo.__init__`
     assert pi.peer_id == PEER_ID
     assert pi.addrs == [MADDR]
-    # test case: `PeerInfo.from_pb`
     pi_pb = p2pd_pb.PeerInfo(id=PEER_ID.to_bytes(), addrs=[MADDR.to_bytes()])
     pi_1 = PeerInfo.from_protobuf(pi_pb)
     assert pi.peer_id == pi_1.peer_id
