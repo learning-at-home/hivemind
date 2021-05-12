@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import pytest
 import hivemind
-from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts
+from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts, Mode
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.key_manager import GroupKeyManager
 from hivemind.utils import Endpoint
@@ -42,25 +42,28 @@ async def test_key_manager():
 
 
 @pytest.mark.forked
-@pytest.mark.parametrize("n_client_mode_peers", [0, 2])
-def test_allreduce_once(n_client_mode_peers):
+@pytest.mark.parametrize("n_aux", [0, 1, 2])
+@pytest.mark.parametrize("n_clients", [0, 1, 2])
+def test_allreduce_once(n_clients, n_aux):
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
 
     n_peers = 4
-    should_listen = [False] * n_client_mode_peers + [True] * (n_peers - n_client_mode_peers)
-    random.shuffle(should_listen)
-
+    modes = [Mode.CLIENT] * n_clients + [Mode.AUX] * n_aux + [Mode.NODE] * (n_peers - n_clients - n_aux)
+    random.shuffle(modes)
+    
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
     tensors3 = [-torch.rand(123), torch.arange(3).to(torch.float32)]
     tensors4 = [torch.randn(123) ** 3, torch.arange(3).to(torch.float32) / 2]
-
-    reference = [(tensors1[i] + tensors2[i] + tensors3[i] + tensors4[i]) / 4 for i in range(len(tensors1))]
+    peer_tensors = [tensors1, tensors2, tensors3, tensors4]
+    
+    reference = [sum(tensors[i] for tensors, mode in zip(peer_tensors, modes)
+                 if mode != Mode.AUX) / (n_peers - n_aux) for i in range(len(tensors1))]
 
     averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
-                                                prefix='mygroup', listen=listen, listen_on='127.0.0.1:*',
-                                                start=True)
-                 for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)]
+                                                prefix='mygroup', listen=mode != Mode.CLIENT, listen_on='127.0.0.1:*',
+                                                auxiliary=mode == Mode.AUX, start=True)
+                 for tensors, mode in zip(peer_tensors, modes)]
 
     futures = []
     for averager in averagers:
@@ -71,9 +74,10 @@ def test_allreduce_once(n_client_mode_peers):
             assert averager.endpoint in result
 
     for averager in averagers:
-        with averager.get_tensors() as averaged_tensors:
-            for ref, our in zip(reference, averaged_tensors):
-                assert torch.allclose(ref, our, atol=1e-6)
+        if averager.mode != Mode.AUX:
+            with averager.get_tensors() as averaged_tensors:
+                for ref, our in zip(reference, averaged_tensors):
+                    assert torch.allclose(ref, our, atol=1e-6)
 
     for averager in averagers:
         averager.shutdown()

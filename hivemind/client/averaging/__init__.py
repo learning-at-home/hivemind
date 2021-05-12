@@ -20,7 +20,7 @@ import torch
 import numpy as np
 
 from hivemind.dht import DHT, DHTID
-from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, split_into_parts
+from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, Mode
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.client.averaging.group_info import GroupInfo
@@ -37,8 +37,6 @@ StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averagi
 DataForGather = Any
 logger = get_logger(__name__)
 DEFAULT_CHUNK_SIZE_BYTES = 2 ** 16
-
-NODE, CLIENT, AUX = 0, 1, 2#TODO ENUM
 
 
 class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragingServicer):
@@ -104,14 +102,14 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
-        assert listen or not auxiliary, "auxiliary peers must accept incoming connections"
+        assert listen or not auxiliary, f"auxiliary peers must accept incoming connections"
 
         super().__init__()
         self.dht = dht
         self.listen, self.listen_on, self.kwargs = listen, listen_on, kwargs
-        self.mode = NODE if self.listen else CLIENT
+        self.mode = Mode.NODE if self.listen else Mode.CLIENT
         if auxiliary:
-            self.mode = AUX
+            self.mode = Mode.AUX
 
         self.channel_options = channel_options
         self.daemon = daemon
@@ -261,7 +259,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             while not future.done():
                 try:
                     self._pending_group_assembled.clear()
-                    data_for_gather = self.serializer.dumps([weight, self._throughput, self.mode, gather_binary]) 
+                    data_for_gather = self.serializer.dumps([weight, self._throughput, self.mode.value, gather_binary]) 
                     group_info = await self._matchmaking.look_for_group(timeout=timeout,
                                                                         data_for_gather=data_for_gather)
                     if group_info is None:
@@ -271,7 +269,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     self._running_groups[group_id] = allreduce_runner
                     self._pending_group_assembled.set()
                     await asyncio.wait_for(allreduce_runner.run(), self._allreduce_timeout)
-                    if self.mode != AUX:
+                    if self.mode != Mode.AUX:
                         await loop.run_in_executor(None, self.update_tensors, allreduce_runner)
 
                     # averaging is finished, exit the loop
@@ -302,11 +300,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def _make_allreduce_runner(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> AllReduceRunner:
         """ Use a group description found by Matchmaking to form AllreduceRunner """
         try:
-            weights, throughputs, modes, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
+            weights, throughputs, modes_ix, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
             user_gathered = dict(zip(group_info.endpoints, map(self.serializer.loads, user_gathered)))
-
+            modes = tuple(map(Mode, modes_ix))
+            
             # compute optimal part sizes from peer throughputs
-            incoming_throughputs = [thr if mode != CLIENT else 0.0 for thr, mode in zip(throughputs, modes)]  # TODO: replace with proper load balancing
+            incoming_throughputs = [thr if mode != Mode.CLIENT else 0.0 for thr, mode in zip(throughputs, modes)]  # TODO: replace with proper load balancing
             part_sizes = await asyncio.get_event_loop().run_in_executor(
                 None, load_balance_peers, self.total_size, incoming_throughputs, min_vector_size)
             async with self.get_tensors_async() as averaged_tensors:

@@ -1,5 +1,6 @@
 import asyncio
 from typing import Sequence, Set, Dict, Tuple, Iterable, AsyncIterator, Any, Optional
+from enum import Enum
 
 import grpc
 import torch
@@ -13,7 +14,9 @@ from hivemind.proto import averaging_pb2_grpc, runtime_pb2, averaging_pb2
 GroupID = bytes
 logger = get_logger(__name__)
 
-NODE, CLIENT, AUX = 0, 1, 2
+
+class Mode(Enum):
+    NODE, CLIENT, AUX = 0, 1, 2
 
 
 class AllReduceProtocol:
@@ -30,12 +33,12 @@ class AllReduceProtocol:
 
     def __init__(self, *, group_id: GroupID, tensors: Sequence[torch.Tensor], endpoint: Endpoint,
                  ordered_group_endpoints: Sequence[Endpoint], part_sizes: Tuple[int, ...], return_deltas: bool = False,
-                 modes: Optional[Sequence[int]] = None):
+                 modes: Optional[Sequence[Mode]] = None):
         assert endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
         self.group_id, self.endpoint = group_id, endpoint
         self.ordered_group_endpoints, self.part_sizes = ordered_group_endpoints, part_sizes
         if modes is None:
-            modes = [CLIENT if part_size == 0 else NODE for part_size in part_sizes]
+            modes = [Mode.CLIENT if part_size == 0 else Mode.NODE for part_size in part_sizes]
         self.peer_modes = dict(zip(ordered_group_endpoints, modes))
 
         self.local_tensor_parts = dict(zip(ordered_group_endpoints, split_into_parts(tensors, part_sizes)))
@@ -48,9 +51,9 @@ class AllReduceProtocol:
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
-        self.num_senders = len([mode for mode in modes if mode != AUX])
+        self.num_senders = len([mode for mode in modes if mode != Mode.AUX])
         for endpoint, mode in self.peer_modes.items():
-            if mode == CLIENT: #TODO do we really need that
+            if mode == Mode.CLIENT:
                 self.averaged_tensor_parts[endpoint] = torch.tensor([])
 
     def __repr__(self):
@@ -72,7 +75,7 @@ class AllReduceProtocol:
         assert not self.future.done(), f"already finished allreduce: {self.future}"
         assert source in self.local_tensor_parts, "unexpected source, not a part of current group"
         assert source not in self.accumulated_from, "duplicate source, already received that part"
-        assert self.peer_modes[self.endpoint] != CLIENT, f"{self.endpoint} is in client mode"
+        assert self.peer_modes[self.endpoint] != Mode.CLIENT, f"{self.endpoint} is in Mode.client mode"
         assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
         logger.debug(f"{self} - accumulating tensor part from {source}")
 
@@ -83,11 +86,11 @@ class AllReduceProtocol:
         self.accumulated_from.add(source)
 
         assert len(self.accumulated_from) <= self.num_senders
-        if len(self.accumulated_from) == self.num_senders: #TODO excluding AUX
+        if len(self.accumulated_from) == self.num_senders:
             average_result = self.accumulator.div_(self.denominator)
             self.averaged_part.set_result(average_result)
 
-            if self.peer_modes[self.endpoint] == AUX:
+            if self.peer_modes[self.endpoint] == Mode.AUX:
                 self.future.set_result(None)  # auxiliary mode has finished averaging
             else:
                 self.register_averaged_part(self.endpoint, average_result)
@@ -100,7 +103,7 @@ class AllReduceProtocol:
         assert source not in self.averaged_tensor_parts, "already registered the average from this peer"
         assert averaged_part.shape == self.local_tensor_parts[source].shape, "averaged part shape mismatch"
         assert averaged_part.dtype == self.local_tensor_parts[source].dtype, "averaged part dtype mismatch"
-        assert self.peer_modes[self.endpoint] != AUX, "You hear a reasonable explanation on why this behavior is wrong"
+        assert self.peer_modes[self.endpoint] != Mode.AUX, "You hear a reasonable explanation on why this behavior is wrong"
         logger.debug(f"{self} - receiving averaged tensor part from {source}")
         self.averaged_tensor_parts[source] = averaged_part
         if len(self.averaged_tensor_parts) == len(self.local_tensor_parts):
@@ -158,7 +161,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
     async def _communicate_with_peer(self, peer_endpoint: Endpoint, local_part: torch.Tensor) -> torch.Tensor:
         """ Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors """
-        assert self.peer_modes[self.endpoint] != AUX, "TODO TEXT"
+        assert self.peer_modes[self.endpoint] != Mode.AUX, "TODO TEXT"
         if peer_endpoint == self.endpoint:
             return await self.accumulate_part(self.endpoint, local_part, weight=self.peer_weights[self.endpoint])
         serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
@@ -197,11 +200,11 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         send allreduce requests to all peers and collect results, return the averaged tensor (or deltas)
         """
         try:
-            if self.peer_modes[self.endpoint] != AUX:
+            if self.peer_modes[self.endpoint] != Mode.AUX:
                 print(f'{self.endpoint} - SENDING STUFF, {self.peer_modes}')
                 await asyncio.gather(self, *(self._communicate_with_peer(peer, self.local_tensor_parts[peer])
                                             for i, peer in enumerate(self.ordered_group_endpoints)
-                                            if self.peer_modes[peer] != CLIENT))
+                                            if self.peer_modes[peer] != Mode.CLIENT))
             else:
                 print(f'{self.endpoint} - NOT SENDING STUFF {self.peer_modes}')
             
