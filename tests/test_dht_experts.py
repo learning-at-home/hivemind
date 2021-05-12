@@ -46,7 +46,7 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
     dht = []
     for i in range(dht_size):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
-        dht.append(hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc))
+        dht.append(hivemind.DHT(start=True, initial_peers=neighbors_i, parallel_rpc=parallel_rpc))
 
     real_experts = sorted({
         'expert.' + '.'.join([str(random.randint(0, dim - 1)) for dim in grid_dims])
@@ -57,7 +57,7 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
                         endpoint=f"host{batch_start // batch_size}:{random.randint(0, 65536)}")
 
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
-    you = hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
+    you = hivemind.DHT(start=True, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
     beam_search = MoEBeamSearcher(you, 'expert.', grid_dims)
 
     for i in range(10):
@@ -75,7 +75,7 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
 
 @pytest.mark.forked
 def test_dht_single_node():
-    node = hivemind.DHT(start=True, expiration=999)
+    node = hivemind.DHT(start=True)
     beam_search = MoEBeamSearcher(node, 'expert.', grid_size=(10,))
 
     assert all(declare_experts(node, ['expert.1', 'expert.2', 'expert.3'], f"{hivemind.LOCALHOST}:1337").values())
