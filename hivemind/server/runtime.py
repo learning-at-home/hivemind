@@ -50,6 +50,7 @@ class Runtime(threading.Thread):
         self.pools = tuple(chain(*(expert.get_pools() for expert in expert_backends.values())))
         self.device, self.prefetch_batches, self.sender_threads = device, prefetch_batches, sender_threads
         self.shutdown_recv, self.shutdown_send = mp.Pipe(duplex=False)
+        self.shutdown_trigger = mp.Event()
         self.ready = mp.Event()  # event is set iff server is currently running and ready to accept batches
 
         self.stats_report_interval = stats_report_interval
@@ -87,7 +88,8 @@ class Runtime(threading.Thread):
 
                     output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
             finally:
-                self.shutdown()
+                if not self.shutdown_trigger.is_set():
+                    self.shutdown()
 
     def shutdown(self):
         """ Gracefully terminate a running runtime. """
@@ -98,14 +100,16 @@ class Runtime(threading.Thread):
             self.stats_reporter.stop.set()
             self.stats_reporter.join()
 
-        self.shutdown_send.send(self.SHUTDOWN_TRIGGER)  # trigger background thread to shutdown
-
         logger.debug("Terminating pools")
         for pool in self.pools:
             if pool.is_alive():
                 pool.terminate()
                 pool.join()
         logger.debug("Pools terminated")
+
+        # trigger background thread to shutdown
+        self.shutdown_send.send(self.SHUTDOWN_TRIGGER)
+        self.shutdown_trigger.set()
 
     def iterate_minibatches_from_pools(self, timeout=None):
         """

@@ -261,6 +261,7 @@ class Server(threading.Thread):
             self.dht.join()
 
         logger.debug(f"Shutting down runtime")
+
         self.runtime.shutdown()
         logger.info("Server shutdown succesfully")
 
