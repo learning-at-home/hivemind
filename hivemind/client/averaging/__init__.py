@@ -183,7 +183,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     self._port.value = found_port
                     await server.start()
                 else:
-                    logger.info(f"The averager running in an experimental client mode, please report any bugs.")
+                    logger.debug(f"The averager is running in client mode.")
 
                 self._matchmaking = Matchmaking(self.endpoint, self.schema_hash, self.dht, **self.matchmaking_kwargs,
                                                 client_mode=not self.listen)
