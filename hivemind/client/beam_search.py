@@ -22,7 +22,7 @@ class MoEBeamSearcher:
         * optional prefix that determines expert role, experiment name, etc.
         * one or more integers that determine that expert's position in an N-dimensional grid
 
-    A hivemind.Server can ``DHT.declare_experts(expert_uids: List[str])`` to make its experts visible to everyone.
+    A hivemind.Server can ``declare_experts(dht, expert_uids: List[str])`` to make its experts visible to everyone.
     When declaring experts, DHT will store each expert's uid and all its prefixes until :expiration: (specified at init)
     For instance, declaring "ffn_expert.98.76.54.32.10" will store the following keys in a DHT:
     ``"ffn_expert.98", "ffn_expert.98.76", "ffn_expert.98.76.54", ..., "ffn_expert.98.76.54.32.10"``

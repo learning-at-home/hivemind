@@ -120,7 +120,7 @@ def test_remote_module_call(hidden_dim=16):
 def test_beam_search_correctness():
     all_expert_uids = [f'ffn.{5 + i}.{10 + j}.{15 + k}' for i in range(10) for j in range(10) for k in range(10)]
     dht = hivemind.DHT(start=True, expiration=999)
-    assert all(dht.declare_experts(all_expert_uids, endpoint='fake-endpoint'))
+    assert all(hivemind.declare_experts(dht, all_expert_uids, endpoint='fake-endpoint'))
 
     dmoe = hivemind.RemoteMixtureOfExperts(
         in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix='ffn.')

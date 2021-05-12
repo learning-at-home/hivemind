@@ -6,7 +6,7 @@ import pytest
 
 import hivemind
 import hivemind.server.expert_uid
-from hivemind import LOCALHOST
+from hivemind import LOCALHOST, declare_experts, get_experts
 from hivemind.client.beam_search import MoEBeamSearcher
 from hivemind.server.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefix, split_uid
 
@@ -26,13 +26,13 @@ def test_store_get_experts():
     for batch_start in range(0, len(expert_uids), batch_size):
         hivemind.declare_experts(first_peer, expert_uids[batch_start: batch_start + batch_size], 'localhost:1234')
 
-    found = other_peer.get_experts(random.sample(expert_uids, 5) + ['foo', 'bar'])
+    found = get_experts(other_peer, random.sample(expert_uids, 5) + ['foo', 'bar'])
     assert all(res is not None for res in found[:-2]), "Could not find some existing experts"
     assert all(res is None for res in found[-2:]), "Found non-existing experts"
 
     other_expert, other_port = "my_other_expert.1337", random.randint(1000, 9999)
     hivemind.declare_experts(other_peer, [other_expert], f'that_host:{other_port}')
-    first_notfound, first_found = hivemind.get_experts(first_peer, ['foobar', other_expert])
+    first_notfound, first_found = get_experts(first_peer, ['foobar', other_expert])
     assert isinstance(first_found, hivemind.RemoteExpert)
     assert first_found.endpoint == f'that_host:{other_port}'
 
@@ -53,9 +53,8 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
         for _ in range(total_experts)
     })
     for batch_start in range(0, len(real_experts), batch_size):
-        random.choice(dht).declare_experts(
-            real_experts[batch_start: batch_start + batch_size], wait=True,
-            endpoint=f"host{batch_start // batch_size}:{random.randint(0, 65536)}")
+        declare_experts(random.choice(dht), real_experts[batch_start: batch_start + batch_size], wait=True,
+                        endpoint=f"host{batch_start // batch_size}:{random.randint(0, 65536)}")
 
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
     you = hivemind.DHT(start=True, expiration=999999, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
@@ -79,14 +78,14 @@ def test_dht_single_node():
     node = hivemind.DHT(start=True, expiration=999)
     beam_search = MoEBeamSearcher(node, 'expert.', grid_size=(10,))
 
-    assert all(node.declare_experts(['expert.1', 'expert.2', 'expert.3'], f"{hivemind.LOCALHOST}:1337").values())
-    assert len(node.declare_experts(["ffn.1", "ffn.2"], endpoint="that_place")) == 4
-    assert len(node.declare_experts(['e.1.2.3', 'e.1.2.5', 'e.2.0'], f"{hivemind.LOCALHOST}:42")) == 7
+    assert all(declare_experts(node, ['expert.1', 'expert.2', 'expert.3'], f"{hivemind.LOCALHOST}:1337").values())
+    assert len(declare_experts(node, ["ffn.1", "ffn.2"], endpoint="that_place")) == 4
+    assert len(declare_experts(node, ['e.1.2.3', 'e.1.2.5', 'e.2.0'], f"{hivemind.LOCALHOST}:42")) == 7
 
-    for expert in node.get_experts(['expert.3', 'expert.2']):
+    for expert in get_experts(node, ['expert.3', 'expert.2']):
         assert expert.endpoint == f"{hivemind.LOCALHOST}:1337"
 
-    assert all(node.declare_experts(['expert.5', 'expert.2'], f"{hivemind.LOCALHOST}:1337").values())
+    assert all(declare_experts(node, ['expert.5', 'expert.2'], f"{hivemind.LOCALHOST}:1337").values())
     found_experts = beam_search.find_best_experts([(0., 1., 2., 3., 4., 5., 6., 7., 8.)], beam_size=2)
     assert len(found_experts) == 2 and [expert.uid for expert in found_experts] == ['expert.5', 'expert.3']
 

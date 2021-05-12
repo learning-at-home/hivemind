@@ -257,12 +257,3 @@ class DHT(mp.Process):
         else:
             future.set_exception(ValueError(f"Can't get address: DHT node has no peers and no public endpoint."
                                             f" Please ensure the node is connected or specify peers=... manually."))
-
-    def declare_experts(self, uids, endpoint, wait: bool = True):
-        logger.warning("dht.declare_experts is scheduled for removal in 0.9.8, please use hivemind.declare_experts.")
-        return hivemind.declare_experts(self, uids, endpoint, wait=wait)
-
-    def get_experts(self, uids, expiration_time: Optional[DHTExpiration] = None,
-                    return_future: bool = False) -> List[Optional[RemoteExpert]]:
-        logger.warning("dht.get_experts is scheduled for removal in 0.9.8, please use hivemind.get_experts.")
-        return hivemind.get_experts(self, uids, expiration_time, return_future)
