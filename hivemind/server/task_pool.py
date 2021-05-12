@@ -173,6 +173,7 @@ class TaskPool(TaskPoolBase):
             batch_inputs = [inp.detach().requires_grad_(inp.requires_grad).share_memory_() for inp in batch_inputs]
 
             logger.debug(f"{self.name}, batch {batch_index}: sending to runtime")
+            print(f"{self.name}, batch {batch_index}: sending to runtime")
             self.batch_sender.send((batch_index, batch_inputs))
             logger.debug(f"{self.name}, batch {batch_index}: sent to runtime")
             prev_num_tasks = len(batch_tasks)

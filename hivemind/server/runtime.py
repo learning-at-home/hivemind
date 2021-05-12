@@ -97,7 +97,7 @@ class Runtime(threading.Thread):
             self.stats_reporter.stop.set()
             self.stats_reporter.join()
 
-        self.shutdown_send.send(self.SHUTDOWN_TRIGGER)  # trigger background thread to shutdown
+        # self.shutdown_send.send(self.SHUTDOWN_TRIGGER)  # trigger background thread to shutdown
 
         logger.debug("Terminating pools")
         for pool in self.pools:
@@ -111,20 +111,24 @@ class Runtime(threading.Thread):
         Chooses pool according to priority, then copies exposed batch and frees the buffer
         """
         with DefaultSelector() as selector:
-            selector.register(self.shutdown_recv, EVENT_READ, self.SHUTDOWN_TRIGGER)
             for pool in self.pools:
                 selector.register(pool.batch_receiver, EVENT_READ, pool)
+            # selector.register(self.shutdown_recv, EVENT_READ, self.SHUTDOWN_TRIGGER)
 
             while True:
                 # wait until at least one batch_receiver becomes available
+                logger.debug("Waiting for inputs from task pools")
                 ready_fds = selector.select()
                 ready_objects = {key.data for (key, events) in ready_fds}
                 if self.SHUTDOWN_TRIGGER in ready_objects:
                     break  # someone asked us to shutdown, break from the loop
 
+                logger.debug("Choosing the pool with highest priority")
                 pool = max(ready_objects, key=lambda pool: pool.priority)
 
+                logger.debug(f"Loading batch from {pool.name}")
                 batch_index, batch_tensors = pool.load_batch_to_runtime(timeout, self.device)
+                logger.debug(f"Loaded batch from {pool.name}")
                 yield pool, batch_index, batch_tensors
 
 
