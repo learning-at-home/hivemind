@@ -1,4 +1,3 @@
-from __future__ import annotations
 import random
 import re
 from typing import NamedTuple, Union, Tuple, Optional, List
