@@ -51,13 +51,11 @@ class DHT(mp.Process):
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 expiration: float = 300, record_validators: Iterable[RecordValidatorBase] = (),
-                 **kwargs):
+                 record_validators: Iterable[RecordValidatorBase] = (), **kwargs):
         super().__init__()
         assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
-        self.default_expiration = expiration
         self._record_validator = CompositeValidator(record_validators)
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
@@ -257,12 +255,3 @@ class DHT(mp.Process):
         else:
             future.set_exception(ValueError(f"Can't get address: DHT node has no peers and no public endpoint."
                                             f" Please ensure the node is connected or specify peers=... manually."))
-
-    def declare_experts(self, uids, endpoint, wait: bool = True):
-        logger.warning("dht.declare_experts is scheduled for removal in 0.9.8, please use hivemind.declare_experts.")
-        return hivemind.declare_experts(self, uids, endpoint, wait=wait)
-
-    def get_experts(self, uids, expiration_time: Optional[DHTExpiration] = None,
-                    return_future: bool = False) -> List[Optional[RemoteExpert]]:
-        logger.warning("dht.get_experts is scheduled for removal in 0.9.8, please use hivemind.get_experts.")
-        return hivemind.get_experts(self, uids, expiration_time, return_future)

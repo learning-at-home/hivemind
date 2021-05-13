@@ -25,7 +25,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     for _ in trange(num_peers):
         neighbors = [f'0.0.0.0:{node.port}' for node in random.sample(peers, min(initial_peers, len(peers)))]
         peer = hivemind.DHT(initial_peers=neighbors, start=True, wait_timeout=wait_timeout,
-                            expiration=expiration, listen_on=f'0.0.0.0:*')
+                            listen_on=f'0.0.0.0:*')
         peers.append(peer)
 
     store_peer, get_peer = peers[-2:]
@@ -43,7 +43,8 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     for start in trange(0, num_experts, expert_batch_size):
         store_start = time.perf_counter()
         endpoints.append(random_endpoint())
-        store_ok = hivemind.declare_experts(store_peer, expert_uids[start: start + expert_batch_size], endpoints[-1])
+        store_ok = hivemind.declare_experts(store_peer, expert_uids[start: start + expert_batch_size], endpoints[-1],
+                                            expiration=expiration)
         successes = store_ok.values()
         total_store_time += time.perf_counter() - store_start
 
