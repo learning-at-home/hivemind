@@ -212,9 +212,30 @@ def test_control_client_ctor_default_listen_maddr():
 @pytest.mark.parametrize(
     "msg_bytes",
     (
-        b'\x08\x00"R\n"\x12 F\xec\xd3p0X\xbeT\x95p^\xc8{\xc8\x13\xa3\x9c\x84d\x0b\x1b\xbb\xa0P\x98w\xc1\xb3\x981i\x16\x12\x02\xa2\x02\x12\x08\x04\x7f\x00\x00\x01\x06\xc7\xb6\x12\x08\x04\xc0\xa8\n\x87\x06\xc7\xb6\x12\x14)\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x06\xc7\xb7',  # noqa: E501
-        b'\x08\x00"R\n"\x12 \xd0\xf0 \x9a\xc6v\xa6\xd3;\xcac|\x95\x94\xa0\xe6:\nM\xc53T\x0e\xf0\x89\x8e(\x0c\xb9\xf7\\\xa5\x12\x02\xa2\x02\x12\x08\x04\x7f\x00\x00\x01\x06\xc9%\x12\x08\x04\xc0\xa8\n\x87\x06\xc9%\x12\x14)\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x06\xc9&',  # noqa: E501
-        b'\x08\x00"R\n"\x12 \xc3\xc3\xee\x18i\x8a\xde\x13\xa9y\x905\xeb\xcb\xa4\xd07\x14\xbe\xf4\xf8\x1b\xe8[g94\x94\xe3f\x18\xa9\x12\x02\xa2\x02\x12\x08\x04\x7f\x00\x00\x01\x06\xc9`\x12\x08\x04\xc0\xa8\n\x87\x06\xc9`\x12\x14)\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x06\xc9a',  # noqa: E501
+        p2pd_pb.Response(
+            type=p2pd_pb.Response.Type.OK,
+            identify=p2pd_pb.IdentifyResponse(
+                id=PeerID.from_base58('QmT7WhTne9zBLfAgAJt9aiZ8jZ5BxJGowRubxsHYmnyzUd').to_bytes(),
+                addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/51126').to_bytes(),
+                       Multiaddr('/ip4/192.168.10.135/tcp/51126').to_bytes(),
+                       Multiaddr('/ip6/::1/tcp/51127').to_bytes()]
+            )).SerializeToString(),
+        p2pd_pb.Response(
+            type=p2pd_pb.Response.Type.OK,
+            identify=p2pd_pb.IdentifyResponse(
+                id=PeerID.from_base58('QmcQFt2MFfCZ9AxzUCNrk4k7TtMdZZvAAteaA6tHpBKdrk').to_bytes(),
+                addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/51493').to_bytes(),
+                       Multiaddr('/ip4/192.168.10.135/tcp/51493').to_bytes(),
+                       Multiaddr('/ip6/::1/tcp/51494').to_bytes()]
+            )).SerializeToString(),
+        p2pd_pb.Response(
+            type=p2pd_pb.Response.Type.OK,
+            identify=p2pd_pb.IdentifyResponse(
+                id=PeerID.from_base58('QmbWqVVoz7v9LS9ZUQAhyyfdFJY3iU8ZrUY3XQozoTA5cc').to_bytes(),
+                addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/51552').to_bytes(),
+                       Multiaddr('/ip4/192.168.10.135/tcp/51552').to_bytes(),
+                       Multiaddr('/ip6/::1/tcp/51553').to_bytes()]
+            )).SerializeToString(),
     ),
     # give test cases ids to prevent bytes from ruining the terminal
     ids=("pb example Response 0", "pb example Response 1", "pb example Response 2"),
@@ -232,24 +253,46 @@ async def test_read_pbmsg_safe_valid(msg_bytes):
 
 
 @pytest.mark.parametrize(
-    "pb_msg, msg_bytes",
+    "pb_type, pb_msg",
     (
         (
-            p2pd_pb.Response(),
-            b'Z\x08\x00*V\x08\x01\x12R\n"\x12 \x03\x8d\xf5\xd4(/#\xd6\xed\xa5\x1bU\xb8s\x8c\xfa\xad\xfc{\x04\xe3\xecw\xdeK\xc9,\xfe\x9c\x00:\xc8\x12\x02\xa2\x02\x12\x08\x04\x7f\x00\x00\x01\x06\xdea\x12\x08\x04\xc0\xa8\n\x87\x06\xdea\x12\x14)\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x06\xdeb',  # noqa: E501
+            p2pd_pb.Response,
+            p2pd_pb.Response(
+                type=p2pd_pb.Response.Type.OK,
+                dht=p2pd_pb.DHTResponse(
+                    type=p2pd_pb.DHTResponse.Type.VALUE,
+                    peer=p2pd_pb.PeerInfo(
+                        id=PeerID.from_base58('QmNaXUy78W9moQ9APCoKaTtPjLcEJPN9hRBCqErY7o2fQs').to_bytes(),
+                        addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/56929').to_bytes(),
+                               Multiaddr('/ip4/192.168.10.135/tcp/56929').to_bytes(),
+                               Multiaddr('/ip6/::1/tcp/56930').to_bytes()]
+                    )
+                )
+            ),
         ),
-        (p2pd_pb.Request(), b"\x02\x08\x05"),
+        (p2pd_pb.Request, p2pd_pb.Request(type=p2pd_pb.Request.Type.LIST_PEERS)),
         (
-            p2pd_pb.DHTRequest(),
-            b'&\x08\x00\x12"\x12 \xd5\x0b\x18/\x9e\xa5G\x06.\xdd\xebW\xf0N\xf5\x0eW\xd3\xec\xdf\x06\x02\xe2\x89\x1e\xf0\xbb.\xc0\xbdE\xb8',  # noqa: E501
+            p2pd_pb.DHTRequest,
+            p2pd_pb.DHTRequest(type=p2pd_pb.DHTRequest.Type.FIND_PEER,
+                               peer=PeerID.from_base58('QmcgHMuEhqdLHDVeNjiCGU7Ds6E7xK3f4amgiwHNPKKn7R').to_bytes()),
         ),
         (
-            p2pd_pb.DHTResponse(),
-            b'V\x08\x01\x12R\n"\x12 wy\xe2\xfa\x11\x9e\xe2\x84X]\x84\xf8\x98\xba\x8c\x8cQ\xd7,\xb59\x1e!G\x92\x86G{\x141\xe9\x1b\x12\x02\xa2\x02\x12\x08\x04\x7f\x00\x00\x01\x06\xdeA\x12\x08\x04\xc0\xa8\n\x87\x06\xdeA\x12\x14)\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x06\xdeB',  # noqa: E501
+            p2pd_pb.DHTResponse,
+            p2pd_pb.DHTResponse(
+                type=p2pd_pb.DHTResponse.Type.VALUE,
+                peer=p2pd_pb.PeerInfo(
+                    id=PeerID.from_base58('QmWP32GhEyXVQsLXFvV81eadDC8zQRZxZvJK359rXxLquk').to_bytes(),
+                    addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/56897').to_bytes(),
+                           Multiaddr('/ip4/192.168.10.135/tcp/56897').to_bytes(),
+                           Multiaddr('/ip6/::1/tcp/56898').to_bytes()]
+                )
+            ),
         ),
         (
-            p2pd_pb.StreamInfo(),
-            b';\n"\x12 \xf6\x9e=\x9f\xc1J\xfe\x02\x93k!S\x80\xa0\xcc(s\xea&\xbe\xed\x9274qTI\xc1\xf7\xb6\xbd7\x12\x08\x04\x7f\x00\x00\x01\x06\xde\xc5\x1a\x0bprotocol123',  # noqa: E501
+            p2pd_pb.StreamInfo,
+            p2pd_pb.StreamInfo(peer=PeerID.from_base58('QmewLxB46MftfxQiunRgJo2W8nW4Lh5NLEkRohkHhJ4wW6').to_bytes(),
+                               addr=Multiaddr('/ip4/127.0.0.1/tcp/57029').to_bytes(),
+                               proto=b'protocol123'),
         ),
     ),
     ids=(
@@ -261,11 +304,14 @@ async def test_read_pbmsg_safe_valid(msg_bytes):
     ),
 )
 @pytest.mark.asyncio
-async def test_write_pbmsg(pb_msg, msg_bytes):
+async def test_write_pbmsg(pb_type, pb_msg):
+    msg_bytes = bytes(chr(pb_msg.ByteSize()), 'utf-8') + pb_msg.SerializeToString()
+    pb_obj = pb_type()
+
     s_read = MockReaderWriter(msg_bytes)
-    await read_pbmsg_safe(s_read, pb_msg)
+    await read_pbmsg_safe(s_read, pb_obj)
     s_write = MockReaderWriter()
-    await write_pbmsg(s_write, pb_msg)
+    await write_pbmsg(s_write, pb_obj)
     assert msg_bytes == s_write.getvalue()
 
 
