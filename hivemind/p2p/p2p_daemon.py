@@ -36,17 +36,6 @@ class P2PContext(object):
     peer_id: PeerID = None
     peer_addr: Multiaddr = None
 
-from hivemind.utils.networking import find_open_port
-
-
-class P2PContext(object):
-    def __init__(self, ours_id, ours_port, handle_name):
-        self.peer_id = None
-        self.peer_addr = None
-        self.ours_id = ours_id
-        self.ours_port = ours_port
-        self.handle_name = handle_name
-
 
 class P2P:
     """

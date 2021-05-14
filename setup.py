@@ -31,17 +31,6 @@ def md5(fname, chunk_size=4096):
     return hash_md5.hexdigest()
 
 
-here = os.path.abspath(os.path.dirname(__file__))
-
-
-def md5(fname, chunk_size=4096):
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(chunk_size), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
-
-
 def proto_compile(output_path):
     import grpc_tools.protoc
 

@@ -4,15 +4,6 @@ import subprocess
 from functools import partial
 from typing import List
 
-import torch
-
-from hivemind.utils import MSGPackSerializer
-from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
-
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
-
-from hivemind.p2p.p2p_daemon_bindings.datastructures import ID
-
 import numpy as np
 import pytest
 import torch
