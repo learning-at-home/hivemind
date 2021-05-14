@@ -84,10 +84,8 @@ class AllReduceProtocol:
         assert source not in self.accumulated_from, "duplicate source, already received that part"
         assert self.peer_modes[self.endpoint] != AveragingMode.CLIENT, f"{self.endpoint} is in AveragingMode.client mode"
         assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
-        logger.debug(f"{self} - accumulating tensor part from {source}")
 
-        print(end=f"{self} - accumulating tensor part from {source}\n")
-        
+        logger.debug(f"{self} - accumulating tensor part from {source}")
         self.accumulator.add_(remote_part, alpha=weight)
         self.denominator += weight
         self.accumulated_from.add(source)
@@ -208,7 +206,6 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
         """
         try:
             if self.peer_modes[self.endpoint] != AveragingMode.AUX:
-                print(f'{self.endpoint} - SENDING STUFF, {self.peer_modes}')
                 await asyncio.gather(self, *(self._communicate_with_peer(peer, self.local_tensor_parts[peer])
                                             for i, peer in enumerate(self.ordered_group_endpoints)
                                             if self.peer_modes[peer] != AveragingMode.CLIENT))
