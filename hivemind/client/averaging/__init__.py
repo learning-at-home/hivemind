@@ -18,6 +18,7 @@ import grpc
 from grpc._cython.cygrpc import InternalError
 import torch
 import numpy as np
+from torch._C import Node
 
 from hivemind.dht import DHT, DHTID
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
@@ -104,14 +105,17 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert initial_group_bits is None or all(bit in '01' for bit in initial_group_bits)
-        assert listen or not auxiliary, f"auxiliary peers must accept incoming connections"
+        assert listen or not auxiliary, "auxiliary peers must accept incoming connections"
 
         super().__init__()
         self.dht = dht
         self.listen, self.listen_on, self.kwargs = listen, listen_on, kwargs
-        self.mode = AveragingMode.NODE if self.listen else AveragingMode.CLIENT
-        if auxiliary:
+        if not self.listen:
+            self.mode = AveragingMode.CLIENT
+        elif auxiliary:
             self.mode = AveragingMode.AUX
+        else:
+            self.mode = AveragingMode.NODE
 
         self.channel_options = channel_options
         self.daemon = daemon
