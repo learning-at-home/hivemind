@@ -108,7 +108,7 @@ class AllReduceProtocol:
         assert source not in self.averaged_tensor_parts, "already registered the average from this peer"
         assert averaged_part.shape == self.local_tensor_parts[source].shape, "averaged part shape mismatch"
         assert averaged_part.dtype == self.local_tensor_parts[source].dtype, "averaged part dtype mismatch"
-        assert self.peer_modes[self.endpoint] != AveragingMode.AUX, "auxiliary peers do not have local tensors for sending"
+        assert self.peer_modes[self.endpoint] != AveragingMode.AUX, "Auxiliary peers do not have local tensors for sending"
         logger.debug(f"{self} - receiving averaged tensor part from {source}")
         self.averaged_tensor_parts[source] = averaged_part
         if len(self.averaged_tensor_parts) == len(self.local_tensor_parts):
@@ -166,7 +166,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
     async def _communicate_with_peer(self, peer_endpoint: Endpoint, local_part: torch.Tensor) -> torch.Tensor:
         """ Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors """
-        assert self.peer_modes[self.endpoint] != AveragingMode.AUX, "auxiliary peers are disallowed from sending tensors"
+        assert self.peer_modes[self.endpoint] != AveragingMode.AUX, "Auxiliary peers are disallowed from sending tensors"
         if peer_endpoint == self.endpoint:
             return await self.accumulate_part(self.endpoint, local_part, weight=self.peer_weights[self.endpoint])
         serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
@@ -209,9 +209,6 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
                 await asyncio.gather(self, *(self._communicate_with_peer(peer, self.local_tensor_parts[peer])
                                             for i, peer in enumerate(self.ordered_group_endpoints)
                                             if self.peer_modes[peer] != AveragingMode.CLIENT))
-            else:
-                print(f'{self.endpoint} - NOT SENDING STUFF {self.peer_modes}')
-            
             return await self
         except BaseException as e:
             code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
