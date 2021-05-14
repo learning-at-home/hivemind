@@ -18,7 +18,6 @@ import grpc
 from grpc._cython.cygrpc import InternalError
 import torch
 import numpy as np
-from torch._C import Node
 
 from hivemind.dht import DHT, DHTID
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
