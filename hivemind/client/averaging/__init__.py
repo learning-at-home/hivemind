@@ -20,7 +20,7 @@ import torch
 import numpy as np
 
 from hivemind.dht import DHT, DHTID
-from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, Mode
+from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.client.averaging.group_info import GroupInfo
@@ -107,9 +107,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         super().__init__()
         self.dht = dht
         self.listen, self.listen_on, self.kwargs = listen, listen_on, kwargs
-        self.mode = Mode.NODE if self.listen else Mode.CLIENT
+        self.mode = AveragingMode.NODE if self.listen else AveragingMode.CLIENT
         if auxiliary:
-            self.mode = Mode.AUX
+            self.mode = AveragingMode.AUX
 
         self.channel_options = channel_options
         self.daemon = daemon
@@ -242,7 +242,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :returns: on success, update averaged_tensors and return group info; on failure, return None
         """
         assert isinstance(weight, (int, float)) and weight > 0, f"Expected a positive int/float, got {type(weight)}"
-        if self.mode == Mode.AUX and weight != 1:
+        if self.mode == AveragingMode.AUX and weight != 1:
             logger.warning("Averager is running in auxiliary mode, weight is unused.")
         future, _future = MPFuture.make_pair()
         gather_binary = self.serializer.dumps(gather)  # serialize here to avoid loading modules in the averager process
@@ -270,7 +270,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     self._running_groups[group_id] = allreduce_runner
                     self._pending_group_assembled.set()
                     await asyncio.wait_for(allreduce_runner.run(), self._allreduce_timeout)
-                    if self.mode != Mode.AUX:
+                    if self.mode != AveragingMode.AUX:
                         await loop.run_in_executor(None, self.update_tensors, allreduce_runner)
 
                     # averaging is finished, exit the loop
@@ -303,10 +303,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         try:
             weights, throughputs, modes_ix, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
             user_gathered = dict(zip(group_info.endpoints, map(self.serializer.loads, user_gathered)))
-            modes = tuple(map(Mode, modes_ix))
+            modes = tuple(map(AveragingMode, modes_ix))
             
             # compute optimal part sizes from peer throughputs
-            incoming_throughputs = [thr if mode != Mode.CLIENT else 0.0 for thr, mode in zip(throughputs, modes)]  # TODO: replace with proper load balancing
+            incoming_throughputs = [thr if mode != AveragingMode.CLIENT else 0.0 for thr, mode in zip(throughputs, modes)]  # TODO: replace with proper load balancing
             part_sizes = await asyncio.get_event_loop().run_in_executor(
                 None, load_balance_peers, self.total_size, incoming_throughputs, min_vector_size)
             async with self.get_tensors_async() as averaged_tensors:
