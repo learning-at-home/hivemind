@@ -16,7 +16,9 @@ logger = get_logger(__name__)
 
 
 class AveragingMode(Enum):
-    NODE, CLIENT, AUX = 0, 1, 2
+    NODE = 0
+    CLIENT = 1
+    AUX = 2
 
 
 class AllReduceProtocol:
