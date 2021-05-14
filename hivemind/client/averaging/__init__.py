@@ -73,7 +73,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
     :param kwargs: extra parameters forwarded to grpc.aio.server
     :param auxiliary: if this flag is specified, averager.step will only assist others without sending
-          local gradients for averaging
+          local tensors for averaging
 
     Example:
 
