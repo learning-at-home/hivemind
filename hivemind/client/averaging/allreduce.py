@@ -108,7 +108,7 @@ class AllReduceProtocol:
         assert source not in self.averaged_tensor_parts, "already registered the average from this peer"
         assert averaged_part.shape == self.local_tensor_parts[source].shape, "averaged part shape mismatch"
         assert averaged_part.dtype == self.local_tensor_parts[source].dtype, "averaged part dtype mismatch"
-        assert self.peer_modes[self.endpoint] != AveragingMode.AUX, "You hear a reasonable explanation on why this behavior is wrong"
+        assert self.peer_modes[self.endpoint] != AveragingMode.AUX, "auxiliary peers do not have local tensors for sending"
         logger.debug(f"{self} - receiving averaged tensor part from {source}")
         self.averaged_tensor_parts[source] = averaged_part
         if len(self.averaged_tensor_parts) == len(self.local_tensor_parts):
