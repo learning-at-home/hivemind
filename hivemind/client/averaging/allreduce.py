@@ -166,7 +166,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
 
     async def _communicate_with_peer(self, peer_endpoint: Endpoint, local_part: torch.Tensor) -> torch.Tensor:
         """ Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors """
-        assert self.peer_modes[self.endpoint] != AveragingMode.AUX, "aux peers are disallowed from sending tensors"
+        assert self.peer_modes[self.endpoint] != AveragingMode.AUX, "auxiliary peers are disallowed from sending tensors"
         if peer_endpoint == self.endpoint:
             return await self.accumulate_part(self.endpoint, local_part, weight=self.peer_weights[self.endpoint])
         serialized_tensor_part = serialize_torch_tensor(local_part, self.compression_type, allow_inplace=False)
