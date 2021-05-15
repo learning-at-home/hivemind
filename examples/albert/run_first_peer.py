@@ -42,7 +42,7 @@ class CoordinatorArguments(BaseTrainingArguments):
         metadata={"help": "Learning curves will be published there"}
     )
     save_checkpoint_step_interval: int = field(
-        default=5,
+        default=None,
         metadata={"help": "Coordinator will load and save state from peers once every that many steps"}
     )
     model_config_path: str = field(
