@@ -106,6 +106,14 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     def step(self, *args, **kwargs):
         self._sync_if_needed()
 
+        if self.averager.averaging_ready_event.is_set():
+            with self.averager.lock_averager_step, torch.no_grad():
+                local_tensors = list(self.averager.local_tensors())
+                for averaged_tensor, local_tensor in zip(self.averager.update, local_tensors):
+                    local_tensor[...] += averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
+                self.averager.update = None
+                self.averager.averaging_ready_event.clear()
+
         with self.lock_scheduler_params:
             if self.local_epoch < self.training_state.max_epoch:
                 self.local_step = 0

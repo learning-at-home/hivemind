@@ -463,7 +463,8 @@ def test_lr_scheduler(n_steps: int = 100, n_dims: int = 16, time_to_wait: int = 
         (x2 - target).pow(2).sum().backward()
         sgd1.step()
         sgd2.step()
-        time.sleep(time_to_wait)
+        sgd1.averager.averaging_ready_event.wait()
+        sgd2.averager.averaging_ready_event.wait()
     assert sgd1.local_epoch == sgd2.local_epoch
     assert all([x['lr'] == y['lr'] for x, y in zip(sgd1.opt.param_groups, sgd2.opt.param_groups)])
 
