@@ -19,7 +19,7 @@ jobs:
           command: pip install -e .
           name: setup
       - run:
-          command: while true; do pytest tests/test_averaging.py::test_allreduce_once[2-2]; done
+          command: while true; do pytest -s tests/test_averaging.py::test_allreduce_once[2-2]; done
           name: tests
   build-and-test-py38:
     docker:
@@ -39,7 +39,7 @@ jobs:
           command: pip install -e .
           name: setup
       - run:
-          command: while true; do pytest tests/test_averaging.py::test_allreduce_once[2-2]; done
+          command: while true; do pytest -s tests/test_averaging.py::test_allreduce_once[2-2]; done
           name: tests
   build-and-test-py39:
     docker:
@@ -59,7 +59,7 @@ jobs:
           command: pip install -e .
           name: setup
       - run:
-          command: while true; do pytest tests/test_averaging.py::test_allreduce_once[2-2]; done
+          command: while true; do pytest -s tests/test_averaging.py::test_allreduce_once[2-2]; done
           name: tests
 
 workflows:
