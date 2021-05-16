@@ -46,7 +46,7 @@ def _test_allreduce_once(n_clients, n_aux):
 
     n_peers = 4
     modes = [AveragingMode.CLIENT] * n_clients + [AveragingMode.AUX] * n_aux + [AveragingMode.NODE] * (n_peers - n_clients - n_aux)
-    random.shuffle(modes)
+    # random.shuffle(modes)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
