@@ -62,14 +62,12 @@ def _test_allreduce_once(n_clients, n_aux):
                                                 auxiliary=(mode == AveragingMode.AUX), start=True)
                  for tensors, mode in zip(peer_tensors, modes)]
     futures = []
-    print(f'=== {modes} ===')
     for averager in averagers:
         futures.append(averager.step(wait=False))
     for future in futures:
         result = future.result()
         for averager in averagers:
-            assert averager.endpoint in result
-
+            assert averager.endpoint in result, f"{modes}"
     for averager in averagers:
         if averager.mode != AveragingMode.AUX:
             with averager.get_tensors() as averaged_tensors:
