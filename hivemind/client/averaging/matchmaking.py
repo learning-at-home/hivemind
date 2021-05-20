@@ -411,12 +411,14 @@ class PotentialLeaders:
         """ Remove and return the next most suitable leader or throw an exception if reached timeout """
         assert self.running.is_set(), "Not running search at the moment"
         while True:
+            print(f"QQ{self.endpoint} - current queue = {self.leader_queue.data}")
             maybe_next_leader, entry = self.leader_queue.top()
 
             if maybe_next_leader is None or self.max_assured_time <= entry.expiration_time <= self.search_end_time:
                 self.update_triggered.set()
 
             if maybe_next_leader is None or entry.expiration_time >= self.declared_expiration_time:
+                print(f"QQ{self.endpoint} - awaiting queue update")
                 await asyncio.wait({self.update_finished.wait(), self.declared_expiration.wait()},
                                    return_when=asyncio.FIRST_COMPLETED)
                 self.declared_expiration.clear()
@@ -428,6 +430,8 @@ class PotentialLeaders:
 
             del self.leader_queue[maybe_next_leader]
             self.past_attempts.add((maybe_next_leader, entry.expiration_time))
+            print(f"QQ{self.endpoint} - yielding {maybe_next_leader}")
+                
             return maybe_next_leader
 
     @property
