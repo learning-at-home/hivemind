@@ -153,6 +153,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
         :note: this function does not guarantee that your group leader is the same as :leader: parameter
           The originally specified leader can disband group and redirect us to a different leader
         """
+        print(f"{self.endpoint} - REQUEST TO {leader}")
         assert self.is_looking_for_group and self.current_leader is None
         call: Optional[grpc.aio.UnaryStreamCall] = None
         try:
@@ -165,14 +166,19 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
                 if message.code == averaging_pb2.ACCEPTED:
                     logger.debug(f"{self.endpoint} - joining the group of {leader}; waiting for peers")
+                    print(f"{self.endpoint} - joining the group of {leader}; waiting for peers")
+                    
                     self.current_leader = leader
                     self.was_accepted_to_group.set()
                     if len(self.current_followers) > 0:
                         await self.leader_disband_group()
+                        print(f"{self.endpoint} - DISBANDED GROUP")
+                    
 
             if message.code != averaging_pb2.ACCEPTED:
                 code = averaging_pb2.MessageCode.Name(message.code)
                 logger.debug(f"{self.endpoint} - requested {leader} to be my leader, but got rejected with {code}")
+                print(f"{self.endpoint} - requested {leader} to be my leader, but got rejected with {code}")
                 return None
 
             async with self.potential_leaders.pause_search():
@@ -180,23 +186,30 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 message = await asyncio.wait_for(call.read(), time_to_expiration + self.request_timeout)
 
                 if message.code == averaging_pb2.BEGIN_ALLREDUCE:
+                    print(f"{self.endpoint} - beginning alreduce")
+                
                     async with self.lock_request_join_group:
                         return await self.follower_assemble_group(leader, message)
+                else:
+                    print(f"{self.endpoint} - NOT beginning alreduce due to receiving code {message.code}")
 
             if message.code in (averaging_pb2.GROUP_DISBANDED, averaging_pb2.CANCELLED):
                 if message.suggested_leader and message.suggested_leader != self.endpoint:
+                    print(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
                     logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
                     self.current_leader = None
                     call.cancel()
                     return await self.request_join_group(message.suggested_leader, expiration_time)
                 else:
+                    print(f"{self} - leader disbanded group/")
                     logger.debug(f"{self} - leader disbanded group")
                     return None
-
+            print(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
+            
             logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
             return None
         except asyncio.TimeoutError:
-            logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
+            print(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             if call is not None:
                 call.cancel()
             return None
