@@ -140,7 +140,7 @@ def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
 
     zeros = torch.zeros(5,5)
     for compression_type in CompressionType.values():
-        assert not deserialize_torch_tensor(serialize_torch_tensor(zeros, compression_type)).isnan().any()
+        assert deserialize_torch_tensor(serialize_torch_tensor(zeros, compression_type)).isfinite.all()
 
 @pytest.mark.forked
 @pytest.mark.asyncio
