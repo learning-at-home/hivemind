@@ -383,6 +383,13 @@ def test_load_state_from_peers():
     assert got_metadata == super_metadata
     assert all(map(torch.allclose, got_tensors, super_tensors))
 
+    averager1.allow_state_sharing = False
+    assert averager2.load_state_from_peers() is None
+    averager1.allow_state_sharing = True
+    got_metadata, got_tensors = averager2.load_state_from_peers()
+    assert num_calls == 3
+    assert got_metadata == super_metadata
+
 
 @pytest.mark.forked
 def test_getset_bits():

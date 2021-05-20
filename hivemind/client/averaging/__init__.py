@@ -73,6 +73,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param kwargs: extra parameters forwarded to grpc.aio.server
     :param auxiliary: if this flag is specified, averager.step will only assist others without sending
           local tensors for averaging
+    :param allow_state_sharing: if set to True, other peers can download this peer's state. Can be overwritten
+      with averager.allow_state_sharing = True / False
 
     Example:
 
@@ -96,8 +98,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  allreduce_timeout: Optional[float] = None, averaging_alpha: float = 1.0,
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
                  throughput: Optional[float] = None, min_vector_size: int = 0,
+                 auxiliary: bool = False, allow_state_sharing: Optional[bool] = None,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', daemon: bool = True,
-                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None, auxiliary: bool = False, **kwargs):
+                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
             "throughput must be a non-negative float32"
@@ -139,6 +142,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
+
+        self._allow_state_sharing = mp.Value(ctypes.c_bool, 0)
+        self.allow_state_sharing = (listen and not auxiliary) if allow_state_sharing is None else allow_state_sharing
+
         self._averager_endpoint: Optional[Endpoint] = None
         if not self.listen:
             self._averager_endpoint = f'client::{uuid.uuid4()}'
@@ -155,6 +162,18 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     @property
     def port(self) -> Optional[Port]:
         return self._port.value if self._port.value != 0 else None
+
+    @property
+    def allow_state_sharing(self) -> bool:
+        """ if set to True, other peers can download this peer's state """
+        return bool(self._allow_state_sharing.value)
+
+    @allow_state_sharing.setter
+    def allow_state_sharing(self, value: bool):
+        if value is True and not self.listen:
+            logger.warning("Cannot allow state sharing: averager in client mode (listen=False) cannot share its state.")
+        else:
+            self._allow_state_sharing.value = value
 
     @property
     def endpoint(self) -> Optional[Endpoint]:
@@ -381,10 +400,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def _declare_for_download_periodically(self):
         download_key = f'{self._matchmaking.group_key_manager.prefix}.all_averagers'
         while True:
-            asyncio.create_task(asyncio.wait_for(self.dht.store(
-                download_key, subkey=self.endpoint, value=self.last_updated,
-                expiration_time=get_dht_time() + self._matchmaking.averaging_expiration, return_future=True),
-                timeout=self._matchmaking.averaging_expiration))
+            if self.allow_state_sharing:
+                asyncio.create_task(asyncio.wait_for(self.dht.store(
+                    download_key, subkey=self.endpoint, value=self.last_updated,
+                    expiration_time=get_dht_time() + self._matchmaking.averaging_expiration, return_future=True),
+                    timeout=self._matchmaking.averaging_expiration))
             await asyncio.sleep(self._matchmaking.averaging_expiration)
 
     async def rpc_download_state(self, request: averaging_pb2.DownloadRequest, context: grpc.ServicerContext
@@ -396,6 +416,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
          - serialized_metadata is a small serialized bytestring meant to store scalars and hyperparameters
          - tensors is a sequence of pytorch tensors that represent model parameters or optimizer statistics
         """
+        if not self.allow_state_sharing:
+            return  # deny request and direct peer to the next prospective averager
         chunk_size_bytes = self.matchmaking_kwargs.get('chunk_size_bytes', DEFAULT_CHUNK_SIZE_BYTES)
         metadata, tensors = await self._get_current_state_from_host_process()
 
@@ -467,6 +489,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                             current_tensor_parts.append(message.tensor_part)
                         if current_tensor_parts:
                             tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
+
+                        if not metadata:
+                            logger.debug(f"Peer {peer} did not send its state.")
+                            continue
+
                         logger.info(f"Finished downloading state from {peer}")
                         future.set_result((metadata, tensors))
                         self.last_updated = get_dht_time()
