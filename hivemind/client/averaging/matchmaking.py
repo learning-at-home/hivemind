@@ -227,7 +227,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                              ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """ accept or reject a join request from another averager; if accepted, run him through allreduce steps """
         try:
-            print(f"{self.endpoint} - incoming request from {request.endpoint}")
+            print(f"{self.endpoint} - incoming request from {request.endpoint} (time={get_dht_time()})")
             async with self.lock_request_join_group:
                 reason_to_reject = self._check_reasons_to_reject(request)
                 if reason_to_reject is not None:
@@ -257,11 +257,11 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     elif len(self.current_followers) + 1 >= self.min_group_size and self.is_looking_for_group:
                         # outcome 2: the time is up, run allreduce with what we have or disband
                         print(f"{self.endpoint} - beginning allreduce because time is up, group: {self.current_followers} (plus {self.endpoint})"
-                            f"target size = {self.target_group_size}")
+                            f"target size = {self.target_group_size} (time={get_dht_time()})")
                         await self.leader_assemble_group()
                     else:
                         print(f"{self.endpoint} - disbanging group because time is up, group: {self.current_followers} (plus {self.endpoint})"
-                            f"target size = {self.target_group_size}")
+                            f"target size = {self.target_group_size} (time={get_dht_time()})")
                         await self.leader_disband_group()
 
             if self.was_accepted_to_group.is_set() or not self.assembled_group.done() \
