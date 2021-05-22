@@ -139,7 +139,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
                 logger.info(f"Step {self.collaborative_optimizer.local_step}")
                 logger.info(f"Your current contribution: {self.total_samples_processed} samples")
                 if self.steps:
-                    logger.info(f"Local loss: {self.loss/self.steps}")
+                    logger.info(f"Local loss: {self.loss / self.steps}")
 
                 self.loss = 0
                 self.steps = 0
