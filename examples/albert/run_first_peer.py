@@ -177,13 +177,14 @@ if __name__ == '__main__':
                     num_samples += item.samples_accumulated
                     sum_mini_steps += item.mini_steps
                 current_loss = sum_loss / sum_mini_steps
-                
+
                 if coordinator_args.wandb_project is not None:
                     wandb.log({
                         "loss": current_loss,
                         "alive peers": alive_peers,
                         "samples": num_samples,
-                        "performance": sum_perf
+                        "performance": sum_perf,
+                        "step": latest_step
                     })
                 if checkpoint_handler.is_time_to_save_state(current_step):
                     checkpoint_handler.save_state(current_step)

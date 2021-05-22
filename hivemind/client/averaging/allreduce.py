@@ -54,7 +54,7 @@ class AllReduceProtocol:
         self.averaged_part: asyncio.Future[torch.Tensor] = asyncio.Future()  # will be set to [accumulator / group size]
         self.averaged_tensor_parts: Dict[Endpoint, torch.Tensor] = {}  # averaged chunks from all peers will be put here
         self.future: asyncio.Future[Sequence[torch.Tensor]] = asyncio.Future()  # final result or exception
-        
+
         self.num_senders = len([mode for mode in modes if mode != AveragingMode.AUX])
 
         if self.num_senders == 0:
@@ -258,7 +258,7 @@ class AllReduceRunner(AllReduceProtocol, averaging_pb2_grpc.DecentralizedAveragi
             yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
 
-def split_into_parts(tensors: Sequence[torch.Tensor], part_sizes: Tuple[int]) -> Tuple[torch.Tensor, ...]:
+def split_into_parts(tensors: Sequence[torch.Tensor], part_sizes: Tuple[int, ...]) -> Tuple[torch.Tensor, ...]:
     """ combines averaged_tensors into one tensor and splits them into equal chunks of size group_size """
     flat_tensor = torch.cat(tuple(map(torch.Tensor.flatten, tensors)))
     return torch.split_with_sizes(flat_tensor, part_sizes, dim=0)
