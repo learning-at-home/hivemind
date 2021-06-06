@@ -87,7 +87,12 @@ class P2P:
         :param use_global_ipfs: Bootstrap to global ipfs (works only if bootstrap=True and bootstrap_peers=None)
         :param host_port: port for p2p network
         :param daemon_listen_port: port for connection daemon and client binding
-        TODO: add relay options discriptions
+        :param relay_enabled: enables circuit relay
+        :param relay_active: enables active mode for relay
+        :param relay_hop: enables hop for relay
+        :param relay_discovery: enables passive discovery for relay
+        :param auto_relay: enables autorelay
+        :param relay_hop_limit: sets the hop limit for hop relays
         :param kwargs:
         :return: new wrapper for p2p daemon
         """
