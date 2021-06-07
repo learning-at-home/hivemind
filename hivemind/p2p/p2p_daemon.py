@@ -71,7 +71,7 @@ class P2P:
                      nat_port_map: bool = True, auto_nat: bool = True, bootstrap: bool = False,
                      bootstrap_peers: Optional[List[str]] = None, use_global_ipfs: bool = False, host_port: int = None,
                      daemon_listen_port: int = None, relay_enabled: bool = True, relay_active: bool = False,
-                     relay_hop: bool = False, relay_discovery: bool = False, auto_relay: bool = False, relay_hop_limit = 0, **kwargs):
+                     relay_hop: bool = False, relay_discovery: bool = False, use_autorelay: bool = False, relay_hop_limit: int = 0, **kwargs):
         """
         Start a new p2pd process and connect to it.
         :param args:
