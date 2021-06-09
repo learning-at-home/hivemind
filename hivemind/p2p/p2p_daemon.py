@@ -71,7 +71,7 @@ class P2P:
                      nat_port_map: bool = True, auto_nat: bool = True, bootstrap: bool = False,
                      bootstrap_peers: Optional[List[str]] = None, use_global_ipfs: bool = False, host_port: int = None,
                      daemon_listen_port: int = None, relay_enabled: bool = True, relay_active: bool = False,
-                     relay_hop: bool = False, relay_discovery: bool = False, auto_relay: bool = False, relay_hop_limit: int = 0, **kwargs):
+                     relay_hop: bool = False, relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0, **kwargs):
         """
         Start a new p2pd process and connect to it.
         :param args:
@@ -91,7 +91,7 @@ class P2P:
         :param relay_active: enables active mode for relay
         :param relay_hop: enables hop for relay
         :param relay_discovery: enables passive discovery for relay
-        :param auto_relay: enables autorelay
+        :param use_auto_relay: enables autorelay
         :param relay_hop_limit: sets the hop limit for hop relays
         :param kwargs:
         :return: new wrapper for p2p daemon
@@ -116,7 +116,7 @@ class P2P:
             quic=quic, tls=tls, connManager=conn_manager,
             natPortMap=nat_port_map, autonat=auto_nat,
             relay=relay_enabled, relayHop=relay_hop, relayDiscovery=relay_discovery,
-            autoRelay=auto_relay, relayHopLimit=relay_hop_limit,
+            autoRelay=use_auto_relay, relayHopLimit=relay_hop_limit,
             b=bootstrap, **{**bootstrap_peers, **dht, **force_reachability, **kwargs})
         self._assign_daemon_ports(host_port, daemon_listen_port)
 
