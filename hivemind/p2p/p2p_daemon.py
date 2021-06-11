@@ -115,7 +115,7 @@ class P2P:
             str(p2pd_path), *args,
             quic=quic, tls=tls, connManager=conn_manager,
             natPortMap=nat_port_map, autonat=auto_nat,
-            relay=use_relay, relayHop=relay_hop, relayDiscovery=relay_discovery,
+            relay=use_relay, relayHop=enable_relay_hop, relayDiscovery=enable_relay_discovery,
             autoRelay=use_auto_relay, relayHopLimit=relay_hop_limit,
             b=bootstrap, **{**bootstrap_peers, **dht, **force_reachability, **kwargs})
         self._assign_daemon_ports(host_port, daemon_listen_port)
