@@ -70,8 +70,8 @@ class P2P:
                      dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
                      nat_port_map: bool = True, auto_nat: bool = True, bootstrap: bool = False,
                      bootstrap_peers: Optional[List[str]] = None, use_global_ipfs: bool = False, host_port: int = None,
-                     daemon_listen_port: int = None, relay_enabled: bool = True, relay_active: bool = False,
-                     relay_hop: bool = False, relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0, **kwargs):
+                     daemon_listen_port: int = None, use_relay: bool = True, enable_relay_active_mode: bool = False,
+                     enable_relay_hop: bool = False, enable_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0, **kwargs):
         """
         Start a new p2pd process and connect to it.
         :param args:
@@ -87,7 +87,7 @@ class P2P:
         :param use_global_ipfs: Bootstrap to global ipfs (works only if bootstrap=True and bootstrap_peers=None)
         :param host_port: port for p2p network
         :param daemon_listen_port: port for connection daemon and client binding
-        :param relay_enabled: enables circuit relay
+        :param use_relay: enables circuit relay
         :param relay_active: enables active mode for relay
         :param relay_hop: enables hop for relay
         :param relay_discovery: enables passive discovery for relay
@@ -115,7 +115,7 @@ class P2P:
             str(p2pd_path), *args,
             quic=quic, tls=tls, connManager=conn_manager,
             natPortMap=nat_port_map, autonat=auto_nat,
-            relay=relay_enabled, relayHop=relay_hop, relayDiscovery=relay_discovery,
+            relay=use_relay, relayHop=relay_hop, relayDiscovery=relay_discovery,
             autoRelay=use_auto_relay, relayHopLimit=relay_hop_limit,
             b=bootstrap, **{**bootstrap_peers, **dht, **force_reachability, **kwargs})
         self._assign_daemon_ports(host_port, daemon_listen_port)
