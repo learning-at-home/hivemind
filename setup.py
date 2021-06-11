@@ -19,7 +19,6 @@ P2PD_VERSION = 'v0.3.1'
 P2PD_CHECKSUM = '8810097959db720208cdc9f2945804a4'
 LIBP2P_TAR_URL = f'https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz'
 
-
 here = os.path.abspath(os.path.dirname(__file__))
 
 
@@ -51,16 +50,13 @@ def proto_compile(output_path):
 
 
 def libp2p_build_install():
-    try:
-        result = subprocess.run("go version", capture_output=True, shell=True).stdout.decode('ascii', 'replace')
-        m = re.search(r'^go version go([\d.]+)', result)
-        v = m.group(1)
+    result = subprocess.run("go version", capture_output=True, shell=True).stdout.decode('ascii', 'replace')
+    m = re.search(r'^go version go([\d.]+)', result)
 
-        if version.parse(v) < version.parse("1.13"):
-            raise EnvironmentError(f'Newer version of go required: must be >= 1.13, found {version}')
-
-    except FileNotFoundError:
+    if m is None:
         raise FileNotFoundError('Could not find golang installation')
+    if version.parse(m.group(1)) < version.parse("1.13"):
+        raise EnvironmentError(f'Newer version of go required: must be >= 1.13, found {version}')
 
     with tempfile.TemporaryDirectory() as tempdir:
         dest = os.path.join(tempdir, 'libp2p-daemon.tar.gz')
@@ -90,15 +86,39 @@ def libp2p_download_install():
 
 
 class Install(install):
+    user_options = install.user_options + [('buildgo', None, None)]
+
+    def initialize_options(self):
+        super().initialize_options()
+        self.buildgo = False
+
+    def finalize_options(self):
+        super().finalize_options()
+
     def run(self):
-        libp2p_download_install()
+        if self.buildgo:
+            libp2p_build_install()
+        else:
+            libp2p_download_install()
         proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
 
 class Develop(develop):
+    user_options = install.user_options + [('buildgo', None, None)]
+
+    def initialize_options(self):
+        super().initialize_options()
+        self.buildgo = False
+
+    def finalize_options(self):
+        super().finalize_options()
+
     def run(self):
-        libp2p_build_install()
+        if self.buildgo:
+            libp2p_build_install()
+        else:
+            libp2p_download_install()
         proto_compile(os.path.join('hivemind', 'proto'))
         super().run()
 
