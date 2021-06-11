@@ -92,9 +92,6 @@ class Install(install):
         super().initialize_options()
         self.buildgo = False
 
-    def finalize_options(self):
-        super().finalize_options()
-
     def run(self):
         if self.buildgo:
             libp2p_build_install()
@@ -110,9 +107,6 @@ class Develop(develop):
     def initialize_options(self):
         super().initialize_options()
         self.buildgo = False
-
-    def finalize_options(self):
-        super().finalize_options()
 
     def run(self):
         if self.buildgo:
