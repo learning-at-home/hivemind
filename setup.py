@@ -86,7 +86,7 @@ def libp2p_download_install():
 
 
 class Install(install):
-    user_options = install.user_options + [('buildgo', None, None)]
+    user_options = install.user_options + [('buildgo', None, "Builds p2pd from source")]
 
     def initialize_options(self):
         super().initialize_options()
