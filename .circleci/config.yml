@@ -77,8 +77,11 @@ jobs:
           command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
-          command: pytest ./tests
+          command: pytest --cov=hivemind ./tests
           name: tests
+      - run:
+          command: codecov
+          name: codecov
 
 workflows:
   main:
