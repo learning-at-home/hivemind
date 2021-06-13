@@ -26,7 +26,7 @@ jobs:
           paths:
             - '~/.cache/pip'
       - run:
-          command: pip install -e .
+          command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
           command: pytest ./tests
@@ -50,7 +50,7 @@ jobs:
           paths:
             - '~/.cache/pip'
       - run:
-          command: pip install -e .
+          command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
           command: pytest ./tests
@@ -74,7 +74,7 @@ jobs:
           paths:
             - '~/.cache/pip'
       - run:
-          command: pip install -e .
+          command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
           command: pytest ./tests
