@@ -45,8 +45,7 @@ def _test_allreduce_once(n_clients, n_aux):
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
 
     n_peers = 4
-    modes = [AveragingMode.CLIENT] * n_clients + [AveragingMode.AUX] * n_aux + [AveragingMode.NODE] * (
-                n_peers - n_clients - n_aux)
+    modes = [AveragingMode.CLIENT] * n_clients + [AveragingMode.AUX] * n_aux + [AveragingMode.NODE] * (n_peers - n_clients - n_aux)
     random.shuffle(modes)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
@@ -56,11 +55,10 @@ def _test_allreduce_once(n_clients, n_aux):
     peer_tensors = [tensors1, tensors2, tensors3, tensors4]
 
     reference = [sum(tensors[i] for tensors, mode in zip(peer_tensors, modes)
-                     if mode != AveragingMode.AUX) / max(1, n_peers - n_aux) for i in range(len(tensors1))]
+                 if mode != AveragingMode.AUX) / max(1, n_peers - n_aux) for i in range(len(tensors1))]
 
     averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
-                                                prefix='mygroup', listen=mode != AveragingMode.CLIENT,
-                                                listen_on='127.0.0.1:*',
+                                                prefix='mygroup', listen=mode != AveragingMode.CLIENT, listen_on='127.0.0.1:*',
                                                 auxiliary=mode == AveragingMode.AUX, start=True)
                  for tensors, mode in zip(peer_tensors, modes)]
 
