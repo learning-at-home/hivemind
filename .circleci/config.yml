@@ -1,5 +1,10 @@
 version: 2.1
 
+parameters:
+  go-version:
+    type: string
+    default: 1.16.2
+
 jobs:
   build-and-test-py37:
     docker:
@@ -9,6 +14,11 @@ jobs:
       - restore_cache:
           keys:
             - py37-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+            - v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+      - run: |
+          wget https://golang.org/dl/go<< pipeline.parameters.go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          tar -C ~/ -xzf go.tar.gz
+          echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
@@ -16,7 +26,7 @@ jobs:
           paths:
             - '~/.cache/pip'
       - run:
-          command: pip install -e .
+          command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
           command: pytest ./tests
@@ -29,6 +39,10 @@ jobs:
       - restore_cache:
           keys:
             - py38-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+      - run: |
+          wget https://golang.org/dl/go<< pipeline.parameters.go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          tar -C ~/ -xzf go.tar.gz
+          echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
@@ -36,7 +50,7 @@ jobs:
           paths:
             - '~/.cache/pip'
       - run:
-          command: pip install -e .
+          command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
           command: pytest ./tests
@@ -49,6 +63,10 @@ jobs:
       - restore_cache:
           keys:
             - py39-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+      - run: |
+          wget https://golang.org/dl/go<< pipeline.parameters.go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          tar -C ~/ -xzf go.tar.gz
+          echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - save_cache:
@@ -56,7 +74,7 @@ jobs:
           paths:
             - '~/.cache/pip'
       - run:
-          command: pip install -e .
+          command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
           command: pytest ./tests

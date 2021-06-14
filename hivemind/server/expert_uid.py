@@ -2,6 +2,7 @@ import random
 import re
 from typing import NamedTuple, Union, Tuple, Optional, List
 
+import hivemind
 from hivemind.dht import DHT
 from hivemind.utils import Endpoint, get_logger
 
@@ -81,7 +82,7 @@ def generate_uids_from_pattern(num_experts: int, expert_pattern: Optional[str], 
 
         # 2. look into DHT (if given) and remove duplicates
         if dht:
-            existing_expert_uids = {found_expert.uid for found_expert in dht.get_experts(new_uids)
+            existing_expert_uids = {found_expert.uid for found_expert in hivemind.get_experts(dht, new_uids)
                                     if found_expert is not None}
             new_uids = [new_uid for new_uid in new_uids if new_uid not in existing_expert_uids]
 

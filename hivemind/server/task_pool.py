@@ -136,7 +136,7 @@ class TaskPool(TaskPoolBase):
         pending_batches = {}  # Dict[batch uuid, List[MPFuture]] for each batch currently in runtime
 
         output_thread = threading.Thread(target=self._pool_output_loop, args=[pending_batches],
-                                         name=f'{self.name}_output')
+                                         name=f'{self.name}_output', daemon=True)
 
         try:
             output_thread.start()
