@@ -5,9 +5,10 @@ import numpy as np
 import torch
 import pytest
 import hivemind
-from hivemind.client.averaging.allreduce import TensorPartContainer
+from hivemind.client.averaging.allreduce import AllReduceProtocol, split_into_parts, restore_from_parts, AveragingMode
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.key_manager import GroupKeyManager
+from hivemind.utils import Endpoint
 
 
 @pytest.mark.forked
@@ -40,26 +41,28 @@ async def test_key_manager():
     assert len(q5) == 0
 
 
-@pytest.mark.forked
-@pytest.mark.parametrize("n_client_mode_peers", [0, 2])
-def test_allreduce_once(n_client_mode_peers):
+def _test_allreduce_once(n_clients, n_aux):
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
 
     n_peers = 4
-    should_listen = [False] * n_client_mode_peers + [True] * (n_peers - n_client_mode_peers)
-    random.shuffle(should_listen)
+    modes = [AveragingMode.CLIENT] * n_clients + [AveragingMode.AUX] * n_aux + [AveragingMode.NODE] * (
+                n_peers - n_clients - n_aux)
+    random.shuffle(modes)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
     tensors3 = [-torch.rand(123), torch.arange(3).to(torch.float32)]
     tensors4 = [torch.randn(123) ** 3, torch.arange(3).to(torch.float32) / 2]
+    peer_tensors = [tensors1, tensors2, tensors3, tensors4]
 
-    reference = [(tensors1[i] + tensors2[i] + tensors3[i] + tensors4[i]) / 4 for i in range(len(tensors1))]
+    reference = [sum(tensors[i] for tensors, mode in zip(peer_tensors, modes)
+                     if mode != AveragingMode.AUX) / max(1, n_peers - n_aux) for i in range(len(tensors1))]
 
     averagers = [hivemind.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
-                                                prefix='mygroup', listen=listen, listen_on='127.0.0.1:*',
-                                                start=True)
-                 for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)]
+                                                prefix='mygroup', listen=mode != AveragingMode.CLIENT,
+                                                listen_on='127.0.0.1:*',
+                                                auxiliary=mode == AveragingMode.AUX, start=True)
+                 for tensors, mode in zip(peer_tensors, modes)]
 
     futures = []
     for averager in averagers:
@@ -70,13 +73,27 @@ def test_allreduce_once(n_client_mode_peers):
             assert averager.endpoint in result
 
     for averager in averagers:
-        with averager.get_tensors() as averaged_tensors:
-            for ref, our in zip(reference, averaged_tensors):
-                assert torch.allclose(ref, our, atol=1e-6)
+        if averager.mode != AveragingMode.AUX:
+            with averager.get_tensors() as averaged_tensors:
+                for ref, our in zip(reference, averaged_tensors):
+                    assert torch.allclose(ref, our, atol=1e-6)
 
     for averager in averagers:
         averager.shutdown()
     dht.shutdown()
+
+
+@pytest.mark.forked
+@pytest.mark.parametrize("n_clients", [0, 1, 2])
+@pytest.mark.parametrize("n_aux", [0, 1, 2])
+def test_allreduce_once(n_clients, n_aux):
+    _test_allreduce_once(n_clients, n_aux)
+
+
+@pytest.mark.forked
+@pytest.mark.parametrize("n_clients, n_aux", [(0, 4), (1, 3), (0, 3)])
+def test_allreduce_once_edge_cases(n_clients, n_aux):
+    _test_allreduce_once(n_clients, n_aux)
 
 
 @pytest.mark.forked
@@ -186,49 +203,46 @@ def test_allgather():
     dht.shutdown()
 
 
-# todo; refactor
-# @pytest.mark.forked
-# @pytest.mark.asyncio
-# async def test_allreduce_protocol():
-#     """ Run group allreduce protocol manually without grpc, see if the internal logic is working as intended """
-#     peers = "alice", "bob", "carol", "colab"
-#
-#     tensors_by_peer = {peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
-#                        for i, peer in enumerate(peers)}
-#
-#     group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
-#     allreduce_protocols = [AllReduceProtocol(
-#         group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer],
-#         ordered_group_endpoints=peers, part_sizes=(150, 200, 67, 0))
-#         for peer in peers]
-#
-#     async def _accumulate(sender: Endpoint, recipient: Endpoint):
-#         sender_allreduce = allreduce_protocols[peers.index(sender)]
-#         recipient_allreduce = allreduce_protocols[peers.index(recipient)]
-#         remote_part=sender_allreduce.local_tensor_parts.get_part_with_ids(recipient)[-1]
-#         averaged_part = await recipient_allreduce.accumulate_part(
-#             source=sender, remote_part=remote_part)
-#         averaged_part =averaged_part[0]
-#         sender_allreduce.register_averaged_part(source=recipient, averaged_part=[averaged_part])
-#
-#     await asyncio.wait({_accumulate(sender, recipient) for sender in peers for recipient in peers
-#                         if recipient != "colab"})
-#
-#     reference_tensors = [
-#         sum(tensors_by_peer[peer][i] for peer in peers) / len(peers)
-#         for i in range(len(tensors_by_peer[peers[0]]))
-#     ]
-#
-#     for peer, allreduce in zip(peers, allreduce_protocols):
-#         assert allreduce.future.done()
-#         averaged_tensors = await allreduce
-#         assert len(averaged_tensors) == len(reference_tensors)
-#         assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
-#                    for our, ref in zip(averaged_tensors, reference_tensors))
-#
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_allreduce_protocol():
+    """ Run group allreduce protocol manually without grpc, see if the internal logic is working as intended """
+    peers = "alice", "bob", "carol", "colab"
 
-def _get_test_tensors():
-    test_tensors = []
+    tensors_by_peer = {peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
+                       for i, peer in enumerate(peers)}
+
+    group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
+    allreduce_protocols = [AllReduceProtocol(
+        group_id=group_id, endpoint=peer, tensors=tensors_by_peer[peer],
+        ordered_group_endpoints=peers, part_sizes=(150, 200, 67, 0))
+        for peer in peers]
+
+    async def _accumulate(sender: Endpoint, recipient: Endpoint):
+        sender_allreduce = allreduce_protocols[peers.index(sender)]
+        recipient_allreduce = allreduce_protocols[peers.index(recipient)]
+        averaged_part = await recipient_allreduce.accumulate_part(
+            source=sender, remote_part=sender_allreduce.local_tensor_parts[recipient])
+        sender_allreduce.register_averaged_part(source=recipient, averaged_part=averaged_part)
+
+    await asyncio.wait({_accumulate(sender, recipient) for sender in peers for recipient in peers
+                        if recipient != "colab"})
+
+    reference_tensors = [
+        sum(tensors_by_peer[peer][i] for peer in peers) / len(peers)
+        for i in range(len(tensors_by_peer[peers[0]]))
+    ]
+
+    for peer, allreduce in zip(peers, allreduce_protocols):
+        assert allreduce.future.done()
+        averaged_tensors = await allreduce
+        assert len(averaged_tensors) == len(reference_tensors)
+        assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
+                   for our, ref in zip(averaged_tensors, reference_tensors))
+
+
+@pytest.mark.forked
+def test_partitioning():
     for _ in range(100):
         tensors = []
         for _ in range(random.randint(1, 5)):
@@ -238,25 +252,17 @@ def _get_test_tensors():
             tensors.append(make_tensor(shape))
 
         total_size = sum(map(torch.Tensor.numel, tensors))
-        if total_size != 0:
-            test_tensors.append(tensors)
-    return test_tensors
-
-
-@pytest.mark.forked
-@pytest.mark.parametrize("tensors", _get_test_tensors())
-def test_partitioning(tensors):
-    total_size = sum(map(torch.Tensor.numel, tensors))
-    num_chunks = random.randint(1, min(100, sum(x.numel() for x in tensors)))
-    part_sizes = load_balance_peers(total_size, [None] * num_chunks)
-
-    endpoints = list(map(str, range(len(part_sizes))))
-    tensor_container = TensorPartContainer.build_from_tensors(tensors, part_sizes, endpoints)
-    restored = tensor_container.tensors
-
-    assert len(restored) == len(tensors)
-    assert tuple(new.shape for new in restored) == tuple(old.shape for old in tensors)
-    assert all(torch.allclose(new, old) for new, old in zip(restored, tensors))
+        if total_size == 0:
+            continue
+        num_chunks = random.randint(1, min(100, sum(x.numel() for x in tensors)))
+        part_sizes = load_balance_peers(total_size, [None] * num_chunks)
+        chunks = split_into_parts(tensors, part_sizes)
+        assert len(chunks) == num_chunks
+        shapes = [tensor.shape for tensor in tensors]
+        restored = restore_from_parts(chunks, shapes)
+        assert len(restored) == len(tensors)
+        assert all(new.shape == old.shape for new, old in zip(restored, tensors))
+        assert all(torch.allclose(new, old) for new, old in zip(restored, tensors))
 
 
 def get_cost(vector_size, partitions, throughputs):
@@ -316,22 +322,22 @@ def test_too_few_peers():
         averager.shutdown()
     dht.shutdown()
 
-# TODO: uncomment this !!
-# @pytest.mark.forked
-# def test_overcrowded(num_peers=16):
-#     dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
-#     averagers = [hivemind.DecentralizedAverager(
-#         averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
-#         averaging_expiration=1, request_timeout=0.5,
-#         prefix='mygroup', initial_group_bits='', start=True)
-#         for _ in range(num_peers)]
-#     for t in range(5):
-#         step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
-#         assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
-#
-#     for averager in averagers:
-#         averager.shutdown()
-#     dht.shutdown()
+
+@pytest.mark.forked
+def test_overcrowded(num_peers=16):
+    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    averagers = [hivemind.DecentralizedAverager(
+        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
+        averaging_expiration=1, request_timeout=0.5,
+        prefix='mygroup', initial_group_bits='', start=True)
+        for _ in range(num_peers)]
+    for t in range(5):
+        step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
+        assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
+
+    for averager in averagers:
+        averager.shutdown()
+    dht.shutdown()
 
 
 @pytest.mark.forked
@@ -378,6 +384,13 @@ def test_load_state_from_peers():
     assert num_calls == 2
     assert got_metadata == super_metadata
     assert all(map(torch.allclose, got_tensors, super_tensors))
+
+    averager1.allow_state_sharing = False
+    assert averager2.load_state_from_peers() is None
+    averager1.allow_state_sharing = True
+    got_metadata, got_tensors = averager2.load_state_from_peers()
+    assert num_calls == 3
+    assert got_metadata == super_metadata
 
 
 @pytest.mark.forked
