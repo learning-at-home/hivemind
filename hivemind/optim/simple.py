@@ -34,25 +34,46 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     :note: the base optimizer cannot add param groups after the DecentralizedOptimizer is created
     """
 
-    def __init__(self, opt: torch.optim.Optimizer, dht: DHT, *, prefix: str, target_group_size: int,
-                 average_parameters: bool, average_gradients: bool, average_opt_statistics: Sequence[str] = (),
-                 averaging_steps_period: int = 1, averaging_time_period: float = 0,
-                 timeout: Optional[float] = None, verbose: bool = False, **kwargs):
+    def __init__(
+        self,
+        opt: torch.optim.Optimizer,
+        dht: DHT,
+        *,
+        prefix: str,
+        target_group_size: int,
+        average_parameters: bool,
+        average_gradients: bool,
+        average_opt_statistics: Sequence[str] = (),
+        averaging_steps_period: int = 1,
+        averaging_time_period: float = 0,
+        timeout: Optional[float] = None,
+        verbose: bool = False,
+        **kwargs,
+    ):
         super().__init__(opt, dht)
         assert averaging_steps_period > 0 and averaging_time_period >= 0, "Averaging period must be positive."
         self.local_step, self.averaging_step_period = 0, averaging_steps_period
 
-        self.averager = TrainingAverager(opt, average_parameters=average_parameters,
-                                         average_gradients=average_gradients,
-                                         average_opt_statistics=average_opt_statistics,
-                                         dht=dht, start=True, prefix=prefix,
-                                         target_group_size=target_group_size, **kwargs)
+        self.averager = TrainingAverager(
+            opt,
+            average_parameters=average_parameters,
+            average_gradients=average_gradients,
+            average_opt_statistics=average_opt_statistics,
+            dht=dht,
+            start=True,
+            prefix=prefix,
+            target_group_size=target_group_size,
+            **kwargs,
+        )
         self.lock_parameters, self.update_event, self.stop_event = Lock(), Event(), Event()
 
         self.background_averaging_thread = Thread(
-            name=f'{self.__class__.__name__}', daemon=True, target=self._average_parameters_in_background,
+            name=f"{self.__class__.__name__}",
+            daemon=True,
+            target=self._average_parameters_in_background,
             args=[self.lock_parameters, self.update_event, self.stop_event, self.averager],
-            kwargs=dict(averaging_period=averaging_time_period, timeout=timeout, verbose=verbose))
+            kwargs=dict(averaging_period=averaging_time_period, timeout=timeout, verbose=verbose),
+        )
         self.background_averaging_thread.start()
 
     def step(self, *args, **kwargs):
@@ -78,9 +99,15 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     @staticmethod
     @torch.no_grad()
     def _average_parameters_in_background(
-            lock_parameters: Lock, update_event: Event, stop_event: Event, averager: TrainingAverager,
-            averaging_period: float, verbose: bool, **kwargs):
-        """ Iteratively find groups of peers, average parameters with these peers and update local model parameters. """
+        lock_parameters: Lock,
+        update_event: Event,
+        stop_event: Event,
+        averager: TrainingAverager,
+        averaging_period: float,
+        verbose: bool,
+        **kwargs,
+    ):
+        """Iteratively find groups of peers, average parameters with these peers and update local model parameters."""
         while not stop_event.is_set():
             update_event.wait()
             update_event.clear()
@@ -121,11 +148,30 @@ class DecentralizedSGD(DecentralizedOptimizer):
      https://arxiv.org/abs/2103.03239
     """
 
-    def __init__(self, params, lr: float, *, dht: DHT, prefix: str, target_group_size: int,
-                 momentum: float = 0, dampening: float = 0, weight_decay: float = 0, nesterov: bool = False, **kwargs):
+    def __init__(
+        self,
+        params,
+        lr: float,
+        *,
+        dht: DHT,
+        prefix: str,
+        target_group_size: int,
+        momentum: float = 0,
+        dampening: float = 0,
+        weight_decay: float = 0,
+        nesterov: bool = False,
+        **kwargs,
+    ):
         opt = torch.optim.SGD(params, lr, momentum, dampening, weight_decay, nesterov)
-        super().__init__(opt, dht, prefix=prefix, target_group_size=target_group_size, average_parameters=True,
-                         average_gradients=False, **kwargs)
+        super().__init__(
+            opt,
+            dht,
+            prefix=prefix,
+            target_group_size=target_group_size,
+            average_parameters=True,
+            average_gradients=False,
+            **kwargs,
+        )
 
 
 class DecentralizedAdam(DecentralizedOptimizer):
@@ -142,12 +188,32 @@ class DecentralizedAdam(DecentralizedOptimizer):
     - [2] Toward Communication Efficient Adaptive Gradient Method - https://dl.acm.org/doi/abs/10.1145/3412815.3416891
     """
 
-    def __init__(self, params, lr: float, *, dht: DHT, prefix: str, target_group_size: int, averaging_steps_period: int,
-                 betas: Tuple[float, float] = (0.9, 0.999), eps: float = 1e-8, weight_decay: float = 0,
-                 amsgrad: bool = False, **kwargs):
+    def __init__(
+        self,
+        params,
+        lr: float,
+        *,
+        dht: DHT,
+        prefix: str,
+        target_group_size: int,
+        averaging_steps_period: int,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-8,
+        weight_decay: float = 0,
+        amsgrad: bool = False,
+        **kwargs,
+    ):
         opt = torch.optim.Adam(params, lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
         opt_statistics = ("max_exp_avg_sq",) if amsgrad else ("exp_avg_sq",)
 
-        super().__init__(opt, dht, prefix=prefix, target_group_size=target_group_size, average_parameters=True,
-                         average_gradients=False, average_opt_statistics=opt_statistics,
-                         averaging_steps_period=averaging_steps_period, **kwargs)
+        super().__init__(
+            opt,
+            dht,
+            prefix=prefix,
+            target_group_size=target_group_size,
+            average_parameters=True,
+            average_gradients=False,
+            average_opt_statistics=opt_statistics,
+            averaging_steps_period=averaging_steps_period,
+            **kwargs,
+        )

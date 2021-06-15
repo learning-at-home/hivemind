@@ -63,10 +63,11 @@ class RSAPrivateKey(PrivateKey):
     def __getstate__(self):
         state = self.__dict__.copy()
         # Serializes the private key to make the class instances picklable
-        state['_private_key'] = self._private_key.private_bytes(
+        state["_private_key"] = self._private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.OpenSSH,
-            encryption_algorithm=serialization.NoEncryption())
+            encryption_algorithm=serialization.NoEncryption(),
+        )
         return state
 
     def __setstate__(self, state):
@@ -91,11 +92,12 @@ class RSAPublicKey(PublicKey):
 
     def to_bytes(self) -> bytes:
         return self._public_key.public_bytes(
-            encoding=serialization.Encoding.OpenSSH, format=serialization.PublicFormat.OpenSSH)
+            encoding=serialization.Encoding.OpenSSH, format=serialization.PublicFormat.OpenSSH
+        )
 
     @classmethod
     def from_bytes(cls, key: bytes) -> RSAPublicKey:
         key = serialization.load_ssh_public_key(key)
         if not isinstance(key, rsa.RSAPublicKey):
-            raise ValueError(f'Expected an RSA public key, got {key}')
+            raise ValueError(f"Expected an RSA public key, got {key}")
         return cls(key)

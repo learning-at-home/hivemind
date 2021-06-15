@@ -62,18 +62,18 @@ def main():
 
     # fmt:on
     args = vars(parser.parse_args())
-    args.pop('config', None)
-    optimizer = args.pop('optimizer')
-    if optimizer == 'adam':
+    args.pop("config", None)
+    optimizer = args.pop("optimizer")
+    if optimizer == "adam":
         optim_cls = torch.optim.Adam
-    elif optimizer == 'sgd':
+    elif optimizer == "sgd":
         optim_cls = partial(torch.optim.SGD, lr=0.01)
-    elif optimizer == 'none':
+    elif optimizer == "none":
         optim_cls = None
     else:
         raise ValueError("optim_cls must be adam, sgd or none")
 
-    if args.pop('increase_file_limit'):
+    if args.pop("increase_file_limit"):
         increase_file_limit()
 
     compression_type = args.pop("compression")
@@ -89,5 +89,5 @@ def main():
         server.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

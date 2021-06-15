@@ -55,20 +55,11 @@ def nested_pack(flat, structure):
 
 def _nested_pack(flat_iter, structure):
     if is_namedtuple(structure):
-        return type(structure)(*[
-            _nested_pack(flat_iter, x)
-            for x in structure]
-                               )
+        return type(structure)(*[_nested_pack(flat_iter, x) for x in structure])
     elif isinstance(structure, (list, tuple)):
-        return type(structure)(
-            _nested_pack(flat_iter, x)
-            for x in structure
-        )
+        return type(structure)(_nested_pack(flat_iter, x) for x in structure)
     elif isinstance(structure, dict):
-        return {
-            k: _nested_pack(flat_iter, v)
-            for k, v in sorted(structure.items())
-        }
+        return {k: _nested_pack(flat_iter, v) for k, v in sorted(structure.items())}
     else:
         return next(flat_iter)
 
@@ -77,19 +68,21 @@ def is_namedtuple(x):
     """Checks if x is a namedtuple instance. Taken from https://stackoverflow.com/a/2166841 ."""
     t = type(x)
     b = t.__bases__
-    if len(b) != 1 or b[0] != tuple: return False
-    f = getattr(t, '_fields', None)
-    if not isinstance(f, tuple): return False
+    if len(b) != 1 or b[0] != tuple:
+        return False
+    f = getattr(t, "_fields", None)
+    if not isinstance(f, tuple):
+        return False
     return all(type(n) == str for n in f)
 
 
 def nested_map(fn, *t):
     # Check arguments.
     if not t:
-        raise ValueError('Expected 2+ arguments, got 1')
+        raise ValueError("Expected 2+ arguments, got 1")
     for i in range(1, len(t)):
         if not nested_compare(t[0], t[i]):
-            msg = 'Nested structure of %r and %r differs'
+            msg = "Nested structure of %r and %r differs"
             raise ValueError(msg % (t[0], t[i]))
 
     # Map.

@@ -9,8 +9,7 @@ from hivemind.moe.server.layers import name_to_block, name_to_input
 
 
 def add_custom_models_from_file(path: str):
-    spec = importlib.util.spec_from_file_location(
-        "custom_module", os.path.abspath(path))
+    spec = importlib.util.spec_from_file_location("custom_module", os.path.abspath(path))
     foo = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(foo)
 
@@ -24,6 +23,7 @@ def register_expert_class(name: str, sample_input: Callable[[int, int], torch.te
         sample of an input in the module
     :unchanged module
     """
+
     def _register_expert_class(custom_class: Type[nn.Module]):
         if name in name_to_block or name in name_to_input:
             raise RuntimeError("The class might already exist or be added twice")
@@ -31,4 +31,5 @@ def register_expert_class(name: str, sample_input: Callable[[int, int], torch.te
         name_to_input[name] = sample_input
 
         return custom_class
+
     return _register_expert_class

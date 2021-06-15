@@ -4,7 +4,8 @@ from hivemind.dht import DHT
 
 
 class DecentralizedOptimizerBase(torch.optim.Optimizer):
-    """ A shared interface for all hivemind optimizers. Cooperates with DHT peers to train a shared model """
+    """A shared interface for all hivemind optimizers. Cooperates with DHT peers to train a shared model"""
+
     def __init__(self, opt: torch.optim.Optimizer, dht: DHT):
         self.opt, self.dht = opt, dht
 
@@ -17,8 +18,10 @@ class DecentralizedOptimizerBase(torch.optim.Optimizer):
         return self.opt.param_groups
 
     def add_param_group(self, param_group: dict) -> None:
-        raise ValueError(f"{self.__class__.__name__} does not support calling add_param_group after creation."
-                         f"Please provide all parameter groups at init.")
+        raise ValueError(
+            f"{self.__class__.__name__} does not support calling add_param_group after creation."
+            f"Please provide all parameter groups at init."
+        )
 
     def state_dict(self) -> dict:
         return self.opt.state_dict()

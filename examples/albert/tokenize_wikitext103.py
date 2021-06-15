@@ -56,15 +56,15 @@ def create_instances_from_document(tokenizer, document, max_seq_length):
                 assert len(tokens_b) >= 1
 
                 instance = tokenizer(
-                    ' '.join(tokens_a),
-                    ' '.join(tokens_b),
-                    truncation='longest_first',
+                    " ".join(tokens_a),
+                    " ".join(tokens_b),
+                    truncation="longest_first",
                     max_length=max_seq_length,
                     # We use this option because DataCollatorForLanguageModeling
                     # is more efficient when it receives the `special_tokens_mask`.
                     return_special_tokens_mask=True,
                 )
-                assert len(instance['input_ids']) <= max_seq_length
+                assert len(instance["input_ids"]) <= max_seq_length
                 instance["sentence_order_label"] = 1 if is_random_next else 0
                 instances.append(instance)
 
@@ -89,11 +89,11 @@ def tokenize_function(tokenizer, examples):
     return new_examples
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     random.seed(0)
-    nltk.download('punkt')
-    tokenizer = AlbertTokenizerFast.from_pretrained('albert-large-v2')
-    wikitext = load_dataset('wikitext', 'wikitext-103-v1', cache_dir='./data/cache')
+    nltk.download("punkt")
+    tokenizer = AlbertTokenizerFast.from_pretrained("albert-large-v2")
+    wikitext = load_dataset("wikitext", "wikitext-103-v1", cache_dir="./data/cache")
 
     tokenized_datasets = wikitext.map(
         partial(tokenize_function, tokenizer),
@@ -102,5 +102,5 @@ if __name__ == '__main__':
         remove_columns=["text"],
     )
 
-    tokenized_datasets.save_to_disk('./data/albert_tokenized_wikitext')
-    tokenizer.save_pretrained('./data/tokenizer')
+    tokenized_datasets.save_to_disk("./data/albert_tokenized_wikitext")
+    tokenizer.save_pretrained("./data/tokenizer")

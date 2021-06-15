@@ -8,6 +8,7 @@ class PerformanceEMA:
     A running estimate of performance (operations/sec) using adjusted exponential moving average
     :param alpha: Smoothing factor in range [0, 1], [default: 0.1].
     """
+
     def __init__(self, alpha: float = 0.1, eps: float = 1e-20):
         self.alpha, self.eps, self.num_updates = alpha, eps, 0
         self.ema_seconds_per_sample, self.samples_per_second = 0, eps
@@ -31,7 +32,7 @@ class PerformanceEMA:
 
     @contextmanager
     def pause(self):
-        """ While inside this context, EMA will not count the time passed towards the performance estimate """
+        """While inside this context, EMA will not count the time passed towards the performance estimate"""
         self.paused, was_paused = True, self.paused
         try:
             yield

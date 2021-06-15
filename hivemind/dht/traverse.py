@@ -9,9 +9,13 @@ from hivemind.dht.routing import DHTID
 ROOT = 0  # alias for heap root
 
 
-async def simple_traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID], beam_size: int,
-                              get_neighbors: Callable[[DHTID], Awaitable[Tuple[Collection[DHTID], bool]]],
-                              visited_nodes: Collection[DHTID] = ()) -> Tuple[Tuple[DHTID], Set[DHTID]]:
+async def simple_traverse_dht(
+    query_id: DHTID,
+    initial_nodes: Collection[DHTID],
+    beam_size: int,
+    get_neighbors: Callable[[DHTID], Awaitable[Tuple[Collection[DHTID], bool]]],
+    visited_nodes: Collection[DHTID] = (),
+) -> Tuple[Tuple[DHTID], Set[DHTID]]:
     """
     Traverse the DHT graph using get_neighbors function, find :beam_size: nearest nodes according to DHTID.xor_distance.
 
@@ -37,7 +41,9 @@ async def simple_traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID],
     heapq.heapify(unvisited_nodes)  # nearest-first heap of candidates, unlimited size
 
     nearest_nodes = [(-distance, node_id) for distance, node_id in heapq.nsmallest(beam_size, unvisited_nodes)]
-    heapq.heapify(nearest_nodes)  # farthest-first heap of size beam_size, used for early-stopping and to select results
+    heapq.heapify(
+        nearest_nodes
+    )  # farthest-first heap of size beam_size, used for early-stopping and to select results
     while len(nearest_nodes) > beam_size:
         heapq.heappop(nearest_nodes)
 
@@ -63,10 +69,15 @@ async def simple_traverse_dht(query_id: DHTID, initial_nodes: Collection[DHTID],
 
 
 async def traverse_dht(
-        queries: Collection[DHTID], initial_nodes: List[DHTID], beam_size: int, num_workers: int, queries_per_call: int,
-        get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[Tuple[DHTID], bool]]]],
-        found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None,
-        await_all_tasks: bool = True, visited_nodes: Optional[Dict[DHTID, Set[DHTID]]] = (),
+    queries: Collection[DHTID],
+    initial_nodes: List[DHTID],
+    beam_size: int,
+    num_workers: int,
+    queries_per_call: int,
+    get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[Tuple[DHTID], bool]]]],
+    found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None,
+    await_all_tasks: bool = True,
+    visited_nodes: Optional[Dict[DHTID, Set[DHTID]]] = (),
 ) -> Tuple[Dict[DHTID, List[DHTID]], Dict[DHTID, Set[DHTID]]]:
     """
     Search the DHT for nearest neighbors to :queries: (based on DHTID.xor_distance). Use get_neighbors to request peers.
@@ -133,22 +144,22 @@ async def traverse_dht(
         visited_nodes[query] = set(visited_nodes.get(query, ()))
 
     def heuristic_priority(heap_query: DHTID):
-        """ Workers prioritize expanding nodes that lead to under-explored queries (by other workers) """
+        """Workers prioritize expanding nodes that lead to under-explored queries (by other workers)"""
         if has_candidates(heap_query):
             # prefer candidates in heaps with least number of concurrent workers, break ties by distance to query
             return active_workers[heap_query], candidate_nodes[heap_query][ROOT][0]
-        return float('inf'), float('inf')  # try not to explore vertices with no candidates
+        return float("inf"), float("inf")  # try not to explore vertices with no candidates
 
     def has_candidates(query: DHTID):
-        """ Whether this query's heap contains at least one candidate node that can be explored """
+        """Whether this query's heap contains at least one candidate node that can be explored"""
         return candidate_nodes[query] and candidate_nodes[query][ROOT][0] <= upper_bound(query)
 
     def upper_bound(query: DHTID):
-        """ Any node that is farther from query than upper_bound(query) will not be added to heaps """
-        return -nearest_nodes[query][ROOT][0] if len(nearest_nodes[query]) >= beam_size else float('inf')
+        """Any node that is farther from query than upper_bound(query) will not be added to heaps"""
+        return -nearest_nodes[query][ROOT][0] if len(nearest_nodes[query]) >= beam_size else float("inf")
 
     def finish_search(query):
-        """ Remove query from a list of targets """
+        """Remove query from a list of targets"""
         unfinished_queries.remove(query)
         if len(unfinished_queries) == 0:
             search_finished_event.set()
@@ -181,10 +192,14 @@ async def traverse_dht(
                 continue
 
             # find additional queries to pack in the same request
-            possible_additional_queries = [query for query in unfinished_queries
-                                           if query != chosen_query and chosen_peer not in visited_nodes[query]]
+            possible_additional_queries = [
+                query
+                for query in unfinished_queries
+                if query != chosen_query and chosen_peer not in visited_nodes[query]
+            ]
             queries_to_call = [chosen_query] + heapq.nsmallest(
-                queries_per_call - 1, possible_additional_queries, key=chosen_peer.xor_distance)
+                queries_per_call - 1, possible_additional_queries, key=chosen_peer.xor_distance
+            )
 
             # update priorities for subsequent workers
             active_workers.update(queries_to_call)
@@ -230,8 +245,7 @@ async def traverse_dht(
             await asyncio.gather(*pending_tasks)
 
         nearest_neighbors_per_query = {
-            query: [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])]
-            for query in queries
+            query: [peer for _, peer in heapq.nlargest(beam_size, nearest_nodes[query])] for query in queries
         }
         return nearest_neighbors_per_query, visited_nodes
 

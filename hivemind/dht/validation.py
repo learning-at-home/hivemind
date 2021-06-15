@@ -66,7 +66,7 @@ class RecordValidatorBase(ABC):
 
         return 0
 
-    def merge_with(self, other: 'RecordValidatorBase') -> bool:
+    def merge_with(self, other: "RecordValidatorBase") -> bool:
         """
         By default, all validators are applied sequentially (i.e. we require all validate() calls
         to return True for a record to be validated successfully).
@@ -90,7 +90,7 @@ class RecordValidatorBase(ABC):
 
 
 class CompositeValidator(RecordValidatorBase):
-    def __init__(self, validators: Iterable[RecordValidatorBase]=()):
+    def __init__(self, validators: Iterable[RecordValidatorBase] = ()):
         self._validators = []
         self.extend(validators)
 

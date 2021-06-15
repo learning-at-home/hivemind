@@ -54,7 +54,7 @@ class TokenAuthorizerBase(AuthorizerBase):
     See https://github.com/learning-at-home/hivemind/issues/253
     """
 
-    def __init__(self, local_private_key: Optional[RSAPrivateKey]=None):
+    def __init__(self, local_private_key: Optional[RSAPrivateKey] = None):
         if local_private_key is None:
             local_private_key = RSAPrivateKey.process_wide()
         self._local_private_key = local_private_key
@@ -99,7 +99,7 @@ class TokenAuthorizerBase(AuthorizerBase):
         auth.time = get_dht_time()
         auth.nonce = secrets.token_bytes(8)
 
-        assert auth.signature == b''
+        assert auth.signature == b""
         auth.signature = self._local_private_key.sign(request.SerializeToString())
 
     _MAX_CLIENT_SERVICER_TIME_DIFF = timedelta(minutes=1)
@@ -109,31 +109,32 @@ class TokenAuthorizerBase(AuthorizerBase):
         auth = request.auth
 
         if not self.is_token_valid(auth.client_access_token):
-            logger.debug('Client failed to prove that it (still) has access to the network')
+            logger.debug("Client failed to prove that it (still) has access to the network")
             return False
 
         client_public_key = RSAPublicKey.from_bytes(auth.client_access_token.public_key)
         signature = auth.signature
-        auth.signature = b''
+        auth.signature = b""
         if not client_public_key.verify(request.SerializeToString(), signature):
-            logger.debug('Request has invalid signature')
+            logger.debug("Request has invalid signature")
             return False
 
         if auth.service_public_key and auth.service_public_key != self._local_public_key.to_bytes():
-            logger.debug('Request is generated for a peer with another public key')
+            logger.debug("Request is generated for a peer with another public key")
             return False
 
         with self._recent_nonces.freeze():
             current_time = get_dht_time()
             if abs(auth.time - current_time) > self._MAX_CLIENT_SERVICER_TIME_DIFF.total_seconds():
-                logger.debug('Clocks are not synchronized or a previous request is replayed again')
+                logger.debug("Clocks are not synchronized or a previous request is replayed again")
                 return False
             if auth.nonce in self._recent_nonces:
-                logger.debug('Previous request is replayed again')
+                logger.debug("Previous request is replayed again")
                 return False
 
-        self._recent_nonces.store(auth.nonce, None,
-                                  current_time + self._MAX_CLIENT_SERVICER_TIME_DIFF.total_seconds() * 3)
+        self._recent_nonces.store(
+            auth.nonce, None, current_time + self._MAX_CLIENT_SERVICER_TIME_DIFF.total_seconds() * 3
+        )
         return True
 
     async def sign_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> None:
@@ -143,7 +144,7 @@ class TokenAuthorizerBase(AuthorizerBase):
         auth.service_access_token.CopyFrom(self._local_access_token)
         auth.nonce = request.auth.nonce
 
-        assert auth.signature == b''
+        assert auth.signature == b""
         auth.signature = self._local_private_key.sign(response.SerializeToString())
 
     async def validate_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> bool:
@@ -151,18 +152,18 @@ class TokenAuthorizerBase(AuthorizerBase):
         auth = response.auth
 
         if not self.is_token_valid(auth.service_access_token):
-            logger.debug('Service failed to prove that it (still) has access to the network')
+            logger.debug("Service failed to prove that it (still) has access to the network")
             return False
 
         service_public_key = RSAPublicKey.from_bytes(auth.service_access_token.public_key)
         signature = auth.signature
-        auth.signature = b''
+        auth.signature = b""
         if not service_public_key.verify(response.SerializeToString(), signature):
-            logger.debug('Response has invalid signature')
+            logger.debug("Response has invalid signature")
             return False
 
         if auth.nonce != request.auth.nonce:
-            logger.debug('Response is generated for another request')
+            logger.debug("Response is generated for another request")
             return False
 
         return True
@@ -174,15 +175,20 @@ class AuthRole(Enum):
 
 
 class AuthRPCWrapper:
-    def __init__(self, stub, role: AuthRole,
-                 authorizer: Optional[AuthorizerBase], service_public_key: Optional[RSAPublicKey]=None):
+    def __init__(
+        self,
+        stub,
+        role: AuthRole,
+        authorizer: Optional[AuthorizerBase],
+        service_public_key: Optional[RSAPublicKey] = None,
+    ):
         self._stub = stub
         self._role = role
         self._authorizer = authorizer
         self._service_public_key = service_public_key
 
     def __getattribute__(self, name: str):
-        if not name.startswith('rpc_'):
+        if not name.startswith("rpc_"):
             return object.__getattribute__(self, name)
 
         method = getattr(self._stub, name)
