@@ -29,8 +29,12 @@ jobs:
           command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
-          command: pytest ./tests
+          command: pytest --cov=hivemind ./tests
           name: tests
+      - run:
+          command: codecov
+          name: codecov
+
   build-and-test-py38:
     docker:
       - image: circleci/python:3.8.1
@@ -53,8 +57,12 @@ jobs:
           command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
-          command: pytest ./tests
+          command: pytest --cov=hivemind ./tests
           name: tests
+      - run:
+          command: codecov
+          name: codecov
+
   build-and-test-py39:
     docker:
       - image: circleci/python:3.9.1
@@ -77,8 +85,11 @@ jobs:
           command: pip install -e . --install-option="--buildgo"
           name: setup
       - run:
-          command: pytest ./tests
+          command: pytest --cov=hivemind ./tests
           name: tests
+      - run:
+          command: codecov
+          name: codecov
 
 workflows:
   main:
