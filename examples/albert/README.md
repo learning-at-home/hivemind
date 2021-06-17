@@ -12,21 +12,25 @@ This tutorial will walk you through the steps to set up collaborative training w
 ## Running an experiment
 - Run the first DHT peer to welcome trainers and record training statistics (e.g. loss, performance):
    - In this example, we use [wandb.ai](https://wandb.ai/site) to plot training metrics; If you're unfamiliar with Weights & Biases, here's a [quickstart tutorial](https://docs.wandb.ai/quickstart).
-   - Run `python run_first_peer.py --listen_on '[::]:*' --experiment_prefix NAME_YOUR_EXPERIMENT --wandb_project WANDB_PROJECT_HERE`
+   - Run `python run_first_peer.py --dht_listen_on '[::]:*' --experiment_prefix NAME_YOUR_EXPERIMENT --wandb_project WANDB_PROJECT_HERE`
    - `NAME_YOUR_EXPERIMENT` must be a unique name of this training run, e.g. `my-first-albert`. It cannot contain `.` due to naming conventions.
    - `WANDB_PROJECT_HERE` is a name of wandb project used to track training metrics. Multiple experiments can have the same project name.
    - This peer will run a DHT node on a certain IP/port (`Running DHT root at ...`). You will need this address for next steps
 ```
-+ python ./run_first_peer.py --listen_on '[::]:31209' --experiment_prefix ysda_albert_v10 --wandb_project Demo-run
-[2021/04/19 02:30:06.051][WARN][root.<module>:36] No address specified. Attempting to infer address from DNS.
-[2021/04/19 02:30:06.088][INFO][root.<module>:44] Running DHT root at 18.217.13.97:31209
-wandb: Currently logged in as: ??? (use `wandb login --relogin` to force relogin)
-wandb: Tracking run with wandb version 0.10.26
-wandb: Syncing run wandering-sky-58
-wandb: ⭐ View project at https://wandb.ai/yhn112/Demo-run
-wandb: 🚀 View run at https://wandb.ai/yhn112/Demo-run/runs/38ygvt3n
-wandb: Run data is saved locally in /home/hivemind/examples/albert/wandb/run-20210419_023006-38ygvt3n
++ python run_first_peer.py --dht_listen_on '[::]:*' --experiment_prefix my-albert-v1 --wandb_projec
+t Demo-run
+[2021/06/17 16:26:35.931][WARN][root.<module>:140] No address specified. Attempting to infer address from DNS.
+[2021/06/17 16:26:36.083][INFO][root.<module>:149] Running DHT root at 193.106.95.184:38319
+wandb: Currently logged in as: XXX (use `wandb login --relogin` to force relogin)
+wandb: Tracking run with wandb version 0.10.32
+wandb: Syncing run dry-mountain-2
+wandb:  View project at https://wandb.ai/XXX/Demo-run
+wandb:  View run at https://wandb.ai/XXX/Demo-run/runs/YYY
+wandb: Run data is saved locally in /path/to/run/data
 wandb: Run `wandb offline` to turn off syncing.
+[2021/04/19 02:26:41.064][INFO][optim.collaborative.fetch_collaboration_state:323] Found no active peers: None
+[2021/04/19 02:26:44.068][INFO][optim.collaborative.fetch_collaboration_state:323] Found no active peers: None
+...
 [2021/04/19 02:37:37.246][INFO][root.<module>:74] 11.05164
 [2021/04/19 02:39:37.441][INFO][root.<module>:74] 11.03771
 [2021/04/19 02:40:37.541][INFO][root.<module>:74] 11.02886
