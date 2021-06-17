@@ -4,4 +4,6 @@ comment:
   require_changes: true
 coverage:
   status:
-    patch: off
+    patch:
+      default:
+        informational: false
