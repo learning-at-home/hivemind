@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 """ This script builds a pre-tokenized compressed representation of wikitext103 using huggingface/datasets """
 import random
-from collections import defaultdict
 from functools import partial
 from multiprocessing import cpu_count
 
 import nltk
 from datasets import load_dataset
 from transformers import AlbertTokenizerFast
+
+
+COLUMN_NAMES = ('attention_mask', 'input_ids', 'sentence_order_label', 'special_tokens_mask', 'token_type_ids')
 
 
 def create_instances_from_document(tokenizer, document, max_seq_length):
@@ -76,14 +78,14 @@ def tokenize_function(tokenizer, examples):
     # Remove empty texts
     texts = (text for text in examples["text"] if len(text) > 0 and not text.isspace())
 
-    new_examples = defaultdict(list)
+    new_examples = {col: [] for col in COLUMN_NAMES}
 
     for text in texts:
         instances = create_instances_from_document(tokenizer, text, max_seq_length=512)
         for instance in instances:
             for key, value in instance.items():
                 new_examples[key].append(value)
-
+    
     return new_examples
 
 
@@ -96,7 +98,7 @@ if __name__ == '__main__':
     tokenized_datasets = wikitext.map(
         partial(tokenize_function, tokenizer),
         batched=True,
-        num_proc=cpu_count(),
+        num_proc=8,
         remove_columns=["text"],
     )
 

@@ -5,6 +5,10 @@ import torch
 
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 def benchmark_compression(tensor: torch.Tensor, compression_type: CompressionType) -> float:
@@ -29,4 +33,4 @@ if __name__ == "__main__":
         for i in range(args.num_iters):
             tm += benchmark_compression(X, compression_type)
         tm /= args.num_iters
-        print(f"Compression type: {name}, time: {tm}")
+        logger.info(f"Compression type: {name}, time: {tm}")
