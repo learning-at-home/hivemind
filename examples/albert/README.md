@@ -41,7 +41,7 @@ wandb: Run `wandb offline` to turn off syncing.
   - if necessary, specify paths: `--dataset_path ./path/to/unpacked/data --tokenizer ./path/to/tokenizer/config` (see [default paths](https://github.com/learning-at-home/hivemind/blob/collaborative_albert_example/examples/albert/run_trainer.py#L63-L69) for reference)
   - run:
 ```shell
- CUDA_VISIBLE_DEVICES=0 HIVEMIND_THREADS=64 python ./hivemind/examples/albert/run_trainer.py \
+ CUDA_VISIBLE_DEVICES=0 HIVEMIND_THREADS=64 python run_trainer.py \
  --experiment_prefix SAME_AS_IN_RUN_FIRST_PEER --initial_peers ONE_OR_MORE_PEERS --seed 42 \
  --logging_first_step --logging_steps 100  --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs
 ```
@@ -49,11 +49,14 @@ Here, `ONE_OR_MORE_PEERS` stands for either your coordinator endpoint (e.g. `123
 
 As the peer begins training, it will periodically report training logs in the following form:
 ```
-{'loss': 4.3577, 'learning_rate': 0.001318944, 'epoch': 0.0}
 [...][INFO][...] Collaboration accumulated 448 samples from 17 peers; ETA 18.88 seconds (refresh in 15.73s.)
 [...][INFO][...] Collaboration accumulated 4096 samples from 16 peers; ETA 0.00 seconds (refresh in 0.50s.)
 [...][INFO][optim.collaborative.step:195] Averaged tensors successfully with 17 peers
 [...][INFO][optim.collaborative.step:211] Optimizer step: done!
+06/17/2021 18:58:23 - INFO - __main__ -   Step 0
+06/17/2021 18:58:23 - INFO - __main__ -   Your current contribution: 892 samples
+06/17/2021 18:58:23 - INFO - __main__ -   Local loss: 11.023
+
 ```
 
 __Sanity check:__ a healthy peer will periodically report `Averaged tensors successfully with [N > 1]` peers.
