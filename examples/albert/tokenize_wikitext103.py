@@ -4,7 +4,6 @@ import random
 from functools import partial
 from multiprocessing import cpu_count
 
-import numpy as np
 import nltk
 from datasets import load_dataset
 from transformers import AlbertTokenizerFast
