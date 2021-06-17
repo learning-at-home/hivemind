@@ -7,3 +7,6 @@ coverage:
     patch:
       default:
         informational: false
+    project:
+      default:
+        threshold: 1%
