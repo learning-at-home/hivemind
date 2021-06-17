@@ -23,7 +23,7 @@ def print_device_info(device=None):
 
     # Additional Info when using cuda
     if device.type == 'cuda':
-        logger.info(repr(torch.cuda.get_device_name(0)))
+        logger.info(torch.cuda.get_device_name(0))
         logger.info(f'Memory Usage:')
         logger.info(f'Allocated: {round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1)} GB')
         logger.info(f'Cached:   {round(torch.cuda.memory_cached(0) / 1024 ** 3, 1)} GB')
