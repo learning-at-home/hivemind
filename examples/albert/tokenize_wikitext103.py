@@ -95,7 +95,7 @@ if __name__ == '__main__':
 
     tokenized_datasets = wikitext.map(
         partial(tokenize_function, tokenizer),
-        batched=True,
+        batched=True, batch_size=8,
         num_proc=cpu_count(),
         remove_columns=["text"],
     )
