@@ -6,7 +6,7 @@ import numpy as np
 
 class TensorPartContainer:
     """
-    Auxiliary object that splits model tensors into parts for all-reduce and combines them back together
+    Auxiliary data structure that is responsible for splitting tensors into parts and assembling them back together
     """
 
     # TODO current state:
