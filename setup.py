@@ -16,7 +16,7 @@ from setuptools.command.develop import develop
 from setuptools.command.install import install
 
 P2PD_VERSION = 'v0.3.1'
-P2PD_CHECKSUM = '8810097959db720208cdc9f2945804a4'
+P2PD_CHECKSUM = '15292b880c6b31f5b3c36084b3acc17f'
 LIBP2P_TAR_URL = f'https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz'
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -76,7 +76,7 @@ def libp2p_build_install():
 def libp2p_download_install():
     install_path = os.path.join(here, 'hivemind', 'hivemind_cli')
     binary_path = os.path.join(install_path, 'p2pd')
-    if 'p2pd' not in os.listdir(install_path) or md5(binary_path) != P2PD_CHECKSUM:
+    if not os.path.exists(binary_path) or md5(binary_path) != P2PD_CHECKSUM:
         print('Downloading Peer to Peer Daemon')
         url = f'https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd'
         urllib.request.urlretrieve(url, binary_path)

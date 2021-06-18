@@ -554,7 +554,12 @@ def _background_thread_fetch_current_state(serializer: SerializerBase, pipe: mp.
     :param get_current_state_ref: a WeakMethod wrapped around DecentralizedAverager.get_current_state (instance-bound)
     """
     while True:
-        trigger, future = pipe.recv()
+        try:
+            trigger, future = pipe.recv()
+        except BaseException as e:
+            logger.debug(f"Averager background thread finished: {repr(e)}")
+            break
+            
         if trigger == '_SHUTDOWN':
             break
 
