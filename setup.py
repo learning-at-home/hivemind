@@ -9,8 +9,7 @@ import tarfile
 import tempfile
 import urllib.request
 
-from packaging import version
-from pkg_resources import parse_requirements
+from pkg_resources import parse_requirements, parse_version
 from setuptools import find_packages, setup
 from setuptools.command.develop import develop
 from setuptools.command.install import install
@@ -55,7 +54,7 @@ def libp2p_build_install():
 
     if m is None:
         raise FileNotFoundError('Could not find golang installation')
-    if version.parse(m.group(1)) < version.parse("1.13"):
+    if parse_version(m.group(1)) < parse_version("1.13"):
         raise EnvironmentError(f'Newer version of go required: must be >= 1.13, found {version}')
 
     with tempfile.TemporaryDirectory() as tempdir:
