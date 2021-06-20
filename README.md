@@ -76,8 +76,18 @@ our [guide](https://learning-at-home.readthedocs.io/en/latest/user/contributing.
 
 ## Citation
 
-If you found hivemind useful for your experiments, you can cite [the paper](https://arxiv.org/abs/2002.04013) that
-inspired it:
+If you found hivemind or its underlying algorithms useful for your experiments, please cite the following source:
+
+```
+@misc{hivemind,
+  author = {Learning@home team},
+  title = {{H}ivemind: a {L}ibrary for {D}ecentralized {D}eep {L}earning},
+  year = 2020,
+  howpublished = {\url{https://github.com/learning-at-home/hivemind}},
+}
+```
+
+Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired the creation of this library:
 
 ```
 @inproceedings{ryabinin2020crowdsourced,

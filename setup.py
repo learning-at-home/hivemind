@@ -9,8 +9,7 @@ import tarfile
 import tempfile
 import urllib.request
 
-from packaging import version
-from pkg_resources import parse_requirements
+from pkg_resources import parse_requirements, parse_version
 from setuptools import find_packages, setup
 from setuptools.command.develop import develop
 from setuptools.command.install import install
@@ -55,7 +54,7 @@ def libp2p_build_install():
 
     if m is None:
         raise FileNotFoundError('Could not find golang installation')
-    if version.parse(m.group(1)) < version.parse("1.13"):
+    if parse_version(m.group(1)) < parse_version("1.13"):
         raise EnvironmentError(f'Newer version of go required: must be >= 1.13, found {version}')
 
     with tempfile.TemporaryDirectory() as tempdir:
@@ -76,7 +75,7 @@ def libp2p_build_install():
 def libp2p_download_install():
     install_path = os.path.join(here, 'hivemind', 'hivemind_cli')
     binary_path = os.path.join(install_path, 'p2pd')
-    if 'p2pd' not in os.listdir(install_path) or md5(binary_path) != P2PD_CHECKSUM:
+    if not os.path.exists(binary_path) or md5(binary_path) != P2PD_CHECKSUM:
         print('Downloading Peer to Peer Daemon')
         url = f'https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd'
         urllib.request.urlretrieve(url, binary_path)

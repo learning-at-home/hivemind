@@ -10,19 +10,23 @@ import hivemind
 from hivemind import find_open_port
 from hivemind.server import layers
 from hivemind.utils.threading import increase_file_limit
+from hivemind.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 def print_device_info(device=None):
     """Prints device stats. Code from https://stackoverflow.com/a/53374933/12891528"""
     device = torch.device(device or ('cuda' if torch.cuda.is_available() else 'cpu'))
-    print('Using device:', device)
+    logger.info(f'Using device: {device}')
 
     # Additional Info when using cuda
     if device.type == 'cuda':
-        print(torch.cuda.get_device_name(0))
-        print('Memory Usage:')
-        print('Allocated:', round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1), 'GB')
-        print('Cached:   ', round(torch.cuda.memory_cached(0) / 1024 ** 3, 1), 'GB')
+        logger.info(torch.cuda.get_device_name(0))
+        logger.info(f'Memory Usage:')
+        logger.info(f'Allocated: {round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1)} GB')
+        logger.info(f'Cached:   {round(torch.cuda.memory_cached(0) / 1024 ** 3, 1)} GB')
 
 
 def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
@@ -111,25 +115,25 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
         abs(timestamps[key2] - timestamps[key1]) if (key1 in timestamps and key2 in timestamps) else float('nan')
     total_examples = batch_size * num_clients * num_batches_per_client
 
-    print('\n' * 3)
-    print("Benchmark finished, status:" + ["Success", "Failure"][benchmarking_failed.is_set()])
-    print(f"Server parameters: num_experts={num_experts}, num_handlers={num_handlers}, max_batch_size={max_batch_size},"
+    logger.info("Benchmark finished, status:" + ["Success", "Failure"][benchmarking_failed.is_set()])
+    logger.info(f"Server parameters: num_experts={num_experts}, num_handlers={num_handlers}, max_batch_size={max_batch_size},"
           f" expert_cls={expert_cls}, hid_dim={hid_dim}, device={device}")
-    print(f"Client parameters: num_clients={num_clients}, num_batches_per_client={num_batches_per_client}, "
+    logger.info(f"Client parameters: num_clients={num_clients}, num_batches_per_client={num_batches_per_client}, "
           f"batch_size={batch_size}, backprop={backprop}")
 
-    print("Results: ")
-    print(f"\tServer startup took {time_between('began_launching_server', 'server_ready') :.3f} s. "
+    logger.info("Results: ")
+    logger.info(f"\tServer startup took {time_between('began_launching_server', 'server_ready') :.3f} s. "
           f"({time_between('began_launching_server', 'created_experts') :.3f} s. experts + "
           f"{time_between('created_experts', 'server_ready') :.3f} s. networking)")
-    print(f"\tProcessed {total_examples} examples in {time_between('server_ready', 'clients_finished') :.3f}")
-    print(f"\tThroughput for {'forward + backward' if backprop else 'forward'} passes: "
+    logger.info(f"\tProcessed {total_examples} examples in {time_between('server_ready', 'clients_finished') :.3f}")
+    logger.info(f"\tThroughput for {'forward + backward' if backprop else 'forward'} passes: "
           f"{total_examples / time_between('server_ready', 'clients_finished') :.3f} samples / s.")
-    print(f"\tBenchmarking took {time_between('started', 'server_shutdown_finished') :.3f} s.")
+    logger.info(f"\tBenchmarking took {time_between('started', 'server_shutdown_finished') :.3f} s.")
     if benchmarking_failed.is_set():
-        print("Note: benchmark code failed, timing/memory results only indicate time till failure!")
+        logger.info("Note: benchmark code failed, timing/memory results only indicate time till failure!")
     print_device_info(device)
-    print(flush=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
 
     assert not benchmarking_failed.is_set()
 

@@ -430,9 +430,9 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     await server_replica2.stop_listening()
 
     # Primary does not handle replicas protocols
-    with pytest.raises(asyncio.IncompleteReadError):
+    with pytest.raises(Exception):
         await client.call_peer_handler(server_id, handler_name + '1', b'')
-    with pytest.raises(asyncio.IncompleteReadError):
+    with pytest.raises(Exception):
         await client.call_peer_handler(server_id, handler_name + '2', b'')
 
     await server_primary.stop_listening()
