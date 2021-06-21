@@ -11,6 +11,7 @@ from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.proto.runtime_pb2 import CompressionType
 
 
+@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_partitioning():
     all_tensors = [
@@ -55,6 +56,7 @@ async def test_partitioning_edge_cases(tensors: Sequence[torch.Tensor], part_siz
         tensor_index += 1
 
 
+@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_partitioning_asynchronous():
     """ ensure that tensor partitioning does not interfere with asynchronous code """
