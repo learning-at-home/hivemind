@@ -4,20 +4,20 @@ from typing import Sequence, Awaitable, AsyncIterable
 import torch
 import numpy as np
 from hivemind.proto import runtime_pb2
-from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor, get_nbytes_per_value
 from collections import deque
 
 
 class TensorPartition:
     """
-    Auxiliary data structure that is responsible for splitting tensors into parts and assembling them back together.
+    Auxiliary data structure for all-reduce, responsible for splitting tensors into parts and re-assembling them.
     The class is designed to avoid excessive memory allocation and run all heavy computation in background
     """
 
     def __init__(self, tensors: Sequence[torch.Tensor], part_sizes: Sequence[float],
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
-                 chunk_size: int = 2 ** 20):
-        self.local_tensors, self.part_sizes, self.chunk_size = tensors, part_sizes, chunk_size
+                 chunk_size_bytes: int = 2 ** 20):
+        self.local_tensors, self.part_sizes, self.chunk_size_bytes = tensors, part_sizes, chunk_size_bytes
         self.tensor_sizes = [tensor.numel() for tensor in tensors]
         self.compression_type = compression_type
         self.total_size = sum(self.tensor_sizes)
@@ -35,7 +35,8 @@ class TensorPartition:
         pivots = np.concatenate([pivots.astype(np.int64)[:-1], [self.total_size]])
 
         for tensor in self.local_tensors:
-            tensor_chunks = tensor.detach().view(-1).split(chunk_size)
+            chunk_size_values = int(chunk_size_bytes / get_nbytes_per_value(tensor.dtype, self.compression_type))
+            tensor_chunks = tensor.detach().view(-1).split(chunk_size_values)
             self._num_chunks_by_tensor.append(len(tensor_chunks))
             for chunk in tensor_chunks:
                 if current_length + len(chunk) > pivots[current_peer_index]:

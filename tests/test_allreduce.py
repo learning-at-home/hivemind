@@ -21,11 +21,11 @@ async def test_partitioning():
     ]
 
     # note: this test does _not_ use parameterization to reuse sampled tensors
-    for chunk_size in 31337, 2 ** 20, 10 ** 10:
+    for chunk_size_bytes in 31337, 2 ** 23, 10 ** 10:
         for num_tensors in 1, 3, 5, len(all_tensors):
             for part_sizes in [(0.25, 0.25, 0.25, 0.25), (0.333, 0.1667, 0.5003), (1.0, 0.0), [0.0, 0.4, 0.6, 0.0]]:
                 tensors = random.choices(all_tensors, k=num_tensors)
-                partition = TensorPartition(tensors, part_sizes, chunk_size=chunk_size)
+                partition = TensorPartition(tensors, part_sizes, chunk_size_bytes=chunk_size_bytes)
 
                 async def write_tensors():
                     for i in range(partition.num_peers):
@@ -45,7 +45,7 @@ async def test_partitioning():
                                      [torch.zeros(0), torch.zeros(999), torch.zeros(0), torch.zeros(0)]])
 @pytest.mark.parametrize("part_sizes", [(0.33, 0.44, 0.23), (0.5, 0.5), (0.1, 0.0, 0.9), (1.0,), (0.1,) * 9])
 async def test_partitioning_edge_cases(tensors: Sequence[torch.Tensor], part_sizes: Sequence[float]):
-    partition = TensorPartition(tensors, part_sizes, chunk_size=10)
+    partition = TensorPartition(tensors, part_sizes, chunk_size_bytes=16)
     for i in range(len(part_sizes)):
         async for chunk in partition.iterate_input_chunks(i):
             partition.append_averaged_chunk(i, chunk)
@@ -64,8 +64,7 @@ async def test_partitioning_asynchronous():
                torch.randn(4096, 1024), torch.randn(30_000, 1024)]
     part_sizes = [0.4, 0.3, 0.2, 0.1]
 
-    partition = TensorPartition(tensors, part_sizes, compression_type=CompressionType.QUANTILE_8BIT,
-                                chunk_size=2 ** 20)
+    partition = TensorPartition(tensors, part_sizes, compression_type=CompressionType.QUANTILE_8BIT)
     read_started, read_finished = asyncio.Event(), asyncio.Event()
 
     async def write_tensors():
