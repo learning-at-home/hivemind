@@ -40,10 +40,11 @@ async def test_partitioning():
                     tensor_index += 1
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("tensors", [[torch.zeros(0)], [torch.zeros(0), torch.zeros(0), torch.zeros(1)],
                                      [torch.zeros(0), torch.zeros(999), torch.zeros(0), torch.zeros(0)]])
 @pytest.mark.parametrize("part_sizes", [(0.33, 0.44, 0.23), (0.5, 0.5), (0.1, 0.0, 0.9), (1.0,), (0.1,) * 9])
+@pytest.mark.forked
+@pytest.mark.asyncio
 async def test_partitioning_edge_cases(tensors: Sequence[torch.Tensor], part_sizes: Sequence[float]):
     partition = TensorPartition(tensors, part_sizes, chunk_size_bytes=16)
     for i in range(len(part_sizes)):
