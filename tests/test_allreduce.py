@@ -12,11 +12,11 @@ from hivemind.proto.runtime_pb2 import CompressionType
 
 
 @pytest.mark.asyncio
-async def test_partitioning_simple():
+async def test_partitioning():
     all_tensors = [
         torch.randn(30_000, 128), torch.rand(128), torch.ones(1, 1, 1, 1, 1, 1, 8),
         torch.ones(1, 0), torch.zeros(0), torch.zeros([]), torch.randn(65536),
-        torch.rand(512, 2048), torch.randn(3072, 768).add(-9), torch.zeros(1020), torch.randn(4096)
+        torch.rand(512, 2048), torch.randn(1024, 1024).add(-9), torch.zeros(1020), torch.randn(4096)
     ]
 
     # note: this test does _not_ use parameterization to reuse sampled tensors
@@ -70,11 +70,11 @@ async def test_partitioning_asynchronous():
         for i in range(partition.num_peers):
             async for chunk in partition.iterate_input_chunks(i):
                 partition.append_averaged_chunk(i, chunk)
+        assert read_started.is_set(), "partitioner should have started reading before it finished writing"
 
     async def read_tensors():
-        read_started.set()
         async for _ in partition.iterate_output_tensors():
-            pass
+            read_started.set()
         read_finished.set()
 
     async def wait_synchronously():

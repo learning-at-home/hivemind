@@ -16,7 +16,7 @@ class TensorPartition:
 
     def __init__(self, tensors: Sequence[torch.Tensor], part_sizes: Sequence[float],
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
-                 chunk_size: int = 2 ** 16):
+                 chunk_size: int = 2 ** 20):
         self.local_tensors, self.part_sizes, self.chunk_size = tensors, part_sizes, chunk_size
         self.tensor_sizes = [tensor.numel() for tensor in tensors]
         self.compression_type = compression_type
@@ -90,7 +90,7 @@ class TensorPartition:
         """ iterate over the outputs of averaging (whether they are average, delta or other aggregation result) """
         assert not self._outputs_depleted, "output tensors are already iterated and no longer available."
         self._outputs_depleted = True
-        peer_index = tensor_index = num_chunks_processed = 0
+        peer_index = num_chunks_processed = 0
         for tensor_index in range(len(self.local_tensors)):
             tensor_chunks = []
             while len(tensor_chunks) < self._num_chunks_by_tensor[tensor_index]:
