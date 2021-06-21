@@ -10,7 +10,7 @@ from collections import deque
 
 class TensorPartition:
     """
-    Auxiliary data structure for all-reduce, responsible for splitting tensors into parts and re-assembling them.
+    Auxiliary data structure for averaging, responsible for splitting tensors into parts and re-assembling them.
     The class is designed to avoid excessive memory allocation and run all heavy computation in background
     """
 
@@ -23,10 +23,10 @@ class TensorPartition:
         self.total_size = sum(self.tensor_sizes)
         self._input_chunks_by_peer = [deque() for _ in range(self.num_peers)]
         self._output_chunks_by_peer = [deque() for _ in range(self.num_peers)]
-        self._inputs_depleted_by_peer = [False for _ in range(self.num_peers)]
+        self._inputs_consumed_by_peer = [False for _ in range(self.num_peers)]
         self._output_chunks_available = [asyncio.Event() for _ in range(self.num_peers)]
         self._num_chunks_by_peer, self._num_chunks_by_tensor = [], []
-        self._outputs_depleted = False
+        self._outputs_consumed = False
 
         # split chunks in proportion to part_sizes
         current_length = 0
@@ -64,8 +64,8 @@ class TensorPartition:
     @torch.no_grad()
     async def iterate_input_chunks(self, peer_index: int) -> runtime_pb2.Tensor:
         """ get tensor chunks that should be averaged by a peer at a given index. Run serialization in background. """
-        assert not self._inputs_depleted_by_peer[peer_index], "input chunks of a given peer are already deallocated."
-        self._inputs_depleted_by_peer[peer_index] = True
+        assert not self._inputs_consumed_by_peer[peer_index], "input chunks of a given peer are already deallocated."
+        self._inputs_consumed_by_peer[peer_index] = True
         if not self._input_chunks_by_peer[peer_index]:
             return
         loop = asyncio.get_event_loop()
@@ -89,8 +89,8 @@ class TensorPartition:
 
     async def iterate_output_tensors(self) -> AsyncIterable[torch.Tensor]:
         """ iterate over the outputs of averaging (whether they are average, delta or other aggregation result) """
-        assert not self._outputs_depleted, "output tensors are already iterated and no longer available."
-        self._outputs_depleted = True
+        assert not self._outputs_consumed, "output tensors are already iterated and no longer available."
+        self._outputs_consumed = True
         peer_index = num_chunks_processed = 0
         for tensor_index in range(len(self.local_tensors)):
             tensor_chunks = []
