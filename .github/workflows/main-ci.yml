@@ -36,7 +36,7 @@ jobs:
         run: |
           pip install -e .
 
-      - name: Test with pytest
+      - name: Test
         run: |
           pytest --cov=hivemind ./tests
       - name: Upload to codecov
