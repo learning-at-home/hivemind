@@ -2,6 +2,7 @@ name: Python package
 
 on: [push]
 
+
 jobs:
   build:
 
@@ -18,7 +19,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          wget https://golang.org/dl/go<< pipeline.parameters.go-version >>.linux-amd64.tar.gz -O go.tar.gz
+          wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz -O go.tar.gz
           tar -C ~/ -xzf go.tar.gz
           echo "export PATH=~/go/bin:$PATH" >> $BASH_ENV
       - name: Install dependencies
