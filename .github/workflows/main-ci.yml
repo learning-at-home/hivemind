@@ -4,7 +4,7 @@ on: [push]
 
 
 jobs:
-  build:
+  run_tests:
 
     runs-on: ubuntu-latest
     strategy:
