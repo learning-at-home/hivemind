@@ -22,12 +22,11 @@ jobs:
           wget https://golang.org/dl/go1.16.2.linux-amd64.tar.gz -O go.tar.gz
           tar -C ~/ -xzf go.tar.gz
           export PATH=~/go/bin:$PATH
-     - name: Cache dependencies
+      - name: Cache dependencies
         uses: actions/cache@v2
         with:
           path: ~/.cache/pip
-          key: administrate-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
-
+          key: Key-v1-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
