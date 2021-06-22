@@ -29,17 +29,16 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          pip install -e .
+          pip install .
       - name: Test
         run: |
-          pytest --cov=hivemind ./tests
+          cd tests
+          pytest --cov=hivemind 
       - name: Upload to codecov
         run: |
           codecov
 
   build_and_test_p2pd:
-    env:
-      go-version: 1.16.2
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -48,11 +47,6 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
-      - name: Install Go
-        run: |
-          wget https://golang.org/dl/go${{env.go-version}}.linux-amd64.tar.gz -O go.tar.gz
-          tar -C ~/ -xzf go.tar.gz
-          export PATH=~/go/bin:$PATH
       - name: Cache dependencies
         uses: actions/cache@v2
         with:
@@ -65,7 +59,8 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          pip install -e . --install-option="--buildgo"
+          pip install . --install-option="--buildgo"
       - name: Test
         run: |
+          cd tests
           pytest -k "p2p" ./tests/
