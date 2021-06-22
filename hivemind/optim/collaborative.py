@@ -238,7 +238,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     def step_aux(self, **kwargs):
         """
-        Find and assist other peers in averaging -- without sending local gradients to those peers.
+        Find and assist other peers in averaging without sending local gradients.
 
         :note: this .step is different from normal pytorch optimizers in several key ways. See __init__ for details.
         """
