@@ -34,7 +34,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          pip install -e . --install-option="--buildgo"
+          pip install -e .
 
       - name: Test with pytest
         run: |
