@@ -68,6 +68,7 @@ jobs:
       - image: circleci/python:3.9.1
     steps:
       - checkout
+      - run: ulimit -n 4096 # temporary workaround for py39
       - restore_cache:
           keys:
             - py39-v1-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
