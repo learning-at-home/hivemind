@@ -163,10 +163,10 @@ if __name__ == '__main__':
                        for peer in metrics_dict]
             latest_step = max(item.step for item in metrics)
             if latest_step != current_step:
-                logger.info(f"Got metrics from {len(metrics)} peers")
+                logger.debug(f"Got metrics from {len(metrics)} peers")
 
                 for i in range(len(metrics)):
-                    logger.info(f"{i} peer {metrics[i]}")
+                    logger.debug(f"{i} peer {metrics[i]}")
                 current_step = latest_step
                 alive_peers = 0
                 num_batches = 0

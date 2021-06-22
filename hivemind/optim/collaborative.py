@@ -232,9 +232,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.collaboration_state_updated.set()
             self.update_scheduler()
 
-            logger.log(self.status_loglevel, f"Optimizer step: done!")
+        logger.log(self.status_loglevel, f"Optimizer step: done!")
 
-            return group_info
+        return group_info
 
     def step_aux(self, **kwargs):
         """
@@ -266,9 +266,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.averager.local_step = current_step + 1
             self.collaboration_state_updated.set()
 
-            logger.log(self.status_loglevel, f"Optimizer step: done!")
+        logger.log(self.status_loglevel, f"Optimizer step: done!")
 
-            return group_info
+        return group_info
 
     def _grad_buffers(self) -> Iterator[torch.Tensor]:
         """ pytorch-internal gradient buffers """
