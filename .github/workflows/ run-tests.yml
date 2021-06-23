@@ -63,4 +63,4 @@ jobs:
       - name: Test
         run: |
           cd tests
-          pytest -k "p2p" ./tests/
+          pytest -k "p2p" 

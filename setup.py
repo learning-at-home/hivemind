@@ -54,7 +54,8 @@ def libp2p_build_install():
 
     if m is None:
         raise FileNotFoundError('Could not find golang installation')
-    if parse_version(m.group(1)) < parse_version("1.13"):
+    version = parse_version(m.group(1))
+    if version < parse_version("1.13"):
         raise EnvironmentError(f'Newer version of go required: must be >= 1.13, found {m.group(1)}')
 
     with tempfile.TemporaryDirectory() as tempdir:
