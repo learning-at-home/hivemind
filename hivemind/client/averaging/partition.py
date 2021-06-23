@@ -122,34 +122,39 @@ class TensorPartReducer:
     """
     Auxiliary data structure responsible for running asynchronous all-reduce
     :param local_parts: a sequence of local torch tensors that will be averaged with other peers
-    :param peer_index: index of local peer in a given all-reduce group
-    :param group_size: total number of peers in a given all-reduce group
-    :param inplace: if set to True, local_tensors can be modified in-place for reduce
+    :param index: index of local peer among non-aux peers in a given all-reduce group, aux peers should use None
+    :param num_senders: total number of peers in a given all-reduce group that will send gradients
+    :note: if sender_index is None, local parts will only be used for shape information
     """
     next_part_index: int = 0  # index in local_parts of the part that should be loaded next
     accumulator: torch.Tensor  # sum of current tensor part from group peers
     denominator: float  # total weight accumulated from all peers for current part
     current_part_accumulated_from: int  # number of peers from which the current part was accumulated (including self)
 
-    def __init__(self, local_parts: Sequence[torch.Tensor], peer_index: int, group_size: int,
-                 weights: Optional[Sequence[float]] = None, inplace: bool = False):
-        self.local_parts, self.peer_index, self.group_size, self.inplace = local_parts, peer_index, group_size, inplace
-        self.num_parts_accumulated = [0 for _ in range(group_size)]
-        self.weights = tuple(weights or (1 for _ in range(group_size)))
-        assert len(weights) == self.group_size
+    def __init__(self, local_parts: Sequence[torch.Tensor], num_senders: int, index: Optional[int],
+                 weights: Optional[Sequence[float]] = None):
+        self.local_parts, self.num_senders, self.index = local_parts, num_senders, index
+        self.num_parts_accumulated = [0 for _ in range(num_senders)]
+        self.weights = tuple(weights or (1 for _ in range(num_senders)))
+        assert len(weights) == self.num_senders
 
     def prepare_next_part(self):
         """ create averaging buffers for the part part in line, pre-populates with local tensor part """
-        next_local_part = self.local_parts[self.next_part_index]
-        self.accumulator = next_local_part if self.inplace else next_local_part.clone()
-        self.denominator = self.weights[self.peer_index]
-        self.num_parts_accumulated[self.peer_index] += 1
-        self.current_part_accumulated_from = 1
+        self.accumulator = torch.zeros_like(self.local_parts[self.next_part_index])
+        self.denominator = 0.0
+
+        if self.index is not None:
+            self.accumulator.add_(self.local_parts[self.next_part_index], alpha=self.weights[])
+            self.denominator += self.weights[self.index]
+            self.num_parts_accumulated[self.peer_index] += 1
+            self.current_part_accumulated_from = 1
 
     async def accumulate_part(self, peer_index, remote_part: torch.Tensor, weight: float = 1.0) -> torch.Tensor:
         """ Add vector part to accumulator, wait for all other vectors to be added, then return the average part """
-        assert not self.averaged_part.done(), f"already finished averaging part: {self.averaged_part}"
-        assert not self.future.done(), f"already finished allreduce: {self.future}"
+        assert self.num_parts_accumulated[peer_index] < len(self.local_parts), "peer has already accumulated all parts"
+        assert 0 < peer_index < self.group_size and peer_index != self.peer_index
+        #TODO peer modes, maybe use num_senders
+
         assert source in self.local_tensor_parts, "unexpected source, not a part of current group"
         assert source not in self.current_part_accumulated_from, "duplicate source, already received that part"
         assert self.peer_modes[
