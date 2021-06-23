@@ -121,60 +121,59 @@ class TensorPartContainer:
 class TensorPartReducer:
     """
     Auxiliary data structure responsible for running asynchronous all-reduce
-    :param local_parts: a sequence of local torch tensors that will be averaged with other peers
-    :param index: index of local peer among non-aux peers in a given all-reduce group, aux peers should use None
+    :param part_shapes: a sequence of shapes of torch tensors that will be averaged by this reducer
     :param num_senders: total number of peers in a given all-reduce group that will send gradients
-    :note: if sender_index is None, local parts will only be used for shape information
+    :note: even if local peer is not sending data, local parts will be used for shape information
     """
-    next_part_index: int = 0  # index in local_parts of the part that should be loaded next
+    current_part_index: int = -1  # index in local_parts of the part that should be loaded next
+    current_part_accumulated_from: int = 0  # number of peers from which the current part was accumulated
     accumulator: torch.Tensor  # sum of current tensor part from group peers
     denominator: float  # total weight accumulated from all peers for current part
-    current_part_accumulated_from: int  # number of peers from which the current part was accumulated (including self)
+    current_part_future: asyncio.Future  # this future will be set with the current averaged part, once it is ready
 
-    def __init__(self, local_parts: Sequence[torch.Tensor], num_senders: int, index: Optional[int],
+    def __init__(self, part_shapes: Sequence[torch.Size], num_senders: int,
                  weights: Optional[Sequence[float]] = None):
-        self.local_parts, self.num_senders, self.index = local_parts, num_senders, index
-        self.num_parts_accumulated = [0 for _ in range(num_senders)]
+        self.part_shapes, self.num_senders, self.num_parts = part_shapes, num_senders, len(part_shapes)
         self.weights = tuple(weights or (1 for _ in range(num_senders)))
-        assert len(weights) == self.num_senders
+        assert len(self.weights) == self.num_senders, "The number of weights is inconsistent with num_senders"
+        for weight in self.weights:
+            assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
+        self.finished = asyncio.Event()
+        self.reset_accumulators()
 
-    def prepare_next_part(self):
-        """ create averaging buffers for the part part in line, pre-populates with local tensor part """
-        self.accumulator = torch.zeros_like(self.local_parts[self.next_part_index])
+    def reset_accumulators(self):
+        """ (re)create averaging buffers for the part part in line, pre-populates with local tensor part """
+        assert self.current_part_accumulated_from == self.num_senders or self.current_part_index == -1
+        if self.current_part_index >= self.num_parts - 1:
+            self.finished.set()
+            return
+
+        self.current_part_index += 1
+        self.current_part_accumulated_from = 0
+        self.current_part_future = asyncio.Future()
+        self.accumulator = torch.zeros(self.part_shapes[self.current_part_index])
         self.denominator = 0.0
 
-        if self.index is not None:
-            self.accumulator.add_(self.local_parts[self.next_part_index], alpha=self.weights[])
-            self.denominator += self.weights[self.index]
-            self.num_parts_accumulated[self.peer_index] += 1
-            self.current_part_accumulated_from = 1
-
-    async def accumulate_part(self, peer_index, remote_part: torch.Tensor, weight: float = 1.0) -> torch.Tensor:
+    async def accumulate_part(self, sender_index: int, part_index: int, tensor_part: torch.Tensor) -> torch.Tensor:
         """ Add vector part to accumulator, wait for all other vectors to be added, then return the average part """
-        assert self.num_parts_accumulated[peer_index] < len(self.local_parts), "peer has already accumulated all parts"
-        assert 0 < peer_index < self.group_size and peer_index != self.peer_index
-        #TODO peer modes, maybe use num_senders
+        assert 0 <= sender_index < self.num_senders, 'invalid sender index'
+        assert 0 <= part_index < self.num_parts, "invalid part index"
 
-        assert source in self.local_tensor_parts, "unexpected source, not a part of current group"
-        assert source not in self.current_part_accumulated_from, "duplicate source, already received that part"
-        assert self.peer_modes[
-                   self.endpoint] != AveragingMode.CLIENT, f"{self.endpoint} is in AveragingMode.client mode"
-        assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
+        while part_index > self.current_part_index:
+            await self.current_part_future  # wait for current part to finish processing
+        assert part_index == self.current_part_index
 
-        logger.debug(f"{self} - accumulating tensor part from {source}")
-        self.accumulator.add_(remote_part, alpha=weight)
-        self.denominator += weight
-        self.current_part_accumulated_from.add(source)
+        current_part_future = self.current_part_future
 
-        assert len(self.current_part_accumulated_from) <= self.num_senders
-        if len(self.current_part_accumulated_from) == self.num_senders:
-            average_result = self.accumulator.div_(self.denominator)
-            self.averaged_part.set_result(average_result)
+        self.accumulator.add_(tensor_part, alpha=self.weights[sender_index])
+        self.denominator += self.weights[sender_index]
+        self.current_part_accumulated_from += 1
 
-            if self.peer_modes[self.endpoint] == AveragingMode.AUX:
-                self.future.set_result(None)  # auxiliary mode has finished averaging
-            else:
-                self.register_averaged_part(self.endpoint, average_result)
+        assert self.current_part_accumulated_from <= self.num_senders
+        if self.current_part_accumulated_from == self.num_senders:
+            current_part_future.set_result(self.accumulator.div_(self.denominator))
+            self.reset_accumulators()
+        return await current_part_future
 
-        return await self.averaged_part
-
+    def __await__(self):
+        return self.finished.wait().__await__()
