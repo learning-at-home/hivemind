@@ -96,6 +96,7 @@ class Install(install):
             libp2p_build_install()
         else:
             libp2p_download_install()
+        print(self.user_options)
         proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
