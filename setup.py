@@ -98,7 +98,8 @@ class Install(install):
         else:
             libp2p_download_install()
 
-        proto_compile(os.path.join(here, 'hivemind', 'proto'))
+        path = self.build_lib if os.path.exists(self.build_lib) else here
+        proto_compile(os.path.join(path, 'hivemind', 'proto'))
         super().run()
 
 
@@ -114,6 +115,7 @@ class Develop(develop):
             libp2p_build_install()
         else:
             libp2p_download_install()
+
         proto_compile(os.path.join(here, 'hivemind', 'proto'))
         super().run()
 
@@ -147,7 +149,7 @@ setup(
     author_email='mryabinin0@gmail.com',
     url="https://github.com/learning-at-home/hivemind",
     packages=find_packages(exclude=['tests']),
-    package_data={'hivemind': ['hivemind_cli/*']},
+    package_data={'hivemind': ['proto/*', 'hivemind_cli/*']},
     include_package_data=True,
     license='MIT',
     setup_requires=['grpcio-tools'],
