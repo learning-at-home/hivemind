@@ -147,7 +147,7 @@ setup(
     author_email='mryabinin0@gmail.com',
     url="https://github.com/learning-at-home/hivemind",
     packages=find_packages(exclude=['tests']),
-    package_data={'hivemind': ['proto/*', 'hivemind_cli/*']},
+    package_data={'hivemind': ['hivemind_cli/*']},
     include_package_data=True,
     license='MIT',
     setup_requires=['grpcio-tools'],
