@@ -1,4 +1,4 @@
-from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable
+from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable, Tuple
 import asyncio
 import uvloop
 T = TypeVar('T')
@@ -32,6 +32,13 @@ async def achain(*async_iters: AsyncIterable[T]) -> AsyncIterator[T]:
     for aiter in async_iters:
         async for elem in aiter:
             yield elem
+
+
+async def aenumerate(aiterable: AsyncIterable[T]) -> AsyncIterable[Tuple[int, T]]:
+    """ equivalent to enumerate(iter) for asynchronous iterators. """
+    index = 0
+    async for elem in aiterable:
+        yield index, elem
 
 
 async def await_cancelled(awaitable: Awaitable) -> bool:
