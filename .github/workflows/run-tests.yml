@@ -33,10 +33,7 @@ jobs:
       - name: Test
         run: |
           cd tests
-          pytest --cov=hivemind 
-          python -c "import hivemind; print(hivemind.__path__)"
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+          pytest
 
   build_and_test_p2pd:
     runs-on: ubuntu-latest
@@ -46,12 +43,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 3.8
+          python-version: '3.8'
       - name: Cache dependencies
         uses: actions/cache@v2
         with:
           path: ~/.cache/pip
-          key: Key-v1-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
+          key: Key-v1-3.8-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -64,3 +61,32 @@ jobs:
         run: |
           cd tests
           pytest -k "p2p" 
+
+  codecov_in_develop_mode:
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: Key-v1-3.8-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Build hivemind
+        run: |
+          pip install -e .
+      - name: Test
+        run: |
+          pytest --cov=hivemind tests
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
