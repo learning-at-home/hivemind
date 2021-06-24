@@ -29,7 +29,8 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          pip install . --user
+          pip install .
+          python -c "import hivemind; print(hivemind.__path__)";
       - name: Test
         run: |
           export PACKS="$(python -m site --user-site)"
