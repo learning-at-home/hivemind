@@ -246,8 +246,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not self.collaboration_state.ready_for_step:
             return
 
-        logger.log(self.status_loglevel,
-                   f"Beginning global optimizer step {self.collaboration_state.optimizer_step}")
+        logger.log(self.status_loglevel, f"Beginning global optimizer step {self.collaboration_state.optimizer_step}")
         self.collaboration_state = self.fetch_collaboration_state()
         self.collaboration_state_updated.set()
 
@@ -257,8 +256,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             try:
                 group_info = self.averager.step(timeout=self.averaging_timeout, **kwargs)
                 if group_info:
-                    logger.log(self.status_loglevel,
-                               f"Averaged tensors successfully with {len(group_info)} peers")
+                    logger.log(self.status_loglevel, f"Averaged tensors successfully with {len(group_info)} peers")
             except BaseException as e:
                 logger.log(self.status_loglevel, f"Skipped averaging: averaging round failed with {repr(e)}.")
 
