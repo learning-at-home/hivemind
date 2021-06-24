@@ -1,5 +1,4 @@
 import dataclasses
-from functools import partial
 from typing import Dict
 
 import pytest
@@ -10,7 +9,7 @@ from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
-from hivemind.dht.validation import DHTRecord, CompositeValidator, RecordValidatorBase
+from hivemind.dht.validation import DHTRecord, CompositeValidator
 
 
 class SchemaA(BaseModel):
