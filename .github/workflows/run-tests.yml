@@ -34,9 +34,8 @@ jobs:
         run: |
           cd tests
           pytest --cov=hivemind 
-      - name: Upload to codecov
-        run: |
-          codecov
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
 
   build_and_test_p2pd:
     runs-on: ubuntu-latest
