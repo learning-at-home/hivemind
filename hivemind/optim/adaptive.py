@@ -9,8 +9,8 @@ from hivemind import TrainingAverager
 class CollaborativeAdaptiveOptimizer(CollaborativeOptimizer):
     """
     Behaves exactly as CollaborativeOptimizer except:
-     - averages adaptive learning rates of an optimizer
-     - doesn't average gradients
+    - averages adaptive learning rates of an optimizer
+    - doesn't average gradients
     :param average_opt_statistics: average optimizer statistics with corresponding names in statedict
     :param kwargs: options for CollaborativeOptimizer
     """
