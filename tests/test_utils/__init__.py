@@ -6,6 +6,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import NamedTuple
+import pkg_resources
 
 from multiaddr import Multiaddr, protocols
 
@@ -15,7 +16,7 @@ from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
 
 
 TIMEOUT_DURATION = 30  # seconds
-P2PD_PATH = os.path.join(os.path.dirname(hivemind.__file__), 'hivemind_cli', 'p2pd')
+P2PD_PATH = pkg_resources.resource_filename("hivemind", "hivemind_cli/p2pd")
 
 
 async def try_until_success(coro_func, timeout=TIMEOUT_DURATION):
