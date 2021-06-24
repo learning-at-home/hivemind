@@ -1,6 +1,6 @@
 name: Tests
 
-on: [push]
+on: [ push ]
 
 
 jobs:
@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9]
+        python-version: [ 3.7, 3.8, 3.9 ]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v2
@@ -43,7 +43,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v2
-      - name: Set up Python 
+      - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
@@ -59,7 +59,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          pip install . --install-option="--buildgo"
+          pip install . --global-option=build_py --global-option="--buildgo"
       - name: Test
         run: |
           cd tests
