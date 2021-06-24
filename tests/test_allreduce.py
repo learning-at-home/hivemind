@@ -156,7 +156,7 @@ async def test_allreduce_protocol():
 
     tensors_by_peer = {peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
                        for i, peer in enumerate(peers)}
-    averaging_weights_by_peer = [1, 0, 1, 1]  # [0.15, 0.0, 0.35, 0.45]
+    averaging_weights_by_peer = [0.15, 0.0, 0.35, 0.45]
 
     group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
 
