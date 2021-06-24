@@ -181,7 +181,9 @@ class TensorPartReducer:
 
         while part_index > self.current_part_index:
             # wait for previous parts to finish processing ...
-            await self._this_or_termination(self.current_part_future)
+            await asyncio.wait({self.current_part_future, self.finished.wait()}, return_when=asyncio.FIRST_COMPLETED)
+            if self.finished.is_set():
+                raise AllreduceException(f"attempted to aggregate part in a finalized {self.__class__.__name__}")
         assert part_index == self.current_part_index
 
         current_part_future = self.current_part_future
@@ -194,7 +196,7 @@ class TensorPartReducer:
         if self.current_part_accumulated_from == self.num_senders:
             current_part_future.set_result(self.accumulator.div_(self.denominator))
             self.reset_accumulators()
-        return await self._this_or_termination(current_part_future)
+        return await current_part_future
 
     def terminate(self):
         del self.accumulator
@@ -206,12 +208,6 @@ class TensorPartReducer:
 
     def __del__(self):
         self.terminate()
-
-    async def _this_or_termination(self, coro: Awaitable[T]) -> T:
-        await asyncio.wait({coro, self.finished.wait()}, return_when=asyncio.FIRST_COMPLETED)
-        if self.finished.is_set():
-            raise AllreduceException(f"attempted to aggregate part in a finalized {self.__class__.__name__}")
-        return await coro
 
 
 class AllreduceException(Exception):
