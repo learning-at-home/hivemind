@@ -34,8 +34,6 @@ jobs:
         run: |
           cd tests
           pytest --cov=hivemind 
-      - name: Stupid check
-        run: |
           python -c "import hivemind; print(hivemind.__path__)"
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
