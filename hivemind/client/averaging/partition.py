@@ -234,4 +234,4 @@ class TensorPartReducer:
 
 
 class AllreduceException(Exception):
-    """ A special exception that is raised when allreduce can't continue normally (e.g. disbanded/bad request/etc) """
+    """ A special exception that is raised when allreduce can't continue normally (e.g. disconnected/protocol error) """
