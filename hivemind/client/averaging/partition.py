@@ -2,7 +2,7 @@
 Auxiliary data structures for AllReduceProtocol and AllReduceRunner
 """
 import asyncio
-from typing import Sequence, Awaitable, AsyncIterable, Tuple, Optional
+from typing import Sequence, Awaitable, AsyncIterable, Tuple, Optional, TypeVar
 
 import torch
 import numpy as np
@@ -11,17 +11,23 @@ from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch
 from collections import deque
 
 
+# TODO implement
+# - stream serializer in background thread
+# - per-tensor compression
+T = TypeVar('T')
+
+
 class TensorPartContainer:
     """
     Auxiliary data structure for averaging, responsible for splitting tensors into parts and re-assembling them.
     The class is designed to avoid excessive memory allocation and run all heavy computation in background
     """
 
-    def __init__(self, tensors: Sequence[torch.Tensor], target_size_by_peer: Sequence[float],
+    def __init__(self, tensors: Sequence[torch.Tensor], peer_fractions: Sequence[float],
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
                  part_size_bytes: int = 2 ** 20):
-        self.local_tensors, self.part_sizes, self.part_size_bytes = tensors, target_size_by_peer, part_size_bytes
-        self.group_size = len(target_size_by_peer)
+        self.local_tensors, self.part_sizes, self.part_size_bytes = tensors, peer_fractions, part_size_bytes
+        self.group_size = len(peer_fractions)
         self.tensor_sizes = [tensor.numel() for tensor in tensors]
         self.compression_type = compression_type
         self.total_size = sum(self.tensor_sizes)
@@ -31,11 +37,12 @@ class TensorPartContainer:
         self._inputs_consumed_by_peer = [False for _ in range(self.group_size)]
         self._output_part_available = [asyncio.Event() for _ in range(self.group_size)]
         self._outputs_consumed = False
+        self.finished = asyncio.Event()
 
         # split tensor parts in proportion to target_size_by_peer
         current_length = 0
         current_peer_index = 0
-        pivots = np.cumsum(target_size_by_peer) / np.sum(target_size_by_peer) * self.total_size
+        pivots = np.cumsum(peer_fractions) / np.sum(peer_fractions) * self.total_size
         pivots = np.concatenate([pivots.astype(np.int64)[:-1], [self.total_size]])
 
         for tensor in self.local_tensors:
@@ -85,10 +92,10 @@ class TensorPartContainer:
 
         prefetch_next_part = _serialize_next_part()
         for i in range(len(self._input_parts_by_peer[peer_index])):
-            next_part = await prefetch_next_part
+            next_part = await self._this_or_termination(prefetch_next_part)
             prefetch_next_part = _serialize_next_part()
             yield next_part
-        yield await prefetch_next_part
+        yield await self._this_or_termination(prefetch_next_part)
 
     def append_averaged_part(self, peer_index: int, part: runtime_pb2.Tensor):
         """ register next-in-line part of results received from a given peer  """
@@ -110,12 +117,30 @@ class TensorPartContainer:
                     continue
                 if not self._output_parts_by_peer[peer_index]:
                     self._output_part_available[peer_index].clear()
-                    await self._output_part_available[peer_index].wait()
-                tensor_parts.append(await self._output_parts_by_peer[peer_index].popleft())
+                    await self._this_or_termination(self._output_part_available[peer_index].wait())
+
+                next_part = await self._this_or_termination(self._output_parts_by_peer[peer_index].popleft())
+                tensor_parts.append(next_part)
                 num_parts_processed += 1
             tensor = torch.cat(tensor_parts)
             del tensor_parts
             yield tensor.reshape(self.local_tensors[tensor_index].shape)
+
+    def finalize(self):
+        """ terminate all iterators, delete intermediate data """
+        for peer_index in range(self.group_size):
+            self._inputs_consumed_by_peer[peer_index] = True
+            self._input_parts_by_peer[peer_index].clear()
+            self._output_parts_by_peer[peer_index].clear()
+            self._output_part_available[peer_index].set()
+        self._outputs_consumed = True
+        self.finished.set()
+
+    async def _this_or_termination(self, coro: Awaitable[T]) -> T:
+        await asyncio.wait({coro, self.finished.wait()}, return_when=asyncio.FIRST_COMPLETED)
+        if self.finished.is_set():
+            raise ValueError(f"attempted to request part from a finalized {self.__class__.__name__}")
+        return await coro
 
 
 class TensorPartReducer:
@@ -160,7 +185,8 @@ class TensorPartReducer:
         assert 0 <= part_index < self.num_parts, "invalid part index"
 
         while part_index > self.current_part_index:
-            await self.current_part_future  # wait for current part to finish processing
+            # wait for previous parts to finish processing ...
+            await self._this_or_termination(self.current_part_future)
         assert part_index == self.current_part_index
 
         current_part_future = self.current_part_future
@@ -173,7 +199,19 @@ class TensorPartReducer:
         if self.current_part_accumulated_from == self.num_senders:
             current_part_future.set_result(self.accumulator.div_(self.denominator))
             self.reset_accumulators()
-        return await current_part_future
+        return await self._this_or_termination(current_part_future)
 
     def __await__(self):
         return self.finished.wait().__await__()
+
+    def finalize(self):
+        del self.accumulator
+        self.current_part_future.cancel()
+        self.finished.set()
+
+    async def _this_or_termination(self, coro: Awaitable[T]) -> T:
+        await asyncio.wait({coro, self.finished.wait()}, return_when=asyncio.FIRST_COMPLETED)
+        if self.finished.is_set():
+            raise ValueError(f"attempted to request part from a finalized {self.__class__.__name__}")
+        return await coro
+
