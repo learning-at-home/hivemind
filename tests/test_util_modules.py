@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import torch
 
+from hivemind import async_map, aiter, aenumerate, achain, anext, azip
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
@@ -142,6 +143,7 @@ def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     for compression_type in CompressionType.values():
         assert deserialize_torch_tensor(serialize_torch_tensor(zeros, compression_type)).isfinite().all()
 
+
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_channel_cache():
@@ -271,3 +273,41 @@ def test_generic_data_classes():
     sorted_expirations = sorted([DHTExpiration(value) for value in range(1, 1000)])
     sorted_heap_entries = sorted([HeapEntry(DHTExpiration(value), key="any") for value in range(1, 1000)[::-1]])
     assert all([entry.expiration_time == value for entry, value in zip(sorted_heap_entries, sorted_expirations)])
+
+
+@pytest.mark.asyncio
+async def test_asyncio():
+    res = [i async for i, item in aenumerate(aiter('a', 'b', 'c'))]
+    assert res == list(range(len(res)))
+
+    num_steps = 0
+    async for elem in async_map(lambda x: x ** 2, aiter(*range(100)), max_prefetch=5):
+        assert elem == num_steps ** 2
+        num_steps += 1
+    assert num_steps == 100
+
+    ours = [elem async for elem in async_map(max, aiter(*range(7)), aiter(*range(-50, 50, 10)), max_prefetch=1)]
+    ref = list(map(max, range(7), range(-50, 50, 10)))
+    assert ours == ref
+
+    ours = [row async for row in azip(aiter('a', 'b', 'c'), aiter(1, 2, 3))]
+    ref = list(zip(['a', 'b', 'c'], [1, 2, 3]))
+    assert ours == ref
+
+    async def _aiterate():
+        yield 'foo'
+        yield 'bar'
+        yield 'baz'
+
+    iterator = _aiterate()
+    assert (await anext(iterator)) == 'foo'
+    tail = [item async for item in iterator]
+    assert tail == ['bar', 'baz']
+    with pytest.raises(StopAsyncIteration):
+        await anext(iterator)
+
+    assert [item async for item in achain(_aiterate(), aiter(*range(5)))] == ['foo', 'bar', 'baz'] + list(range(5))
+
+
+
+
