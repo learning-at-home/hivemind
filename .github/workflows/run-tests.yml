@@ -29,11 +29,12 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          pip install .
+          pip install . --user
       - name: Test
         run: |
+          export PACKS="$(python -m site --user-site)"
           cd tests
-          pytest --cov=../hivemind 
+          pytest --cov=$PACKS/hivemind 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
 
