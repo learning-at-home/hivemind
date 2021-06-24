@@ -14,3 +14,4 @@ multiaddr>=0.0.9
 pymultihash>=0.8.2
 cryptography>=3.4.6
 pydantic>=1.8.1
+janus>=0.6.1
