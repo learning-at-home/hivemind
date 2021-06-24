@@ -71,7 +71,7 @@ async def test_partitioning_asynchronous():
     async def write_tensors():
         for i in range(partition.group_size):
             async for part in partition.iterate_input_parts_for(i):
-                partition.append_averaged_part(i, part)
+                partition.append_averaged_part(i, serialize_torch_tensor(part))
         assert read_started.is_set(), "partitioner should have started reading before it finished writing"
 
     async def read_tensors():

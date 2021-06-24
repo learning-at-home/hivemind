@@ -2,7 +2,7 @@
 Auxiliary data structures for AllReduceProtocol and AllReduceRunner
 """
 import asyncio
-from typing import Sequence, Awaitable, AsyncIterable, Tuple, Optional, TypeVar
+from typing import Sequence, Awaitable, AsyncIterable, Tuple, Optional, TypeVar, Union
 
 import torch
 import numpy as np
@@ -36,6 +36,7 @@ class TensorPartContainer:
         self._output_parts_by_peer = [deque() for _ in range(self.group_size)]
         self._inputs_consumed_by_peer = [False for _ in range(self.group_size)]
         self._output_part_available = [asyncio.Event() for _ in range(self.group_size)]
+        self._outputs_registered_by_peer = [0 for _ in range(self.group_size)]
         self._outputs_consumed = False
         self.finished = asyncio.Event()
 
@@ -99,8 +100,18 @@ class TensorPartContainer:
 
     def append_averaged_part(self, peer_index: int, part: runtime_pb2.Tensor):
         """ register next-in-line part of results received from a given peer  """
+        #TODO remove this function in favor of register_averaged_part
         self._output_parts_by_peer[peer_index].append(
-            asyncio.get_event_loop().run_in_executor(None, deserialize_torch_tensor, part))
+                asyncio.get_event_loop().run_in_executor(None, deserialize_torch_tensor, part))
+        self._output_part_available[peer_index].set()
+
+    def register_averaged_part(self, peer_index: int, part_index: int, part: torch.Tensor):
+        """ register next-in-line part of results received from a given peer  """
+        if part_index != self._outputs_registered_by_peer[peer_index]:
+            raise ValueError(f"Could not register part #{part_index} from peer #{peer_index}, "
+                             f" expected part index: {self._outputs_registered_by_peer[peer_index]}")
+        self._output_parts_by_peer[peer_index].append(part) #TODO this was meant to be a future
+        self._outputs_registered_by_peer[peer_index] += 1
         self._output_part_available[peer_index].set()
 
     async def iterate_output_tensors(self) -> AsyncIterable[torch.Tensor]:
@@ -126,7 +137,10 @@ class TensorPartContainer:
             del tensor_parts
             yield tensor.reshape(self.local_tensors[tensor_index].shape)
 
-    def finalize(self):
+    def __del__(self):
+        self.terminate()
+
+    def terminate(self):
         """ terminate all iterators, delete intermediate data """
         for peer_index in range(self.group_size):
             self._inputs_consumed_by_peer[peer_index] = True
@@ -139,7 +153,7 @@ class TensorPartContainer:
     async def _this_or_termination(self, coro: Awaitable[T]) -> T:
         await asyncio.wait({coro, self.finished.wait()}, return_when=asyncio.FIRST_COMPLETED)
         if self.finished.is_set():
-            raise ValueError(f"attempted to request part from a finalized {self.__class__.__name__}")
+            raise AllreduceException(f"attempted to request part from a finalized {self.__class__.__name__}")
         return await coro
 
 
@@ -181,7 +195,7 @@ class TensorPartReducer:
 
     async def accumulate_part(self, sender_index: int, part_index: int, tensor_part: torch.Tensor) -> torch.Tensor:
         """ Add vector part to accumulator, wait for all other vectors to be added, then return the average part """
-        assert 0 <= sender_index < self.num_senders, 'invalid sender index'
+        assert 0 <= sender_index < self.num_senders, "invalid sender index"
         assert 0 <= part_index < self.num_parts, "invalid part index"
 
         while part_index > self.current_part_index:
@@ -201,17 +215,23 @@ class TensorPartReducer:
             self.reset_accumulators()
         return await self._this_or_termination(current_part_future)
 
-    def __await__(self):
-        return self.finished.wait().__await__()
-
-    def finalize(self):
+    def terminate(self):
         del self.accumulator
         self.current_part_future.cancel()
         self.finished.set()
 
+    def __await__(self):
+        return self.finished.wait().__await__()
+
+    def __del__(self):
+        self.terminate()
+
     async def _this_or_termination(self, coro: Awaitable[T]) -> T:
         await asyncio.wait({coro, self.finished.wait()}, return_when=asyncio.FIRST_COMPLETED)
         if self.finished.is_set():
-            raise ValueError(f"attempted to request part from a finalized {self.__class__.__name__}")
+            raise AllreduceException(f"attempted to aggregate part in a finalized {self.__class__.__name__}")
         return await coro
 
+
+class AllreduceException(Exception):
+    """ A special exception that is raised when allreduce can't continue normally (e.g. disbanded/bad request/etc) """
