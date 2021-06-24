@@ -13,6 +13,7 @@ from pkg_resources import parse_requirements, parse_version
 from setuptools import find_packages, setup
 from setuptools.command.develop import develop
 from setuptools.command.install import install
+from setuptools.command.build_py import build_py
 
 P2PD_VERSION = 'v0.3.1'
 P2PD_CHECKSUM = '15292b880c6b31f5b3c36084b3acc17f'
@@ -85,6 +86,12 @@ def libp2p_download_install():
             raise RuntimeError(f'Downloaded p2pd binary from {url} does not match with md5 checksum')
 
 
+class BuildPy(build_py):
+    def run(self):
+        super().run()
+        proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
+
+
 class Install(install):
     user_options = install.user_options + [('buildgo', None, "Builds p2pd from source")]
 
@@ -98,7 +105,6 @@ class Install(install):
         else:
             libp2p_download_install()
 
-        proto_compile(os.path.join(self.install_lib, 'hivemind', 'proto'))
         super().run()
 
 
@@ -140,7 +146,7 @@ extras['all'] = extras['dev'] + extras['docs']
 setup(
     name='hivemind',
     version=version_string,
-    cmdclass={'install': Install, 'develop': Develop},
+    cmdclass={'build_py': BuildPy, 'install': Install, 'develop': Develop},
     description='Decentralized deep learning in PyTorch',
     long_description='Decentralized deep learning in PyTorch. Built to train giant models on '
                      'thousands of volunteers across the world.',
