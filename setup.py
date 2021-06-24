@@ -84,6 +84,7 @@ def libp2p_download_install():
         if md5(binary_path) != P2PD_CHECKSUM:
             raise RuntimeError(f'Downloaded p2pd binary from {url} does not match with md5 checksum')
 
+# class BuildExt(build_ext):
 
 class Install(install):
     user_options = install.user_options + [('buildgo', None, "Builds p2pd from source")]
@@ -98,8 +99,7 @@ class Install(install):
         else:
             libp2p_download_install()
 
-        path = self.build_lib if os.path.exists(self.build_lib) else here
-        proto_compile(os.path.join(path, 'hivemind', 'proto'))
+        proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
         super().run()
 
 
@@ -116,7 +116,7 @@ class Develop(develop):
         else:
             libp2p_download_install()
 
-        proto_compile(os.path.join(here, 'hivemind', 'proto'))
+        proto_compile(os.path.abspath(os.path.join('hivemind', 'proto')))
         super().run()
 
 
