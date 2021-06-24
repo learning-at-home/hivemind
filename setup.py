@@ -103,7 +103,7 @@ class Install(install):
 
 
 class Develop(develop):
-    user_options = develop.user_options + [('buildgo', None, None)]
+    user_options = develop.user_options + [('buildgo', None, "Builds p2pd from source")]
 
     def initialize_options(self):
         super().initialize_options()
