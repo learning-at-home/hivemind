@@ -6,6 +6,8 @@
 
 Collaborative Optimizer
 #######################
+.. automodule:: hivemind.optim.collaborative
+.. currentmodule:: hivemind.optim.collaborative
 
 .. autoclass:: CollaborativeOptimizer
    :members:
