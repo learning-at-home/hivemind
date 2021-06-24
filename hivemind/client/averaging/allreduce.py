@@ -59,7 +59,6 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.sender_endpoints, self.sender_weights = zip(*(
             (endpoint, weight) for endpoint, weight, mode in zip(self.ordered_group_endpoints, weights, modes)
             if mode != AveragingMode.AUX))
-        self.sender_to_index = {endpoint: i for i, endpoint in enumerate(self.sender_endpoints)}
 
         self.tensor_part_container = TensorPartContainer(tensors, peer_fractions, compression_type, part_size_bytes)
         self.parts_for_local_averaging = self.tensor_part_container.get_raw_input_parts(
@@ -103,7 +102,6 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 async for local_tensor, averaged_tensor_delta in azip(
                         aiter(*self.tensor_part_container.local_tensors),
                         self.tensor_part_container.iterate_output_tensors()):
-                    print(f'{self.endpoint} - updated another tensor!')
                     local_tensor[...] += averaged_tensor_delta
                 self.finalize()
 
@@ -126,14 +124,14 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
         """ Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors """
         peer_index = self.ordered_group_endpoints.index(peer_endpoint)
         if peer_endpoint == self.endpoint:
+            sender_index = self.sender_endpoints.index(peer_endpoint)
             for part_index, tensor_part in enumerate(self.parts_for_local_averaging):
-                averaged_part = await self.tensor_part_reducer.accumulate_part(peer_index, part_index, tensor_part)
+                averaged_part = await self.tensor_part_reducer.accumulate_part(sender_index, part_index, tensor_part)
                 self.tensor_part_container.register_averaged_part(peer_index, part_index, averaged_part - tensor_part)
 
         else:
             loop = asyncio.get_event_loop()
             stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
-            peer_index = self.ordered_group_endpoints.index(peer_endpoint)
 
             async def _write_to_peer():
                 parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
@@ -175,7 +173,7 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
-                sender_index = self.sender_to_index[request.endpoint]
+                sender_index = self.sender_endpoints.index(request.endpoint)
                 async for msg in self._accumulate_parts_streaming(achain(aiter(request), stream), sender_index):
                     yield msg
 
