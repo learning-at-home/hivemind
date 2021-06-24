@@ -42,12 +42,12 @@ async def test_partitioning():
 
 @pytest.mark.parametrize("tensors", [[torch.zeros(0)], [torch.zeros(0), torch.zeros(0), torch.zeros(1)],
                                      [torch.zeros(0), torch.zeros(999), torch.zeros(0), torch.zeros(0)]])
-@pytest.mark.parametrize("peer_shares", [(0.33, 0.44, 0.23), (0.5, 0.5), (0.1, 0.0, 0.9), (1.0,), (0.1,) * 9])
+@pytest.mark.parametrize("peer_fractions", [(0.33, 0.44, 0.23), (0.5, 0.5), (0.1, 0.0, 0.9), (1.0,), (0.1,) * 9])
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_partitioning_edge_cases(tensors: Sequence[torch.Tensor], peer_shares: Sequence[float]):
-    partition = TensorPartContainer(tensors, peer_shares, part_size_bytes=16)
-    for i in range(len(peer_shares)):
+async def test_partitioning_edge_cases(tensors: Sequence[torch.Tensor], peer_fractions: Sequence[float]):
+    partition = TensorPartContainer(tensors, peer_fractions, part_size_bytes=16)
+    for i in range(len(peer_fractions)):
         async for part in partition.iterate_input_parts_for(i):
             partition.append_averaged_part(i, part)
 
@@ -63,9 +63,9 @@ async def test_partitioning_asynchronous():
     """ ensure that tensor partitioning does not interfere with asynchronous code """
     tensors = [torch.randn(2048, 2048), torch.randn(1024, 4096),
                torch.randn(4096, 1024), torch.randn(30_000, 1024)]
-    peer_shares = [0.4, 0.3, 0.2, 0.1]
+    peer_fractions = [0.4, 0.3, 0.2, 0.1]
 
-    partition = TensorPartContainer(tensors, peer_shares, compression_type=CompressionType.QUANTILE_8BIT)
+    partition = TensorPartContainer(tensors, peer_fractions, compression_type=CompressionType.QUANTILE_8BIT)
     read_started, read_finished = asyncio.Event(), asyncio.Event()
 
     async def write_tensors():
