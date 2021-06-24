@@ -50,9 +50,9 @@ async def test_partitioning():
 @pytest.mark.asyncio
 async def test_partitioning_edge_cases(tensors: Sequence[torch.Tensor], peer_fractions: Sequence[float]):
     partition = TensorPartContainer(tensors, peer_fractions, part_size_bytes=16)
-    for i in range(len(peer_fractions)):
-        async for part in partition.iterate_input_parts_for(i):
-            partition.append_averaged_part(i, part)
+    for peer_index in range(len(peer_fractions)):
+        async for part_index, part in aenumerate(partition.iterate_input_parts_for(peer_index)):
+            partition.register_averaged_part(peer_index, part_index, deserialize_torch_tensor(part))
 
     tensor_index = 0
     async for output_tensor in partition.iterate_output_tensors():
