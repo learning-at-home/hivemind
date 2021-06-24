@@ -11,9 +11,8 @@ import urllib.request
 
 from pkg_resources import parse_requirements, parse_version
 from setuptools import find_packages, setup
-from setuptools.command.develop import develop
-from setuptools.command.install import install
 from setuptools.command.build_py import build_py
+from setuptools.command.develop import develop
 
 P2PD_VERSION = 'v0.3.1'
 P2PD_CHECKSUM = '15292b880c6b31f5b3c36084b3acc17f'
@@ -49,7 +48,7 @@ def proto_compile(output_path):
             file.truncate()
 
 
-def libp2p_build_install():
+def build_p2p_daemon():
     result = subprocess.run("go version", capture_output=True, shell=True).stdout.decode('ascii', 'replace')
     m = re.search(r'^go version go([\d.]+)', result)
 
@@ -74,7 +73,7 @@ def libp2p_build_install():
                                f' exited with status code: {result.returncode}')
 
 
-def libp2p_download_install():
+def download_p2p_daemon():
     install_path = os.path.join(here, 'hivemind', 'hivemind_cli')
     binary_path = os.path.join(install_path, 'p2pd')
     if not os.path.exists(binary_path) or md5(binary_path) != P2PD_CHECKSUM:
@@ -87,41 +86,27 @@ def libp2p_download_install():
 
 
 class BuildPy(build_py):
+    user_options = build_py.user_options + [('buildgo', None, "Builds p2pd from source")]
+
+    def initialize_options(self):
+        super().initialize_options()
+        self.buildgo = False
+
     def run(self):
+        if self.buildgo:
+            build_p2p_daemon()
+        else:
+            download_p2p_daemon()
+
         super().run()
+
         proto_compile(os.path.join(self.build_lib, 'hivemind', 'proto'))
 
 
-class Install(install):
-    user_options = install.user_options + [('buildgo', None, "Builds p2pd from source")]
-
-    def initialize_options(self):
-        super().initialize_options()
-        self.buildgo = False
-
-    def run(self):
-        if self.buildgo:
-            libp2p_build_install()
-        else:
-            libp2p_download_install()
-
-        super().run()
-
-
 class Develop(develop):
-    user_options = develop.user_options + [('buildgo', None, "Builds p2pd from source")]
-
-    def initialize_options(self):
-        super().initialize_options()
-        self.buildgo = False
-
     def run(self):
-        if self.buildgo:
-            libp2p_build_install()
-        else:
-            libp2p_download_install()
-
-        proto_compile(os.path.abspath(os.path.join('hivemind', 'proto')))
+        self.reinitialize_command('build_py', build_lib=here)
+        self.run_command('build_py')
         super().run()
 
 
@@ -146,7 +131,7 @@ extras['all'] = extras['dev'] + extras['docs']
 setup(
     name='hivemind',
     version=version_string,
-    cmdclass={'build_py': BuildPy, 'install': Install, 'develop': Develop},
+    cmdclass={'build_py': BuildPy, 'develop': Develop},
     description='Decentralized deep learning in PyTorch',
     long_description='Decentralized deep learning in PyTorch. Built to train giant models on '
                      'thousands of volunteers across the world.',
