@@ -8,6 +8,10 @@
    :members: step
    :member-order: bysource
 
+
+.. automodule:: hivemind.client.averaging.training
+.. currentmodule:: hivemind.client.averaging.training
+
 .. autoclass:: TrainingAverager
    :members: step
    :member-order: bysource
