@@ -30,12 +30,13 @@ jobs:
       - name: Build hivemind
         run: |
           pip install .
-          python -c "import hivemind; print(hivemind.__path__)";
       - name: Test
         run: |
-          export PACKS="$(python -m site --user-site)"
           cd tests
-          pytest --cov=$PACKS/hivemind 
+          pytest --cov=hivemind 
+      - name: Stupid check
+        run: |
+          python -c "import hivemind; print(hivemind.__path__)"
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
 
