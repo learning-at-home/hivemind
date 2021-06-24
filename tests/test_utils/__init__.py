@@ -6,6 +6,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import NamedTuple
+from pkg_resources import resource_filename
 
 from multiaddr import Multiaddr, protocols
 
@@ -14,6 +15,7 @@ from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
 
 
 TIMEOUT_DURATION = 30  # seconds
+P2PD_PATH = resource_filename("hivemind", "hivemind_cli/p2pd")
 
 
 async def try_until_success(coro_func, timeout=TIMEOUT_DURATION):
@@ -57,7 +59,7 @@ class Daemon:
         self.f_log = open(self.log_filename, "wb")
 
     def _run(self):
-        cmd_list = ["hivemind/hivemind_cli/p2pd", f"-listen={str(self.control_maddr)}"]
+        cmd_list = [P2PD_PATH, f"-listen={str(self.control_maddr)}"]
         cmd_list += [f"-hostAddrs=/ip4/127.0.0.1/tcp/{find_open_port()}"]
         if self.enable_connmgr:
             cmd_list += ["-connManager=true", "-connLo=1", "-connHi=2", "-connGrace=0"]
