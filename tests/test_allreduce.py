@@ -6,6 +6,7 @@ from typing import Sequence
 import pytest
 import torch
 
+from hivemind import aenumerate
 from hivemind.client.averaging.partition import TensorPartContainer, TensorPartReducer
 from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.proto.runtime_pb2 import CompressionType
@@ -28,16 +29,18 @@ async def test_partitioning():
                 partition = TensorPartContainer(tensors, weights, part_size_bytes=part_size_bytes)
 
                 async def write_tensors():
-                    for i in range(partition.group_size):
-                        async for part in partition.iterate_input_parts_for(i):
+                    for peer_index in range(partition.group_size):
+                        async for part_index, part in aenumerate(partition.iterate_input_parts_for(peer_index)):
                             output_tensor = torch.sin(deserialize_torch_tensor(part))
-                            part = serialize_torch_tensor(output_tensor, part.compression)
-                            partition.append_averaged_part(i, part)
-                asyncio.create_task(write_tensors())
+                            partition.register_averaged_part(peer_index, part_index, output_tensor)
+
+                task = asyncio.create_task(write_tensors())
                 tensor_index = 0
                 async for output_tensor in partition.iterate_output_tensors():
                     assert torch.allclose(output_tensor, torch.sin(tensors[tensor_index]))
                     tensor_index += 1
+                assert tensor_index == len(tensors)
+                await task
 
 
 @pytest.mark.parametrize("tensors", [[torch.zeros(0)], [torch.zeros(0), torch.zeros(0), torch.zeros(1)],
@@ -69,9 +72,9 @@ async def test_partitioning_asynchronous():
     read_started, read_finished = asyncio.Event(), asyncio.Event()
 
     async def write_tensors():
-        for i in range(partition.group_size):
-            async for part in partition.iterate_input_parts_for(i):
-                partition.append_averaged_part(i, serialize_torch_tensor(part))
+        for peer_index in range(partition.group_size):
+            async for part_index, part in aenumerate(partition.iterate_input_parts_for(peer_index)):
+                partition.register_averaged_part(peer_index, part_index, deserialize_torch_tensor(part))
         assert read_started.is_set(), "partitioner should have started reading before it finished writing"
 
     async def read_tensors():
