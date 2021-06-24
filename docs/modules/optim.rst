@@ -4,8 +4,6 @@
 .. automodule:: hivemind.optim
 .. currentmodule:: hivemind.optim
 
-Collaborative Optimizer
-#######################
 
 .. autoclass:: CollaborativeOptimizer
    :members: step
