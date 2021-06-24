@@ -1,6 +1,6 @@
 ## Hivemind: decentralized deep learning in PyTorch
 
-[![CI status](https://github.com/learning-at-home/hivemind/actions/workflows/main-ci.yml/badge.svg?branch=master)](https://github.com/learning-at-home/hivemind/actions)
+[![CI status](https://github.com/learning-at-home/hivemind/actions/workflows/run-tests.yml/badge.svg?branch=master)](https://github.com/learning-at-home/hivemind/actions)
 [![Documentation Status](https://readthedocs.org/projects/learning-at-home/badge/?version=latest)](https://learning-at-home.readthedocs.io/en/latest/?badge=latest)
 [![Gitter](https://badges.gitter.im/learning-at-home/hivemind.svg)](https://gitter.im/learning-at-home/hivemind?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
