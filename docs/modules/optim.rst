@@ -13,6 +13,8 @@ Collaborative Optimizer
    :members:
    :member-order: bysource
 
+.. automodule:: hivemind.optim.adaptive
+.. currentmodule:: hivemind.optim.adaptive
 
 .. autoclass:: CollaborativeAdaptiveOptimizer
    :members:
