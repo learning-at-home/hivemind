@@ -20,7 +20,7 @@ import torch
 import numpy as np
 
 from hivemind.dht import DHT, DHTID
-from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
+from hivemind.client.averaging.allreduce import AllReduceProtocol, AllreduceException, GroupID, AveragingMode
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.client.averaging.group_info import GroupInfo
@@ -138,7 +138,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.allreduce_kwargs = dict(compression_type=compression_type, chunk_size_bytes=chunk_size_bytes,
                                      min_vector_size=min_vector_size)
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
-        self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
+        self._running_groups: Dict[GroupID, AllReduceProtocol] = {}  # one or more assembled groups that run all-reduce
 
         self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
@@ -324,7 +324,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 future.set_exception(RuntimeError("Internal sanity check failed: averager.step left future pending."
                                                   " Please report this to hivemind issues."))
 
-    async def _make_allreduce_runner(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> AllReduceRunner:
+    async def _make_allreduce_runner(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> AllReduceProtocol:
         """ Use a group description found by Matchmaking to form AllreduceRunner """
         try:
             weights, throughputs, mode_ids, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
@@ -332,16 +332,17 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             # compute optimal part sizes from peer throughputs
             modes = tuple(map(AveragingMode, mode_ids))
             incoming_throughputs = [thr if mode != AveragingMode.CLIENT else 0.0 for thr, mode in zip(throughputs, modes)]  # TODO: replace with proper load balancing
-            part_sizes = await asyncio.get_event_loop().run_in_executor(
+            peer_fractions = await asyncio.get_event_loop().run_in_executor(
                 None, load_balance_peers, self.total_size, incoming_throughputs, min_vector_size)
             async with self.get_tensors_async() as averaged_tensors:
-                return AllReduceRunner(group_id=group_info.group_id, tensors=averaged_tensors, endpoint=self.endpoint,
-                                       ordered_group_endpoints=group_info.endpoints, part_sizes=part_sizes,
-                                       weights=weights, gathered=user_gathered, return_deltas=True, modes=modes, **kwargs)
+                return AllReduceProtocol(
+                    group_id=group_info.group_id, tensors=averaged_tensors, endpoint=self.endpoint,
+                    ordered_group_endpoints=group_info.endpoints, peer_fractions=peer_fractions, weights=weights,
+                    gathered=user_gathered, return_deltas=True, modes=modes, **kwargs)
         except Exception as e:
             raise MatchmakingException(f"Unable to create allreduce runner ({e}), group_info: {weights, throughputs, modes, user_gathered}")
 
-    def update_tensors(self, allreduce_group: AllReduceRunner):
+    def update_tensors(self, allreduce_group: AllReduceProtocol):
         """
         a private (extendable) method that applies changes from a finished allreduce to local tensors
         """

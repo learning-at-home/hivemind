@@ -1,5 +1,5 @@
 """
-Auxiliary data structures for AllReduceProtocol and AllReduceRunner
+Auxiliary data structures for AllReduceProtocol
 """
 import asyncio
 from typing import Sequence, Awaitable, AsyncIterable, Tuple, Optional, TypeVar, Deque
@@ -129,13 +129,14 @@ class TensorPartContainer:
 
     def terminate(self):
         """ terminate all iterators, delete intermediate data """
-        for peer_index in range(self.group_size):
-            self._inputs_consumed_by_peer[peer_index] = True
-            self._input_parts_by_peer[peer_index].clear()
-            self._output_parts_by_peer[peer_index].clear()
-            self._output_part_available[peer_index].set()
-        self._outputs_consumed = True
-        self.finished.set()
+        if not self.finished.is_set():
+            for peer_index in range(self.group_size):
+                self._inputs_consumed_by_peer[peer_index] = True
+                self._input_parts_by_peer[peer_index].clear()
+                self._output_parts_by_peer[peer_index].clear()
+                self._output_part_available[peer_index].set()
+            self._outputs_consumed = True
+            self.finished.set()
 
 
 class TensorPartReducer:
@@ -199,9 +200,10 @@ class TensorPartReducer:
         return await current_part_future
 
     def terminate(self):
-        del self.accumulator
-        self.current_part_future.cancel()
-        self.finished.set()
+        if not self.finished.is_set():
+            del self.accumulator
+            self.current_part_future.cancel()
+            self.finished.set()
 
     def __await__(self):
         return self.finished.wait().__await__()

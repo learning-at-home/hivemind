@@ -5,11 +5,14 @@ from typing import Sequence
 
 import pytest
 import torch
+import grpc
 
-from hivemind import aenumerate
+from hivemind import aenumerate, Endpoint
+from hivemind.client.averaging.allreduce import AllReduceProtocol, AveragingMode
 from hivemind.client.averaging.partition import TensorPartContainer, TensorPartReducer
-from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor, ChannelCache
 from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.proto import averaging_pb2_grpc
 
 
 @pytest.mark.forked
@@ -131,3 +134,71 @@ async def test_reducer(num_senders: int, num_parts: int, synchronize_prob: float
         assert len(averaged_tensors) == len(reference)
         for avg, ref in zip(averaged_tensors, reference):
             assert torch.allclose(avg, ref, rtol=1e-3, atol=1e-5)
+
+
+class AllreduceProtocolForTesting(AllReduceProtocol):
+    """ a version of AllReduceProtocol that was monkey-patched to accept custom endpoint names """
+    def __init__(self, *args, peer_endpoints, **kwargs):
+        self.__peer_endpoints = peer_endpoints
+        super().__init__(*args, **kwargs)
+
+    def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
+        return ChannelCache.get_stub(
+            self.__peer_endpoints[peer], averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_allreduce_protocol():
+    """ Run group allreduce protocol manually without grpc, see if the internal logic is working as intended """
+
+    peers = "alice", "bob", "carol", "colab"
+
+    tensors_by_peer = {peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
+                       for i, peer in enumerate(peers)}
+    averaging_weights_by_peer = [1, 0, 1, 1]  # [0.15, 0.0, 0.35, 0.45]
+
+    group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
+
+    servers = []
+    allreduce_protocols = []
+    peer_endpoints = {}
+
+    for peer in peers:
+        server = grpc.aio.server()
+        allreduce_protocol = AllreduceProtocolForTesting(
+            group_id=group_id, endpoint=peer, tensors=[x.clone() for x in tensors_by_peer[peer]],
+            ordered_group_endpoints=peers, peer_fractions=(150, 200, 67, 0),
+            modes=[AveragingMode.NODE, AveragingMode.AUX, AveragingMode.NODE, AveragingMode.CLIENT],
+            weights=averaging_weights_by_peer, peer_endpoints=peer_endpoints
+        )
+        averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(allreduce_protocol, server)
+        peer_endpoints[peer] = f"127.0.0.1:{server.add_insecure_port('127.0.0.1:*')}"
+        allreduce_protocols.append(allreduce_protocol)
+        servers.append(server)
+        await server.start()
+
+    await asyncio.gather(*[allreduce_protocol.run() for allreduce_protocol in allreduce_protocols])
+
+    reference_tensors = [
+        sum(tensors_by_peer[peer][i] * averaging_weights_by_peer[peer_index]
+            for peer_index, peer in enumerate(peers)
+            ) / sum(averaging_weights_by_peer)
+        for i in range(len(tensors_by_peer[peers[0]]))
+    ]
+
+    for peer_index, protocol in enumerate(allreduce_protocols):
+        assert protocol._future.done()
+        if protocol.modes[peer_index] != AveragingMode.AUX:
+            averaged_tensors = protocol.tensor_part_container.local_tensors
+            assert len(averaged_tensors) == len(reference_tensors)
+            assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
+                       for our, ref in zip(averaged_tensors, reference_tensors))
+
+        else:  # auxiliary peer neither sends nor updates its tensors
+            local_tensors = protocol.tensor_part_container.local_tensors
+            assert len(local_tensors) == len(reference_tensors)
+            assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
+                       for our, ref in zip(local_tensors, tensors_by_peer[peers[peer_index]]))
+
+
