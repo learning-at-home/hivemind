@@ -128,9 +128,9 @@ class TensorPartContainer:
             yield tensor.reshape(self.local_tensors[tensor_index].shape)
 
     def __del__(self):
-        self.terminate()
+        self.finalize()
 
-    def terminate(self):
+    def finalize(self):
         """ terminate all iterators, delete intermediate data """
         if not self.finished.is_set():
             for peer_index in range(self.group_size):
@@ -168,7 +168,7 @@ class TensorPartReducer:
         """ (re)create averaging buffers for the part part in line, pre-populates with local tensor part """
         assert self.current_part_accumulated_from == self.num_senders or self.current_part_index == -1
         if self.current_part_index >= self.num_parts - 1:
-            self.finished.set()
+            self.finalize()
             return
 
         self.current_part_index += 1
@@ -201,17 +201,18 @@ class TensorPartReducer:
             self.reset_accumulators()
         return await current_part_future
 
-    def terminate(self):
+    def finalize(self):
         if not self.finished.is_set():
-            del self.accumulator
-            self.current_part_future.cancel()
+            if hasattr(self, 'current_part_future'):
+                self.current_part_future.cancel()
+                del self.accumulator
             self.finished.set()
 
     def __await__(self):
         return self.finished.wait().__await__()
 
     def __del__(self):
-        self.terminate()
+        self.finalize()
 
 
 class AllreduceException(Exception):
