@@ -120,6 +120,8 @@ class TensorPartContainer:
                 if not self._output_parts_by_peer[peer_index]:
                     self._output_part_available[peer_index].clear()
                     await self._output_part_available[peer_index].wait()
+                    if self.finished.is_set():
+                        raise AllreduceException("All-reduce was terminated due to see previous exceptions.")
 
                 tensor_parts.append(self._output_parts_by_peer[peer_index].popleft())
                 num_parts_processed += 1
