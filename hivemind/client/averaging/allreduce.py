@@ -129,17 +129,14 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
             stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
 
             async def _write_to_peer():
-                try:
-                    parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
-                    first_part = await anext(parts_aiter)
-                    await stream.write(averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING,
-                                                                   group_id=self.group_id, endpoint=self.endpoint,
-                                                                   tensor_part=first_part))
-                    async for part in parts_aiter:
-                        await stream.write(averaging_pb2.AveragingData(tensor_part=part))
-                    await stream.done_writing()
-                except BaseException as e:
-                    logger.exception(e)
+                parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
+                first_part = await anext(parts_aiter)
+                await stream.write(averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING,
+                                                               group_id=self.group_id, endpoint=self.endpoint,
+                                                               tensor_part=first_part))
+                async for part in parts_aiter:
+                    await stream.write(averaging_pb2.AveragingData(tensor_part=part))
+                await stream.done_writing()
             write_task = asyncio.create_task(_write_to_peer())
 
             try:
@@ -149,6 +146,7 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         code = msg.code
                     averaged_part_delta = await loop.run_in_executor(None, deserialize_torch_tensor, msg.tensor_part)
                     self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part_delta)
+                await write_task
 
                 if code != averaging_pb2.AVERAGED_PART:
                     raise AllreduceException(f"peer {peer_endpoint} returned {averaging_pb2.MessageCode.Name(code)}"
