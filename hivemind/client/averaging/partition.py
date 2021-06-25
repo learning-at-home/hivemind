@@ -93,8 +93,11 @@ class TensorPartContainer:
                                                _aiterate_parts(), max_prefetch=self.prefetch):
             yield serialized_part
 
-    def register_averaged_part(self, peer_index: int, part_index: int, part: torch.Tensor):
-        """ register next-in-line part of results received from a given peer  """
+    def register_processed_part(self, peer_index: int, part_index: int, part: torch.Tensor):
+        """
+        register next-in-line part of results received from a given peer for use in iterate_output_tensors
+        depending on the algorithm, processed part is an average, difference from average or another aggregation
+        """
         if part_index != self._outputs_registered_by_peer[peer_index]:
             raise ValueError(f"Could not register part #{part_index} from peer #{peer_index}, "
                              f" expected part index: {self._outputs_registered_by_peer[peer_index]}")
@@ -157,8 +160,7 @@ class TensorPartReducer:
         self.part_shapes, self.num_senders, self.num_parts = part_shapes, num_senders, len(part_shapes)
         self.weights = tuple(weights or (1 for _ in range(num_senders)))
         assert len(self.weights) == self.num_senders, "The number of weights is inconsistent with num_senders"
-        for weight in self.weights:
-            assert isinstance(weight, (int, float)) and weight > 0, "averaging weights must be a non-negative int/float"
+        assert all(isinstance(weight, (int, float)) for weight in self.weights)
         self.finished = asyncio.Event()
         self.reset_accumulators()
 
