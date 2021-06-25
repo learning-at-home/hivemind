@@ -57,9 +57,11 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
         self.modes, self.peer_fractions = modes, peer_fractions
         self._future = asyncio.Future()
 
-        self.sender_endpoints, self.sender_weights = zip(*(
-            (endpoint, weight) for endpoint, weight, mode in zip(self.ordered_group_endpoints, weights, modes)
-            if mode != AveragingMode.AUX))
+        self.sender_endpoints, self.sender_weights = [], []
+        for endpoint, weight, mode in zip(self.ordered_group_endpoints, weights, modes):
+            if mode != AveragingMode.AUX:
+                self.sender_endpoints.append(endpoint)
+                self.sender_weights.append(weight)
 
         self.tensor_part_container = TensorPartContainer(tensors, peer_fractions, compression_type, part_size_bytes)
         self.parts_for_local_averaging = self.tensor_part_container.get_raw_input_parts(
@@ -130,27 +132,20 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
             async def _write_to_peer():
                 parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
-                print(f'{self.endpoint} - YIELDING to {peer_endpoint}, total parts = {self.tensor_part_container.num_parts_by_peer[peer_index]}')
                 first_part = await anext(parts_aiter)
                 await stream.write(averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING,
                                                                group_id=self.group_id, endpoint=self.endpoint,
                                                                tensor_part=first_part))
-                print(f'{self.endpoint} - SENT1 to {peer_endpoint}')
                 async for part in parts_aiter:
                     await stream.write(averaging_pb2.AveragingData(tensor_part=part))
-                    print(f'{self.endpoint} - SENT2 to {peer_endpoint}')
 
-                print(f'{self.endpoint} - DONE1 to {peer_endpoint}')
                 await stream.done_writing()
-                print(f'{self.endpoint} - DONE2 to {peer_endpoint}')
-
 
             write_task = asyncio.create_task(_write_to_peer())
 
             try:
                 code = None
                 async for part_index, msg in aenumerate(stream):
-                    print(f'{self.endpoint} - received part {part_index} from {peer_endpoint}')
                     if code is None:
                         code = msg.code
                     averaged_part_delta = await loop.run_in_executor(None, deserialize_torch_tensor, msg.tensor_part)
@@ -161,9 +156,6 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
                     raise AllreduceException(f"peer {peer_endpoint} returned {averaging_pb2.MessageCode.Name(code)} "
                                              f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}"
                                              f", allreduce failed")
-            except BaseException as e:
-                print(f'EXC {self.endpoint} when talking to {peer_endpoint}')
-                raise
             finally:
                 if not write_task.done():
                     write_task.cancel()
