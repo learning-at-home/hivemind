@@ -35,7 +35,7 @@ async def test_partitioning():
                     for peer_index in range(partition.group_size):
                         async for part_index, part in aenumerate(partition.iterate_input_parts_for(peer_index)):
                             output_tensor = torch.sin(deserialize_torch_tensor(part))
-                            partition.register_averaged_part(peer_index, part_index, output_tensor)
+                            partition.register_processed_part(peer_index, part_index, output_tensor)
 
                 task = asyncio.create_task(write_tensors())
                 tensor_index = 0
@@ -55,7 +55,7 @@ async def test_partitioning_edge_cases(tensors: Sequence[torch.Tensor], peer_fra
     partition = TensorPartContainer(tensors, peer_fractions, part_size_bytes=16)
     for peer_index in range(len(peer_fractions)):
         async for part_index, part in aenumerate(partition.iterate_input_parts_for(peer_index)):
-            partition.register_averaged_part(peer_index, part_index, deserialize_torch_tensor(part))
+            partition.register_processed_part(peer_index, part_index, deserialize_torch_tensor(part))
 
     tensor_index = 0
     async for output_tensor in partition.iterate_output_tensors():
@@ -77,7 +77,7 @@ async def test_partitioning_asynchronous():
     async def write_tensors():
         for peer_index in range(partition.group_size):
             async for part_index, part in aenumerate(partition.iterate_input_parts_for(peer_index)):
-                partition.register_averaged_part(peer_index, part_index, deserialize_torch_tensor(part))
+                partition.register_processed_part(peer_index, part_index, deserialize_torch_tensor(part))
         assert read_started.is_set(), "partitioner should have started reading before it finished writing"
 
     async def read_tensors():
@@ -147,16 +147,28 @@ class AllreduceProtocolForTesting(AllReduceProtocol):
             self.__peer_endpoints[peer], averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
 
 
+NODE, CLIENT, AUX = AveragingMode.NODE, AveragingMode.CLIENT, AveragingMode.AUX
+
+
+@pytest.mark.parametrize("peer_modes, averaging_weights, peer_fractions", [
+    ((NODE, NODE, NODE, NODE), (1, 1, 1, 1), (1, 1, 1, 1)),
+    ((NODE, NODE, NODE, NODE), (0.1, 0.2, 0.3, 0.4), (1, 1, 1, 1)),
+    ((NODE, NODE, NODE, NODE), (1, 1, 1, 1), (1, 2, 3, 0)),
+    ((NODE, NODE, NODE, CLIENT), (1, 1, 1, 1), (1, 2, 3, 0)),
+    ((NODE, NODE, NODE, AUX), (1, 1, 1, 0), (1, 2, 3, 4)),
+    ((NODE, NODE, NODE, NODE), (0.15, 0.0, 0.35, 0.45), (1, 1, 1, 1)),
+    ((NODE, AUX, NODE, CLIENT), (0.15, 0.0, 0.35, 0.45), (150, 200, 67, 0)),
+])
+@pytest.mark.parametrize("part_size_bytes", [2 ** 20, 256, 19],)
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_allreduce_protocol():
+async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions, part_size_bytes):
     """ Run group allreduce protocol manually without grpc, see if the internal logic is working as intended """
 
     peers = "alice", "bob", "carol", "colab"
 
     tensors_by_peer = {peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
                        for i, peer in enumerate(peers)}
-    averaging_weights_by_peer = [0.15, 0.0, 0.35, 0.45]
 
     group_id = random.getrandbits(160).to_bytes(length=20, byteorder='big')
 
@@ -168,9 +180,8 @@ async def test_allreduce_protocol():
         server = grpc.aio.server()
         allreduce_protocol = AllreduceProtocolForTesting(
             group_id=group_id, endpoint=peer, tensors=[x.clone() for x in tensors_by_peer[peer]],
-            ordered_group_endpoints=peers, peer_fractions=(150, 200, 67, 0),
-            modes=[AveragingMode.NODE, AveragingMode.AUX, AveragingMode.NODE, AveragingMode.CLIENT],
-            weights=averaging_weights_by_peer, peer_endpoints=peer_endpoints
+            ordered_group_endpoints=peers, peer_fractions=peer_fractions, modes=peer_modes,
+            weights=averaging_weights, peer_endpoints=peer_endpoints, part_size_bytes=part_size_bytes
         )
         averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(allreduce_protocol, server)
         peer_endpoints[peer] = f"127.0.0.1:{server.add_insecure_port('127.0.0.1:*')}"
@@ -178,12 +189,16 @@ async def test_allreduce_protocol():
         servers.append(server)
         await server.start()
 
-    await asyncio.gather(*[allreduce_protocol.run() for allreduce_protocol in allreduce_protocols])
+    async def _run_allreduce_inplace(allreduce: AllReduceProtocol):
+        async for tensor_index, tensor_delta in aenumerate(allreduce):
+            allreduce.tensor_part_container.local_tensors[tensor_index].add_(tensor_delta)
+
+    await asyncio.gather(*map(_run_allreduce_inplace, allreduce_protocols))
 
     reference_tensors = [
-        sum(tensors_by_peer[peer][i] * averaging_weights_by_peer[peer_index]
+        sum(tensors_by_peer[peer][i] * averaging_weights[peer_index]
             for peer_index, peer in enumerate(peers)
-            ) / sum(averaging_weights_by_peer)
+            ) / sum(averaging_weights)
         for i in range(len(tensors_by_peer[peers[0]]))
     ]
 

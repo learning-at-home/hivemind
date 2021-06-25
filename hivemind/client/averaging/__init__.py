@@ -27,14 +27,14 @@ from hivemind.client.averaging.group_info import GroupInfo
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, split_for_streaming, combine_from_streaming
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
-from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
+from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop, aenumerate
 from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
 from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils import Endpoint, Port, MPFuture, get_logger, TensorDescriptor
 
 # flavour types
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
-DataForGather = Any
+GatheredData = Any
 logger = get_logger(__name__)
 DEFAULT_CHUNK_SIZE_BYTES = 2 ** 16
 
@@ -251,8 +251,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if self._parent_pid != os.getpid() or self.is_alive():
             self.shutdown()
 
-    def step(self, gather: Optional[DataForGather] = None, weight: float = 1.0, timeout: Optional[float] = None,
-             allow_retries: bool = True, wait: bool = True) -> Union[Optional[Dict[Endpoint, DataForGather]], MPFuture]:
+    def step(self, gather: Optional[GatheredData] = None, weight: float = 1.0, timeout: Optional[float] = None,
+             allow_retries: bool = True, wait: bool = True) -> Union[Optional[Dict[Endpoint, GatheredData]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
 
@@ -291,16 +291,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                                                                         data_for_gather=data_for_gather)
                     if group_info is None:
                         raise AllreduceException("Averaging step failed: could not find a group.")
-                    group_id = group_info.group_id
-                    allreduce_runner = await self._make_allreduce_runner(group_info, **self.allreduce_kwargs)
-                    self._running_groups[group_id] = allreduce_runner
-                    self._pending_group_assembled.set()
-                    await asyncio.wait_for(allreduce_runner.run(), self._allreduce_timeout)
-                    if self.mode != AveragingMode.AUX:
-                        await loop.run_in_executor(None, self.update_tensors, allreduce_runner)
 
-                    # averaging is finished, exit the loop
-                    future.set_result(allreduce_runner.gathered)
+                    future.set_result(await asyncio.wait_for(
+                        self._run_allreduce(group_info, **self.allreduce_kwargs), self._allreduce_timeout))
+                    # averaging is finished, loop will now exit
 
                 except (AllreduceException, MatchmakingException, AssertionError, StopAsyncIteration, InternalError,
                         asyncio.CancelledError, asyncio.InvalidStateError, grpc.RpcError, grpc.aio.AioRpcError) as e:
@@ -311,10 +305,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     else:
                         logger.warning(f"Averager caught {repr(e)}, retrying")
 
-                finally:
-                    _ = self._running_groups.pop(group_id, None)
-                    self._pending_group_assembled.set()
-
         except BaseException as e:
             if not future.done():
                 future.set_exception(e)
@@ -324,36 +314,46 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 future.set_exception(RuntimeError("Internal sanity check failed: averager.step left future pending."
                                                   " Please report this to hivemind issues."))
 
-    async def _make_allreduce_runner(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> AllReduceProtocol:
-        """ Use a group description found by Matchmaking to form AllreduceRunner """
+    async def _run_allreduce(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
+        """ run all-reduce in a given group and update tensors in-place, return gathered metadata """
         try:
             weights, throughputs, mode_ids, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
             user_gathered = dict(zip(group_info.endpoints, map(self.serializer.loads, user_gathered)))
-            # compute optimal part sizes from peer throughputs
             modes = tuple(map(AveragingMode, mode_ids))
-            incoming_throughputs = [thr if mode != AveragingMode.CLIENT else 0.0 for thr, mode in zip(throughputs, modes)]  # TODO: replace with proper load balancing
+
+            # compute optimal part sizes from peer throughputs; TODO: replace with proper load balancing
+            incoming_throughputs = [thr if mode != AveragingMode.CLIENT else 0.0
+                                    for thr, mode in zip(throughputs, modes)]
             peer_fractions = await asyncio.get_event_loop().run_in_executor(
                 None, load_balance_peers, self.total_size, incoming_throughputs, min_vector_size)
+
             async with self.get_tensors_async() as averaged_tensors:
-                return AllReduceProtocol(
+                allreduce_protocol = AllReduceProtocol(
                     group_id=group_info.group_id, tensors=averaged_tensors, endpoint=self.endpoint,
                     ordered_group_endpoints=group_info.endpoints, peer_fractions=peer_fractions, weights=weights,
-                    gathered=user_gathered, return_deltas=True, modes=modes, **kwargs)
-        except Exception as e:
-            raise MatchmakingException(f"Unable to create allreduce runner ({e}), group_info: {weights, throughputs, modes, user_gathered}")
+                    gathered=user_gathered, modes=modes, **kwargs)
+                self._running_groups[group_info.group_id] = allreduce_protocol
+                self._pending_group_assembled.set()
 
-    def update_tensors(self, allreduce_group: AllReduceProtocol):
-        """
-        a private (extendable) method that applies changes from a finished allreduce to local tensors
-        """
-        assert allreduce_group.return_deltas and allreduce_group.future.done()
-        averaging_deltas = allreduce_group.future.result()
+                # actually run all-reduce
+                averaging_outputs = [output async for output in allreduce_protocol]
 
-        with torch.no_grad(), self.get_tensors() as local_tensors:
-            assert len(local_tensors) == len(self._averaged_tensors)
-            for tensor, update in zip(local_tensors, averaging_deltas):
-                tensor.add_(update, alpha=self._averaging_alpha)
-        self.last_updated = get_dht_time()
+                if modes[group_info.endpoints.index(self.endpoint)] != AveragingMode.AUX:
+                    with torch.no_grad(), self.get_tensors() as local_tensors:
+                        assert len(local_tensors) == len(self._averaged_tensors)
+                        for tensor, update in zip(local_tensors, averaging_outputs):
+                            tensor.add_(update, alpha=self._averaging_alpha)
+                    self.last_updated = get_dht_time()
+
+                async for tensor_index, delta_averaged_tensor in aenumerate(allreduce_protocol.run()):
+                    averaged_tensors[tensor_index] += delta_averaged_tensor
+
+        except BaseException as e:
+            logger.exception(e)
+            raise MatchmakingException(f"Unable to run all-reduce ({e})")
+        finally:
+            _ = self._running_groups.pop(group_info.group_id, None)
+            self._pending_group_assembled.set()
 
     @contextlib.contextmanager
     def get_tensors(self) -> Sequence[torch.Tensor]:
