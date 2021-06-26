@@ -6,7 +6,7 @@ coverage:
   status:
     patch:
       default:
-        informational: false
+        informational: true
     project:
       default:
         threshold: 1%

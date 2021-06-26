@@ -1,13 +1,11 @@
-import re
-
 import pytest
-from pydantic import BaseModel, StrictFloat, StrictInt, conint
+from pydantic import BaseModel, StrictInt, conint
 from typing import Dict
 
 import hivemind
 from hivemind.dht import get_dht_time
 from hivemind.dht.node import DHTNode, LOCALHOST
-from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator, conbytes
+from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
 
 
