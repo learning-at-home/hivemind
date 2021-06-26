@@ -1,14 +1,13 @@
-import asyncio
 import random
 
 import numpy as np
 import torch
 import pytest
 import hivemind
-from hivemind.client.averaging.allreduce import AllReduceProtocol, AveragingMode
+from hivemind.client.averaging.allreduce import AveragingMode
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.key_manager import GroupKeyManager
-from hivemind.utils import Endpoint
+from hivemind.proto.runtime_pb2 import CompressionType
 
 
 @pytest.mark.forked
@@ -128,6 +127,48 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
     for averager in averagers:
         averager.shutdown()
     dht.shutdown()
+
+
+@pytest.mark.forked
+def test_allreduce_compression():
+    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+
+    tensors1 = [torch.linspace(0, 500, 1000) ** 0.5, torch.randn(1000)]
+    tensors2 = [torch.linspace(300, 800, 1000) ** 0.5, torch.randn(1000)]
+    results = {}
+
+    FLOAT16, UINT8 = CompressionType.FLOAT16, CompressionType.UNIFORM_8BIT
+
+    for compression_type in [(FLOAT16, FLOAT16), (FLOAT16, UINT8), (UINT8, FLOAT16), (UINT8, UINT8)]:
+        averager1 = hivemind.DecentralizedAverager([x.clone() for x in tensors1], dht=dht,
+                                                   compression_type=compression_type, listen=False,
+                                                   target_group_size=2, prefix='mygroup', start=True)
+        averager2 = hivemind.DecentralizedAverager([x.clone() for x in tensors2], dht=dht,
+                                                   compression_type=compression_type,
+                                                   target_group_size=2, prefix='mygroup', start=True)
+
+        for future in averager1.step(wait=False), averager2.step(wait=False):
+            future.result()
+
+        with averager1.get_tensors() as averaged_tensors:
+            results[compression_type] = averaged_tensors
+
+
+    assert torch.allclose(results[UINT8, FLOAT16][0], results[UINT8, UINT8][0])
+    assert torch.allclose(results[UINT8, FLOAT16][1], results[FLOAT16, FLOAT16][1])
+    assert torch.allclose(results[UINT8, UINT8][1], results[FLOAT16, UINT8][1])
+    assert torch.allclose(results[FLOAT16, UINT8][0], results[FLOAT16, FLOAT16][0])
+
+    assert not torch.allclose(results[UINT8, FLOAT16][1], results[UINT8, UINT8][1])
+    assert not torch.allclose(results[UINT8, FLOAT16][0], results[FLOAT16, FLOAT16][0])
+    assert not torch.allclose(results[UINT8, UINT8][0], results[FLOAT16, UINT8][0])
+    assert not torch.allclose(results[FLOAT16, UINT8][1], results[FLOAT16, FLOAT16][1])
+
+    reference = [(tensors1[i] + tensors2[i]) / 2 for i in range(len(tensors1))]
+    assert 0 < torch.mean(torch.square(results[FLOAT16, FLOAT16][0] - reference[0])).item() <= 1e-5
+    assert 0 < torch.mean(torch.square(results[FLOAT16, FLOAT16][1] - reference[1])).item() <= 1e-5
+    assert 1e-5 < torch.mean(torch.square(results[UINT8, UINT8][0] - reference[0])).item() <= 1e-2
+    assert 1e-5 < torch.mean(torch.square(results[UINT8, UINT8][1] - reference[1])).item() <= 1e-2
 
 
 def compute_mean_std(averagers, unbiased=True):

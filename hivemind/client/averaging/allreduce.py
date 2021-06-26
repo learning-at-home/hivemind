@@ -40,8 +40,7 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
             self, *, group_id: GroupID, tensors: Sequence[torch.Tensor], endpoint: Endpoint,
             ordered_group_endpoints: Sequence[Endpoint], peer_fractions: Tuple[float, ...],
             weights: Optional[Sequence[float]] = None, modes: Optional[Sequence[AveragingMode]] = None,
-            compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
-            part_size_bytes: int = 2 ** 20, gathered: Optional[Dict[Endpoint, Any]] = None):
+            gathered: Optional[Dict[Endpoint, Any]] = None, **kwargs):
         assert endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
         modes = modes or [AveragingMode.CLIENT if frac == 0 else AveragingMode.NODE for frac in peer_fractions]
         weights = weights or [1 if mode != AveragingMode.AUX else 0 for mode in modes]
@@ -52,9 +51,8 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
             assert mode != AveragingMode.AUX or weight == 0, "auxiliary peer should have zero averaging weight"
 
         self.group_id, self.endpoint, self.ordered_group_endpoints = group_id, endpoint, ordered_group_endpoints
-        self.compression_type, self.part_size_bytes, self.gathered = compression_type, part_size_bytes, gathered
+        self.modes, self.peer_fractions, self.gathered = modes, peer_fractions, gathered
         self.endpoint_index = self.ordered_group_endpoints.index(self.endpoint)
-        self.modes, self.peer_fractions = modes, peer_fractions
         self._future = asyncio.Future()
 
         self.sender_endpoints, self.sender_weights = [], []
@@ -63,7 +61,7 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 self.sender_endpoints.append(endpoint)
                 self.sender_weights.append(weight)
 
-        self.tensor_part_container = TensorPartContainer(tensors, peer_fractions, compression_type, part_size_bytes)
+        self.tensor_part_container = TensorPartContainer(tensors, peer_fractions, **kwargs)
         self.parts_for_local_averaging = self.tensor_part_container.get_raw_input_parts(
             self.ordered_group_endpoints.index(self.endpoint))
         self.tensor_part_reducer = TensorPartReducer(tuple(part.shape for part in self.parts_for_local_averaging),
@@ -194,13 +192,13 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     async def _accumulate_parts_streaming(self, stream: AsyncIterator[averaging_pb2.AveragingData], sender_index: int):
         loop = asyncio.get_event_loop()
-        async for part_index, tensor_part in aenumerate(
-                async_map(lambda msg: deserialize_torch_tensor(msg.tensor_part), stream,
+        async for part_index, (tensor_part, part_compression) in aenumerate(
+                async_map(lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg.tensor_part.compression), stream,
                           max_prefetch=self.tensor_part_container.prefetch)):
             averaged_part = await self.tensor_part_reducer.accumulate_part(sender_index, part_index, tensor_part)
 
             serialized_delta = await loop.run_in_executor(
-                None, lambda: serialize_torch_tensor(averaged_part - tensor_part, self.compression_type))
+                None, lambda: serialize_torch_tensor(averaged_part - tensor_part, part_compression))
             yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
 
     async def _send_error_to_peer(self, peer_endpoint: Endpoint, code: averaging_pb2.MessageCode):

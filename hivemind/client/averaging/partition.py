@@ -2,14 +2,14 @@
 Auxiliary data structures for AllReduceProtocol
 """
 import asyncio
-from typing import Sequence, AsyncIterable, Tuple, Optional, TypeVar
+from typing import Sequence, AsyncIterable, Tuple, Optional, TypeVar, Union
 from collections import deque
 
 import torch
 import numpy as np
 
-from hivemind.proto import runtime_pb2
-from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor, get_nbytes_per_value
+from hivemind.proto.runtime_pb2 import CompressionType, Tensor
+from hivemind.utils.compression import serialize_torch_tensor, get_nbytes_per_value
 from hivemind.utils.asyncio import async_map
 
 
@@ -23,10 +23,13 @@ class TensorPartContainer:
     """
 
     def __init__(self, tensors: Sequence[torch.Tensor], peer_fractions: Sequence[float],
-                 compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
+                 compression_type: Union[type(CompressionType), Sequence[type(CompressionType)]] = CompressionType.NONE,
                  part_size_bytes: int = 2 ** 20, prefetch: int = 1):
+        if not isinstance(compression_type, Sequence):
+            compression_type = [compression_type] * len(tensors)
+        assert len(compression_type) == len(tensors), "compression types do not match the number of tensors"
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
-        self.part_size_bytes, self.prefetch = part_size_bytes, prefetch
+        self.compression_type, self.part_size_bytes, self.prefetch = compression_type, part_size_bytes, prefetch
         self.tensor_sizes = [tensor.numel() for tensor in tensors]
         self.total_size = sum(self.tensor_sizes)
         self.num_parts_by_peer, self.num_parts_by_tensor = [], []
@@ -44,8 +47,8 @@ class TensorPartContainer:
         pivots = np.cumsum(peer_fractions) / np.sum(peer_fractions) * self.total_size
         pivots = np.concatenate([pivots.astype(np.int64)[:-1], [self.total_size]])
 
-        for tensor in self.local_tensors:
-            part_size_values = int(part_size_bytes / get_nbytes_per_value(tensor.dtype, compression_type))
+        for tensor, tensor_compression in zip(self.local_tensors, compression_type):
+            part_size_values = int(part_size_bytes / get_nbytes_per_value(tensor.dtype, tensor_compression))
             tensor_parts = tensor.detach().view(-1).split(part_size_values)
             self.num_parts_by_tensor.append(len(tensor_parts))
             for part in tensor_parts:
@@ -59,9 +62,9 @@ class TensorPartContainer:
                         current_peer_part_end = min(current_length + len(part), pivots[current_peer_index])
                         peer_intersections.append(current_peer_part_end - pivots[current_peer_index - 1])
                     assigned_peer_index = prev_peer_index + np.argmax(peer_intersections)
-                    self._input_parts_by_peer[assigned_peer_index].append((part, compression_type))
+                    self._input_parts_by_peer[assigned_peer_index].append((part, tensor_compression))
                 else:
-                    self._input_parts_by_peer[current_peer_index].append((part, compression_type))
+                    self._input_parts_by_peer[current_peer_index].append((part, tensor_compression))
                 current_length += len(part)
         assert current_length == self.total_size
         for current_peer_index in range(self.group_size):
@@ -77,7 +80,7 @@ class TensorPartContainer:
         return input_parts
 
     @torch.no_grad()
-    async def iterate_input_parts_for(self, peer_index: int) -> runtime_pb2.Tensor:
+    async def iterate_input_parts_for(self, peer_index: int) -> Tensor:
         """ iterate serialized tensor parts for a peer at a given index. Run serialization in background. """
         assert not self._inputs_consumed_by_peer[peer_index], "input parts of a given peer are already deallocated."
         self._inputs_consumed_by_peer[peer_index] = True
