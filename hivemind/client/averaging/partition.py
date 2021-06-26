@@ -2,7 +2,7 @@
 Auxiliary data structures for AllReduceProtocol
 """
 import asyncio
-from typing import Sequence, Awaitable, AsyncIterable, Tuple, Optional, TypeVar, Deque
+from typing import Sequence, AsyncIterable, Tuple, Optional, TypeVar
 from collections import deque
 
 import torch
@@ -13,9 +13,6 @@ from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch
 from hivemind.utils.asyncio import async_map
 
 
-
-# TODO implement
-# - per-tensor compression
 T = TypeVar('T')
 
 
@@ -27,7 +24,7 @@ class TensorPartContainer:
 
     def __init__(self, tensors: Sequence[torch.Tensor], peer_fractions: Sequence[float],
                  compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
-                 part_size_bytes: int = 2 ** 20, prefetch: int = 10):
+                 part_size_bytes: int = 2 ** 20, prefetch: int = 1):
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
         self.part_size_bytes, self.prefetch = part_size_bytes, prefetch
         self.tensor_sizes = [tensor.numel() for tensor in tensors]

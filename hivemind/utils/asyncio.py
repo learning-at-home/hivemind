@@ -1,7 +1,7 @@
-from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable, Tuple
+from concurrent.futures import ThreadPoolExecutor
+from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable, Tuple, Optional
 import asyncio
 
-import janus
 import uvloop
 
 from hivemind.utils.logging import get_logger
@@ -69,48 +69,24 @@ async def await_cancelled(awaitable: Awaitable) -> bool:
         return False
 
 
-async def async_map(func: callable, *iterables: AsyncIterable, max_prefetch: int):
+async def async_map(func: callable, *iterables: AsyncIterable, max_prefetch: Optional[int] = None,
+                    executor: Optional[ThreadPoolExecutor] = None):
     """ iterate from an async iterable in a background thread, yield results to async iterable """
-    async for args in azip(*iterables):
-        yield func(*args)
-    return
+    loop = asyncio.get_event_loop()
+    queue = asyncio.Queue(max_prefetch)
 
-
-    assert max_prefetch > 0
-    inputs, outputs = janus.Queue(max_prefetch), janus.Queue(max_prefetch)
-
-    async def _put_inputs():
+    async def _put_items():
         async for args in azip(*iterables):
-            await inputs.async_q.put(args)
-        await inputs.async_q.put(False)
-        await inputs.async_q.join()
+            await queue.put(loop.run_in_executor(executor, func, *args))
+        await queue.put(None)
 
-    def _thread():
-        try:
-            args = inputs.sync_q.get()
-            while args != False:
-                outputs.sync_q.put((func(*args),))
-                args = inputs.sync_q.get()
-            inputs.sync_q.join()
-            outputs.sync_q.put(False)
-        except Exception as e:
-            outputs.sync_q.put(e)
-
-    task = asyncio.create_task(_put_inputs())
-    future = asyncio.get_event_loop().run_in_executor(None, _thread)
-
+    task = asyncio.create_task(_put_items())
     try:
-        output_or_exception = await outputs.async_q.get()
-        while output_or_exception != False:
-            if not isinstance(output_or_exception, Exception):
-                yield output_or_exception[0]
-                print('PRE--')
-                output_or_exception = await outputs.async_q.get()
-                print('--POST')
-            else:
-                raise output_or_exception
-    except BaseException as e:
-        logger.exception(e)
+        future = await queue.get()
+        while future is not None:
+            yield await future
+            future = await queue.get()
+        await task
     finally:
-        await asyncio.gather(task, future, outputs.wait_closed())
-
+        if not task.done():
+            task.cancel()
