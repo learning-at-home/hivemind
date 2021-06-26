@@ -307,7 +307,3 @@ async def test_asyncio():
         await anext(iterator)
 
     assert [item async for item in achain(_aiterate(), aiter(*range(5)))] == ['foo', 'bar', 'baz'] + list(range(5))
-
-
-
-

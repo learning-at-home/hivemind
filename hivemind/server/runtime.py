@@ -103,7 +103,7 @@ class Runtime(threading.Thread):
         logger.debug("Terminating pools")
         for pool in self.pools:
             if pool.is_alive():
-                pool.finalize()
+                pool.termnate()
                 pool.join()
         logger.debug("Pools terminated")
 
