@@ -64,7 +64,6 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 self.sender_endpoints.append(endpoint)
                 self.sender_weights.append(weight)
 
-        print('!!', kwargs)
         self.tensor_part_container = TensorPartContainer(tensors, peer_fractions, **kwargs)
         self.parts_for_local_averaging = self.tensor_part_container.get_raw_input_parts(
             self.ordered_group_endpoints.index(self.endpoint))
