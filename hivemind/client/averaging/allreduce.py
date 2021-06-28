@@ -28,7 +28,8 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
     :note: this class returns **differences** between averaged and local tensors in order to improve numerical stability
     :param group_id: unique identifier of this specific all-reduce run
-    :param tensors: local tensors that should be averaged with group-mates
+    :param tensors: local tensors that should be averaged with groupmates
+    :param tensors: local tensors that should be averaged with groupmates
     :param endpoint: your endpoint, must be included in ordered_group_endpoints
     :param ordered_group_endpoints: group endpoints ordered s.t. i-th endpoint is responsible for averaging i-th part
     :param peer_fractions: for each peer, a target fraction of vector elements that this peer should average
@@ -87,7 +88,7 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
         return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
 
     async def run(self) -> AsyncIterator[torch.Tensor]:
-        """ run all-reduce, return average tensors """
+        """ Run all-reduce, return differences between averaged and original tensors as they are computed """
         pending_tasks = set()
         try:
             if len(self.sender_endpoints) == 0:

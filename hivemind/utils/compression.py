@@ -191,7 +191,7 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
 
 
 def get_nbytes_per_value(dtype: torch.dtype, compression: CompressionType) -> int:
-    """ returns the number of bits per value for a given tensor (excluding metadata) """
+    """ returns the number of bytes per value for a given tensor (excluding metadata) """
     if compression in (CompressionType.QUANTILE_8BIT, CompressionType.UNIFORM_8BIT):
         return 1
     elif compression in (CompressionType.FLOAT16, CompressionType.MEANSTD_16BIT):
