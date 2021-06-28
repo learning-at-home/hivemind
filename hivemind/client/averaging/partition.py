@@ -10,7 +10,7 @@ import numpy as np
 
 from hivemind.proto.runtime_pb2 import CompressionType, Tensor
 from hivemind.utils.compression import serialize_torch_tensor, get_nbytes_per_value
-from hivemind.utils.asyncio import async_map
+from hivemind.utils.asyncio import amap_in_executor
 
 
 T = TypeVar('T')
@@ -89,8 +89,8 @@ class TensorPartContainer:
             for _ in range(self.num_parts_by_peer[peer_index]):
                 yield self._input_parts_by_peer[peer_index].popleft()
 
-        async for serialized_part in async_map(lambda args: serialize_torch_tensor(*args),
-                                               _aiterate_parts(), max_prefetch=self.prefetch):
+        async for serialized_part in amap_in_executor(lambda args: serialize_torch_tensor(*args),
+                                                      _aiterate_parts(), max_prefetch=self.prefetch):
             yield serialized_part
 
     def register_processed_part(self, peer_index: int, part_index: int, part: torch.Tensor):

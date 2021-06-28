@@ -69,8 +69,8 @@ async def await_cancelled(awaitable: Awaitable) -> bool:
         return False
 
 
-async def async_map(func: Callable[..., T], *iterables: AsyncIterable, max_prefetch: Optional[int] = None,
-                    executor: Optional[ThreadPoolExecutor] = None) -> AsyncIterator[T]:
+async def amap_in_executor(func: Callable[..., T], *iterables: AsyncIterable, max_prefetch: Optional[int] = None,
+                           executor: Optional[ThreadPoolExecutor] = None) -> AsyncIterator[T]:
     """ iterate from an async iterable in a background thread, yield results to async iterable """
     loop = asyncio.get_event_loop()
     queue = asyncio.Queue(max_prefetch)

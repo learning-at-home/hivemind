@@ -7,7 +7,7 @@ import torch
 
 from hivemind.client.averaging.partition import TensorPartContainer, TensorPartReducer, AllreduceException
 from hivemind.utils import Endpoint, get_logger, ChannelCache
-from hivemind.utils.asyncio import anext, achain, aiter, aenumerate, async_map, azip
+from hivemind.utils.asyncio import anext, achain, aiter, aenumerate, amap_in_executor, azip
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.proto import averaging_pb2_grpc, runtime_pb2, averaging_pb2
 
@@ -196,8 +196,8 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
     async def _accumulate_parts_streaming(self, stream: AsyncIterator[averaging_pb2.AveragingData], sender_index: int):
         loop = asyncio.get_event_loop()
         async for part_index, (tensor_part, part_compression) in aenumerate(
-                async_map(lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg.tensor_part.compression), stream,
-                          max_prefetch=self.tensor_part_container.prefetch)):
+                amap_in_executor(lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg.tensor_part.compression), stream,
+                                 max_prefetch=self.tensor_part_container.prefetch)):
             averaged_part = await self.tensor_part_reducer.accumulate_part(sender_index, part_index, tensor_part)
 
             serialized_delta = await loop.run_in_executor(

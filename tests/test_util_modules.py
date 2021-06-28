@@ -11,7 +11,7 @@ from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 import hivemind
 from hivemind.utils import MSGPackSerializer
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
-from hivemind.utils.asyncio import async_map, aiter, aenumerate, achain, anext, azip
+from hivemind.utils.asyncio import amap_in_executor, aiter, aenumerate, achain, anext, azip
 from hivemind.utils.mpfuture import FutureStateError
 
 
@@ -281,12 +281,12 @@ async def test_asyncio_utils():
     assert res == list(range(len(res)))
 
     num_steps = 0
-    async for elem in async_map(lambda x: x ** 2, aiter(*range(100)), max_prefetch=5):
+    async for elem in amap_in_executor(lambda x: x ** 2, aiter(*range(100)), max_prefetch=5):
         assert elem == num_steps ** 2
         num_steps += 1
     assert num_steps == 100
 
-    ours = [elem async for elem in async_map(max, aiter(*range(7)), aiter(*range(-50, 50, 10)), max_prefetch=1)]
+    ours = [elem async for elem in amap_in_executor(max, aiter(*range(7)), aiter(*range(-50, 50, 10)), max_prefetch=1)]
     ref = list(map(max, range(7), range(-50, 50, 10)))
     assert ours == ref
 
