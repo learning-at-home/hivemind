@@ -46,8 +46,8 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
             weights: Optional[Sequence[float]] = None, modes: Optional[Sequence[AveragingMode]] = None,
             gathered: Optional[Dict[Endpoint, Any]] = None, **kwargs):
         assert endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
-        modes = modes or [AveragingMode.CLIENT if frac == 0 else AveragingMode.NODE for frac in peer_fractions]
-        weights = weights or [1 if mode != AveragingMode.AUX else 0 for mode in modes]
+        modes = modes or tuple(AveragingMode.CLIENT if frac == 0 else AveragingMode.NODE for frac in peer_fractions)
+        weights = weights or tuple(int(mode != AveragingMode.AUX) for mode in modes)
         assert len(weights) == len(modes) == len(ordered_group_endpoints), "lists have inconsistent length"
         assert any(mode != AveragingMode.CLIENT for mode in modes), "cannot run allreduce without reducers"
         for mode, frac, weight in zip(modes, peer_fractions, weights):
