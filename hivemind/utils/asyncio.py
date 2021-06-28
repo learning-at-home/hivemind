@@ -7,12 +7,12 @@ import uvloop
 from hivemind.utils.logging import get_logger
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 logger = get_logger(__name__)
 
 
 def switch_to_uvloop() -> asyncio.AbstractEventLoop:
-    """ stop any running event loops; install uvloop; then create, set and return a new event loop """
+    """stop any running event loops; install uvloop; then create, set and return a new event loop"""
     try:
         asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
     except RuntimeError as error_no_event_loop:
@@ -24,18 +24,18 @@ def switch_to_uvloop() -> asyncio.AbstractEventLoop:
 
 
 async def anext(aiter: AsyncIterator[T]) -> Union[T, StopAsyncIteration]:
-    """ equivalent to next(iter) for asynchronous iterators. Modifies aiter in-place! """
+    """equivalent to next(iter) for asynchronous iterators. Modifies aiter in-place!"""
     return await aiter.__anext__()
 
 
 async def aiter(*args: T) -> AsyncIterator[T]:
-    """ create an asynchronous iterator from a sequence of values """
+    """create an asynchronous iterator from a sequence of values"""
     for arg in args:
         yield arg
 
 
 async def azip(*iterables: AsyncIterable[T]) -> AsyncIterator[Tuple[T, ...]]:
-    """ equivalent of zip for asynchronous iterables """
+    """equivalent of zip for asynchronous iterables"""
     iterators = [iterable.__aiter__() for iterable in iterables]
     while True:
         try:
@@ -45,14 +45,14 @@ async def azip(*iterables: AsyncIterable[T]) -> AsyncIterator[Tuple[T, ...]]:
 
 
 async def achain(*async_iters: AsyncIterable[T]) -> AsyncIterator[T]:
-    """ equivalent to chain(iter1, iter2, ...) for asynchronous iterators. """
+    """equivalent to chain(iter1, iter2, ...) for asynchronous iterators."""
     for aiter in async_iters:
         async for elem in aiter:
             yield elem
 
 
 async def aenumerate(aiterable: AsyncIterable[T]) -> AsyncIterable[Tuple[int, T]]:
-    """ equivalent to enumerate(iter) for asynchronous iterators. """
+    """equivalent to enumerate(iter) for asynchronous iterators."""
     index = 0
     async for elem in aiterable:
         yield index, elem
@@ -69,9 +69,13 @@ async def await_cancelled(awaitable: Awaitable) -> bool:
         return False
 
 
-async def amap_in_executor(func: Callable[..., T], *iterables: AsyncIterable, max_prefetch: Optional[int] = None,
-                           executor: Optional[ThreadPoolExecutor] = None) -> AsyncIterator[T]:
-    """ iterate from an async iterable in a background thread, yield results to async iterable """
+async def amap_in_executor(
+    func: Callable[..., T],
+    *iterables: AsyncIterable,
+    max_prefetch: Optional[int] = None,
+    executor: Optional[ThreadPoolExecutor] = None
+) -> AsyncIterator[T]:
+    """iterate from an async iterable in a background thread, yield results to async iterable"""
     loop = asyncio.get_event_loop()
     queue = asyncio.Queue(max_prefetch)
 

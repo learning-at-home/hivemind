@@ -458,7 +458,7 @@ def test_generic_data_classes():
 
 @pytest.mark.asyncio
 async def test_asyncio_utils():
-    res = [i async for i, item in aenumerate(aiter('a', 'b', 'c'))]
+    res = [i async for i, item in aenumerate(aiter("a", "b", "c"))]
     assert res == list(range(len(res)))
 
     num_steps = 0
@@ -471,20 +471,20 @@ async def test_asyncio_utils():
     ref = list(map(max, range(7), range(-50, 50, 10)))
     assert ours == ref
 
-    ours = [row async for row in azip(aiter('a', 'b', 'c'), aiter(1, 2, 3))]
-    ref = list(zip(['a', 'b', 'c'], [1, 2, 3]))
+    ours = [row async for row in azip(aiter("a", "b", "c"), aiter(1, 2, 3))]
+    ref = list(zip(["a", "b", "c"], [1, 2, 3]))
     assert ours == ref
 
     async def _aiterate():
-        yield 'foo'
-        yield 'bar'
-        yield 'baz'
+        yield "foo"
+        yield "bar"
+        yield "baz"
 
     iterator = _aiterate()
-    assert (await anext(iterator)) == 'foo'
+    assert (await anext(iterator)) == "foo"
     tail = [item async for item in iterator]
-    assert tail == ['bar', 'baz']
+    assert tail == ["bar", "baz"]
     with pytest.raises(StopAsyncIteration):
         await anext(iterator)
 
-    assert [item async for item in achain(_aiterate(), aiter(*range(5)))] == ['foo', 'bar', 'baz'] + list(range(5))
+    assert [item async for item in achain(_aiterate(), aiter(*range(5)))] == ["foo", "bar", "baz"] + list(range(5))

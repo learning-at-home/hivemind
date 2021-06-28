@@ -13,7 +13,7 @@ from hivemind.utils.compression import serialize_torch_tensor, get_nbytes_per_va
 from hivemind.utils.asyncio import amap_in_executor
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 DEFAULT_PART_SIZE_BYTES = 2 ** 20
 
 
@@ -28,9 +28,14 @@ class TensorPartContainer:
     :param prefetch: when compressing, pre-compute this many compressed tensors in background
     """
 
-    def __init__(self, tensors: Sequence[torch.Tensor], peer_fractions: Sequence[float],
-                 compression_type: Union[type(CompressionType), Sequence[type(CompressionType)]] = CompressionType.NONE,
-                 part_size_bytes: int = 2 ** 20, prefetch: int = 1):
+    def __init__(
+        self,
+        tensors: Sequence[torch.Tensor],
+        peer_fractions: Sequence[float],
+        compression_type: Union[type(CompressionType), Sequence[type(CompressionType)]] = CompressionType.NONE,
+        part_size_bytes: int = 2 ** 20,
+        prefetch: int = 1,
+    ):
         if not isinstance(compression_type, Sequence):
             compression_type = [compression_type] * len(tensors)
         assert len(compression_type) == len(tensors), "compression types do not match the number of tensors"
@@ -77,7 +82,7 @@ class TensorPartContainer:
 
     @torch.no_grad()
     def get_raw_input_parts(self, peer_index: int) -> Tuple[torch.Tensor, ...]:
-        """ get non-serialized tensor parts for a peer at a given index """
+        """get non-serialized tensor parts for a peer at a given index"""
         assert not self._inputs_consumed_by_peer[peer_index], "input parts of a given peer are already deallocated."
         self._inputs_consumed_by_peer[peer_index] = True
         input_parts = tuple(part for part, compression in self._input_parts_by_peer[peer_index])
@@ -86,7 +91,7 @@ class TensorPartContainer:
 
     @torch.no_grad()
     async def iterate_input_parts_for(self, peer_index: int) -> AsyncIterator[Tensor]:
-        """ iterate serialized tensor parts for a peer at a given index. Run serialization in background. """
+        """iterate serialized tensor parts for a peer at a given index. Run serialization in background."""
         assert not self._inputs_consumed_by_peer[peer_index], "input parts of a given peer are already deallocated."
         self._inputs_consumed_by_peer[peer_index] = True
 
@@ -94,8 +99,9 @@ class TensorPartContainer:
             for _ in range(self.num_parts_by_peer[peer_index]):
                 yield self._input_parts_by_peer[peer_index].popleft()
 
-        async for serialized_part in amap_in_executor(lambda x_and_compr: serialize_torch_tensor(*x_and_compr),
-                                                      _aiterate_parts(), max_prefetch=self.prefetch):
+        async for serialized_part in amap_in_executor(
+            lambda x_and_compr: serialize_torch_tensor(*x_and_compr), _aiterate_parts(), max_prefetch=self.prefetch
+        ):
             yield serialized_part
 
     def register_processed_part(self, peer_index: int, part_index: int, part: torch.Tensor):
@@ -104,14 +110,16 @@ class TensorPartContainer:
         depending on the algorithm, processed part is an average, difference from average or another aggregation
         """
         if part_index != self._outputs_registered_by_peer[peer_index]:
-            raise ValueError(f"Could not register part #{part_index} from peer #{peer_index}, "
-                             f" expected part index: {self._outputs_registered_by_peer[peer_index]}")
+            raise ValueError(
+                f"Could not register part #{part_index} from peer #{peer_index}, "
+                f" expected part index: {self._outputs_registered_by_peer[peer_index]}"
+            )
         self._output_parts_by_peer[peer_index].append(part)
         self._outputs_registered_by_peer[peer_index] += 1
         self._output_part_available[peer_index].set()
 
     async def iterate_output_tensors(self) -> AsyncIterable[torch.Tensor]:
-        """ iterate over the outputs of averaging (whether they are average, delta or other aggregation result) """
+        """iterate over the outputs of averaging (whether they are average, delta or other aggregation result)"""
         assert not self._outputs_consumed, "output tensors are already iterated and no longer available."
         self._outputs_consumed = True
         peer_index = num_parts_processed = 0
@@ -138,7 +146,7 @@ class TensorPartContainer:
         self.finalize()
 
     def finalize(self):
-        """ terminate all iterators, delete intermediate data """
+        """terminate all iterators, delete intermediate data"""
         if not self.finished.is_set():
             for peer_index in range(self.group_size):
                 self._inputs_consumed_by_peer[peer_index] = True
@@ -158,8 +166,7 @@ class TensorPartReducer:
     :note: even if local peer is not sending data, local parts will be used for shape information
     """
 
-    def __init__(self, part_shapes: Sequence[torch.Size], num_senders: int,
-                 weights: Optional[Sequence[float]] = None):
+    def __init__(self, part_shapes: Sequence[torch.Size], num_senders: int, weights: Optional[Sequence[float]] = None):
         self.part_shapes, self.num_senders, self.num_parts = part_shapes, num_senders, len(part_shapes)
         self.weights = tuple(weights or (1 for _ in range(num_senders)))
         assert len(self.weights) == self.num_senders, "The number of weights is inconsistent with num_senders"
@@ -173,7 +180,7 @@ class TensorPartReducer:
         self.reset_accumulators()
 
     def reset_accumulators(self):
-        """ (re)create averaging buffers for the next part in line, prepopulate with local tensor part """
+        """(re)create averaging buffers for the next part in line, prepopulate with local tensor part"""
         assert self.current_part_accumulated_from == self.num_senders or self.current_part_index == -1
         if self.current_part_index >= self.num_parts - 1:
             self.finalize()
@@ -186,7 +193,7 @@ class TensorPartReducer:
         self.denominator = 0.0
 
     async def accumulate_part(self, sender_index: int, part_index: int, tensor_part: torch.Tensor) -> torch.Tensor:
-        """ Add vector part to accumulator, wait for all other vectors to be added, then return the average part """
+        """Add vector part to accumulator, wait for all other vectors to be added, then return the average part"""
         assert 0 <= sender_index < self.num_senders, "invalid sender index"
         assert 0 <= part_index < self.num_parts, "invalid part index"
 
@@ -211,7 +218,7 @@ class TensorPartReducer:
 
     def finalize(self):
         if not self.finished.is_set():
-            if hasattr(self, 'current_part_future'):
+            if hasattr(self, "current_part_future"):
                 self.current_part_future.cancel()
                 del self.accumulator
             self.finished.set()
@@ -221,4 +228,4 @@ class TensorPartReducer:
 
 
 class AllreduceException(Exception):
-    """ A special exception that is raised when allreduce can't continue normally (e.g. disconnected/protocol error) """
+    """A special exception that is raised when allreduce can't continue normally (e.g. disconnected/protocol error)"""
