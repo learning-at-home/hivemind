@@ -8,7 +8,6 @@ import torch
 from hivemind.client.averaging.partition import TensorPartContainer, TensorPartReducer, AllreduceException
 from hivemind.utils import Endpoint, get_logger, ChannelCache
 from hivemind.utils.asyncio import anext, achain, aiter, aenumerate, amap_in_executor
-
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.proto import averaging_pb2_grpc, averaging_pb2
 
