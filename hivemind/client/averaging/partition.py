@@ -89,7 +89,7 @@ class TensorPartContainer:
             for _ in range(self.num_parts_by_peer[peer_index]):
                 yield self._input_parts_by_peer[peer_index].popleft()
 
-        async for serialized_part in amap_in_executor(lambda args: serialize_torch_tensor(*args),
+        async for serialized_part in amap_in_executor(lambda x_and_compr: serialize_torch_tensor(*x_and_compr),
                                                       _aiterate_parts(), max_prefetch=self.prefetch):
             yield serialized_part
 
