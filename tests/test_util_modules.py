@@ -5,13 +5,13 @@ import numpy as np
 import pytest
 import torch
 
-from hivemind import async_map, aiter, aenumerate, achain, anext, azip
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 import hivemind
 from hivemind.utils import MSGPackSerializer
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils.asyncio import async_map, aiter, aenumerate, achain, anext, azip
 from hivemind.utils.mpfuture import FutureStateError
 
 
