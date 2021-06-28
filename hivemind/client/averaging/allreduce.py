@@ -212,12 +212,14 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):
         assert not cancel or not exception, "finalize accepts either exception or cancel, but not both"
         if not self._future.done():
-            logger.debug(f"{self} - {'cancelled' if cancel else exception or 'finished'}")
             if cancel:
+                logger.debug(f"{self} - cancelled")
                 self._future.cancel()
             elif exception:
+                logger.debug(f"{self} - caught {exception}")
                 self._future.set_exception(exception)
             else:
+                logger.debug(f"{self} - finished")
                 self._future.set_result(None)
             self.tensor_part_container.finalize()
             self.tensor_part_reducer.finalize()
