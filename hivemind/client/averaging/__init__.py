@@ -345,7 +345,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 return allreduce_protocol.gathered
         except BaseException as e:
             logger.exception(e)
-            raise MatchmakingException(f"Unable to run all-reduce ({e})")
+            raise MatchmakingException(f"Unable to run All-Reduce: {e}")
         finally:
             _ = self._running_groups.pop(group_info.group_id, None)
             self._pending_group_assembled.set()
