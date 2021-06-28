@@ -2,7 +2,7 @@
 Auxiliary data structures for AllReduceProtocol
 """
 import asyncio
-from typing import Sequence, AsyncIterable, Tuple, Optional, TypeVar, Union
+from typing import Sequence, AsyncIterable, Tuple, Optional, TypeVar, Union, Type
 from collections import deque
 
 import torch
