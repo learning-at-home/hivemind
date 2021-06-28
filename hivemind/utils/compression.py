@@ -197,6 +197,6 @@ def get_nbytes_per_value(dtype: torch.dtype, compression: CompressionType) -> in
     elif compression in (CompressionType.FLOAT16, CompressionType.MEANSTD_16BIT):
         return 2
     elif compression == CompressionType.NONE:
-        return torch.finfo(dtype).bits / 8
+        return torch.finfo(dtype).bits // 8
     else:
         raise NotImplementedError(f"Unknown compression type: {CompressionType.Name(compression)}")
