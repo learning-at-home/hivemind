@@ -205,17 +205,11 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
 
     for peer_index, protocol in enumerate(allreduce_protocols):
         assert protocol._future.done()
-        if protocol.modes[peer_index] != AveragingMode.AUX:
-            averaged_tensors = protocol.tensor_part_container.local_tensors
-            assert len(averaged_tensors) == len(reference_tensors)
-            assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
-                       for our, ref in zip(averaged_tensors, reference_tensors))
+        targets_for_peer = reference_tensors if protocol.modes[peer_index] != AveragingMode.AUX else reference_tensors
+        output_tensors = protocol.tensor_part_container.local_tensors
+        assert len(output_tensors) == len(targets_for_peer)
+        assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
+                   for our, ref in zip(output_tensors, targets_for_peer))
 
-        else:  # auxiliary peer neither sends nor updates its tensors
-            local_tensors = protocol.tensor_part_container.local_tensors
-            assert len(local_tensors) == len(reference_tensors)
-            assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
-                       for our, ref in zip(local_tensors, tensors_by_peer[peers[peer_index]]))
-
-        for server in servers:
-            await server.stop(grace=1)
+    for server in servers:
+        await server.stop(grace=1)
