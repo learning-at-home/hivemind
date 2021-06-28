@@ -31,8 +31,7 @@ class TensorPartContainer:
         assert len(compression_type) == len(tensors), "compression types do not match the number of tensors"
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
         self.compression_type, self.part_size_bytes, self.prefetch = compression_type, part_size_bytes, prefetch
-        self.tensor_sizes = [tensor.numel() for tensor in tensors]
-        self.total_size = sum(self.tensor_sizes)
+        self.total_size = sum(tensor.numel() for tensor in tensors)
         self.num_parts_by_peer, self.num_parts_by_tensor = [], []
         self._input_parts_by_peer = [deque() for _ in range(self.group_size)]
         self._output_parts_by_peer = [deque() for _ in range(self.group_size)]
