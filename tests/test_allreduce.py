@@ -10,7 +10,7 @@ import grpc
 from hivemind import aenumerate, Endpoint
 from hivemind.client.averaging.allreduce import AllReduceRunner, AveragingMode
 from hivemind.client.averaging.partition import TensorPartContainer, TensorPartReducer
-from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor, ChannelCache
+from hivemind.utils import deserialize_torch_tensor, ChannelCache
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto import averaging_pb2_grpc
 
