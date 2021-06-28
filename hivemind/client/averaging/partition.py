@@ -1,5 +1,5 @@
 """
-Auxiliary data structures for AllReduceProtocol
+Auxiliary data structures for AllReduceRunner
 """
 import asyncio
 from typing import Sequence, AsyncIterable, Tuple, Optional, TypeVar, Union

@@ -22,11 +22,12 @@ class AveragingMode(Enum):
     AUX = 2
 
 
-class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
+class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
     """
     An internal class that runs butterfly AllReduce in a predefined group of averagers
 
     :note: this class returns **differences** between averaged and local tensors in order to improve numerical stability
+    :param group_id: unique identifier of this specific all-reduce run
     :param tensors: local tensors that should be averaged with group-mates
     :param endpoint: your endpoint, must be included in ordered_group_endpoints
     :param ordered_group_endpoints: group endpoints ordered s.t. i-th endpoint is responsible for averaging i-th part
