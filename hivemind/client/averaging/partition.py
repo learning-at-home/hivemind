@@ -211,9 +211,6 @@ class TensorPartReducer:
                 del self.accumulator
             self.finished.set()
 
-    def __await__(self):
-        return self.finished.wait().__await__()
-
     def __del__(self):
         self.finalize()
 
