@@ -23,7 +23,7 @@ class TensorPartContainer:
     """
 
     def __init__(self, tensors: Sequence[torch.Tensor], peer_fractions: Sequence[float],
-                 compression_type: Union[type(CompressionType), Sequence[type(CompressionType)]] = CompressionType.NONE,
+                 compression_type: Union[Type[CompressionType], Sequence[Type[CompressionType]]] = CompressionType.NONE,
                  part_size_bytes: int = 2 ** 20, prefetch: int = 1):
         if not isinstance(compression_type, Sequence):
             compression_type = [compression_type] * len(tensors)
