@@ -152,11 +152,6 @@ class TensorPartReducer:
     :param weights: relative importance of each sender, used for weighted average (default = equal weights)
     :note: even if local peer is not sending data, local parts will be used for shape information
     """
-    current_part_index: int = -1  # index in local_parts of the part that should be loaded next
-    current_part_accumulated_from: int = 0  # number of peers from which the current part was accumulated
-    accumulator: torch.Tensor  # sum of current tensor part from group peers
-    denominator: float  # total weight accumulated from all peers for current part
-    current_part_future: asyncio.Future  # this future will be set with the current averaged part, once it is ready
 
     def __init__(self, part_shapes: Sequence[torch.Size], num_senders: int,
                  weights: Optional[Sequence[float]] = None):
@@ -164,6 +159,11 @@ class TensorPartReducer:
         self.weights = tuple(weights or (1 for _ in range(num_senders)))
         assert len(self.weights) == self.num_senders, "The number of weights is inconsistent with num_senders"
         assert all(isinstance(weight, (int, float)) for weight in self.weights)
+        self.current_part_index = -1  # index in local_parts of the part that should be loaded next
+        self.current_part_accumulated_from = 0  # number of peers from which the current part was accumulated
+        self.accumulator = None  # sum of current tensor part from group peers
+        self.denominator = 0.0  # total weight accumulated from all peers for current part
+        self.current_part_future = asyncio.Future()
         self.finished = asyncio.Event()
         self.reset_accumulators()
 
