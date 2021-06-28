@@ -128,19 +128,7 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
         else:
             loop = asyncio.get_event_loop()
             stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
-
-            async def _write_to_peer():
-                parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
-                first_part = await anext(parts_aiter)
-                await stream.write(averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING,
-                                                               group_id=self.group_id, endpoint=self.endpoint,
-                                                               tensor_part=first_part))
-                async for part in parts_aiter:
-                    await stream.write(averaging_pb2.AveragingData(tensor_part=part))
-
-                await stream.done_writing()
-
-            write_task = asyncio.create_task(_write_to_peer())
+            write_task = asyncio.create_task(self._write_to_peer(stream, peer_index))
 
             try:
                 code = None
@@ -158,6 +146,17 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
             finally:
                 if not write_task.done():
                     write_task.cancel()
+
+    async def _write_to_peer(self, stream: grpc.aio.StreamStreamCall, peer_index: int):
+        parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
+        first_part = await anext(parts_aiter)
+        await stream.write(averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING,
+                                                       group_id=self.group_id, endpoint=self.endpoint,
+                                                       tensor_part=first_part))
+        async for part in parts_aiter:
+            await stream.write(averaging_pb2.AveragingData(tensor_part=part))
+
+        await stream.done_writing()
 
     async def rpc_aggregate_part(self, stream: AsyncIterator[averaging_pb2.AveragingData], context: grpc.ServicerContext
                                  ) -> AsyncIterator[averaging_pb2.AveragingData]:
