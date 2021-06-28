@@ -21,6 +21,11 @@ class TensorPartContainer:
     """
     Auxiliary data structure for averaging, responsible for splitting tensors into parts and reassembling them.
     The class is designed to avoid excessive memory allocation and run all heavy computation in background
+    :param tensors: local tensors to be split and aggregated
+    :param peer_fractions: for each peer, a target fraction of vector elements that this peer should average
+    :param compression_type: optionally compress tensors with this compression algorithm before sending them to peers
+    :param part_size_bytes: greedily split tensors into parts of up to this many bytes (after compression)
+    :param prefetch: when compressing, pre-compute this many compressed tensors in background
     """
 
     def __init__(self, tensors: Sequence[torch.Tensor], peer_fractions: Sequence[float],
