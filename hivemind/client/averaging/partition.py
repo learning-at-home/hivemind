@@ -66,6 +66,7 @@ class TensorPartContainer:
                 else:
                     self._input_parts_by_peer[current_peer_index].append((part, tensor_compression))
                 current_length += len(part)
+
         assert current_length == self.total_size
         for current_peer_index in range(self.group_size):
             self.num_parts_by_peer.append(len(self._input_parts_by_peer[current_peer_index]))
