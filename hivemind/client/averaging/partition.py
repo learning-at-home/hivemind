@@ -168,7 +168,7 @@ class TensorPartReducer:
         self.reset_accumulators()
 
     def reset_accumulators(self):
-        """ (re)create averaging buffers for the part part in line, pre-populates with local tensor part """
+        """ (re)create averaging buffers for the next part in line, prepopulate with local tensor part """
         assert self.current_part_accumulated_from == self.num_senders or self.current_part_index == -1
         if self.current_part_index >= self.num_parts - 1:
             self.finalize()
