@@ -198,12 +198,9 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
 
     await asyncio.gather(*map(_run_allreduce_inplace, allreduce_protocols))
 
-    reference_tensors = [
-        sum(tensors_by_peer[peer][i] * averaging_weights[peer_index]
-            for peer_index, peer in enumerate(peers)
-            ) / sum(averaging_weights)
-        for i in range(len(tensors_by_peer[peers[0]]))
-    ]
+    reference_tensors = [sum(tensors_by_peer[peer][i] * averaging_weights[peer_index]
+                             for peer_index, peer in enumerate(peers)) / sum(averaging_weights)
+                         for i in range(len(tensors_by_peer[peers[0]]))]
 
     for peer_index, protocol in enumerate(allreduce_protocols):
         assert protocol._future.done()
