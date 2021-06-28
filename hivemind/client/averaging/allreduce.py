@@ -56,7 +56,7 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         self.group_id, self.endpoint, self.ordered_group_endpoints = group_id, endpoint, ordered_group_endpoints
         self.modes, self.peer_fractions, self.gathered = modes, peer_fractions, gathered
-        self.endpoint_index = self.ordered_group_endpoints.index(self.endpoint)
+
         self._future = asyncio.Future()
 
         self.sender_endpoints, self.sender_weights = [], []
@@ -65,9 +65,9 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 self.sender_endpoints.append(endpoint)
                 self.sender_weights.append(weight)
 
+        endpoint_index = self.ordered_group_endpoints.index(self.endpoint)
         self.tensor_part_container = TensorPartContainer(tensors, peer_fractions, **kwargs)
-        self.parts_for_local_averaging = self.tensor_part_container.get_raw_input_parts(
-            self.ordered_group_endpoints.index(self.endpoint))
+        self.parts_for_local_averaging = self.tensor_part_container.get_raw_input_parts(endpoint_index)
         self.tensor_part_reducer = TensorPartReducer(tuple(part.shape for part in self.parts_for_local_averaging),
                                                      len(self.sender_endpoints), self.sender_weights)
 
