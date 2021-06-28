@@ -18,7 +18,7 @@ T = TypeVar('T')
 
 class TensorPartContainer:
     """
-    Auxiliary data structure for averaging, responsible for splitting tensors into parts and re-assembling them.
+    Auxiliary data structure for averaging, responsible for splitting tensors into parts and reassembling them.
     The class is designed to avoid excessive memory allocation and run all heavy computation in background
     """
 
