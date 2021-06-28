@@ -68,7 +68,7 @@ class TensorPartContainer:
                 current_length += len(part)
 
         assert current_length == self.total_size
-        self.num_parts_by_peer = [len(parts) for parts in self._input_parts_by_peer]
+        self.num_parts_by_peer = tuple(len(parts) for parts in self._input_parts_by_peer)
 
     @torch.no_grad()
     def get_raw_input_parts(self, peer_index: int) -> Tuple[torch.Tensor, ...]:
