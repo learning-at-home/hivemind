@@ -44,8 +44,8 @@ class TensorPartContainer:
         # split tensor parts in proportion to target_size_by_peer
         current_length = 0
         current_peer_index = 0
-        pivots = np.cumsum(peer_fractions) / np.sum(peer_fractions) * self.total_size
-        pivots = np.concatenate([pivots.astype(np.int64)[:-1], [self.total_size]])
+        pivots = (np.cumsum(peer_fractions) / np.sum(peer_fractions) * self.total_size).astype(np.int64)
+        pivots[-1] = self.total_size
 
         for tensor, tensor_compression in zip(self.local_tensors, compression_type):
             part_size_values = int(part_size_bytes / get_nbytes_per_value(tensor.dtype, tensor_compression))
