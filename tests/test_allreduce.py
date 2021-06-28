@@ -93,7 +93,7 @@ async def test_partitioning_asynchronous():
         return time_in_waiting
 
     start_time = time.perf_counter()
-    _, _, time_in_waiting = await asyncio.gather(write_tensors(), read_tensors(), wait_synchronously())
+    *_, time_in_waiting = await asyncio.gather(write_tensors(), read_tensors(), wait_synchronously())
     wall_time = time.perf_counter() - start_time
     assert time_in_waiting > wall_time / 3, f"Event loop could only run {time_in_waiting / wall_time :.5f} of the time"
 
