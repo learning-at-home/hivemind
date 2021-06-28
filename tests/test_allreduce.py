@@ -95,6 +95,8 @@ async def test_partitioning_asynchronous():
     start_time = time.perf_counter()
     _, _, time_in_waiting = await asyncio.gather(write_tensors(), read_tensors(), wait_synchronously())
     wall_time = time.perf_counter() - start_time
+    # check that event loop had enough time to respond to incoming requests; this is over 50% most of the time
+    # we set 33% threshold to ensure that the test will pass reliably. If we break prefetch, this drops to <10%
     assert time_in_waiting > wall_time / 3, f"Event loop could only run {time_in_waiting / wall_time :.5f} of the time"
 
 
