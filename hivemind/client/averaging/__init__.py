@@ -328,28 +328,36 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 None, load_balance_peers, self.total_size, incoming_throughputs, min_vector_size)
 
             async with self.get_tensors_async() as local_tensors:
-                allreduce_protocol = AllReduceRunner(
+                allreduce = AllReduceRunner(
                     group_id=group_info.group_id, tensors=local_tensors, endpoint=self.endpoint,
                     ordered_group_endpoints=group_info.endpoints, peer_fractions=peer_fractions, weights=weights,
                     gathered=user_gathered, modes=modes, **kwargs)
-                self._running_groups[group_info.group_id] = allreduce_protocol
-                self._pending_group_assembled.set()
 
-                # actually run all-reduce
-                averaging_outputs = [output async for output in allreduce_protocol]
+                with self.register_allreduce_group(group_info.group_id, allreduce):
 
-                if modes[group_info.endpoints.index(self.endpoint)] != AveragingMode.AUX:
-                    assert len(local_tensors) == len(self._averaged_tensors)
-                    for tensor, update in zip(local_tensors, averaging_outputs):
-                        tensor.add_(update, alpha=self._averaging_alpha)
-                    self.last_updated = get_dht_time()
+                    # actually run all-reduce
+                    averaging_outputs = [output async for output in allreduce]
 
-                return allreduce_protocol.gathered
+                    if modes[group_info.endpoints.index(self.endpoint)] != AveragingMode.AUX:
+                        assert len(local_tensors) == len(self._averaged_tensors)
+                        for tensor, update in zip(local_tensors, averaging_outputs):
+                            tensor.add_(update, alpha=self._averaging_alpha)
+                        self.last_updated = get_dht_time()
+
+                return allreduce.gathered
         except BaseException as e:
             logger.exception(e)
             raise MatchmakingException(f"Unable to run All-Reduce: {e}")
+
+    @contextlib.contextmanager
+    def register_allreduce_group(self, group_id: GroupID, allreduce: AllReduceRunner):
+        """ registers a given all-reduce runner to listen for incoming connections """
+        try:
+            self._running_groups[group_id] = allreduce
+            self._pending_group_assembled.set()
+            yield
         finally:
-            self._running_groups.pop(group_info.group_id, None)
+            self._running_groups.pop(group_id, None)
             self._pending_group_assembled.set()
 
     @contextlib.contextmanager
