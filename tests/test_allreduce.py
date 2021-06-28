@@ -134,8 +134,8 @@ async def test_reducer(num_senders: int, num_parts: int, synchronize_prob: float
 
     for averaged_tensors in averaged_tensors_by_peer:
         assert len(averaged_tensors) == len(reference)
-        for avg, ref in zip(averaged_tensors, reference):
-            assert torch.allclose(avg, ref, rtol=1e-3, atol=1e-5)
+        for averaging_result, reference_tensor in zip(averaged_tensors, reference):
+            assert torch.allclose(averaging_result, reference_tensor, rtol=1e-3, atol=1e-5)
 
 
 class AllreduceRunnerForTesting(AllReduceRunner):
