@@ -20,6 +20,7 @@ import torch
 import numpy as np
 
 from hivemind.dht import DHT, DHTID
+from hivemind.client.averaging.partition import DEFAULT_PART_SIZE_BYTES
 from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
@@ -36,9 +37,6 @@ from hivemind.utils import Endpoint, Port, MPFuture, get_logger, TensorDescripto
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
 GatheredData = Any
 logger = get_logger(__name__)
-
-
-DEFAULT_PART_SIZE_BYTES = 2 ** 20
 
 
 class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragingServicer):

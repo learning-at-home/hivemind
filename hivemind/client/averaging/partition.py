@@ -14,6 +14,7 @@ from hivemind.utils.asyncio import async_map
 
 
 T = TypeVar('T')
+DEFAULT_PART_SIZE_BYTES = 2 ** 20
 
 
 class TensorPartContainer:
