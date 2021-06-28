@@ -153,7 +153,6 @@ def test_allreduce_compression():
         with averager1.get_tensors() as averaged_tensors:
             results[compression_type_pair] = averaged_tensors
 
-
     assert torch.allclose(results[UINT8, FLOAT16][0], results[UINT8, UINT8][0])
     assert torch.allclose(results[UINT8, FLOAT16][1], results[FLOAT16, FLOAT16][1])
     assert torch.allclose(results[UINT8, UINT8][1], results[FLOAT16, UINT8][1])
@@ -165,10 +164,9 @@ def test_allreduce_compression():
     assert not torch.allclose(results[FLOAT16, UINT8][1], results[FLOAT16, FLOAT16][1])
 
     reference = [(tensors1[i] + tensors2[i]) / 2 for i in range(len(tensors1))]
-    assert 0 < torch.mean(torch.square(results[FLOAT16, FLOAT16][0] - reference[0])).item() <= 1e-5
-    assert 0 < torch.mean(torch.square(results[FLOAT16, FLOAT16][1] - reference[1])).item() <= 1e-5
-    assert 1e-5 < torch.mean(torch.square(results[UINT8, UINT8][0] - reference[0])).item() <= 1e-2
-    assert 1e-5 < torch.mean(torch.square(results[UINT8, UINT8][1] - reference[1])).item() <= 1e-2
+    for i in range(2):
+        assert 0 < torch.mean(torch.square(results[FLOAT16, FLOAT16][i] - reference[i])).item() <= 1e-5
+        assert 1e-5 < torch.mean(torch.square(results[UINT8, UINT8][i] - reference[i])).item() <= 1e-2
 
 
 def compute_mean_std(averagers, unbiased=True):
