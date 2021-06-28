@@ -32,7 +32,6 @@ class TensorPartContainer:
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
         self.compression_type, self.part_size_bytes, self.prefetch = compression_type, part_size_bytes, prefetch
         self.total_size = sum(tensor.numel() for tensor in tensors)
-        self.num_parts_by_peer, self.num_parts_by_tensor = [], []
         self._input_parts_by_peer = [deque() for _ in range(self.group_size)]
         self._output_parts_by_peer = [deque() for _ in range(self.group_size)]
         self._inputs_consumed_by_peer = [False for _ in range(self.group_size)]
@@ -40,6 +39,7 @@ class TensorPartContainer:
         self._outputs_registered_by_peer = [0 for _ in range(self.group_size)]
         self._outputs_consumed = False
         self.finished = asyncio.Event()
+        self.num_parts_by_tensor = []
 
         # split tensor parts in proportion to target_size_by_peer
         current_length = 0
@@ -68,8 +68,7 @@ class TensorPartContainer:
                 current_length += len(part)
 
         assert current_length == self.total_size
-        for current_peer_index in range(self.group_size):
-            self.num_parts_by_peer.append(len(self._input_parts_by_peer[current_peer_index]))
+        self.num_parts_by_peer = [len(parts) for parts in self._input_parts_by_peer]
 
     @torch.no_grad()
     def get_raw_input_parts(self, peer_index: int) -> Tuple[torch.Tensor, ...]:
