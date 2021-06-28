@@ -139,19 +139,19 @@ def test_allreduce_compression():
 
     FLOAT16, UINT8 = CompressionType.FLOAT16, CompressionType.UNIFORM_8BIT
 
-    for compression_type in [(FLOAT16, FLOAT16), (FLOAT16, UINT8), (UINT8, FLOAT16), (UINT8, UINT8)]:
+    for compression_type_pair in [(FLOAT16, FLOAT16), (FLOAT16, UINT8), (UINT8, FLOAT16), (UINT8, UINT8)]:
         averager1 = hivemind.DecentralizedAverager([x.clone() for x in tensors1], dht=dht,
-                                                   compression_type=compression_type, listen=False,
+                                                   compression_type=compression_type_pair, listen=False,
                                                    target_group_size=2, prefix='mygroup', start=True)
         averager2 = hivemind.DecentralizedAverager([x.clone() for x in tensors2], dht=dht,
-                                                   compression_type=compression_type,
+                                                   compression_type=compression_type_pair,
                                                    target_group_size=2, prefix='mygroup', start=True)
 
         for future in averager1.step(wait=False), averager2.step(wait=False):
             future.result()
 
         with averager1.get_tensors() as averaged_tensors:
-            results[compression_type] = averaged_tensors
+            results[compression_type_pair] = averaged_tensors
 
 
     assert torch.allclose(results[UINT8, FLOAT16][0], results[UINT8, UINT8][0])
