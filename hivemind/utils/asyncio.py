@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable, Tuple, Optional, Callable, Any
+from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable, Tuple, Optional, Callable
 import asyncio
 
 import uvloop
@@ -69,7 +69,7 @@ async def await_cancelled(awaitable: Awaitable) -> bool:
         return False
 
 
-async def async_map(func: Callable[[Any, ...], T], *iterables: AsyncIterable, max_prefetch: Optional[int] = None,
+async def async_map(func: Callable[..., T], *iterables: AsyncIterable, max_prefetch: Optional[int] = None,
                     executor: Optional[ThreadPoolExecutor] = None) -> AsyncIterator[T]:
     """ iterate from an async iterable in a background thread, yield results to async iterable """
     loop = asyncio.get_event_loop()
