@@ -205,7 +205,10 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
 
     for peer_index, protocol in enumerate(allreduce_protocols):
         assert protocol._future.done()
-        targets_for_peer = reference_tensors if protocol.modes[peer_index] != AveragingMode.AUX else reference_tensors
+        if protocol.modes[peer_index] != AveragingMode.AUX:
+            targets_for_peer = reference_tensors
+        else:
+            targets_for_peer = tensors_by_peer[peers.index(peer)]
         output_tensors = protocol.tensor_part_container.local_tensors
         assert len(output_tensors) == len(targets_for_peer)
         assert all(torch.allclose(our, ref, atol=1e-6, rtol=0)
