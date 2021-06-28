@@ -131,6 +131,7 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
 
 @pytest.mark.forked
 def test_allreduce_compression():
+    """ this test ensures that compression works correctly when multiple tensors have different compression types """
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
 
     tensors1 = [torch.linspace(0, 500, 1000) ** 0.5, torch.randn(1000)]
