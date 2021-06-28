@@ -161,7 +161,7 @@ class TensorPartReducer:
         assert all(isinstance(weight, (int, float)) for weight in self.weights)
         self.current_part_index = -1  # index in local_parts of the part that should be loaded next
         self.current_part_accumulated_from = 0  # number of peers from which the current part was accumulated
-        self.accumulator = None  # sum of current tensor part from group peers
+        self.accumulator = None  # this will contain the sum of current tensor part from group peers
         self.denominator = 0.0  # total weight accumulated from all peers for current part
         self.current_part_future = asyncio.Future()
         self.finished = asyncio.Event()
