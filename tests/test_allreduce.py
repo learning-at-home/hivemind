@@ -8,7 +8,7 @@ import torch
 import grpc
 
 from hivemind import aenumerate, Endpoint
-from hivemind.client.averaging.allreduce import AllReduceProtocol, AveragingMode
+from hivemind.client.averaging.allreduce import AllReduceRunner, AveragingMode
 from hivemind.client.averaging.partition import TensorPartContainer, TensorPartReducer
 from hivemind.utils import serialize_torch_tensor, deserialize_torch_tensor, ChannelCache
 from hivemind.proto.runtime_pb2 import CompressionType
@@ -136,8 +136,8 @@ async def test_reducer(num_senders: int, num_parts: int, synchronize_prob: float
             assert torch.allclose(avg, ref, rtol=1e-3, atol=1e-5)
 
 
-class AllreduceProtocolForTesting(AllReduceProtocol):
-    """ a version of AllReduceProtocol that was monkey-patched to accept custom endpoint names """
+class AllreduceRunnerForTesting(AllReduceRunner):
+    """ a version of AllReduceRunner that was monkey-patched to accept custom endpoint names """
     def __init__(self, *args, peer_endpoints, **kwargs):
         self.__peer_endpoints = peer_endpoints
         super().__init__(*args, **kwargs)
@@ -179,7 +179,7 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
 
     for peer in peers:
         server = grpc.aio.server()
-        allreduce_protocol = AllreduceProtocolForTesting(
+        allreduce_protocol = AllreduceRunnerForTesting(
             group_id=group_id, endpoint=peer, tensors=[x.clone() for x in tensors_by_peer[peer]],
             ordered_group_endpoints=peers, peer_fractions=peer_fractions, modes=peer_modes,
             weights=averaging_weights, peer_endpoints=peer_endpoints, part_size_bytes=part_size_bytes
@@ -190,7 +190,7 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
         servers.append(server)
         await server.start()
 
-    async def _run_allreduce_inplace(allreduce: AllReduceProtocol):
+    async def _run_allreduce_inplace(allreduce: AllReduceRunner):
         async for tensor_index, tensor_delta in aenumerate(allreduce):
             allreduce.tensor_part_container.local_tensors[tensor_index].add_(tensor_delta)
 

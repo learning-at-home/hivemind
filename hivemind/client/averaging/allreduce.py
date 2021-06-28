@@ -22,18 +22,22 @@ class AveragingMode(Enum):
     AUX = 2
 
 
-class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
+class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
     """
     An internal class that runs butterfly AllReduce in a predefined group of averagers
 
     :note: this class returns **differences** between averaged and local tensors in order to improve numerical stability
+    :param group_id: unique identifier of this specific all-reduce run
+    :param tensors: local tensors that should be averaged with groupmates
     :param tensors: local tensors that should be averaged with groupmates
     :param endpoint: your endpoint, must be included in ordered_group_endpoints
     :param ordered_group_endpoints: group endpoints ordered s.t. i-th endpoint is responsible for averaging i-th part
     :param peer_fractions: for each peer, a target fraction of vector elements that this peer should average
       (the actual number of values by peer will be nearly proportional, but there are no exact guarantees)
+    :param modes: AveragingMode for each peer in ordered_group_endpoints (normal, client-only or auxiliary)
     :param weights: scaling coefficients for weighted averaging (default = equal weights for all non-aux peers)
-    :param part_size_bytes: all tensors will be split into chunks of up to this size before being transferred
+    :param gathered: additional user-defined data collected from this group
+    :param kwargs: additional paramters (e.g. part_size_bytes) will be passed to TensorPartContainer
     """
 
     def __init__(
@@ -127,19 +131,7 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
         else:
             loop = asyncio.get_event_loop()
             stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
-
-            async def _write_to_peer():
-                parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
-                first_part = await anext(parts_aiter)
-                await stream.write(averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING,
-                                                               group_id=self.group_id, endpoint=self.endpoint,
-                                                               tensor_part=first_part))
-                async for part in parts_aiter:
-                    await stream.write(averaging_pb2.AveragingData(tensor_part=part))
-
-                await stream.done_writing()
-
-            write_task = asyncio.create_task(_write_to_peer())
+            write_task = asyncio.create_task(self._write_to_peer(stream, peer_index))
 
             try:
                 code = None
@@ -157,6 +149,17 @@ class AllReduceProtocol(averaging_pb2_grpc.DecentralizedAveragingServicer):
             finally:
                 if not write_task.done():
                     write_task.cancel()
+
+    async def _write_to_peer(self, stream: grpc.aio.StreamStreamCall, peer_index: int):
+        parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
+        first_part = await anext(parts_aiter)
+        await stream.write(averaging_pb2.AveragingData(code=averaging_pb2.PART_FOR_AVERAGING,
+                                                       group_id=self.group_id, endpoint=self.endpoint,
+                                                       tensor_part=first_part))
+        async for part in parts_aiter:
+            await stream.write(averaging_pb2.AveragingData(tensor_part=part))
+
+        await stream.done_writing()
 
     async def rpc_aggregate_part(self, stream: AsyncIterator[averaging_pb2.AveragingData], context: grpc.ServicerContext
                                  ) -> AsyncIterator[averaging_pb2.AveragingData]:
