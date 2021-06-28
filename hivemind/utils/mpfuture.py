@@ -14,7 +14,7 @@ ResultType = TypeVar('ResultType')
 
 
 class FutureStateError(RuntimeError):
-    """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
+    """ Raised when attempting to change state of a future in a terminal state (e.g. finished) """
     pass
 
 
