@@ -313,7 +313,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                                                   " Please report this to hivemind issues."))
 
     async def _run_allreduce(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
-        """ run all-reduce in a given group and update tensors in-place, return gathered metadata """
+        """ Run All-Reduce in a given group and update tensors in place, return gathered metadata """
         try:
             weights, throughputs, mode_ids, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
             user_gathered = dict(zip(group_info.endpoints, map(self.serializer.loads, user_gathered)))
@@ -345,7 +345,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 return allreduce_protocol.gathered
         except BaseException as e:
             logger.exception(e)
-            raise MatchmakingException(f"Unable to run all-reduce ({e})")
+            raise MatchmakingException(f"Unable to run All-Reduce: {e}")
         finally:
             _ = self._running_groups.pop(group_info.group_id, None)
             self._pending_group_assembled.set()
