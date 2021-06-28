@@ -276,7 +276,7 @@ def test_generic_data_classes():
 
 
 @pytest.mark.asyncio
-async def test_asyncio():
+async def test_asyncio_utils():
     res = [i async for i, item in aenumerate(aiter('a', 'b', 'c'))]
     assert res == list(range(len(res)))
 
