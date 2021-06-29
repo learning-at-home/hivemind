@@ -28,8 +28,11 @@ def bootstrap_addr(external_port: int, id_: str) -> Multiaddr:
     return Multiaddr(f'/ip4/127.0.0.1/tcp/{external_port}/p2p/{id_}')
 
 
-def bootstrap_from(daemons: List[P2P]) -> List[str]:
-    return [bootstrap_addr(d.external_port, d.id) for d in daemons]
+async def bootstrap_from(daemons: List[P2P]) -> List[Multiaddr]:
+    maddrs = []
+    for d in daemons:
+        maddrs += await d.identify_maddrs()
+    return maddrs
 
 
 @pytest.mark.asyncio
@@ -49,7 +52,7 @@ async def test_server_client_connection():
     peers = await server._client.list_peers()
     assert len(peers) == 0
 
-    nodes = bootstrap_from([server])
+    nodes = await bootstrap_from([server])
     client = await P2P.create(bootstrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
@@ -145,7 +148,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
                                    dht_pb2.PingResponse)
     assert is_process_running(server_pid)
 
-    nodes = bootstrap_from([server])
+    nodes = await bootstrap_from([server])
     client_primary = await P2P.create(bootstrap_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
     client_pid = client_primary._child.pid
@@ -164,7 +167,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
         await P2P.send_protobuf(ping_request, dht_pb2.PingRequest, writer)
 
         writer.close()
-        await  asyncio.sleep(1)
+        await asyncio.sleep(1)
         assert handler_cancelled
     else:
         actual_response = await client.call_unary_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)
@@ -189,7 +192,7 @@ async def test_call_unary_handler_error(handle_name="handle"):
     await server.add_unary_handler(handle_name, error_handler, dht_pb2.PingRequest, dht_pb2.PingResponse)
     assert is_process_running(server_pid)
 
-    nodes = bootstrap_from([server])
+    nodes = await bootstrap_from([server])
     client = await P2P.create(bootstrap_peers=nodes)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
@@ -224,7 +227,7 @@ async def test_call_peer_single_process(test_input, expected, handle, handler_na
     await server.add_stream_handler(handler_name, handle)
     assert is_process_running(server_pid)
 
-    nodes = bootstrap_from([server])
+    nodes = await bootstrap_from([server])
     client = await P2P.create(bootstrap_peers=nodes)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
@@ -313,7 +316,7 @@ async def test_call_peer_torch_square(test_input, expected, handler_name="handle
     server = await P2P.create()
     await server.add_stream_handler(handler_name, handle)
 
-    nodes = bootstrap_from([server])
+    nodes = await bootstrap_from([server])
     client = await P2P.create(bootstrap_peers=nodes)
 
     await client.wait_for_at_least_n_peers(1)
@@ -345,7 +348,7 @@ async def test_call_peer_torch_add(test_input, expected, handler_name="handle"):
     server = await P2P.create()
     await server.add_stream_handler(handler_name, handle)
 
-    nodes = bootstrap_from([server])
+    nodes = await bootstrap_from([server])
     client = await P2P.create(bootstrap_peers=nodes)
 
     await client.wait_for_at_least_n_peers(1)
@@ -376,7 +379,7 @@ async def test_call_peer_error(replicate, handler_name="handle"):
     server = await replicate_if_needed(server_primary, replicate)
     await server.add_stream_handler(handler_name, handle_add_torch_with_exc)
 
-    nodes = bootstrap_from([server])
+    nodes = await bootstrap_from([server])
     client_primary = await P2P.create(bootstrap_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
 
@@ -407,7 +410,7 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     server_replica2 = await replicate_if_needed(server_primary, True)
     await server_replica2.add_stream_handler(handler_name + '2', partial(handler, key=b'replica2'))
 
-    nodes = bootstrap_from([server_primary])
+    nodes = await bootstrap_from([server_primary])
     client = await P2P.create(bootstrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
