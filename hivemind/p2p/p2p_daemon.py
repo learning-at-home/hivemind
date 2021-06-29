@@ -34,9 +34,17 @@ class P2PContext(object):
 
 class P2P:
     """
-    Forks a child process and executes p2pd command with given arguments.
-    Can be used for peer to peer communication and procedure calls.
-    Sends SIGKILL to the child in destructor.
+    This class is responsible for establishing peer-to-peer connections through NAT and/or firewalls.
+    It creates and manages a libp2p daemon in a background process, then terminates it when P2P is shut down.
+    In order to communicate, a P2P instance should either use one or more bootstrap_peers that will connect it
+    to the rest of the swarm or use the public IPFS network (https://ipfs.io).
+
+    For incoming connections, P2P instances add RPC handlers that may be accessed by other peers:
+      - `P2P.add_unary_handler` accepts a protobuf message and returns another protobuf
+      - `P2P.add_stream_handler` transfers raw data using bi-directional streaming interface
+
+    To access these handlers, a P2P instance can `P2P.call_unary_handler`/`P2P.call_stream_handler`,
+    using the recipient's unique `P2P.id` and the name of the corresponding handler.
     """
 
     HEADER_LEN = 8
@@ -65,13 +73,12 @@ class P2P:
                      dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
                      nat_port_map: bool = True, auto_nat: bool = True,
                      bootstrap_peers: Optional[List[Multiaddr]] = None,
-                     use_ipfs: bool = False, p2p_port: int = None,
+                     use_ipfs: bool = False, external_port: int = None,
                      daemon_listen_port: int = None, use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      **kwargs) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
-        :param args:
         :param quic: Enables the QUIC transport
         :param tls: Enables TLS1.3 channel security protocol
         :param conn_manager: Enables the Connection Manager
@@ -82,25 +89,26 @@ class P2P:
         :param bootstrap: Connects to bootstrap peers and bootstraps the dht if enabled
         :param bootstrap_peers: List of bootstrap peers
         :param use_ipfs: Bootstrap to IPFS (works only if bootstrap=True and bootstrap_peers=None)
-        :param p2p_port: port for p2p network
+        :param external_port: port for external connections from other p2p instances
         :param daemon_listen_port: port for connection daemon and client binding
         :param use_relay: enables circuit relay
         :param use_relay_hop: enables hop for relay
         :param use_relay_discovery: enables passive discovery for relay
         :param use_auto_relay: enables autorelay
         :param relay_hop_limit: sets the hop limit for hop relays
-        :param kwargs: other CLI arguments for the p2p daemon
+        :param args: positional CLI arguments for the p2p daemon
+        :param kwargs: keyword CLI arguments for the p2p daemon
         :return: a wrapper for the p2p daemon
         """
 
-        assert not (bootstrap_peers is not None and use_ipfs), \
+        assert not (bootstrap_peers and use_ipfs), \
             'User-defined bootstrap_peers and use_ipfs=True are incompatible, please choose one option'
 
         self = cls()
         with path(cli, P2PD_FILENAME) as p:
             p2pd_path = p
 
-        need_bootstrap = bootstrap_peers is not None or use_ipfs
+        need_bootstrap = bool(bootstrap_peers) or use_ipfs
         bootstrap_peers = cls._make_bootstrap_peers(bootstrap_peers)
         dht = cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0})
         force_reachability = cls.FORCE_REACHABILITY_MAPPING.get(force_reachability, {})
@@ -111,7 +119,7 @@ class P2P:
             relay=use_relay, relayHop=use_relay_hop, relayDiscovery=use_relay_discovery,
             autoRelay=use_auto_relay, relayHopLimit=relay_hop_limit,
             b=need_bootstrap, **{**bootstrap_peers, **dht, **force_reachability, **kwargs})
-        self._assign_daemon_ports(p2p_port, daemon_listen_port)
+        self._assign_daemon_ports(external_port, daemon_listen_port)
 
         for try_count in range(NUM_RETRIES):
             try:
@@ -128,11 +136,11 @@ class P2P:
         return self
 
     @classmethod
-    async def replicate(cls, daemon_listen_port: int, p2p_port: int) -> 'P2P':
+    async def replicate(cls, daemon_listen_port: int, external_port: int) -> 'P2P':
         """
         Connect to existing p2p daemon
         :param daemon_listen_port: port for connection daemon and client binding
-        :param p2p_port: port for p2p network
+        :param external_port: port for external connections from other p2p instances
         :return: new wrapper for existing p2p daemon
         """
 
@@ -141,7 +149,7 @@ class P2P:
         # Use external already running p2pd
         self._child = None
         self._alive = True
-        self._assign_daemon_ports(p2p_port, daemon_listen_port)
+        self._assign_daemon_ports(external_port, daemon_listen_port)
         self._client_listen_port = find_open_port()
         self._client = p2pclient.Client(
             Multiaddr(f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}'),
@@ -169,7 +177,7 @@ class P2P:
     def _initialize(self, proc_args: List[str]) -> None:
         proc_args = deepcopy(proc_args)
         proc_args.extend(self._make_process_args(
-            hostAddrs=f'/ip4/0.0.0.0/tcp/{self._p2p_port},/ip4/0.0.0.0/udp/{self._p2p_port}/quic',
+            hostAddrs=f'/ip4/0.0.0.0/tcp/{self._external_port},/ip4/0.0.0.0/udp/{self._external_port}/quic',
             listen=f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}'
         ))
         self._child = Popen(args=proc_args, encoding="utf8")
@@ -183,19 +191,19 @@ class P2P:
         await asyncio.sleep(delay)
         self.id, _ = await self._client.identify()
 
-    def _assign_daemon_ports(self, p2p_port: int = None, daemon_listen_port: int = None) -> None:
-        if p2p_port is None:
-            p2p_port = find_open_port()
+    def _assign_daemon_ports(self, external_port: int = None, daemon_listen_port: int = None) -> None:
+        if external_port is None:
+            external_port = find_open_port()
         if daemon_listen_port is None:
             daemon_listen_port = find_open_port()
-            while daemon_listen_port == p2p_port:
+            while daemon_listen_port == external_port:
                 daemon_listen_port = find_open_port()
 
-        self._p2p_port, self._daemon_listen_port = p2p_port, daemon_listen_port
+        self._external_port, self._daemon_listen_port = external_port, daemon_listen_port
 
     @property
-    def p2p_port(self) -> int:
-        return self._p2p_port
+    def external_port(self) -> int:
+        return self._external_port
 
     @staticmethod
     async def send_raw_data(data: bytes, writer: asyncio.StreamWriter) -> None:
@@ -369,7 +377,7 @@ class P2P:
     def _terminate(self) -> None:
         self._alive = False
         if self._child is not None and self._child.poll() is None:
-            self._child.kill()
+            self._child.terminate()
             self._child.wait()
 
     @staticmethod
