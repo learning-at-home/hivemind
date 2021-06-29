@@ -1,7 +1,14 @@
-from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable
+from concurrent.futures import ThreadPoolExecutor
+from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable, Tuple, Optional, Callable
 import asyncio
+
 import uvloop
+
+from hivemind.utils.logging import get_logger
+
+
 T = TypeVar('T')
+logger = get_logger(__name__)
 
 
 def switch_to_uvloop() -> asyncio.AbstractEventLoop:
@@ -27,11 +34,29 @@ async def aiter(*args: T) -> AsyncIterator[T]:
         yield arg
 
 
+async def azip(*iterables: AsyncIterable[T]) -> AsyncIterator[Tuple[T, ...]]:
+    """ equivalent of zip for asynchronous iterables """
+    iterators = [iterable.__aiter__() for iterable in iterables]
+    while True:
+        try:
+            yield tuple(await asyncio.gather(*(itr.__anext__() for itr in iterators)))
+        except StopAsyncIteration:
+            break
+
+
 async def achain(*async_iters: AsyncIterable[T]) -> AsyncIterator[T]:
     """ equivalent to chain(iter1, iter2, ...) for asynchronous iterators. """
     for aiter in async_iters:
         async for elem in aiter:
             yield elem
+
+
+async def aenumerate(aiterable: AsyncIterable[T]) -> AsyncIterable[Tuple[int, T]]:
+    """ equivalent to enumerate(iter) for asynchronous iterators. """
+    index = 0
+    async for elem in aiterable:
+        yield index, elem
+        index += 1
 
 
 async def await_cancelled(awaitable: Awaitable) -> bool:
@@ -42,3 +67,26 @@ async def await_cancelled(awaitable: Awaitable) -> bool:
         return True
     except BaseException:
         return False
+
+
+async def amap_in_executor(func: Callable[..., T], *iterables: AsyncIterable, max_prefetch: Optional[int] = None,
+                           executor: Optional[ThreadPoolExecutor] = None) -> AsyncIterator[T]:
+    """ iterate from an async iterable in a background thread, yield results to async iterable """
+    loop = asyncio.get_event_loop()
+    queue = asyncio.Queue(max_prefetch)
+
+    async def _put_items():
+        async for args in azip(*iterables):
+            await queue.put(loop.run_in_executor(executor, func, *args))
+        await queue.put(None)
+
+    task = asyncio.create_task(_put_items())
+    try:
+        future = await queue.get()
+        while future is not None:
+            yield await future
+            future = await queue.get()
+        await task
+    finally:
+        if not task.done():
+            task.cancel()

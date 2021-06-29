@@ -1,0 +1,12 @@
+comment:
+  layout: "diff, files"
+  behavior: default
+  require_changes: true
+coverage:
+  status:
+    patch:
+      default:
+        informational: true
+    project:
+      default:
+        threshold: 1%

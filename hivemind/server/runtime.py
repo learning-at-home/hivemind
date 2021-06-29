@@ -118,7 +118,7 @@ class Runtime(threading.Thread):
         with DefaultSelector() as selector:
             for pool in self.pools:
                 selector.register(pool.batch_receiver, EVENT_READ, pool)
-            # selector.register(self.shutdown_recv, EVENT_READ, self.SHUTDOWN_TRIGGER)
+            selector.register(self.shutdown_recv, EVENT_READ, self.SHUTDOWN_TRIGGER)
 
             while True:
                 # wait until at least one batch_receiver becomes available

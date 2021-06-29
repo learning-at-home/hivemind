@@ -17,7 +17,6 @@ import hivemind
 from hivemind.utils.logging import get_logger
 import metrics_utils
 
-
 logger = get_logger(__name__)
 
 
@@ -163,6 +162,10 @@ if __name__ == '__main__':
                        for peer in metrics_dict]
             latest_step = max(item.step for item in metrics)
             if latest_step != current_step:
+                logger.debug(f"Got metrics from {len(metrics)} peers")
+
+                for i, metrics_for_peer in enumerate(metrics):
+                    logger.debug(f"{i} peer {metrics_for_peer}")
                 current_step = latest_step
                 alive_peers = 0
                 num_batches = 0
@@ -176,17 +179,20 @@ if __name__ == '__main__':
                     sum_perf += item.samples_per_second
                     num_samples += item.samples_accumulated
                     sum_mini_steps += item.mini_steps
+                current_loss = sum_loss / sum_mini_steps
+
                 if coordinator_args.wandb_project is not None:
                     wandb.log({
-                        "loss": sum_loss / sum_mini_steps,
+                        "loss": current_loss,
                         "alive peers": alive_peers,
                         "samples": num_samples,
-                        "performance": sum_perf
+                        "performance": sum_perf,
+                        "step": latest_step
                     })
                 if checkpoint_handler.is_time_to_save_state(current_step):
                     checkpoint_handler.save_state(current_step)
                     if checkpoint_handler.is_time_to_upload():
-                        checkpoint_handler.upload_checkpoint(sum_loss / sum_mini_steps)
-                logger.info(f"Step #{current_step}\tloss = {sum_loss / alive_peers:.5f}")
+                        checkpoint_handler.upload_checkpoint(current_loss)
+                logger.info(f"Step #{current_step}\tloss = {current_loss:.5f}")
         logger.debug("Peer is still alive...")
         time.sleep(coordinator_args.refresh_period)
