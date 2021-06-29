@@ -19,8 +19,6 @@ message NodeInfo {
   // note: both node_id and port are optional: if specified, ask peer to add you to its routing table;
   // if either node_id or port is absent, simply request recipient info (for client-only mode)
   bytes node_id = 1;                   // sender's own node id serialized with DHTID.to_bytes()
-  int32 rpc_port = 2;                  // port to which sender listens for DHT RPCs
-  string endpoint = 3;                 // (optional) node's preferred return address
 }
 
 message PingRequest {
@@ -32,7 +30,6 @@ message PingRequest {
 message PingResponse {
   ResponseAuthInfo auth = 1;
   NodeInfo peer = 2;                   // respondent's node id, for you to update routing table
-  string sender_endpoint = 3;          // echo sender's visible endpoint - used to infer his ip address
   double dht_time = 4;                 // recipient's local DHT time - used to soft-synchronize peers
   bool available = 5;                  // if validate = True, this flag asserts that the sender is available for ping
 }

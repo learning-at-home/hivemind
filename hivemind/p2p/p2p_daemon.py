@@ -1,8 +1,8 @@
 import asyncio
+import subprocess
 from copy import deepcopy
 from dataclasses import dataclass
 from importlib.resources import path
-from subprocess import Popen
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import google.protobuf
@@ -180,7 +180,7 @@ class P2P:
             hostAddrs=f'/ip4/0.0.0.0/tcp/{self._external_port},/ip4/0.0.0.0/udp/{self._external_port}/quic',
             listen=f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}'
         ))
-        self._child = Popen(args=proc_args, encoding="utf8")
+        self._child = subprocess.Popen(args=proc_args, encoding="utf8", stdout=subprocess.DEVNULL)
         self._alive = True
         self._client_listen_port = find_open_port()
         self._client = p2pclient.Client(

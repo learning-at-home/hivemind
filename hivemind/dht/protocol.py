@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 from itertools import zip_longest
 from typing import Optional, List, Tuple, Dict, Any, Sequence, Union, Collection
 
@@ -10,18 +11,20 @@ import grpc
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
-from hivemind.proto import dht_pb2, dht_pb2_grpc as dht_grpc
-from hivemind.utils import Endpoint, get_logger, replace_port, MSGPackSerializer, ChannelCache, ValueWithExpiration
+from hivemind.p2p import P2P, P2PContext, PeerID as Endpoint
+from hivemind.proto import dht_pb2
+from hivemind.utils import get_logger, replace_port, MSGPackSerializer, ChannelCache, ValueWithExpiration
 from hivemind.utils import get_dht_time, GRPC_KEEPALIVE_OPTIONS, MAX_DHT_TIME_DISCREPANCY_SECONDS
 from hivemind.utils.auth import AuthRole, AuthRPCWrapper, AuthorizerBase
 
 logger = get_logger(__name__)
 
 
-class DHTProtocol(dht_grpc.DHTServicer):
+class DHTProtocol:
     # fmt:off
-    node_id: DHTID; port: int; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
-    channel_options: Tuple[Tuple[str, Any]]; server: grpc.aio.Server
+    p2p: P2P
+    node_id: DHTID; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
+    channel_options: Tuple[Tuple[str, Any]]
     storage: DHTLocalStorage; cache: DHTLocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
     record_validator: Optional[RecordValidatorBase]
     # fmt:on
@@ -29,12 +32,13 @@ class DHTProtocol(dht_grpc.DHTServicer):
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     RESERVED_SUBKEYS = IS_REGULAR_VALUE, IS_DICTIONARY = serializer.dumps(None), b''
 
+    PING_NAME, STORE_NAME, FIND_NAME = '__ping__', '__store__', '__find__'
+
     @classmethod
     async def create(
-            cls, node_id: DHTID, bucket_size: int, depth_modulo: int, num_replicas: int, wait_timeout: float,
+            cls, p2p: P2P, node_id: DHTID, bucket_size: int, depth_modulo: int, num_replicas: int, wait_timeout: float,
             parallel_rpc: Optional[int] = None, cache_size: Optional[int] = None,
-            listen=True, listen_on='0.0.0.0:*', endpoint: Optional[Endpoint] = None,
-            record_validator: Optional[RecordValidatorBase] = None,
+            listen=True, record_validator: Optional[RecordValidatorBase] = None,
             authorizer: Optional[AuthorizerBase] = None,
             channel_options: Sequence[Tuple[str, Any]] = (), **kwargs) -> DHTProtocol:
         """
@@ -50,33 +54,31 @@ class DHTProtocol(dht_grpc.DHTServicer):
          Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
         """
         self = cls(_initialized_with_create=True)
+        self.p2p = p2p
         self.node_id, self.bucket_size, self.num_replicas = node_id, bucket_size, num_replicas
         self.wait_timeout, self.channel_options = wait_timeout, tuple(channel_options)
         self.storage, self.cache = DHTLocalStorage(), DHTLocalStorage(maxsize=cache_size)
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.rpc_semaphore = asyncio.Semaphore(parallel_rpc if parallel_rpc is not None else float('inf'))
+        self.listen = listen
         self.record_validator = record_validator
         self.authorizer = authorizer
 
-        if listen:  # set up server to process incoming rpc requests
-            grpc.aio.init_grpc_aio()
-            self.server = grpc.aio.server(**kwargs, options=GRPC_KEEPALIVE_OPTIONS)
-            servicer = AuthRPCWrapper(self, AuthRole.SERVICER, self.authorizer)
-            dht_grpc.add_DHTServicer_to_server(servicer, self.server)
+        if listen:
+            await self.p2p.add_unary_handler(
+                DHTProtocol.PING_NAME, functools.partial(DHTProtocol.rpc_ping, self),
+                dht_pb2.PingRequest, dht_pb2.PingResponse)
+            await self.p2p.add_unary_handler(
+                DHTProtocol.STORE_NAME, functools.partial(DHTProtocol.rpc_store, self),
+                dht_pb2.StoreRequest, dht_pb2.StoreResponse)
+            await self.p2p.add_unary_handler(
+                DHTProtocol.FIND_NAME, functools.partial(DHTProtocol.rpc_find, self),
+                dht_pb2.FindRequest, dht_pb2.FindResponse)
 
-            self.port = self.server.add_insecure_port(listen_on)
-            assert self.port != 0, f"Failed to listen to {listen_on}"
-            if endpoint is not None and endpoint.endswith('*'):
-                endpoint = replace_port(endpoint, self.port)
-            self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes(), rpc_port=self.port,
-                                              endpoint=endpoint or dht_pb2.NodeInfo.endpoint.DESCRIPTOR.default_value)
-            await self.server.start()
-        else:  # not listening to incoming requests, client-only mode
+            self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes())
+        else:  # client-only mode
             # note: use empty node_info so peers won't add you to their routing tables
-            self.node_info, self.server, self.port = dht_pb2.NodeInfo(), None, None
-            if listen_on != '0.0.0.0:*' or len(kwargs) != 0:
-                logger.warning(f"DHTProtocol has no server (due to listen=False), listen_on"
-                               f"and kwargs have no effect (unused kwargs: {kwargs})")
+            self.node_info = dht_pb2.NodeInfo()
         return self
 
     def __init__(self, *, _initialized_with_create=False):
@@ -86,14 +88,33 @@ class DHTProtocol(dht_grpc.DHTServicer):
 
     async def shutdown(self, timeout=None):
         """ Process existing requests, close all connections and stop the server """
-        if self.server:
-            await self.server.stop(timeout)
-        else:
-            logger.warning("DHTProtocol has no server (due to listen=False), it doesn't need to be shut down")
+        # TODO: Remove handlers from self.p2p in shutdown()
+        # FIXME: Remove `timeout` argument if unused
+        # await self.client.stop_listening()
+        # await self.client.shutdown()
+        pass
+
+    class DHTStub: #TODO refactor this
+        # TODO: timeouts
+        def __init__(self, protocol: DHTProtocol, peer: Endpoint):
+            self.protocol = protocol
+            self.peer = peer
+
+        async def rpc_ping(self, request: dht_pb2.PingRequest, timeout=None) -> dht_pb2.PingResponse:
+            return await self.protocol.p2p.call_unary_handler(
+                self.peer, DHTProtocol.PING_NAME, request, dht_pb2.PingResponse)
+
+        async def rpc_store(self, request: dht_pb2.StoreRequest, timeout=None) -> dht_pb2.StoreResponse:
+            return await self.protocol.p2p.call_unary_handler(
+                self.peer, DHTProtocol.STORE_NAME, request, dht_pb2.StoreResponse)
+
+        async def rpc_find(self, request: dht_pb2.FindRequest, timeout=None) -> dht_pb2.FindResponse:
+            return await self.protocol.p2p.call_unary_handler(
+                self.peer, DHTProtocol.FIND_NAME, request, dht_pb2.FindResponse)
 
     def _get_dht_stub(self, peer: Endpoint) -> dht_grpc.DHTStub:
         """ get a DHTStub that sends requests to a given peer """
-        stub = ChannelCache.get_stub(peer, dht_grpc.DHTStub, aio=True, options=self.channel_options)
+        stub = DHTProtocol.DHTStub(self, peer)
         return AuthRPCWrapper(stub, AuthRole.CLIENT, self.authorizer, service_public_key=None)
 
     async def call_ping(self, peer: Endpoint, validate: bool = False, strict: bool = True) -> Optional[DHTID]:
@@ -112,16 +133,16 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 time_requested = get_dht_time()
                 response = await self._get_dht_stub(peer).rpc_ping(ping_request, timeout=self.wait_timeout)
                 time_responded = get_dht_time()
-        except grpc.aio.AioRpcError as error:
-            logger.debug(f"DHTProtocol failed to ping {peer}: {error.code()}")
+        except Exception as e:
+            logger.debug(f"DHTProtocol failed to ping {peer}: {e}")
             response = None
         responded = bool(response and response.peer and response.peer.node_id)
 
         if responded and validate:
             try:
-                if self.server is not None and not response.available:
-                    raise ValidationError(f"Peer {peer} couldn't access this node at {response.sender_endpoint} . "
-                                          f"Make sure that this port is open for incoming requests.")
+                if self.listen and not response.available:
+                    raise ValidationError(f"Peer {peer} can't access this node. "
+                                          f"Probably, libp2p has failed to bypass the firewall")
 
                 if response.dht_time != dht_pb2.PingResponse.dht_time.DESCRIPTOR.default_value:
                     if response.dht_time < time_requested - MAX_DHT_TIME_DISCREPANCY_SECONDS or \
@@ -138,32 +159,18 @@ class DHTProtocol(dht_grpc.DHTServicer):
         asyncio.create_task(self.update_routing_table(peer_id, peer, responded=responded))
         return peer_id
 
-    async def get_outgoing_request_endpoint(self, peer: Endpoint) -> Optional[Endpoint]:
-        """ ask this peer how it perceives this node's outgoing request address """
-        try:
-            async with self.rpc_semaphore:
-                ping_request = dht_pb2.PingRequest(peer=None, validate=False)
-                response = await self._get_dht_stub(peer).rpc_ping(ping_request, timeout=self.wait_timeout)
-                if response.sender_endpoint != dht_pb2.PingResponse.sender_endpoint.DESCRIPTOR.default_value:
-                    return response.sender_endpoint
-        except grpc.aio.AioRpcError as error:
-            logger.debug(f"DHTProtocol failed to ping {peer}: {error.code()}")
-
-    async def rpc_ping(self, request: dht_pb2.PingRequest, context: grpc.ServicerContext):
+    async def rpc_ping(self, request: dht_pb2.PingRequest, context: P2PContext):
         """ Some node wants us to add it to our routing table. """
-        response = dht_pb2.PingResponse(peer=self.node_info, sender_endpoint=context.peer(),
+
+        response = dht_pb2.PingResponse(peer=self.node_info,
                                         dht_time=get_dht_time(), available=False)
 
-        if request.peer and request.peer.node_id and request.peer.rpc_port:
+        if request.peer and request.peer.node_id:
             sender_id = DHTID.from_bytes(request.peer.node_id)
-            if request.peer.endpoint != dht_pb2.NodeInfo.endpoint.DESCRIPTOR.default_value:
-                sender_endpoint = request.peer.endpoint  # if peer has preferred endpoint, use it
-            else:
-                sender_endpoint = replace_port(context.peer(), new_port=request.peer.rpc_port)
+            sender_endpoint = context.remote_id
 
-            response.sender_endpoint = sender_endpoint
             if request.validate:
-                response.available = await self.call_ping(response.sender_endpoint, validate=False) == sender_id
+                response.available = await self.call_ping(sender_endpoint, validate=False) == sender_id
 
             asyncio.create_task(self.update_routing_table(sender_id, sender_endpoint,
                                                           responded=response.available or not request.validate))
@@ -220,12 +227,12 @@ class DHTProtocol(dht_grpc.DHTServicer):
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
             return response.store_ok
-        except grpc.aio.AioRpcError as error:
-            logger.debug(f"DHTProtocol failed to store at {peer}: {error.code()}")
+        except Exception as e:
+            logger.debug(f"DHTProtocol failed to store at {peer}: {e}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
             return None
 
-    async def rpc_store(self, request: dht_pb2.StoreRequest, context: grpc.ServicerContext) -> dht_pb2.StoreResponse:
+    async def rpc_store(self, request: dht_pb2.StoreRequest, context: P2PContext) -> dht_pb2.StoreResponse:
         """ Some node wants us to store this (key, value) pair """
         if request.peer:  # if requested, add peer to the routing table
             asyncio.create_task(self.rpc_ping(dht_pb2.PingRequest(peer=request.peer), context))
@@ -283,7 +290,8 @@ class DHTProtocol(dht_grpc.DHTServicer):
             output = {}  # unpack data depending on its type
             for key, result in zip(keys, response.results):
                 key_bytes = DHTID.to_bytes(key)
-                nearest = dict(zip(map(DHTID.from_bytes, result.nearest_node_ids), result.nearest_endpoints))
+                nearest = dict(zip(map(DHTID.from_bytes, result.nearest_node_ids),
+                                   map(Endpoint.from_base58, result.nearest_endpoints)))
 
                 if result.type == dht_pb2.NOT_FOUND:
                     output[key] = None, nearest
@@ -305,11 +313,11 @@ class DHTProtocol(dht_grpc.DHTServicer):
                     logger.error(f"Unknown result type: {result.type}")
 
             return output
-        except grpc.aio.AioRpcError as error:
-            logger.debug(f"DHTProtocol failed to find at {peer}: {error.code()}")
+        except Exception as e:
+            logger.debug(f"DHTProtocol failed to find at {peer}: {e}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
 
-    async def rpc_find(self, request: dht_pb2.FindRequest, context: grpc.ServicerContext) -> dht_pb2.FindResponse:
+    async def rpc_find(self, request: dht_pb2.FindRequest, context: P2PContext) -> dht_pb2.FindResponse:
         """
         Someone wants to find keys in the DHT. For all keys that we have locally, return value and expiration
         Also return :bucket_size: nearest neighbors from our routing table for each key (whether or not we found value)
@@ -337,7 +345,7 @@ class DHTProtocol(dht_grpc.DHTServicer):
             for node_id, endpoint in self.routing_table.get_nearest_neighbors(
                     key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id)):
                 item.nearest_node_ids.append(node_id.to_bytes())
-                item.nearest_endpoints.append(endpoint)
+                item.nearest_endpoints.append(endpoint.to_base58())
             response.results.append(item)
         return response
 

@@ -9,8 +9,7 @@ import pytest
 import torch
 from multiaddr import Multiaddr
 
-from hivemind.p2p import P2P, P2PHandlerError
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
+from hivemind.p2p import P2P, P2PHandlerError, PeerID
 from hivemind.proto import dht_pb2, runtime_pb2
 from hivemind.utils import MSGPackSerializer
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
@@ -24,8 +23,8 @@ async def replicate_if_needed(p2p: P2P, replicate: bool) -> P2P:
     return await P2P.replicate(p2p._daemon_listen_port, p2p.external_port) if replicate else p2p
 
 
-def bootstrap_addr(external_port: int, id_: str) -> Multiaddr:
-    return Multiaddr(f'/ip4/127.0.0.1/tcp/{external_port}/p2p/{id_}')
+def bootstrap_addr(external_port: int, peer_id: PeerID) -> Multiaddr:
+    return Multiaddr(f'/ip4/127.0.0.1/tcp/{external_port}/p2p/{peer_id}')
 
 
 async def bootstrap_from(daemons: List[P2P]) -> List[Multiaddr]:
