@@ -90,15 +90,14 @@ class TaskPool(TaskPoolBase):
 
     def submit_task(self, *args: torch.Tensor) -> Future:
         """ Add task to this pool's queue, return Future for its output """
-        future1, future2 = MPFuture.make_pair()
-        task = Task(future1, args)
+        task = Task(MPFuture(), args)
         if self.get_task_size(task) > self.max_batch_size:
             exc = ValueError(f"Task size greater than max_batch_size ({self.max_batch_size}), it can't be processed")
-            future2.set_exception(exc)
+            task.future.set_exception(exc)
         else:
             self.tasks.put(task)
             self.undispatched_task_timestamps.put(time.time())
-        return future2
+        return task.future
 
     def iterate_minibatches(self, *args, **kwargs):
         """ Form minibatches by grouping one or more tasks together up to self.max_batch_size """
