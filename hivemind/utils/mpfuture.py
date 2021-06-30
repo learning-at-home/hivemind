@@ -208,3 +208,5 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._shared_state_code = state['_shared_state_code']
         self._origin_pid, self._uid = state['_origin_pid'], state['_uid']
         self._result, self._exception = state['_result'], state['_exception']
+        self._waiters, self._done_callbacks = [], []
+        self._condition = threading.Condition()
