@@ -173,7 +173,7 @@ class DHT(mp.Process):
         :note: when run_coroutine is called with wait=False, MPFuture can be cancelled to interrupt the task.
         """
         future = MPFuture()
-        self.pipe.send(('_run_coroutine', [], dict(coro=coro, future=_future)))
+        self.pipe.send(('_run_coroutine', [], dict(coro=coro, future=future)))
         return future if return_future else future.result()
 
     async def _run_coroutine(self, node: DHTNode, coro: Callable[[DHT, DHTNode], Awaitable[ReturnType]],
