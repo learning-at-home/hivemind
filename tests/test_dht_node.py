@@ -2,48 +2,32 @@ import asyncio
 import heapq
 import multiprocessing as mp
 import random
-from itertools import chain, product
-from typing import Dict, List, Optional, Sequence, TypeVar
+from itertools import product
+from typing import Optional, List, Dict
 
 import numpy as np
 import pytest
-from multiaddr import Multiaddr
 
 import hivemind
 from hivemind import get_dht_time, replace_port
-from hivemind.dht.node import DHTID, Endpoint, DHTNode
+from hivemind.dht.node import DHTID, Endpoint, DHTNode, LOCALHOST
 from hivemind.dht.protocol import DHTProtocol, ValidationError
 from hivemind.dht.storage import DictionaryDHTValue
-from hivemind.p2p import P2P, PeerID
-from hivemind.utils.networking import LOCALHOST
 
 
-def maddrs_to_peer_ids(maddrs: List[Multiaddr]) -> List[PeerID]:
-    return list({PeerID.from_base58(maddr['p2p']) for maddr in maddrs})
-
-
-def run_protocol_listener(dhtid: DHTID, maddr_conn: mp.connection.Connection,
-                          bootstrap_peers: Optional[List[Multiaddr]] = None):
+def run_protocol_listener(port: int, dhtid: DHTID, started: mp.synchronize.Event, ping: Optional[Endpoint] = None):
     loop = asyncio.get_event_loop()
-
-    # FIXME: Set external_host = localhost
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-    maddrs = loop.run_until_complete(p2p.identify_maddrs())
-
     protocol = loop.run_until_complete(DHTProtocol.create(
-        p2p, dhtid, bucket_size=20, depth_modulo=5, num_replicas=3, wait_timeout=5))
+        dhtid, bucket_size=20, depth_modulo=5, num_replicas=3, wait_timeout=5, listen_on=f"{LOCALHOST}:{port}"))
 
-    print(f"Started peer id={protocol.node_id} maddrs={maddrs}", flush=True)
+    assert protocol.port == port
+    print(f"Started peer id={protocol.node_id} port={port}", flush=True)
 
-    if bootstrap_peers is not None:
-        for endpoint in maddrs_to_peer_ids(bootstrap_peers):
-            loop.run_until_complete(protocol.call_ping(endpoint))
-
-    maddr_conn.send((p2p.id, maddrs))
-
-    loop.run_forever()
-    # TODO: Implement graceful shutdown, like wait_for_termination() in the original PR
-    # print(f"Finished peer id={protocol.node_id} maddrs={maddrs}", flush=True)
+    if ping is not None:
+        loop.run_until_complete(protocol.call_ping(ping))
+    started.set()
+    loop.run_until_complete(protocol.server.wait_for_termination())
+    print(f"Finished peer id={protocol.node_id} port={port}", flush=True)
 
 
 # note: we run grpc-related tests in a separate process to re-initialize all global states from scratch
@@ -53,42 +37,37 @@ def run_protocol_listener(dhtid: DHTID, maddr_conn: mp.connection.Connection,
 @pytest.mark.forked
 def test_dht_protocol():
     # create the first peer
-    remote_conn, local_conn = mp.Pipe()
-    peer1_id = DHTID.generate()
-    peer1_proc = mp.Process(target=run_protocol_listener, args=(peer1_id, remote_conn), daemon=True)
-    peer1_proc.start()
-    peer1_endpoint, peer1_maddrs = local_conn.recv()
+    peer1_port, peer1_id, peer1_started = hivemind.find_open_port(), DHTID.generate(), mp.Event()
+    peer1_proc = mp.Process(target=run_protocol_listener, args=(peer1_port, peer1_id, peer1_started), daemon=True)
+    peer1_proc.start(), peer1_started.wait()
 
     # create another peer that connects to the first peer
-    remote_conn, local_conn = mp.Pipe()
-    peer2_id = DHTID.generate()
-    peer2_proc = mp.Process(target=run_protocol_listener, args=(peer2_id, remote_conn), daemon=True,
-                            kwargs={'bootstrap_peers': peer1_maddrs})
-    peer2_proc.start()
-    peer2_endpoint, peer2_maddrs = local_conn.recv()
+    peer2_port, peer2_id, peer2_started = hivemind.find_open_port(), DHTID.generate(), mp.Event()
+    peer2_proc = mp.Process(target=run_protocol_listener, args=(peer2_port, peer2_id, peer2_started),
+                            kwargs={'ping': f'{LOCALHOST}:{peer1_port}'}, daemon=True)
+    peer2_proc.start(), peer2_started.wait()
 
     loop = asyncio.get_event_loop()
     for listen in [False, True]:  # note: order matters, this test assumes that first run uses listen=False
-        p2p = loop.run_until_complete(P2P.create(bootstrap_peers=peer1_maddrs))
         protocol = loop.run_until_complete(DHTProtocol.create(
-            p2p, DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, listen=listen))
+            DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, listen=listen))
         print(f"Self id={protocol.node_id}", flush=True)
 
-        assert loop.run_until_complete(protocol.call_ping(peer1_endpoint)) == peer1_id
+        assert loop.run_until_complete(protocol.call_ping(f'{LOCALHOST}:{peer1_port}')) == peer1_id
 
         key, value, expiration = DHTID.generate(), [random.random(), {'ololo': 'pyshpysh'}], get_dht_time() + 1e3
         store_ok = loop.run_until_complete(protocol.call_store(
-            peer1_endpoint, [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
+            f'{LOCALHOST}:{peer1_port}', [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
         )
         assert all(store_ok), "DHT rejected a trivial store"
 
         # peer 1 must know about peer 2
         (recv_value_bytes, recv_expiration), nodes_found = loop.run_until_complete(
-            protocol.call_find(peer1_endpoint, [key]))[key]
+            protocol.call_find(f'{LOCALHOST}:{peer1_port}', [key]))[key]
         recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
         (recv_id, recv_endpoint) = next(iter(nodes_found.items()))
-        assert recv_id == peer2_id and recv_endpoint == peer2_endpoint, \
-            f"expected id={peer2_id}, peer={peer2_endpoint} but got {recv_id}, {recv_endpoint}"
+        assert recv_id == peer2_id and ':'.join(recv_endpoint.split(':')[-2:]) == f"{LOCALHOST}:{peer2_port}", \
+            f"expected id={peer2_id}, peer={LOCALHOST}:{peer2_port} but got {recv_id}, {recv_endpoint}"
 
         assert recv_value == value and recv_expiration == expiration, \
             f"call_find_value expected {value} (expires by {expiration}) " \
@@ -97,35 +76,38 @@ def test_dht_protocol():
         # peer 2 must know about peer 1, but not have a *random* nonexistent value
         dummy_key = DHTID.generate()
         empty_item, nodes_found_2 = loop.run_until_complete(
-            protocol.call_find(peer2_endpoint, [dummy_key]))[dummy_key]
+            protocol.call_find(f'{LOCALHOST}:{peer2_port}', [dummy_key]))[dummy_key]
         assert empty_item is None, "Non-existent keys shouldn't have values"
         (recv_id, recv_endpoint) = next(iter(nodes_found_2.items()))
-        assert recv_id == peer1_id and recv_endpoint == peer1_endpoint, \
-            f"expected id={peer1_id}, peer={peer1_endpoint} but got {recv_id}, {recv_endpoint}"
+        assert recv_id == peer1_id and recv_endpoint == f"{LOCALHOST}:{peer1_port}", \
+            f"expected id={peer1_id}, peer={LOCALHOST}:{peer1_port} but got {recv_id}, {recv_endpoint}"
 
         # cause a non-response by querying a nonexistent peer
-        assert loop.run_until_complete(protocol.call_find(PeerID.from_base58('fakeid'), [key])) is None
+        dummy_port = hivemind.find_open_port()
+        assert loop.run_until_complete(protocol.call_find(f"{LOCALHOST}:{dummy_port}", [key])) is None
 
         # store/get a dictionary with sub-keys
         nested_key, subkey1, subkey2 = DHTID.generate(), 'foo', 'bar'
         value1, value2 = [random.random(), {'ololo': 'pyshpysh'}], 'abacaba'
         assert loop.run_until_complete(protocol.call_store(
-            peer1_endpoint, keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value1)],
+            f'{LOCALHOST}:{peer1_port}', keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value1)],
             expiration_time=[expiration], subkeys=[subkey1])
         )
         assert loop.run_until_complete(protocol.call_store(
-            peer1_endpoint, keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value2)],
+            f'{LOCALHOST}:{peer1_port}', keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value2)],
             expiration_time=[expiration + 5], subkeys=[subkey2])
         )
         (recv_dict, recv_expiration), nodes_found = loop.run_until_complete(
-            protocol.call_find(peer1_endpoint, [nested_key]))[nested_key]
+            protocol.call_find(f'{LOCALHOST}:{peer1_port}', [nested_key]))[nested_key]
         assert isinstance(recv_dict, DictionaryDHTValue)
         assert len(recv_dict.data) == 2 and recv_expiration == expiration + 5
         assert recv_dict.data[subkey1] == (protocol.serializer.dumps(value1), expiration)
         assert recv_dict.data[subkey2] == (protocol.serializer.dumps(value2), expiration + 5)
 
+        assert LOCALHOST in loop.run_until_complete(protocol.get_outgoing_request_endpoint(f'{LOCALHOST}:{peer1_port}'))
+
         if listen:
-            loop.run_until_complete(p2p.shutdown())
+            loop.run_until_complete(protocol.shutdown())
 
     peer1_proc.terminate()
     peer2_proc.terminate()
@@ -134,92 +116,68 @@ def test_dht_protocol():
 @pytest.mark.forked
 def test_empty_table():
     """ Test RPC methods with empty routing table """
-    remote_conn, local_conn = mp.Pipe()
-    peer_id = DHTID.generate()
-    peer_proc = mp.Process(target=run_protocol_listener, args=(peer_id, remote_conn), daemon=True)
-    peer_proc.start()
-    peer_endpoint, peer_maddrs = local_conn.recv()
+    peer_port, peer_id, peer_started = hivemind.find_open_port(), DHTID.generate(), mp.Event()
+    peer_proc = mp.Process(target=run_protocol_listener, args=(peer_port, peer_id, peer_started), daemon=True)
+    peer_proc.start(), peer_started.wait()
 
     loop = asyncio.get_event_loop()
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=peer_maddrs))
     protocol = loop.run_until_complete(DHTProtocol.create(
-        p2p, DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, listen=False))
+        DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, listen=False))
 
     key, value, expiration = DHTID.generate(), [random.random(), {'ololo': 'pyshpysh'}], get_dht_time() + 1e3
 
     empty_item, nodes_found = loop.run_until_complete(
-        protocol.call_find(peer_endpoint, [key]))[key]
+        protocol.call_find(f'{LOCALHOST}:{peer_port}', [key]))[key]
     assert empty_item is None and len(nodes_found) == 0
     assert all(loop.run_until_complete(protocol.call_store(
-        peer_endpoint, [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
+        f'{LOCALHOST}:{peer_port}', [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
     )), "peer rejected store"
 
     (recv_value_bytes, recv_expiration), nodes_found = loop.run_until_complete(
-        protocol.call_find(peer_endpoint, [key]))[key]
+        protocol.call_find(f'{LOCALHOST}:{peer_port}', [key]))[key]
     recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
     assert len(nodes_found) == 0
     assert recv_value == value and recv_expiration == expiration
 
-    assert loop.run_until_complete(protocol.call_ping(peer_endpoint)) == peer_id
-    assert loop.run_until_complete(protocol.call_ping(PeerID.from_base58('fakeid'))) is None
+    assert loop.run_until_complete(protocol.call_ping(f'{LOCALHOST}:{peer_port}')) == peer_id
+    assert loop.run_until_complete(protocol.call_ping(f'{LOCALHOST}:{hivemind.find_open_port()}')) is None
     peer_proc.terminate()
 
 
-def run_node(node_id: DHTID, bootstrap_peers: List[Multiaddr], status_pipe: mp.Pipe):
+def run_node(node_id, peers, status_pipe: mp.Pipe):
     if asyncio.get_event_loop().is_running():
         asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
         asyncio.set_event_loop(asyncio.new_event_loop())
     loop = asyncio.get_event_loop()
-
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-    maddrs = loop.run_until_complete(p2p.identify_maddrs())
-    node = loop.run_until_complete(DHTNode.create(p2p, node_id, initial_peers=maddrs_to_peer_ids(bootstrap_peers)))
-
-    status_pipe.send((p2p.id, maddrs))
-
+    node = loop.run_until_complete(DHTNode.create(node_id, initial_peers=peers))
+    status_pipe.send(node.port)
     while True:
         loop.run_forever()
-
-
-T = TypeVar('T')
-
-
-def sample_at_most_n(seq: Sequence[T], n: int) -> Sequence[T]:
-    return random.sample(seq, min(n, len(seq)))
 
 
 @pytest.mark.forked
 def test_dht_node():
     # create dht with 50 nodes + your 51-st node
-    processes: List[mp.Process] = []
     dht: Dict[Endpoint, DHTID] = {}
-    swarm_maddrs: List[List[Multiaddr]] = []
+    processes: List[mp.Process] = []
 
     for i in range(50):
         node_id = DHTID.generate()
-
-        # Sample multiaddrs for <= 5 different bootstrap peers
-        bootstrap_peers = sum(sample_at_most_n(swarm_maddrs, 5), [])
-
+        peers = random.sample(dht.keys(), min(len(dht), 5))
         pipe_recv, pipe_send = mp.Pipe(duplex=False)
-        proc = mp.Process(target=run_node, args=(node_id, bootstrap_peers, pipe_send), daemon=True)
+        proc = mp.Process(target=run_node, args=(node_id, peers, pipe_send), daemon=True)
         proc.start()
+        port = pipe_recv.recv()
         processes.append(proc)
-
-        peer_endpoint, peer_maddrs = pipe_recv.recv()
-        dht[peer_endpoint] = node_id
-        swarm_maddrs.append(peer_maddrs)
+        dht[f"{LOCALHOST}:{port}"] = node_id
 
     loop = asyncio.get_event_loop()
-
-    bootstrap_peers = sum(sample_at_most_n(swarm_maddrs, 5), [])
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-    me = loop.run_until_complete(DHTNode.create(p2p, initial_peers=maddrs_to_peer_ids(bootstrap_peers), parallel_rpc=10,
+    me = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 5), parallel_rpc=10,
                                                 cache_refresh_before_expiry=False))
 
     # test 1: find self
     nearest = loop.run_until_complete(me.find_nearest_nodes([me.node_id], k_nearest=1))[me.node_id]
-    assert len(nearest) == 1 and nearest[me.node_id] == me.endpoint
+    assert len(nearest) == 1 and ':'.join(nearest[me.node_id].split(':')[-2:]) == f"{LOCALHOST}:{me.port}"
 
     # test 2: find others
     for i in range(10):
@@ -227,7 +185,7 @@ def test_dht_node():
         nearest = loop.run_until_complete(me.find_nearest_nodes([query_id], k_nearest=1))[query_id]
         assert len(nearest) == 1
         found_node_id, found_endpoint = next(iter(nearest.items()))
-        assert found_node_id == query_id and found_endpoint == ref_endpoint
+        assert found_node_id == query_id and ':'.join(found_endpoint.split(':')[-2:]) == ref_endpoint
 
     # test 3: find neighbors to random nodes
     accuracy_numerator = accuracy_denominator = 0  # top-1 nearest neighbor accuracy
@@ -271,26 +229,17 @@ def test_dht_node():
     assert len(nearest) == len(dht) + 1
     assert len(set.difference(set(nearest.keys()), set(all_node_ids) | {me.node_id})) == 0
 
-    # test 5: node without peers (when P2P is connected to the swarm)
-
-    bootstrap_peers = sum(sample_at_most_n(swarm_maddrs, 5), [])
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-
-    detached_node = loop.run_until_complete(DHTNode.create(p2p))
+    # test 5: node without peers
+    detached_node = loop.run_until_complete(DHTNode.create())
     nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy]))[dummy]
-    assert len(nearest) == 1 and nearest[detached_node.node_id] == detached_node.endpoint
+    assert len(nearest) == 1 and nearest[detached_node.node_id] == f"{LOCALHOST}:{detached_node.port}"
     nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy], exclude_self=True))[dummy]
     assert len(nearest) == 0
 
     # test 6 store and get value
-
     true_time = get_dht_time() + 1200
     assert loop.run_until_complete(me.store("mykey", ["Value", 10], true_time))
-
-    bootstrap_peers = sum(sample_at_most_n(swarm_maddrs, 5), [])
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-
-    that_guy = loop.run_until_complete(DHTNode.create(p2p, initial_peers=random.sample(dht.keys(), 3), parallel_rpc=10,
+    that_guy = loop.run_until_complete(DHTNode.create(initial_peers=random.sample(dht.keys(), 3), parallel_rpc=10,
                                                       cache_refresh_before_expiry=False, cache_locally=False))
 
     for node in [me, that_guy]:
@@ -336,9 +285,6 @@ def test_dht_node():
 
     for proc in processes:
         proc.terminate()
-    # The nodes don't own their hivemind.p2p.P2P instances, so we shutdown them separately
-    loop.run_until_complete(asyncio.gather(*chain.from_iterable([node.shutdown(), node.protocol.p2p.shutdown()]
-                                                                for node in [me, detached_node, that_guy])))
 
 
 @pytest.mark.forked

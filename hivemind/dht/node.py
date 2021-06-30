@@ -15,8 +15,7 @@ from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.dht.traverse import traverse_dht
-from hivemind.p2p import P2P, PeerID as Endpoint
-from hivemind.utils import MSGPackSerializer, get_logger, SerializerBase
+from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase
 from hivemind.utils.timed_storage import TimedStorage, ValueWithExpiration
 
 logger = get_logger(__name__)
@@ -67,7 +66,7 @@ class DHTNode:
 
     """
     # fmt:off
-    node_id: DHTID; is_alive: bool; endpoint: Endpoint; num_replicas: int; num_workers: int; protocol: DHTProtocol
+    node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
     chunk_size: int; refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
     cache_on_store: bool; reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedSet[_SearchState]]
     cache_refresh_task: Optional[asyncio.Task]; cache_refresh_evt: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
@@ -76,17 +75,16 @@ class DHTNode:
 
     @classmethod
     async def create(
-            cls, p2p: P2P, node_id: Optional[DHTID] = None, initial_peers: List[Endpoint] = (),
+            cls, node_id: Optional[DHTID] = None, initial_peers: List[Endpoint] = (),
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 3, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
             cache_on_store: bool = True, reuse_get_requests: bool = True, num_workers: int = 1, chunk_size: int = 16,
             blacklist_time: float = 5.0, backoff_rate: float = 2.0,
-            listen: bool = True,
+            listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", endpoint: Optional[Endpoint] = None,
             record_validator: Optional[RecordValidatorBase] = None,
             validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
-        :param p2p: instance of hivemind.p2p.P2P that will be used for communication
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
         :param initial_peers: connects to these peers to populate routing table, defaults to no peers
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
@@ -117,6 +115,8 @@ class DHTNode:
         :param strict: if True, any error encountered in validation will interrupt the creation of DHTNode
         :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
           if False, this node will refuse any incoming request, effectively being only a "client"
+        :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
+        :param endpoint: if specified, this is peer's preferred public endpoint. Otherwise let peers infer endpoint
         :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
         :param kwargs: extra parameters used in grpc.aio.server
@@ -138,10 +138,10 @@ class DHTNode:
         self.cache_refresh_evt = asyncio.Event()
         self.cache_refresh_task = None
 
-        self.protocol = await DHTProtocol.create(
-            p2p, self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
-            parallel_rpc, cache_size, listen, record_validator, **kwargs)
-        self.endpoint = p2p.id
+        self.protocol = await DHTProtocol.create(self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
+                                                 parallel_rpc, cache_size, listen, listen_on, endpoint, record_validator,
+                                                 **kwargs)
+        self.port = self.protocol.port
 
         if initial_peers:
             # stage 1: ping initial_peers, add each other to the routing table
@@ -185,7 +185,7 @@ class DHTNode:
     async def shutdown(self, timeout=None):
         """ Process existing requests, close all connections and stop the server """
         self.is_alive = False
-        if self.protocol.listen:
+        if self.protocol.server:
             await self.protocol.shutdown(timeout)
 
     async def find_nearest_nodes(
@@ -234,7 +234,7 @@ class DHTNode:
         for query, nearest_nodes in nearest_nodes_per_query.items():
             if not exclude_self:
                 nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query.xor_distance)
-                node_to_endpoint[self.node_id] = self.endpoint
+                node_to_endpoint[self.node_id] = f"{LOCALHOST}:{self.port}"
             nearest_nodes_with_endpoints[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
         return nearest_nodes_with_endpoints
 

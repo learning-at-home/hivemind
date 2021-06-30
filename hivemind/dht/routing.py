@@ -8,8 +8,7 @@ import random
 from collections.abc import Iterable
 from itertools import chain
 from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
-from hivemind.p2p import PeerID as Endpoint
-from hivemind.utils import MSGPackSerializer, get_dht_time, DHTExpiration
+from hivemind.utils import Endpoint, MSGPackSerializer, get_dht_time, DHTExpiration
 
 DHTKey, Subkey, DHTValue, BinaryDHTID, BinaryDHTValue, = Any, Any, Any, bytes, bytes
 
