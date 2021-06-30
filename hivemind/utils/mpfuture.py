@@ -24,7 +24,7 @@ TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
 try:
     from concurrent.futures import InvalidStateError
 except ImportError:
-    class InvalidStateError:
+    class InvalidStateError(Exception):
         """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
 
 
@@ -203,7 +203,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise asyncio.CancelledError()
 
     def __del__(self):
-        if os.getpid() == self._origin_pid:
+        if getattr(self, '_origin_pid', None) == os.getpid():
             del ACTIVE_FUTURES[self._uid]
         if getattr(self, '_aio_event', None):
             self._aio_event.set()
