@@ -72,11 +72,11 @@ class P2P:
     async def create(cls, *args, quic: bool = True, tls: bool = True, conn_manager: bool = True,
                      dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
                      nat_port_map: bool = True, auto_nat: bool = True,
-                     bootstrap_peers: Optional[List[Multiaddr]] = None,
-                     use_ipfs: bool = False, external_port: int = None,
-                     daemon_listen_port: int = None, use_relay: bool = True, use_relay_hop: bool = False,
+                     bootstrap_peers: Optional[List[Multiaddr]] = None, use_ipfs: bool = False,
+                     external_port: Optional[int] = None, daemon_listen_port: Optional[int] = None,
+                     use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
-                     **kwargs) -> 'P2P':
+                     quiet: bool = True, **kwargs) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
         :param quic: Enables the QUIC transport
@@ -96,6 +96,7 @@ class P2P:
         :param use_relay_discovery: enables passive discovery for relay
         :param use_auto_relay: enables autorelay
         :param relay_hop_limit: sets the hop limit for hop relays
+        :param quiet: make the daemon process quiet
         :param args: positional CLI arguments for the p2p daemon
         :param kwargs: keyword CLI arguments for the p2p daemon
         :return: a wrapper for the p2p daemon
@@ -118,7 +119,7 @@ class P2P:
             natPortMap=nat_port_map, autonat=auto_nat,
             relay=use_relay, relayHop=use_relay_hop, relayDiscovery=use_relay_discovery,
             autoRelay=use_auto_relay, relayHopLimit=relay_hop_limit,
-            b=need_bootstrap, **{**bootstrap_peers, **dht, **force_reachability, **kwargs})
+            b=need_bootstrap, q=quiet, **{**bootstrap_peers, **dht, **force_reachability, **kwargs})
         self._assign_daemon_ports(external_port, daemon_listen_port)
 
         for try_count in range(NUM_RETRIES):
@@ -136,11 +137,11 @@ class P2P:
         return self
 
     @classmethod
-    async def replicate(cls, daemon_listen_port: int, external_port: int) -> 'P2P':
+    async def replicate(cls, external_port: int, daemon_listen_port: int) -> 'P2P':
         """
         Connect to existing p2p daemon
-        :param daemon_listen_port: port for connection daemon and client binding
         :param external_port: port for external connections from other p2p instances
+        :param daemon_listen_port: port for connection daemon and client binding
         :return: new wrapper for existing p2p daemon
         """
 
@@ -180,7 +181,7 @@ class P2P:
             hostAddrs=f'/ip4/0.0.0.0/tcp/{self._external_port},/ip4/0.0.0.0/udp/{self._external_port}/quic',
             listen=f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}'
         ))
-        self._child = subprocess.Popen(args=proc_args, encoding="utf8", stdout=subprocess.DEVNULL)
+        self._child = subprocess.Popen(args=proc_args, encoding="utf8")
         self._alive = True
         self._client_listen_port = find_open_port()
         self._client = p2pclient.Client(
