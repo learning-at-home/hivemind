@@ -134,9 +134,10 @@ class P2P:
                 break
             except Exception as e:
                 if try_count == ping_n_retries - 1:
+                    logger.error(f'Failed to ping p2pd: {e}')
+                    self.shutdown()
                     if isinstance(e, FileNotFoundError):  # The daemon's Unix socket is not found
                         raise RuntimeError('The p2p daemon failed to start, see its stderr above for the reasons')
-                    self._terminate()
                     raise
 
         return self
@@ -165,7 +166,8 @@ class P2P:
         return self
 
     async def _ping_client(self) -> None:
-        self.id, _ = await self._client.identify()
+        self.id, maddrs = await self._client.identify()
+        logger.debug(f'Launched p2pd with id = {self.id}, host multiaddrs = {maddrs}')
 
     async def identify_maddrs(self) -> List[Multiaddr]:
         _, maddrs = await self._client.identify()
@@ -370,6 +372,7 @@ class P2P:
         if self._child is not None and self._child.poll() is None:
             self._child.terminate()
             self._child.wait()
+            logger.debug(f'Terminated p2pd with id = {self.id}')
 
     @staticmethod
     def _make_process_args(*args, **kwargs) -> List[str]:
