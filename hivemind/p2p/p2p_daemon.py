@@ -11,7 +11,7 @@ from multiaddr import Multiaddr
 
 import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, StreamInfo
+from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto import p2pd_pb2
 from hivemind.utils import MSGPackSerializer
 from hivemind.utils.logging import get_logger
@@ -162,8 +162,11 @@ class P2P:
 
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
-        await self._wait_for_client()
+        await self._ping_client()
         return self
+
+    async def _ping_client(self) -> None:
+        self.id, _ = await self._client.identify()
 
     async def identify_maddrs(self) -> List[Multiaddr]:
         _, maddrs = await self._client.identify()
@@ -172,6 +175,9 @@ class P2P:
 
         p2p_maddr = Multiaddr(f'/p2p/{self.id.to_base58()}')
         return [addr.encapsulate(p2p_maddr) for addr in maddrs]
+
+    async def list_peers(self) -> List[PeerInfo]:
+        return list(await self._client.list_peers())
 
     async def wait_for_at_least_n_peers(self, n_peers: int, attempts: int = 3, delay: float = 1) -> None:
         for _ in range(attempts):
@@ -186,9 +192,6 @@ class P2P:
         self._child = subprocess.Popen(args=proc_args, encoding="utf8")
         self._alive = True
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
-
-    async def _ping_client(self) -> None:
-        self.id, _ = await self._client.identify()
 
     @property
     def daemon_listen_maddr(self) -> Multiaddr:

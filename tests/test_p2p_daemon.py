@@ -10,7 +10,7 @@ import pytest
 import torch
 from multiaddr import Multiaddr
 
-from hivemind.p2p import P2P, P2PHandlerError, PeerID
+from hivemind.p2p import P2P, P2PHandlerError, PeerID, PeerInfo
 from hivemind.proto import dht_pb2, runtime_pb2
 from hivemind.utils import MSGPackSerializer
 from hivemind.utils.networking import find_open_port
@@ -46,16 +46,16 @@ async def test_daemon_killed_on_del():
 @pytest.mark.asyncio
 async def test_server_client_connection():
     server = await P2P.create()
-    peers = await server._client.list_peers()
+    peers = await server.list_peers()
     assert len(peers) == 0
 
     nodes = await bootstrap_from([server])
     client = await P2P.create(bootstrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
-    peers = await client._client.list_peers()
+    peers = await client.list_peers()
     assert len(peers) == 1
-    peers = await server._client.list_peers()
+    peers = await server.list_peers()
     assert len(peers) == 1
 
 
@@ -63,7 +63,7 @@ async def test_server_client_connection():
 async def test_quic_transport():
     server_port = find_open_port((socket.AF_INET, socket.SOCK_DGRAM))
     server = await P2P.create(quic=True, host_maddrs=[Multiaddr(f'/ip4/127.0.0.1/udp/{server_port}/quic')])
-    peers = await server._client.list_peers()
+    peers = await server.list_peers()
     assert len(peers) == 0
 
     nodes = await bootstrap_from([server])
@@ -72,9 +72,9 @@ async def test_quic_transport():
                               bootstrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
-    peers = await client._client.list_peers()
+    peers = await client.list_peers()
     assert len(peers) == 1
-    peers = await server._client.list_peers()
+    peers = await server.list_peers()
     assert len(peers) == 1
 
 
