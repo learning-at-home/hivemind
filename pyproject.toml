@@ -1,6 +1,2 @@
 [tool.black]
 line-length = 119
-
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta:__legacy__"
