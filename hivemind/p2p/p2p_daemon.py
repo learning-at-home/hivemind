@@ -21,8 +21,6 @@ logger = get_logger(__name__)
 
 
 P2PD_FILENAME = 'p2pd'
-NUM_RETRIES = 3
-RETRY_DELAY = 0.4
 
 
 @dataclass(frozen=True)
@@ -77,7 +75,8 @@ class P2P:
                      host_maddrs: Optional[List[Multiaddr]] = None,
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
-                     quiet: bool = True, **kwargs) -> 'P2P':
+                     quiet: bool = True,
+                     ping_n_retries: int = 3, ping_retry_delay = 0.4, **kwargs) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
         :param quic: Enables the QUIC transport
@@ -128,13 +127,13 @@ class P2P:
             b=need_bootstrap, q=quiet, **{**bootstrap_peers, **dht, **force_reachability, **host_maddrs, **kwargs})
 
         self._initialize(proc_args)
-        for try_count in range(NUM_RETRIES):
+        for try_count in range(ping_n_retries):
             try:
-                await asyncio.sleep(RETRY_DELAY * (2 ** try_count))
+                await asyncio.sleep(ping_retry_delay * (2 ** try_count))
                 await self._ping_client()
                 break
             except Exception as e:
-                if try_count == NUM_RETRIES - 1:
+                if try_count == ping_n_retries - 1:
                     if isinstance(e, FileNotFoundError):  # The daemon's Unix socket is not found
                         raise RuntimeError('The p2p daemon failed to start, see its stderr above for the reasons')
                     self._terminate()
