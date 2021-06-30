@@ -20,11 +20,7 @@ def is_process_running(pid: int) -> bool:
 
 
 async def replicate_if_needed(p2p: P2P, replicate: bool) -> P2P:
-    return await P2P.replicate(p2p.external_port, p2p.daemon_listen_maddr) if replicate else p2p
-
-
-def bootstrap_addr(external_port: int, peer_id: PeerID) -> Multiaddr:
-    return Multiaddr(f'/ip4/127.0.0.1/tcp/{external_port}/p2p/{peer_id}')
+    return await P2P.replicate(p2p.daemon_listen_maddr) if replicate else p2p
 
 
 async def bootstrap_from(daemons: List[P2P]) -> List[Multiaddr]:
@@ -64,7 +60,7 @@ async def test_server_client_connection():
 @pytest.mark.asyncio
 async def test_daemon_replica_does_not_affect_primary():
     p2p_daemon = await P2P.create()
-    p2p_replica = await P2P.replicate(p2p_daemon.external_port, p2p_daemon.daemon_listen_maddr)
+    p2p_replica = await P2P.replicate(p2p_daemon.daemon_listen_maddr)
 
     child_pid = p2p_daemon._child.pid
     assert is_process_running(child_pid)
@@ -139,7 +135,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
             nonlocal handler_cancelled
             handler_cancelled = True
         return dht_pb2.PingResponse(
-            peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes(), rpc_port=server.external_port),
+            peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()),
             sender_endpoint=context.handle_name, available=True)
 
     server_pid = server_primary._child.pid
@@ -155,10 +151,10 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
     await client.wait_for_at_least_n_peers(1)
 
     ping_request = dht_pb2.PingRequest(
-        peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes(), rpc_port=client.external_port),
+        peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()),
         validate=True)
     expected_response = dht_pb2.PingResponse(
-        peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes(), rpc_port=server.external_port),
+        peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()),
         sender_endpoint=handle_name, available=True)
 
     if should_cancel:
@@ -198,7 +194,7 @@ async def test_call_unary_handler_error(handle_name="handle"):
     await client.wait_for_at_least_n_peers(1)
 
     ping_request = dht_pb2.PingRequest(
-        peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes(), rpc_port=client.external_port),
+        peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()),
         validate=True)
 
     with pytest.raises(P2PHandlerError) as excinfo:
@@ -253,7 +249,7 @@ async def run_server(handler_name, server_side, client_side, response_received):
     assert is_process_running(server_pid)
 
     server_side.send(server.id)
-    server_side.send(server.external_port)
+    server_side.send(await server.identify_maddrs())
     while response_received.value == 0:
         await asyncio.sleep(0.5)
 
@@ -279,10 +275,9 @@ async def test_call_peer_different_processes():
     proc.start()
 
     peer_id = client_side.recv()
-    peer_port = client_side.recv()
+    peer_maddrs = client_side.recv()
 
-    nodes = [bootstrap_addr(peer_port, peer_id)]
-    client = await P2P.create(bootstrap_peers=nodes)
+    client = await P2P.create(bootstrap_peers=peer_maddrs)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 

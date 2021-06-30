@@ -70,11 +70,11 @@ class P2P:
         self._server_stopped = asyncio.Event()
 
     @classmethod
-    async def create(cls, *args, quic: bool = True, tls: bool = True, conn_manager: bool = True,
+    async def create(cls, *args, quic: bool = False, tls: bool = True, conn_manager: bool = True,
                      dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
                      nat_port_map: bool = True, auto_nat: bool = True,
                      bootstrap_peers: Optional[List[Multiaddr]] = None, use_ipfs: bool = False,
-                     external_port: Optional[int] = None,
+                     host_maddrs: Optional[List[Multiaddr]] = None,
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      quiet: bool = False, **kwargs) -> 'P2P':
@@ -90,7 +90,7 @@ class P2P:
         :param bootstrap: Connects to bootstrap peers and bootstraps the dht if enabled
         :param bootstrap_peers: List of bootstrap peers
         :param use_ipfs: Bootstrap to IPFS (works only if bootstrap=True and bootstrap_peers=None)
-        :param external_port: port for external connections from other p2p instances
+        :param host_maddrs: multiaddresses for external connections from other p2p instances
         :param use_relay: enables circuit relay
         :param use_relay_hop: enables hop for relay
         :param use_relay_discovery: enables passive discovery for relay
@@ -109,25 +109,23 @@ class P2P:
         with path(cli, P2PD_FILENAME) as p:
             p2pd_path = p
 
+        socket_uid = secrets.token_urlsafe(8)
+        self._daemon_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pd-{socket_uid}.sock')
+        self._client_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pclient-{socket_uid}.sock')
+
         need_bootstrap = bool(bootstrap_peers) or use_ipfs
         bootstrap_peers = cls._make_bootstrap_peers(bootstrap_peers)
         dht = cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0})
         force_reachability = cls.FORCE_REACHABILITY_MAPPING.get(force_reachability, {})
+        host_maddrs = {'hostAddrs': ','.join(str(maddr) for maddr in host_maddrs)} if host_maddrs else {}
         proc_args = self._make_process_args(
             str(p2pd_path), *args,
+            listen=self._daemon_listen_maddr,
             quic=quic, tls=tls, connManager=conn_manager,
             natPortMap=nat_port_map, autonat=auto_nat,
             relay=use_relay, relayHop=use_relay_hop, relayDiscovery=use_relay_discovery,
             autoRelay=use_auto_relay, relayHopLimit=relay_hop_limit,
-            b=need_bootstrap, q=quiet, **{**bootstrap_peers, **dht, **force_reachability, **kwargs})
-
-        if external_port is None:
-            external_port = find_open_port()
-        self._external_port = external_port
-
-        socket_uid = secrets.token_urlsafe(8)
-        self._daemon_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pd-{socket_uid}.sock')
-        self._client_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pclient-{socket_uid}.sock')
+            b=need_bootstrap, q=quiet, **{**bootstrap_peers, **dht, **force_reachability, **host_maddrs, **kwargs})
 
         self._initialize(proc_args)
         for try_count in range(NUM_RETRIES):
@@ -144,10 +142,9 @@ class P2P:
         return self
 
     @classmethod
-    async def replicate(cls, external_port: int, daemon_listen_maddr: Multiaddr) -> 'P2P':
+    async def replicate(cls, daemon_listen_maddr: Multiaddr) -> 'P2P':
         """
         Connect to existing p2p daemon
-        :param external_port: port for external connections from other p2p instances
         :param daemon_listen_maddr: multiaddr of the existing p2p daemon
         :return: new wrapper for the existing p2p daemon
         """
@@ -157,8 +154,6 @@ class P2P:
         # Use external already running p2pd
         self._child = None
         self._alive = True
-
-        self._external_port = external_port
 
         socket_uid = secrets.token_urlsafe(8)
         self._daemon_listen_maddr = daemon_listen_maddr
@@ -187,11 +182,6 @@ class P2P:
         raise RuntimeError('Not enough peers')
 
     def _initialize(self, proc_args: List[str]) -> None:
-        proc_args = deepcopy(proc_args)
-        proc_args.extend(self._make_process_args(
-            hostAddrs=f'/ip4/0.0.0.0/tcp/{self._external_port},/ip4/0.0.0.0/udp/{self._external_port}/quic',
-            listen=self._daemon_listen_maddr
-        ))
         self._child = subprocess.Popen(args=proc_args, encoding="utf8")
         self._alive = True
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
@@ -199,10 +189,6 @@ class P2P:
     async def _wait_for_client(self, delay: float = 0) -> None:
         await asyncio.sleep(delay)
         self.id, _ = await self._client.identify()
-
-    @property
-    def external_port(self) -> int:
-        return self._external_port
 
     @property
     def daemon_listen_maddr(self) -> Multiaddr:
