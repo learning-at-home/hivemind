@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures._base as base
-import ctypes
 import multiprocessing as mp
 import multiprocessing.connection
 import os
 import threading
 from typing import Tuple, Generic, TypeVar, Dict, Optional, Any, Callable
+
+import torch
+
 from hivemind.utils.logging import get_logger
 
 
@@ -82,12 +84,11 @@ class MPFuture(base.Future, Generic[ResultType]):
     """
 
     def __init__(self, loop: Optional[asyncio.BaseEventLoop] = None):
-        self._shared_state_code = mp.Value(ctypes.c_byte)
+        self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state, self._result, self._exception = base.PENDING, None, None
         self._origin_pid, self._uid = os.getpid(), id(self)
         # note: self._uid is only unique inside process that spawned it
         super().__init__()
-
         if ACTIVE_PID != self._origin_pid:
             _initialize_mpfuture_backend()
         ACTIVE_FUTURES[self._uid] = self
@@ -100,11 +101,11 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     @property
     def _state(self) -> State:
-        return ALL_STATES[self._shared_state_code.value]
+        return ALL_STATES[self._shared_state_code.item()]
 
     @_state.setter
     def _state(self, new_state):
-        self._shared_state_code.value = ALL_STATES.index(new_state)
+        self._shared_state_code[...] = ALL_STATES.index(new_state)
         if self._state in TERMINAL_STATES and self._aio_event is not None:
             asyncio.run_coroutine_threadsafe(self._set_event(), self.get_loop())
 
@@ -197,3 +198,13 @@ class MPFuture(base.Future, Generic[ResultType]):
         if self._aio_event:
             self._aio_event.set()
         del ACTIVE_FUTURES[self._uid]
+
+    def __getstate__(self):
+        return dict(_shared_state_code=self._shared_state_code,
+                    _origin_pid=self._origin_pid, _uid=self._uid,
+                    _result=self._result, _exception=self._exception)
+
+    def __setstate__(self, state):
+        self._shared_state_code = state['_shared_state_code']
+        self._origin_pid, self._uid = state['_origin_pid'], state['_uid']
+        self._result, self._exception = state['_result'], state['_exception']

@@ -187,6 +187,28 @@ async def test_await_mpfuture():
     p.join()
 
 
+def test_mpfuture_bidirectional():
+    evt = mp.Event()
+    future_from_main = hivemind.MPFuture()
+
+    def _future_creator():
+        future_from_fork = hivemind.MPFuture()
+        future_from_main.set_result(('abc', future_from_fork))
+
+        if future_from_fork.result() == ['we', 'need', 'to', 'go', 'deeper']:
+            evt.set()
+
+    p = mp.Process(target=_future_creator)
+    p.start()
+
+    out = future_from_main.result()
+    assert isinstance(out[1], hivemind.MPFuture)
+    out[1].set_result(['we', 'need', 'to', 'go', 'deeper'])
+
+    p.join()
+    assert evt.is_set()
+
+
 def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     torch.manual_seed(0)
     X = torch.randn(*size)
