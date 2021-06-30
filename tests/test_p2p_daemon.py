@@ -44,6 +44,12 @@ async def test_daemon_killed_on_del():
 
 
 @pytest.mark.asyncio
+async def test_error_for_wrong_daemon_arguments():
+    with pytest.raises(RuntimeError):
+        await P2P.create(unkown_argument=True, ping_retry_delay=0)
+
+
+@pytest.mark.asyncio
 async def test_server_client_connection():
     server = await P2P.create()
     peers = await server.list_peers()
