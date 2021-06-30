@@ -62,6 +62,7 @@ class P2P:
     }
 
     def __init__(self):
+        self.id = None
         self._child = None
         self._alive = False
         self._listen_task = None
@@ -135,7 +136,7 @@ class P2P:
             except Exception as e:
                 if try_count == ping_n_retries - 1:
                     logger.error(f'Failed to ping p2pd: {e}')
-                    self.shutdown()
+                    await self.shutdown()
                     if isinstance(e, FileNotFoundError):  # The daemon's Unix socket is not found
                         raise RuntimeError('The p2p daemon failed to start, see its stderr above for the reasons')
                     raise
