@@ -1,9 +1,9 @@
 import asyncio
 import secrets
-import subprocess
 from copy import deepcopy
 from dataclasses import dataclass
 from importlib.resources import path
+from subprocess import Popen
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import google.protobuf
@@ -189,7 +189,7 @@ class P2P:
         raise RuntimeError('Not enough peers')
 
     def _initialize(self, proc_args: List[str]) -> None:
-        self._child = subprocess.Popen(args=proc_args, encoding="utf8")
+        self._child = Popen(args=proc_args, encoding="utf8")
         self._alive = True
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
