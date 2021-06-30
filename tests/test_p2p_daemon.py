@@ -196,7 +196,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
         assert actual_response == expected_response
         assert not handler_cancelled
 
-    await server.stop_listening()
+    await server.shutdown()
     await server_primary.shutdown()
     assert not is_process_running(server_pid)
 
@@ -228,7 +228,6 @@ async def test_call_unary_handler_error(handle_name="handle"):
         await client.call_unary_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)
     assert 'boom' in str(excinfo.value)
 
-    await server.stop_listening()
     await server.shutdown()
     await client.shutdown()
 
@@ -261,7 +260,6 @@ async def test_call_peer_single_process(test_input, expected, handle, handler_na
     result = MSGPackSerializer.loads(result_msgp)
     assert result == expected
 
-    await server.stop_listening()
     await server.shutdown()
     assert not is_process_running(server_pid)
 
@@ -280,7 +278,6 @@ async def run_server(handler_name, server_side, client_side, response_received):
     while response_received.value == 0:
         await asyncio.sleep(0.5)
 
-    await server.stop_listening()
     await server.shutdown()
     assert not is_process_running(server_pid)
 
@@ -349,7 +346,6 @@ async def test_call_peer_torch_square(test_input, expected, handler_name="handle
     result = deserialize_torch_tensor(result)
     assert torch.allclose(result, expected)
 
-    await server.stop_listening()
     await server.shutdown()
     await client.shutdown()
 
@@ -382,7 +378,6 @@ async def test_call_peer_torch_add(test_input, expected, handler_name="handle"):
     result = deserialize_torch_tensor(result)
     assert torch.allclose(result, expected)
 
-    await server.stop_listening()
     await server.shutdown()
     await client.shutdown()
 
@@ -411,9 +406,10 @@ async def test_call_peer_error(replicate, handler_name="handle"):
     result = await client.call_peer_handler(server.id, handler_name, inp_msgp)
     assert result == b'something went wrong :('
 
-    await server.stop_listening()
     await server_primary.shutdown()
+    await server.shutdown()
     await client_primary.shutdown()
+    await client.shutdown()
 
 
 @pytest.mark.asyncio
@@ -444,8 +440,8 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     result = await client.call_peer_handler(server_id, handler_name + '2', b'3')
     assert result == b"replica2"
 
-    await server_replica1.stop_listening()
-    await server_replica2.stop_listening()
+    await server_replica1.shutdown()
+    await server_replica2.shutdown()
 
     # Primary does not handle replicas protocols
     with pytest.raises(Exception):
@@ -453,6 +449,5 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     with pytest.raises(Exception):
         await client.call_peer_handler(server_id, handler_name + '2', b'')
 
-    await server_primary.stop_listening()
     await server_primary.shutdown()
     await client.shutdown()

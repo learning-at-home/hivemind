@@ -308,14 +308,14 @@ class P2P:
 
         return do_handle_unary_stream
 
-    def start_listening(self) -> None:
+    def _start_listening(self) -> None:
         async def listen() -> None:
             async with self._client.listen():
                 await self._server_stopped.wait()
 
         self._listen_task = asyncio.create_task(listen())
 
-    async def stop_listening(self) -> None:
+    async def _stop_listening(self) -> None:
         if self._listen_task is not None:
             self._server_stopped.set()
             self._listen_task.cancel()
@@ -327,13 +327,13 @@ class P2P:
 
     async def add_stream_handler(self, name: str, handle: Callable[[bytes], bytes]) -> None:
         if self._listen_task is None:
-            self.start_listening()
+            self._start_listening()
         await self._client.stream_handler(name, self._handle_stream(handle))
 
     async def add_unary_handler(self, name: str, handle: Callable[[Any, P2PContext], Any],
                                 in_proto_type: type, out_proto_type: type) -> None:
         if self._listen_task is None:
-            self.start_listening()
+            self._start_listening()
         await self._client.stream_handler(
             name, self._handle_unary_stream(handle, name, in_proto_type, out_proto_type))
 
@@ -366,6 +366,7 @@ class P2P:
         return self._alive
 
     async def shutdown(self) -> None:
+        await self._stop_listening()
         await asyncio.get_event_loop().run_in_executor(None, self._terminate)
 
     def _terminate(self) -> None:
