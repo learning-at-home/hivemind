@@ -115,8 +115,8 @@ class DHT(mp.Process):
         :param kwargs: parameters forwarded to DHTNode.get_many_by_id
         :returns: (value, expiration time); if value was not found, returns None
         """
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get', [], dict(key=key, latest=latest, future=_future, **kwargs)))
+        future = MPFuture()
+        self.pipe.send(('_get', [], dict(key=key, latest=latest, future=future, **kwargs)))
         return future if return_future else future.result()
 
     async def _get(self, node: DHTNode, key: DHTKey, latest: bool, future: MPFuture, **kwargs):
@@ -141,9 +141,9 @@ class DHT(mp.Process):
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        future, _future = MPFuture.make_pair()
+        future = MPFuture()
         self.pipe.send(('_store', [], dict(key=key, value=value, expiration_time=expiration_time, subkey=subkey,
-                                           future=_future, **kwargs)))
+                                           future=future, **kwargs)))
         return future if return_future else future.result()
 
     async def _store(self, node: DHTNode, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
@@ -172,7 +172,7 @@ class DHT(mp.Process):
           or use asyncio.get_event_loop().run_in_executor(...) to prevent coroutine from blocking background DHT tasks
         :note: when run_coroutine is called with wait=False, MPFuture can be cancelled to interrupt the task.
         """
-        future, _future = MPFuture.make_pair()
+        future = MPFuture()
         self.pipe.send(('_run_coroutine', [], dict(coro=coro, future=_future)))
         return future if return_future else future.result()
 
@@ -214,8 +214,8 @@ class DHT(mp.Process):
         """
         assert num_peers is None or peers == (), "please specify either a num_peers or the list of peers, not both"
         assert not isinstance(peers, str) and isinstance(peers, Sequence), "Please send a list / tuple of endpoints"
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=_future)))
+        future = MPFuture()
+        self.pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=future)))
         return future.result()
 
     async def _get_visible_address(self, node: DHTNode, num_peers: Optional[int], peers: Sequence[Endpoint],

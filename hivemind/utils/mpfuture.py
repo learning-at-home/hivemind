@@ -197,7 +197,8 @@ class MPFuture(base.Future, Generic[ResultType]):
     def __del__(self):
         if self._aio_event:
             self._aio_event.set()
-        del ACTIVE_FUTURES[self._uid]
+        if os.getpid() == self._origin_pid:
+            del ACTIVE_FUTURES[self._uid]
 
     def __getstate__(self):
         return dict(_shared_state_code=self._shared_state_code,
@@ -210,3 +211,4 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._result, self._exception = state['_result'], state['_exception']
         self._waiters, self._done_callbacks = [], []
         self._condition = threading.Condition()
+        self._aio_event = self._loop = None

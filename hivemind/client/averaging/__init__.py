@@ -272,9 +272,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             weight = float(self.mode != AveragingMode.AUX)
         assert isinstance(weight, (int, float)) and weight >= 0, f"Expected a positive int/float, got {type(weight)}"
 
-        future, _future = MPFuture.make_pair()
+        future = MPFuture()
         gather_binary = self.serializer.dumps(gather)  # serialize here to avoid loading modules in the averager process
-        self.pipe.send(('_step', [], dict(future=_future, gather_binary=gather_binary, weight=weight,
+        self.pipe.send(('_step', [], dict(future=future, gather_binary=gather_binary, weight=weight,
                                           allow_retries=allow_retries, timeout=timeout)))
         return future.result() if wait else future
 
@@ -445,8 +445,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     async def _get_current_state_from_host_process(self):
         """ Executed in the averager process inside rpc_download_state """
-        future, _future = MPFuture.make_pair()
-        self._pipe.send(('_TRIGGER_GET_CURRENT_STATE', _future))
+        future = MPFuture()
+        self._pipe.send(('_TRIGGER_GET_CURRENT_STATE', future))
         return await future
 
     def load_state_from_peers(self, wait=True) -> Optional[Tuple[Any, Sequence[torch.Tensor]]]:
@@ -459,8 +459,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         The exact contents of both metadata and tensors are determined by get_current_state method
         """
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_load_state_from_peers', [], dict(future=_future)))
+        future = MPFuture()
+        self.pipe.send(('_load_state_from_peers', [], dict(future=future)))
         return future.result() if wait else future
 
     async def _load_state_from_peers(self, future: MPFuture):
@@ -519,8 +519,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :param wait: if True, return bits immediately. Otherwise return awaitable MPFuture
         :returns: averager's current group key bits (without prefix)
         """
-        future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_group_bits', [], dict(future=_future)))
+        future = MPFuture()
+        self.pipe.send(('_get_group_bits', [], dict(future=future)))
         return future.result() if wait else future
 
     async def _get_group_bits(self, future: MPFuture):
@@ -531,9 +531,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :param group_bits: group bits (string of '0' or '1') to be used in averager's group key
         :param wait: if True, wait until the update is confirmed by the averager. Otherwise return immediately
         """
-        future, _future = MPFuture.make_pair()
+        future = MPFuture()
         assert all(bit in '01' for bit in group_bits)
-        self.pipe.send(('_set_group_bits', [], dict(group_bits=group_bits, future=_future)))
+        self.pipe.send(('_set_group_bits', [], dict(group_bits=group_bits, future=future)))
         return future.result() if wait else future
 
     async def _set_group_bits(self, group_bits: str, future: MPFuture):
