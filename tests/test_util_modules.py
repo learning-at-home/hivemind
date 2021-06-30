@@ -15,6 +15,7 @@ from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 from hivemind.utils import MSGPackSerializer
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.asyncio import amap_in_executor, aiter, aenumerate, achain, anext, azip
+from hivemind.utils.mpfuture import InvalidStateError
 
 
 def test_mpfuture_result():
@@ -31,11 +32,6 @@ def test_mpfuture_result():
     p.join()
 
     assert future.result() == 321
-
-    with pytest.raises(concurrent.futures.InvalidStateError):
-        future.set_result(123)
-    with pytest.raises(concurrent.futures.InvalidStateError):
-        future.set_exception(ValueError())
     assert future.cancel() is False
     assert future.done() and not future.running() and not future.cancelled()
 
@@ -77,9 +73,9 @@ def test_mpfuture_cancel():
             future.result()
         with pytest.raises(concurrent.futures.CancelledError):
             future.exception()
-        with pytest.raises(concurrent.futures.InvalidStateError):
+        with pytest.raises(InvalidStateError):
             future.set_result(123)
-        with pytest.raises(concurrent.futures.InvalidStateError):
+        with pytest.raises(InvalidStateError):
             future.set_exception(NotImplementedError())
         assert future.cancelled() and future.done() and not future.running()
         evt.set()

@@ -21,6 +21,13 @@ PID, UID, State, PipeEnd = int, int, Any, mp.connection.Connection
 ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED
 TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
 
+try:
+    from concurrent.futures import InvalidStateError
+except ImportError:
+    class InvalidStateError:
+        """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
+
+
 INITIALIZER_LOCK = mp.Lock()
 PIPE_WAITER: Optional[threading.Thread] = None
 MPFUTURE_PIPES: Dict[PID, Tuple[PipeEnd, PipeEnd]] = mp.Manager().dict()
@@ -91,6 +98,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         super().__init__()
         if ACTIVE_PID != self._origin_pid:
             _initialize_mpfuture_backend()
+        assert self._uid not in ACTIVE_FUTURES
         ACTIVE_FUTURES[self._uid] = self
 
         try:
@@ -116,7 +124,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         if os.getpid() == self._origin_pid:
             super().set_result(result)
         elif self._state in TERMINAL_STATES:
-            raise base.InvalidStateError(f"Can't set_result to a future that is {self._state} ({self})")
+            raise InvalidStateError(f"Can't set_result to a future that is {self._state} ({self})")
         else:
             _send_update(self._origin_pid, self._uid, base.FINISHED, result)
 
@@ -124,7 +132,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         if os.getpid() == self._origin_pid:
             super().set_exception(exception)
         elif self._state in TERMINAL_STATES:
-            raise base.InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self})")
+            raise InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self})")
         else:
             _send_update(self._origin_pid, self._uid, Exception, exception)
 
@@ -135,7 +143,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         elif self._state == base.CANCELLED:
             return False
         else:
-            raise base.InvalidStateError(f"Can't set_running_or_notify_cancel when future is in {self._state} ({self})")
+            raise InvalidStateError(f"Can't set_running_or_notify_cancel when future is in {self._state} ({self})")
 
     def cancel(self):
         if os.getpid() == self._origin_pid:
@@ -195,10 +203,10 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise asyncio.CancelledError()
 
     def __del__(self):
-        if self._aio_event:
-            self._aio_event.set()
         if os.getpid() == self._origin_pid:
             del ACTIVE_FUTURES[self._uid]
+        if getattr(self, '_aio_event', None):
+            self._aio_event.set()
 
     def __getstate__(self):
         return dict(_shared_state_code=self._shared_state_code,
