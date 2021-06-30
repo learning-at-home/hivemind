@@ -1,4 +1,5 @@
 import asyncio
+import secrets
 import subprocess
 from copy import deepcopy
 from dataclasses import dataclass
@@ -73,10 +74,10 @@ class P2P:
                      dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
                      nat_port_map: bool = True, auto_nat: bool = True,
                      bootstrap_peers: Optional[List[Multiaddr]] = None, use_ipfs: bool = False,
-                     external_port: Optional[int] = None, daemon_listen_port: Optional[int] = None,
+                     external_port: Optional[int] = None,
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
-                     quiet: bool = True, **kwargs) -> 'P2P':
+                     quiet: bool = False, **kwargs) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
         :param quic: Enables the QUIC transport
@@ -90,7 +91,6 @@ class P2P:
         :param bootstrap_peers: List of bootstrap peers
         :param use_ipfs: Bootstrap to IPFS (works only if bootstrap=True and bootstrap_peers=None)
         :param external_port: port for external connections from other p2p instances
-        :param daemon_listen_port: port for connection daemon and client binding
         :param use_relay: enables circuit relay
         :param use_relay_hop: enables hop for relay
         :param use_relay_discovery: enables passive discovery for relay
@@ -120,29 +120,36 @@ class P2P:
             relay=use_relay, relayHop=use_relay_hop, relayDiscovery=use_relay_discovery,
             autoRelay=use_auto_relay, relayHopLimit=relay_hop_limit,
             b=need_bootstrap, q=quiet, **{**bootstrap_peers, **dht, **force_reachability, **kwargs})
-        self._assign_daemon_ports(external_port, daemon_listen_port)
 
+        if external_port is None:
+            external_port = find_open_port()
+        self._external_port = external_port
+
+        socket_uid = secrets.token_urlsafe(8)
+        self._daemon_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pd-{socket_uid}.sock')
+        self._client_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pclient-{socket_uid}.sock')
+
+        self._initialize(proc_args)
         for try_count in range(NUM_RETRIES):
             try:
-                self._initialize(proc_args)
                 await self._wait_for_client(RETRY_DELAY * (2 ** try_count))
                 break
             except Exception as e:
-                logger.debug(f"Failed to initialize p2p daemon: {e}")
-                self._terminate()
                 if try_count == NUM_RETRIES - 1:
+                    if isinstance(e, FileNotFoundError):  # The daemon's Unix socket is not found
+                        raise RuntimeError('The p2p daemon failed to start, see its stderr above for the reasons')
+                    self._terminate()
                     raise
-                self._assign_daemon_ports()
 
         return self
 
     @classmethod
-    async def replicate(cls, external_port: int, daemon_listen_port: int) -> 'P2P':
+    async def replicate(cls, external_port: int, daemon_listen_maddr: Multiaddr) -> 'P2P':
         """
         Connect to existing p2p daemon
         :param external_port: port for external connections from other p2p instances
-        :param daemon_listen_port: port for connection daemon and client binding
-        :return: new wrapper for existing p2p daemon
+        :param daemon_listen_maddr: multiaddr of the existing p2p daemon
+        :return: new wrapper for the existing p2p daemon
         """
 
         self = cls()
@@ -150,11 +157,15 @@ class P2P:
         # Use external already running p2pd
         self._child = None
         self._alive = True
-        self._assign_daemon_ports(external_port, daemon_listen_port)
-        self._client_listen_port = find_open_port()
-        self._client = p2pclient.Client(
-            Multiaddr(f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}'),
-            Multiaddr(f'/ip4/127.0.0.1/tcp/{self._client_listen_port}'))
+
+        self._external_port = external_port
+
+        socket_uid = secrets.token_urlsafe(8)
+        self._daemon_listen_maddr = daemon_listen_maddr
+        self._client_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pclient-{socket_uid}.sock')
+
+        self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
+
         await self._wait_for_client()
         return self
 
@@ -179,32 +190,23 @@ class P2P:
         proc_args = deepcopy(proc_args)
         proc_args.extend(self._make_process_args(
             hostAddrs=f'/ip4/0.0.0.0/tcp/{self._external_port},/ip4/0.0.0.0/udp/{self._external_port}/quic',
-            listen=f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}'
+            listen=self._daemon_listen_maddr
         ))
         self._child = subprocess.Popen(args=proc_args, encoding="utf8")
         self._alive = True
-        self._client_listen_port = find_open_port()
-        self._client = p2pclient.Client(
-            Multiaddr(f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}'),
-            Multiaddr(f'/ip4/127.0.0.1/tcp/{self._client_listen_port}'))
+        self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
     async def _wait_for_client(self, delay: float = 0) -> None:
         await asyncio.sleep(delay)
         self.id, _ = await self._client.identify()
 
-    def _assign_daemon_ports(self, external_port: int = None, daemon_listen_port: int = None) -> None:
-        if external_port is None:
-            external_port = find_open_port()
-        if daemon_listen_port is None:
-            daemon_listen_port = find_open_port()
-            while daemon_listen_port == external_port:
-                daemon_listen_port = find_open_port()
-
-        self._external_port, self._daemon_listen_port = external_port, daemon_listen_port
-
     @property
     def external_port(self) -> int:
         return self._external_port
+
+    @property
+    def daemon_listen_maddr(self) -> Multiaddr:
+        return self._daemon_listen_maddr
 
     @staticmethod
     async def send_raw_data(data: bytes, writer: asyncio.StreamWriter) -> None:
