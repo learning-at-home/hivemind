@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 # flavour types
 ResultType = TypeVar('ResultType')
 PID, UID, State, PipeEnd = int, int, Any, mp.connection.Connection
-ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CANCELLED
+ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED
 TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
 
 INITIALIZER_LOCK = mp.Lock()
@@ -30,7 +30,7 @@ def _initialize_mpfuture_backend():
     global ACTIVE_PID, ACTIVE_FUTURES, PIPE_WAITER
     pid = os.getpid()
     logger.debug(f"Initializing MPFuture backend for pid {pid}")
-    assert PIPE_WAITER is None and pid != ACTIVE_PID and pid not in MPFUTURE_PIPES, "already initialized"
+    assert pid != ACTIVE_PID and pid not in MPFUTURE_PIPES, "already initialized"
 
     with INITIALIZER_LOCK:
         ACTIVE_PID, ACTIVE_FUTURES, MPFUTURE_PIPES[pid] = pid, {}, mp.Pipe(duplex=False)
