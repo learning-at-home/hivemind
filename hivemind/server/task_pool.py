@@ -14,7 +14,8 @@ from typing import List, Tuple, Dict, Any, Generator
 
 import torch
 
-from hivemind.utils import MPFuture, get_logger, FutureStateError
+from hivemind.utils import MPFuture, get_logger
+from concurrent.futures import InvalidStateError
 
 logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))
@@ -127,7 +128,7 @@ class TaskPool(TaskPoolBase):
                 if task.future.set_running_or_notify_cancel():
                     batch.append(task)
                     total_size += task_size
-            except FutureStateError as e:
+            except InvalidStateError as e:
                 logger.debug(f"Failed to add task to batch: {task.future} raised {e}")
 
     def run(self, *args, **kwargs):
@@ -196,7 +197,7 @@ class TaskPool(TaskPoolBase):
             for task, task_outputs in zip(batch_tasks, outputs_per_task):
                 try:
                     task.future.set_result(tuple(task_outputs))
-                except FutureStateError as e:
+                except InvalidStateError as e:
                     logger.debug(f"Failed to send task result due to an exception: {e}")
 
     @property
