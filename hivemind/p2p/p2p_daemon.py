@@ -77,7 +77,7 @@ class P2P:
                      host_maddrs: Optional[List[Multiaddr]] = None,
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
-                     quiet: bool = False, **kwargs) -> 'P2P':
+                     quiet: bool = True, **kwargs) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
         :param quic: Enables the QUIC transport
@@ -130,7 +130,8 @@ class P2P:
         self._initialize(proc_args)
         for try_count in range(NUM_RETRIES):
             try:
-                await self._wait_for_client(RETRY_DELAY * (2 ** try_count))
+                await asyncio.sleep(RETRY_DELAY * (2 ** try_count))
+                await self._ping_client()
                 break
             except Exception as e:
                 if try_count == NUM_RETRIES - 1:
@@ -186,8 +187,7 @@ class P2P:
         self._alive = True
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
-    async def _wait_for_client(self, delay: float = 0) -> None:
-        await asyncio.sleep(delay)
+    async def _ping_client(self) -> None:
         self.id, _ = await self._client.identify()
 
     @property
