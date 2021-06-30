@@ -1,5 +1,6 @@
 import asyncio
 import multiprocessing as mp
+import socket
 import subprocess
 from functools import partial
 from typing import List
@@ -12,6 +13,7 @@ from multiaddr import Multiaddr
 from hivemind.p2p import P2P, P2PHandlerError, PeerID
 from hivemind.proto import dht_pb2, runtime_pb2
 from hivemind.utils import MSGPackSerializer
+from hivemind.utils.networking import find_open_port
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 
 
@@ -49,6 +51,25 @@ async def test_server_client_connection():
 
     nodes = await bootstrap_from([server])
     client = await P2P.create(bootstrap_peers=nodes)
+    await client.wait_for_at_least_n_peers(1)
+
+    peers = await client._client.list_peers()
+    assert len(peers) == 1
+    peers = await server._client.list_peers()
+    assert len(peers) == 1
+
+
+@pytest.mark.asyncio
+async def test_quic_transport():
+    server_port = find_open_port((socket.AF_INET, socket.SOCK_DGRAM))
+    server = await P2P.create(quic=True, host_maddrs=[Multiaddr(f'/ip4/127.0.0.1/udp/{server_port}/quic')])
+    peers = await server._client.list_peers()
+    assert len(peers) == 0
+
+    nodes = await bootstrap_from([server])
+    client_port = find_open_port((socket.AF_INET, socket.SOCK_DGRAM))
+    client = await P2P.create(quic=True, host_maddrs=[Multiaddr(f'/ip4/127.0.0.1/udp/{client_port}/quic')],
+                              bootstrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
     peers = await client._client.list_peers()
