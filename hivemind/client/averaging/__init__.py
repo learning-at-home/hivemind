@@ -76,6 +76,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param allow_state_sharing: if set to True, other peers can download this peer's state. Can be overwritten
       with averager.allow_state_sharing = True / False
     :param shutdown_grace_seconds: when calling .shutdown, wait for up to this many seconds before terminating
+
     Example:
 
     >>> averager = DecentralizedAverager(...)
