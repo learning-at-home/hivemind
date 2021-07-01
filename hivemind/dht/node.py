@@ -637,6 +637,9 @@ class DHTNode:
 
             await asyncio.sleep(max(0.0, period - (get_dht_time() - refresh_time)))
 
+    async def identify_maddrs(self, latest: bool = False) -> List[Multiaddr]:
+        return await self.protocol.p2p.identify_maddrs(latest=latest)
+
 
 @dataclass(init=True, repr=True, frozen=False, order=False)
 class _SearchState:

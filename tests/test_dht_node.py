@@ -363,13 +363,12 @@ def test_dht_node():
 @pytest.mark.asyncio
 async def test_dhtnode_replicas():
     dht_size = 20
-    initial_peers = 3
     num_replicas = random.randint(1, 20)
 
-    peers = []
-    for i in range(dht_size):
-        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(initial_peers, len(peers)))]
-        peers.append(await DHTNode.create(initial_peers=neighbors_i, num_replicas=num_replicas))
+    peers = [await hivemind.DHTNode.create(num_replicas=num_replicas)]
+    initial_peers = await peers[0].identify_maddrs()
+    peers += await asyncio.gather(*[hivemind.DHTNode.create(initial_peers=initial_peers, num_replicas=num_replicas)
+                                    for _ in range(dht_size - 1)])
 
     you = random.choice(peers)
     assert await you.store('key1', 'foo', get_dht_time() + 999)
@@ -390,7 +389,7 @@ async def test_dhtnode_replicas():
 @pytest.mark.asyncio
 async def test_dhtnode_caching(T=0.05):
     node2 = await hivemind.DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
-    node1 = await hivemind.DHTNode.create(initial_peers=[f'localhost:{node2.port}'],
+    node1 = await hivemind.DHTNode.create(initial_peers=await node2.protocol.p2p.identify_maddrs(),
                                           cache_refresh_before_expiry=5 * T, listen=False, reuse_get_requests=False)
     await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
     await node2.store('k2', [654, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
@@ -435,10 +434,10 @@ async def test_dhtnode_caching(T=0.05):
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_reuse_get():
-    peers = []
-    for i in range(10):
-        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
+    peers = [await hivemind.DHTNode.create(parallel_rpc=256)]
+    initial_peers = await peers[0].identify_maddrs()
+    peers += await asyncio.gather(*[hivemind.DHTNode.create(initial_peers=initial_peers, parallel_rpc=256)
+                                    for _ in range(9)])
 
     await asyncio.gather(
         random.choice(peers).store('k1', 123, hivemind.get_dht_time() + 999),
@@ -469,50 +468,36 @@ async def test_dhtnode_reuse_get():
 @pytest.mark.asyncio
 async def test_dhtnode_blacklist():
     node1 = await hivemind.DHTNode.create(blacklist_time=999)
-    node2 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
-    node3 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
-    node4 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
+    initial_peers = await node1.identify_maddrs()
+    node2, node3, node4 = await asyncio.gather(
+        *[hivemind.DHTNode.create(blacklist_time=999, initial_peers=initial_peers)
+          for _ in range(3)])
 
     assert await node2.store('abc', 123, expiration_time=hivemind.get_dht_time() + 99)
     assert len(node2.blacklist.ban_counter) == 0
 
-    await node3.shutdown()
-    await node4.shutdown()
+    await asyncio.gather(node3.shutdown(), node4.shutdown())
 
     assert await node2.store('def', 456, expiration_time=hivemind.get_dht_time() + 99)
 
-    assert len(node2.blacklist.ban_counter) == 2
+    assert set(node2.blacklist.ban_counter.keys()) == {node3.endpoint, node4.endpoint}
 
-    for banned_peer in node2.blacklist.ban_counter:
-        assert any(banned_peer.endswith(str(port)) for port in [node3.port, node4.port])
-
-    node3_endpoint = await node3.protocol.get_outgoing_request_endpoint(f"{hivemind.LOCALHOST}:{node1.port}")
-    node3_endpoint = replace_port(node3_endpoint, node3.port)
     assert await node1.get('abc', latest=True)  # force node1 to crawl dht and discover unresponsive peers
-    assert node3_endpoint in node1.blacklist
+    assert node3.endpoint in node1.blacklist
 
-    node2_endpoint = await node2.protocol.get_outgoing_request_endpoint(f"{hivemind.LOCALHOST}:{node1.port}")
-    node2_endpoint = replace_port(node2_endpoint, node2.port)
     assert await node1.get('abc', latest=True)  # force node1 to crawl dht and discover unresponsive peers
-    assert node2_endpoint not in node1.blacklist
+    assert node2.endpoint not in node1.blacklist
 
-
-@pytest.mark.forked
-@pytest.mark.asyncio
-async def test_dhtnode_validate(fake_endpoint='127.0.0.721:*'):
-    node1 = await hivemind.DHTNode.create(blacklist_time=999)
-    with pytest.raises(ValidationError):
-        node2 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"],
-                                              endpoint=fake_endpoint)
+    await asyncio.gather(node1.shutdown(), node2.shutdown())
 
 
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_edge_cases():
-    peers = []
-    for i in range(5):
-        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=4))
+    peers = [await hivemind.DHTNode.create(parallel_rpc=4)]
+    initial_peers = await peers[0].identify_maddrs()
+    peers += await asyncio.gather(*[hivemind.DHTNode.create(initial_peers=initial_peers, parallel_rpc=4)
+                                    for _ in range(4)])
 
     subkeys = [0, '', False, True, 'abyrvalg', 4555]
     keys = subkeys + [()]
@@ -525,3 +510,5 @@ async def test_dhtnode_edge_cases():
         assert stored is not None
         assert subkey in stored.value
         assert stored.value[subkey].value == value
+
+    await asyncio.wait([node.shutdown() for node in peers])
