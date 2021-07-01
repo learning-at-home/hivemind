@@ -102,8 +102,9 @@ a new test to make sure it's not reintroduced by future changes.
 To run tests, you need to install hivemind in development mode with additional dependencies: `pip install -e .[dev]`.
 You can run all tests with `pytest tests/` or choose a specific subset, e.g., `pytest tests/test_dht.py`.
 
-When investigating tests, please note that pytest automatically wraps all hivemind tests with fixtures defined in a 
-global configuration file: `tests/conftest.py` . For more informantion, refer to [pytest docs](https://docs.pytest.org/en/6.2.x/fixture.html).
+When investigating test behavior, please note that pytest automatically wraps all hivemind tests with fixtures defined
+in a global configuration file: `tests/conftest.py` . For more informantion, refer to 
+[pytest documentation on fixtures](https://docs.pytest.org/en/6.2.x/fixture.html).
 
 ## Building documentation
 
