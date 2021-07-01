@@ -42,7 +42,7 @@ def test_store_get_experts():
     # test graceful shutdown
     first_peer.shutdown()
     other_peer.shutdown()
-    time.sleep(0.1)
+    time.sleep(1.0)
     assert sum(peer.is_alive() for peer in peers) == len(peers) - 2
     remaining_peer1 = random.choice([peer for peer in peers if peer.is_alive()])
     remaining_peer2 = random.choice([peer for peer in peers if peer.is_alive()])
