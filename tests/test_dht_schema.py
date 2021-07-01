@@ -4,7 +4,7 @@ from typing import Dict
 
 import hivemind
 from hivemind.dht import get_dht_time
-from hivemind.dht.node import DHTNode, LOCALHOST
+from hivemind.dht.node import DHTNode
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
 
@@ -20,8 +20,7 @@ async def dht_nodes_with_schema():
     validator = SchemaValidator(SampleSchema)
 
     alice = await DHTNode.create(record_validator=validator)
-    bob = await DHTNode.create(
-        record_validator=validator, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+    bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.identify_maddrs())
     return alice, bob
 
 
@@ -108,8 +107,7 @@ async def test_keys_outside_schema(dht_nodes_with_schema):
         assert validator.merge_with(SchemaValidator(MergedSchema, allow_extra_keys=False))
 
         alice = await DHTNode.create(record_validator=validator)
-        bob = await DHTNode.create(
-            record_validator=validator, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+        bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.identify_maddrs())
 
         store_ok = await bob.store('unknown_key', b'foo_bar', get_dht_time() + 10)
         assert store_ok == allow_extra_keys
@@ -131,8 +129,7 @@ async def test_prefix():
     validator = SchemaValidator(Schema, allow_extra_keys=False, prefix='prefix')
 
     alice = await DHTNode.create(record_validator=validator)
-    bob = await DHTNode.create(
-        record_validator=validator, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+    bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.identify_maddrs())
 
     assert await bob.store('prefix_field', 777, get_dht_time() + 10)
     assert not await bob.store('prefix_field', 'string_value', get_dht_time() + 10)
