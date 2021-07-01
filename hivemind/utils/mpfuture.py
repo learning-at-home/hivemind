@@ -86,10 +86,20 @@ class MPFuture(base.Future, Generic[ResultType]):
     @_state.setter
     def _state(self, new_state: State):
         self._shared_state_code[...] = ALL_STATES.index(new_state)
-        if self._state in TERMINAL_STATES and self._aio_event is not None and not self._aio_event.is_set():
-            asyncio.run_coroutine_threadsafe(self._set_event(), self.get_loop()).result()
+        if self._state in TERMINAL_STATES and self._loop is not None and not self._aio_event.is_set():
+            self._set_event_threadsafe()
 
-    async def _set_event(self):
+    def _set_event_threadsafe(self):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop == self.get_loop():
+            asyncio.create_task(self._event_setter())
+        else:
+            asyncio.run_coroutine_threadsafe(self._event_setter(), self._loop)
+
+    async def _event_setter(self):
         self._aio_event.set()
 
     @property
