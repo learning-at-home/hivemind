@@ -13,11 +13,10 @@ from hivemind.server.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefi
 
 
 @pytest.mark.forked
-def test_store_get_experts():
+def test_store_get_experts(n_peers=10):
     peers = [hivemind.DHT(start=True)]
-    for i in range(10):
-        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(hivemind.DHT(initial_peers=neighbors_i, start=True))
+    initial_peers = peers[0].get_visible_maddrs()
+    peers += [hivemind.DHT(initial_peers=initial_peers, start=True) for _ in range(n_peers - 1)]
 
     first_peer = random.choice(peers)
     other_peer = random.choice(peers)
@@ -48,12 +47,11 @@ def test_store_get_experts():
 
 
 @pytest.mark.forked
-def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peers=3, beam_size=4, parallel_rpc=4,
+def test_beam_search(n_peers=20, total_experts=128, batch_size=32, beam_size=4, parallel_rpc=4,
                      grid_dims=(32, 32, 32)):
-    dht = []
-    for i in range(dht_size):
-        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
-        dht.append(hivemind.DHT(start=True, initial_peers=neighbors_i, parallel_rpc=parallel_rpc))
+    dht = [hivemind.DHT(start=True)]
+    initial_peers = dht[0].get_visible_maddrs()
+    dht += [hivemind.DHT(initial_peers=initial_peers, start=True) for _ in range(n_peers - 1)]
 
     real_experts = sorted({
         'expert.' + '.'.join([str(random.randint(0, dim - 1)) for dim in grid_dims])
@@ -63,8 +61,8 @@ def test_beam_search(dht_size=20, total_experts=128, batch_size=32, initial_peer
         declare_experts(random.choice(dht), real_experts[batch_start: batch_start + batch_size], wait=True,
                         endpoint=f"host{batch_start // batch_size}:{random.randint(0, 65536)}")
 
-    neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(dht, min(initial_peers, len(dht)))]
-    you = hivemind.DHT(start=True, initial_peers=neighbors_i, parallel_rpc=parallel_rpc)
+    neighbors = sum([peer.get_visible_maddrs() for peer in random.sample(dht, min(3, len(dht)))], [])
+    you = hivemind.DHT(start=True, initial_peers=neighbors, parallel_rpc=parallel_rpc)
     beam_search = MoEBeamSearcher(you, 'expert.', grid_dims)
 
     for i in range(10):
@@ -142,22 +140,23 @@ def test_uid_patterns():
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_negative_caching():
-    peers = []
-    for i in range(10):
-        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(hivemind.DHT(initial_peers=neighbors_i, cache_locally=False, start=True))
+async def test_negative_caching(n_peers=10):
+    dht_kwargs = {'cache_locally': False}
+
+    peers = [hivemind.DHT(start=True, **dht_kwargs)]
+    initial_peers = peers[0].get_visible_maddrs()
+    peers += [hivemind.DHT(initial_peers=initial_peers, start=True, **dht_kwargs) for _ in range(n_peers - 1)]
 
     writer_peer = random.choice(peers)
     assert all(hivemind.declare_experts(writer_peer, ['ffn.1.2.3', 'ffn.3.4.5'], 'myaddr:1234').values())
 
-    neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-    neg_caching_peer = hivemind.DHT(initial_peers=neighbors_i, cache_locally=False, start=True)
+    neighbors = sum([peer.get_visible_maddrs() for peer in random.sample(peers, min(3, len(peers)))], [])
+    neg_caching_peer = hivemind.DHT(initial_peers=neighbors, start=True, **dht_kwargs)
     beam_search = MoEBeamSearcher(neg_caching_peer, uid_prefix='ffn.', grid_size=(10, 10, 10), negative_caching=True)
     # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
     assert len(beam_search.get_initial_beam(scores=[.1, .2, .3, .4, .5, .6], beam_size=3)) == 2
 
-    node = await hivemind.DHTNode.create(initial_peers=neighbors_i)
+    node = await hivemind.DHTNode.create(initial_peers=neighbors)
     fetched = await asyncio.gather(*(node.get(f'ffn.{i}.') for i in range(10)))
     for i in range(6):
         assert fetched[i] is not None, f"node should have cached ffn.{i}."
