@@ -103,8 +103,8 @@ To run tests, you need to install hivemind in development mode with additional d
 You can run all tests with `pytest tests/` or choose a specific subset, e.g., `pytest tests/test_dht.py`.
 
 When investigating test behavior, please note that pytest automatically wraps all hivemind tests with fixtures defined
-in a global configuration file: `tests/conftest.py` . For more informantion, refer to 
-[pytest documentation on fixtures](https://docs.pytest.org/en/6.2.x/fixture.html).
+in a global configuration file [`tests/conftest.py`](./tests/conftest.py), some of which will run automatically. 
+For more informantion, refer to the [pytest documentation on fixtures](https://docs.pytest.org/en/6.2.x/fixture.html).
 
 ## Building documentation
 
