@@ -7,7 +7,6 @@ import pytest
 import hivemind
 from hivemind.dht import get_dht_time
 from hivemind.dht.crypto import RSASignatureValidator
-from hivemind.dht.node import LOCALHOST
 from hivemind.dht.validation import DHTRecord
 from hivemind.utils.crypto import RSAPrivateKey
 
@@ -105,12 +104,11 @@ def test_signing_in_different_process():
 @pytest.mark.asyncio
 async def test_dhtnode_signatures():
     alice = await hivemind.DHTNode.create(record_validator=RSASignatureValidator())
+    initial_peers = await alice.identify_maddrs()
     bob = await hivemind.DHTNode.create(
-        record_validator=RSASignatureValidator(RSAPrivateKey()),
-        initial_peers=[f"{LOCALHOST}:{alice.port}"])
+        record_validator=RSASignatureValidator(RSAPrivateKey()), initial_peers=initial_peers)
     mallory = await hivemind.DHTNode.create(
-        record_validator=RSASignatureValidator(RSAPrivateKey()),
-        initial_peers=[f"{LOCALHOST}:{alice.port}"])
+        record_validator=RSASignatureValidator(RSAPrivateKey()), initial_peers=initial_peers)
 
     key = b'key'
     subkey = b'protected_subkey' + bob.protocol.record_validator.local_public_key
