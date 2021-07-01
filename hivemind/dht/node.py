@@ -77,7 +77,7 @@ class DHTNode:
 
     @classmethod
     async def create(
-            cls, p2p: P2P, node_id: Optional[DHTID] = None,
+            cls, p2p: Optional[P2P] = None, node_id: Optional[DHTID] = None,
             initial_peers: Optional[Union[List[Multiaddr], List[Endpoint]]] = None,
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 3, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
@@ -140,6 +140,11 @@ class DHTNode:
         self.cache_refresh_evt = asyncio.Event()
         self.cache_refresh_task = None
 
+        self.need_manage_p2p = p2p is None
+        if self.need_manage_p2p:
+            p2p = await P2P.create(bootstrap_peers=initial_peers)
+        self.p2p = p2p
+
         self.protocol = await DHTProtocol.create(
             p2p, self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
             parallel_rpc, cache_size, listen, record_validator, **kwargs)
@@ -192,6 +197,8 @@ class DHTNode:
         self.is_alive = False
         if self.protocol.listen:
             await self.protocol.shutdown(timeout)
+        if self.need_manage_p2p:
+            await self.p2p.shutdown()
 
     async def find_nearest_nodes(
             self, queries: Collection[DHTID], k_nearest: Optional[int] = None, beam_size: Optional[int] = None,

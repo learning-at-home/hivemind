@@ -240,8 +240,7 @@ def test_dht_node():
     # step B: run 51-st node in this process
     loop = asyncio.get_event_loop()
     bootstrap_peers = random.choice(swarm_maddrs)
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-    me = loop.run_until_complete(DHTNode.create(p2p, initial_peers=bootstrap_peers, parallel_rpc=10,
+    me = loop.run_until_complete(DHTNode.create(initial_peers=bootstrap_peers, parallel_rpc=10,
                                                 cache_refresh_before_expiry=False))
 
     # test 1: find self
@@ -298,11 +297,8 @@ def test_dht_node():
     assert len(nearest) == len(dht) + 1
     assert len(set.difference(set(nearest.keys()), set(all_node_ids) | {me.node_id})) == 0
 
-    # test 5: node without peers (when P2P is connected to the swarm)
-    bootstrap_peers = random.choice(swarm_maddrs)
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-
-    detached_node = loop.run_until_complete(DHTNode.create(p2p))
+    # test 5: node without peers
+    detached_node = loop.run_until_complete(DHTNode.create())
     nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy]))[dummy]
     assert len(nearest) == 1 and nearest[detached_node.node_id] == detached_node.endpoint
     nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy], exclude_self=True))[dummy]
@@ -313,10 +309,8 @@ def test_dht_node():
     assert loop.run_until_complete(me.store("mykey", ["Value", 10], true_time))
 
     bootstrap_peers = random.choice(swarm_maddrs)
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-    that_guy = loop.run_until_complete(
-        DHTNode.create(p2p, initial_peers=bootstrap_peers, parallel_rpc=10,
-                       cache_refresh_before_expiry=False, cache_locally=False))
+    that_guy = loop.run_until_complete(DHTNode.create(initial_peers=bootstrap_peers, parallel_rpc=10,
+                                                      cache_refresh_before_expiry=False, cache_locally=False))
 
     for node in [me, that_guy]:
         val, expiration_time = loop.run_until_complete(node.get("mykey"))
@@ -362,8 +356,7 @@ def test_dht_node():
     for proc in processes:
         proc.terminate()
     # The nodes don't own their hivemind.p2p.P2P instances, so we shutdown them separately
-    loop.run_until_complete(asyncio.gather(*chain.from_iterable([node.shutdown(), node.protocol.p2p.shutdown()]
-                                                                for node in [me, detached_node, that_guy])))
+    loop.run_until_complete(asyncio.wait([node.shutdown() for node in [me, detached_node, that_guy]]))
 
 
 @pytest.mark.forked
