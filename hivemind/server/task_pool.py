@@ -15,7 +15,7 @@ from typing import List, Tuple, Dict, Any, Generator
 import torch
 
 from hivemind.utils import MPFuture, get_logger
-from concurrent.futures import InvalidStateError
+from hivemind.utils.mpfuture import InvalidStateError
 
 logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))

@@ -6,6 +6,7 @@ import multiprocessing as mp
 import multiprocessing.connection
 import os
 import threading
+import uuid
 from typing import Tuple, Generic, TypeVar, Dict, Optional, Any, Callable
 
 import torch
@@ -93,7 +94,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     def __init__(self, loop: Optional[asyncio.BaseEventLoop] = None):
         self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state, self._result, self._exception = base.PENDING, None, None
-        self._origin_pid, self._uid = os.getpid(), id(self)
+        self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         # note: self._uid is only unique inside process that spawned it
         super().__init__()
         if ACTIVE_PID != self._origin_pid:
@@ -114,6 +115,8 @@ class MPFuture(base.Future, Generic[ResultType]):
     @_state.setter
     def _state(self, new_state):
         self._shared_state_code[...] = ALL_STATES.index(new_state)
+        if new_state == base.FINISHED and self._result is None:
+            print(f'SET {self._uid} -> FINISHED, result=None')
         if self._state in TERMINAL_STATES and self._aio_event is not None:
             asyncio.run_coroutine_threadsafe(self._set_event(), self.get_loop())
 
@@ -121,10 +124,12 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._aio_event.set()
 
     def set_result(self, result: ResultType):
+        if result is None:
+            print(self._uid, result)
         if os.getpid() == self._origin_pid:
             super().set_result(result)
         elif self._state in TERMINAL_STATES:
-            raise InvalidStateError(f"Can't set_result to a future that is {self._state} ({self})")
+            raise InvalidStateError(f"Can't set_result to a future that is {self._state} ({self._uid})")
         else:
             _send_update(self._origin_pid, self._uid, base.FINISHED, result)
 
@@ -132,7 +137,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         if os.getpid() == self._origin_pid:
             super().set_exception(exception)
         elif self._state in TERMINAL_STATES:
-            raise InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self})")
+            raise InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self._uid})")
         else:
             _send_update(self._origin_pid, self._uid, Exception, exception)
 
@@ -143,7 +148,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         elif self._state == base.CANCELLED:
             return False
         else:
-            raise InvalidStateError(f"Can't set_running_or_notify_cancel when future is in {self._state} ({self})")
+            raise InvalidStateError(f"Can't set_running_or_notify_cancel when future is in {self._state} ({self._uid})")
 
     def cancel(self):
         if os.getpid() == self._origin_pid:

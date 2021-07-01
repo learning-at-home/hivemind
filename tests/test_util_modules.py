@@ -97,7 +97,7 @@ def test_mpfuture_status():
     p.join()
 
     assert future.running() and not future.done() and not future.cancelled()
-    with pytest.raises(concurrent.futures.InvalidStateError):
+    with pytest.raises(InvalidStateError):
         future.set_running_or_notify_cancel()
 
     future = hivemind.MPFuture()
