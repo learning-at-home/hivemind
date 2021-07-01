@@ -2,7 +2,6 @@ import asyncio
 import random
 import time
 
-import psutil
 import numpy as np
 import pytest
 

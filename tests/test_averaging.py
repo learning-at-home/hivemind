@@ -1,9 +1,9 @@
 import random
 
 import numpy as np
-import psutil
 import torch
 import pytest
+
 import hivemind
 from hivemind.client.averaging.allreduce import AveragingMode
 from hivemind.client.averaging.load_balancing import load_balance_peers
