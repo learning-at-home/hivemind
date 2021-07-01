@@ -314,9 +314,9 @@ def test_dht_node():
 
     bootstrap_peers = random.choice(swarm_maddrs)
     p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-
-    that_guy = loop.run_until_complete(DHTNode.create(p2p, initial_peers=random.sample(dht.keys(), 3), parallel_rpc=10,
-                                                      cache_refresh_before_expiry=False, cache_locally=False))
+    that_guy = loop.run_until_complete(
+        DHTNode.create(p2p, initial_peers=maddrs_to_peer_ids(bootstrap_peers), parallel_rpc=10,
+                       cache_refresh_before_expiry=False, cache_locally=False))
 
     for node in [me, that_guy]:
         val, expiration_time = loop.run_until_complete(node.get("mykey"))
