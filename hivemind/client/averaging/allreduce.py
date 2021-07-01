@@ -112,11 +112,6 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
             self.finalize(exception=e)
             for task in pending_tasks:
                 task.cancel()
-            code = averaging_pb2.CANCELLED if isinstance(e, asyncio.CancelledError) else averaging_pb2.INTERNAL_ERROR
-            logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
-            for peer_endpoint, mode in zip(self.ordered_group_endpoints, self.modes):
-                if peer_endpoint != self.endpoint and mode != AveragingMode.CLIENT:
-                    asyncio.create_task(self._send_error_to_peer(peer_endpoint, code))
             raise
 
     async def _communicate_with_peer(self, peer_endpoint: Endpoint):
@@ -210,7 +205,20 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
         await stream.done_writing()
 
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):
+        """ finish or terminate AllReduceRunner, propagate any errors / cancellations to peers. """
         assert not cancel or not exception, "finalize accepts either exception or cancel, but not both"
+        pending_tasks = set()
+        if cancel or exception:
+            # propagate error to peers
+            if cancel or isinstance(exception, asyncio.CancelledError):
+                code = averaging_pb2.CANCELLED
+            else:
+                code = averaging_pb2.INTERNAL_ERROR
+            logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
+            for peer_endpoint, mode in zip(self.ordered_group_endpoints, self.modes):
+                if peer_endpoint != self.endpoint and mode != AveragingMode.CLIENT:
+                    pending_tasks.add(asyncio.create_task(self._send_error_to_peer(peer_endpoint, code)))
+
         if not self._future.done():
             if cancel:
                 logger.debug(f"{self} - cancelled")
@@ -223,7 +231,7 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
                 self._future.set_result(None)
             self.tensor_part_container.finalize()
             self.tensor_part_reducer.finalize()
-            return True
+            return pending_tasks
         else:
             logger.debug(f"{self} - could not finish: allreduce is already finished: {self._future}")
-            return False
+            return pending_tasks

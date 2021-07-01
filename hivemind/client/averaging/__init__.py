@@ -75,7 +75,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
           local tensors for averaging
     :param allow_state_sharing: if set to True, other peers can download this peer's state. Can be overwritten
       with averager.allow_state_sharing = True / False
-
+    :param shutdown_grace_seconds: when calling .shutdown, wait for up to this many seconds before terminating
     Example:
 
     >>> averager = DecentralizedAverager(...)
@@ -90,6 +90,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     """
     _matchmaking: Matchmaking
     _pending_group_assembled: asyncio.Event
+    _server: grpc.aio.Server
     serializer = MSGPackSerializer
 
     def __init__(self, averaged_tensors: Sequence[torch.Tensor], dht: DHT, *, start: bool,
@@ -100,7 +101,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  throughput: Optional[float] = None, min_vector_size: int = 0,
                  auxiliary: bool = False, allow_state_sharing: Optional[bool] = None,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', daemon: bool = True,
-                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None, **kwargs):
+                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None,
+                 shutdown_grace_seconds: float = 5, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
             "throughput must be a non-negative float32"
@@ -130,7 +132,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             tensor.share_memory_()
         self.total_size = sum(map(torch.Tensor.numel, self._averaged_tensors))
         self.schema_hash = compute_schema_hash(self._averaged_tensors)
-        self._throughput = throughput
+        self.shutdown_grace_seconds = shutdown_grace_seconds
+        self.throughput = throughput
 
         self.matchmaking_kwargs = dict(
             prefix=prefix, initial_group_bits=initial_group_bits, target_group_size=target_group_size,
@@ -205,12 +208,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 grpc.aio.init_grpc_aio()
 
                 if self.listen:
-                    server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
-                    averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, server)
-                    found_port = server.add_insecure_port(self.listen_on)
+                    self._server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
+                    averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, self._server)
+                    found_port = self._server.add_insecure_port(self.listen_on)
                     assert found_port != 0, f"Failed to listen to {self.listen_on}"
                     self._port.value = found_port
-                    await server.start()
+                    await self._server.start()
                 else:
                     logger.debug(f"The averager is running in client mode.")
 
@@ -225,7 +228,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
                 while True:
                     method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
-                    asyncio.create_task(getattr(self, method)(*args, **kwargs))
+                    task = asyncio.create_task(getattr(self, method)(*args, **kwargs))
+                    if method == '_shutdown':
+                        await task
+                        break
 
             loop.run_until_complete(_run())
 
@@ -240,15 +246,26 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     def shutdown(self) -> None:
         """ Shut down the averager process """
-        # TODO notify peers before terminating
-        if self._parent_pid != os.getpid() or self.is_alive():
-            self._pipe.send(('_SHUTDOWN', None))
-            self.terminate()
+        if self.is_alive():
+            self.pipe.send(('_shutdown', [None], {}))  # shut down the daemon process
+            self._pipe.send(('_SHUTDOWN', None))  # shut down background thread in master
+            self.join(self.shutdown_grace_seconds)
+            if self.is_alive():
+                logger.warning("Averager did not shut down within the grace period; terminating it the hard way.")
+                self.terminate()
         else:
-            logger.warning("DHT shutdown has no effect: the process is not alive")
+            logger.exception("Averager shutdown has no effect: the process is already not alive")
+
+    async def _shutdown(self, timeout: Optional[float] = None) -> None:
+        remaining_tasks = set()
+        for group in self._running_groups.values():
+            remaining_tasks.update(group.finalize(cancel=True))
+        if self.listen:
+            remaining_tasks.add(self._server.stop(timeout))
+        await asyncio.gather(*remaining_tasks)
 
     def __del__(self):
-        if self._parent_pid != os.getpid() or self.is_alive():
+        if self._parent_pid == os.getpid() and self.is_alive():
             self.shutdown()
 
     def step(self, gather: Optional[GatheredData] = None, weight: Optional[float] = None,
@@ -286,7 +303,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             while not future.done():
                 try:
                     self._pending_group_assembled.clear()
-                    data_for_gather = self.serializer.dumps([weight, self._throughput, self.mode.value, gather_binary]) 
+                    data_for_gather = self.serializer.dumps([weight, self.throughput, self.mode.value, gather_binary])
                     group_info = await self._matchmaking.look_for_group(timeout=timeout,
                                                                         data_for_gather=data_for_gather)
                     if group_info is None:

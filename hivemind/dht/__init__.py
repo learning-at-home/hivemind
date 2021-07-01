@@ -44,19 +44,19 @@ class DHT(mp.Process):
     :param max_workers: declare_experts and get_experts will use up to this many parallel workers
         (but no more than one per key)
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
-    :param shutdown_grade_seconds: when calling .shutdown, wait for up to this many seconds before terminating
+    :param shutdown_grace_seconds: when calling .shutdown, wait for up to this many seconds before terminating
     :param kwargs: any other params will be forwarded to DHTNode upon creation
     """
     _node: DHTNode
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 record_validators: Iterable[RecordValidatorBase] = (), shutdown_grade_seconds: float = 3, **kwargs):
+                 record_validators: Iterable[RecordValidatorBase] = (), shutdown_grace_seconds: float = 3, **kwargs):
         super().__init__()
         assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
-        self.shutdown_grace_seconds = shutdown_grade_seconds
+        self.shutdown_grace_seconds = shutdown_grace_seconds
         self._record_validator = CompositeValidator(record_validators)
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
@@ -79,7 +79,7 @@ class DHT(mp.Process):
                     self._port.value = self._node.port
                 self.ready.set()
 
-                while self._node.is_alive:
+                while True:
                     method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
                     task = asyncio.create_task(getattr(self, method)(*args, **kwargs))
                     if method == '_shutdown':
@@ -130,9 +130,9 @@ class DHT(mp.Process):
         self.pipe.send(('_get', [], dict(key=key, latest=latest, future=_future, **kwargs)))
         return future if return_future else future.result()
 
-    async def _get(self, node: DHTNode, key: DHTKey, latest: bool, future: MPFuture, **kwargs):
+    async def _get(self, key: DHTKey, latest: bool, future: MPFuture, **kwargs):
         try:
-            result = await node.get(key, latest=latest, **kwargs)
+            result = await self._node.get(key, latest=latest, **kwargs)
             if not future.done():
                 future.set_result(result)
         except BaseException as e:
@@ -157,10 +157,10 @@ class DHT(mp.Process):
                                            future=_future, **kwargs)))
         return future if return_future else future.result()
 
-    async def _store(self, node: DHTNode, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
+    async def _store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
                      subkey: Optional[Subkey], future: MPFuture, **kwargs):
         try:
-            result = await node.store(key, value, expiration_time, subkey=subkey, **kwargs)
+            result = await self._node.store(key, value, expiration_time, subkey=subkey, **kwargs)
             if not future.done():
                 future.set_result(result)
         except BaseException as e:
