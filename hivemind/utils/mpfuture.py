@@ -92,10 +92,11 @@ class MPFuture(base.Future, Generic[ResultType]):
     """
 
     def __init__(self, loop: Optional[asyncio.BaseEventLoop] = None):
+        self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int#TODO
         self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state, self._result, self._exception = base.PENDING, None, None
-        self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         # note: self._uid is only unique inside process that spawned it
+
         super().__init__()
         if ACTIVE_PID != self._origin_pid:
             _initialize_mpfuture_backend()
@@ -115,17 +116,13 @@ class MPFuture(base.Future, Generic[ResultType]):
     @_state.setter
     def _state(self, new_state):
         self._shared_state_code[...] = ALL_STATES.index(new_state)
-        if new_state == base.FINISHED and self._result is None:
-            print(f'SET {self._uid} -> FINISHED, result=None')
-        if self._state in TERMINAL_STATES and self._aio_event is not None:
+        if self._state in TERMINAL_STATES and self._aio_event is not None and not self._aio_event.is_set():
             asyncio.run_coroutine_threadsafe(self._set_event(), self.get_loop())
 
     async def _set_event(self):
         self._aio_event.set()
 
     def set_result(self, result: ResultType):
-        if result is None:
-            print(self._uid, result)
         if os.getpid() == self._origin_pid:
             super().set_result(result)
         elif self._state in TERMINAL_STATES:
@@ -215,7 +212,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __getstate__(self):
         return dict(_shared_state_code=self._shared_state_code,
-                    _origin_pid=self._origin_pid, _uid=self._uid,
+                    _state=self._state, _origin_pid=self._origin_pid, _uid=self._uid,
                     _result=self._result, _exception=self._exception)
 
     def __setstate__(self, state):
@@ -225,3 +222,4 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._waiters, self._done_callbacks = [], []
         self._condition = threading.Condition()
         self._aio_event = self._loop = None
+        self._state = state['_state']
