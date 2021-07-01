@@ -144,7 +144,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
-        self._pipe, self.pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with a background process
+        self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with daemon
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
 
         self._allow_state_sharing = mp.Value(ctypes.c_bool, 0)
@@ -158,7 +158,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         # note: we create a background thread weakref and with daemon=True to ensure garbage collection
         background_fetcher = threading.Thread(
             daemon=True, target=_background_thread_fetch_current_state,
-            args=[self.serializer, self.pipe, weakref.WeakMethod(self.get_current_state)])
+            args=[self.serializer, self._outer_pipe, weakref.WeakMethod(self.get_current_state)])
         background_fetcher.start()
         if start:
             self.run_in_background(await_ready=True)
@@ -228,7 +228,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                 self.ready.set()
 
                 while True:
-                    method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
+                    method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._inner_pipe.recv)
                     task = asyncio.create_task(getattr(self, method)(*args, **kwargs))
                     if method == '_shutdown':
                         await task
@@ -248,8 +248,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def shutdown(self) -> None:
         """ Shut down the averager process """
         if self.is_alive():
-            self.pipe.send(('_shutdown', [None], {}))  # shut down the daemon process
-            self._pipe.send(('_SHUTDOWN', None))  # shut down background thread in master
+            self._outer_pipe.send(('_shutdown', [None], {}))  # shut down the daemon process
+            self._inner_pipe.send(('_SHUTDOWN', None))  # shut down background thread in master
             self.join(self.shutdown_grace_seconds)
             if self.is_alive():
                 logger.warning("Averager did not shut down within the grace period; terminating it the hard way.")
@@ -292,8 +292,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         future, _future = MPFuture.make_pair()
         gather_binary = self.serializer.dumps(gather)  # serialize here to avoid loading modules in the averager process
-        self.pipe.send(('_step', [], dict(future=_future, gather_binary=gather_binary, weight=weight,
-                                          allow_retries=allow_retries, timeout=timeout)))
+        self._outer_pipe.send(('_step', [], dict(future=_future, gather_binary=gather_binary, weight=weight,
+                                                 allow_retries=allow_retries, timeout=timeout)))
         return future.result() if wait else future
 
     async def _step(self, *, future: MPFuture, gather_binary: bytes, weight: float,
@@ -464,7 +464,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def _get_current_state_from_host_process(self):
         """ Executed in the averager process inside rpc_download_state """
         future, _future = MPFuture.make_pair()
-        self._pipe.send(('_TRIGGER_GET_CURRENT_STATE', _future))
+        self._inner_pipe.send(('_TRIGGER_GET_CURRENT_STATE', _future))
         return await future
 
     def load_state_from_peers(self, wait=True) -> Optional[Tuple[Any, Sequence[torch.Tensor]]]:
@@ -478,7 +478,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         The exact contents of both metadata and tensors are determined by get_current_state method
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_load_state_from_peers', [], dict(future=_future)))
+        self._outer_pipe.send(('_load_state_from_peers', [], dict(future=_future)))
         return future.result() if wait else future
 
     async def _load_state_from_peers(self, future: MPFuture):
@@ -538,7 +538,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         :returns: averager's current group key bits (without prefix)
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_group_bits', [], dict(future=_future)))
+        self._outer_pipe.send(('_get_group_bits', [], dict(future=_future)))
         return future.result() if wait else future
 
     async def _get_group_bits(self, future: MPFuture):
@@ -551,7 +551,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """
         future, _future = MPFuture.make_pair()
         assert all(bit in '01' for bit in group_bits)
-        self.pipe.send(('_set_group_bits', [], dict(group_bits=group_bits, future=_future)))
+        self._outer_pipe.send(('_set_group_bits', [], dict(group_bits=group_bits, future=_future)))
         return future.result() if wait else future
 
     async def _set_group_bits(self, group_bits: str, future: MPFuture):

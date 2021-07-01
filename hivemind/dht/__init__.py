@@ -25,7 +25,7 @@ from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.utils.networking import Hostname, Endpoint, strip_port
-from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, get_dht_time
+from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled
 
 logger = get_logger(__name__)
 
@@ -60,7 +60,7 @@ class DHT(mp.Process):
         self.shutdown_grace_seconds = shutdown_grace_seconds
         self._record_validator = CompositeValidator(record_validators)
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
-        self._pipe, self.pipe = mp.Pipe(duplex=True)
+        self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)
         self.ready = mp.Event()
         self.daemon = daemon
         if start:
@@ -81,7 +81,7 @@ class DHT(mp.Process):
                 self.ready.set()
 
                 while True:
-                    method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._pipe.recv)
+                    method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._inner_pipe.recv)
                     task = asyncio.create_task(getattr(self, method)(*args, **kwargs))
                     if method == '_shutdown':
                         await task
@@ -102,7 +102,7 @@ class DHT(mp.Process):
     def shutdown(self) -> None:
         """ Shut down a running dht process """
         if self.is_alive():
-            self.pipe.send(('_shutdown', [], {}))
+            self._outer_pipe.send(('_shutdown', [], {}))
             self.join(self.shutdown_grace_seconds)
             if self.is_alive():
                 logger.warning("DHT did not shut down within the grace period; terminating it the hard way.")
@@ -128,7 +128,7 @@ class DHT(mp.Process):
         :returns: (value, expiration time); if value was not found, returns None
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get', [], dict(key=key, latest=latest, future=_future, **kwargs)))
+        self._outer_pipe.send(('_get', [], dict(key=key, latest=latest, future=_future, **kwargs)))
         return future if return_future else future.result()
 
     async def _get(self, key: DHTKey, latest: bool, future: MPFuture, **kwargs):
@@ -154,8 +154,8 @@ class DHT(mp.Process):
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_store', [], dict(key=key, value=value, expiration_time=expiration_time, subkey=subkey,
-                                           future=_future, **kwargs)))
+        self._outer_pipe.send(('_store', [], dict(key=key, value=value, expiration_time=expiration_time, subkey=subkey,
+                                                  future=_future, **kwargs)))
         return future if return_future else future.result()
 
     async def _store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
@@ -185,7 +185,7 @@ class DHT(mp.Process):
         :note: when run_coroutine is called with wait=False, MPFuture can be cancelled to interrupt the task.
         """
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_run_coroutine', [], dict(coro=coro, future=_future)))
+        self._outer_pipe.send(('_run_coroutine', [], dict(coro=coro, future=_future)))
         return future if return_future else future.result()
 
     async def _run_coroutine(self, coro: Callable[[DHT, DHTNode], Awaitable[ReturnType]],
@@ -227,7 +227,7 @@ class DHT(mp.Process):
         assert num_peers is None or peers == (), "please specify either a num_peers or the list of peers, not both"
         assert not isinstance(peers, str) and isinstance(peers, Sequence), "Please send a list / tuple of endpoints"
         future, _future = MPFuture.make_pair()
-        self.pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=_future)))
+        self._outer_pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=_future)))
         return future.result()
 
     async def _get_visible_address(self, num_peers: Optional[int], peers: Sequence[Endpoint],
