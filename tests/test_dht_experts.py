@@ -36,8 +36,14 @@ def test_store_get_experts():
     assert isinstance(first_found, hivemind.RemoteExpert)
     assert first_found.endpoint == f'that_host:{other_port}'
 
-    for peer in peers:
-        peer.shutdown()
+    # test graceful shutdown
+    first_peer.shutdown()
+    other_peer.shutdown()
+    assert sum(peer.is_alive() for peer in peers) == len(peers) - 2
+    remaining_peer1 = random.choice([peer for peer in peers if peer.is_alive()])
+    remaining_peer2 = random.choice([peer for peer in peers if peer.is_alive()])
+    assert all(hivemind.declare_experts(remaining_peer1, ['new_expert.1'], 'dummy'))
+    assert hivemind.get_experts(remaining_peer2, ['new_expert.1'])[0].endpoint == 'dummy'
 
 
 @pytest.mark.forked
