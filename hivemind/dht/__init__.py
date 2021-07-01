@@ -18,10 +18,8 @@ import ctypes
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Iterable, List, Optional, Sequence, Union, Callable, Awaitable, TypeVar
+from typing import Iterable, Optional, Sequence, Union, Callable, Awaitable, TypeVar
 
-import hivemind
-from hivemind.client import RemoteExpert
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
