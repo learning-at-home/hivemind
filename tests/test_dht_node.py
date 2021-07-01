@@ -182,7 +182,7 @@ def run_node(bootstrap_peers: List[Multiaddr], info_queue: mp.Queue):
         loop.run_forever()
 
 
-def launch_swarm(n_peers: int, n_sequential_peers: int) -> \
+def launch_swarm_in_separate_processes(n_peers: int, n_sequential_peers: int) -> \
         Tuple[List[mp.Process], Dict[Endpoint, DHTID], List[List[Multiaddr]]]:
     assert n_sequential_peers < n_peers, \
         'Parameters imply that first n_sequential_peers of n_peers will be run sequentially'
@@ -233,9 +233,9 @@ def launch_swarm(n_peers: int, n_sequential_peers: int) -> \
 
 @pytest.mark.forked
 def test_dht_node():
-    # step A: create a swarm of 50 dht nodes in parallel processes
+    # step A: create a swarm of 50 dht nodes in separate processes
     #         (first 5 created sequentially, others created in parallel)
-    processes, dht, swarm_maddrs = launch_swarm(n_peers=50, n_sequential_peers=5)
+    processes, dht, swarm_maddrs = launch_swarm_in_separate_processes(n_peers=50, n_sequential_peers=5)
 
     # step B: run 51-st node in this process
     loop = asyncio.get_event_loop()

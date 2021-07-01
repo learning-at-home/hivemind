@@ -74,6 +74,7 @@ class P2P:
                      nat_port_map: bool = True, auto_nat: bool = True,
                      bootstrap_peers: Optional[List[Multiaddr]] = None, use_ipfs: bool = False,
                      host_maddrs: Optional[List[Multiaddr]] = None,
+                     announce_maddrs: Optional[List[Multiaddr]] = None,
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      quiet: bool = True,
@@ -91,6 +92,7 @@ class P2P:
         :param bootstrap_peers: List of bootstrap peers
         :param use_ipfs: Bootstrap to IPFS (works only if bootstrap=True and bootstrap_peers=None)
         :param host_maddrs: multiaddresses for external connections from other p2p instances
+        :param announce_maddrs: multiaddresses the host should announce to the network
         :param use_relay: enables circuit relay
         :param use_relay_hop: enables hop for relay
         :param use_relay_discovery: enables passive discovery for relay
@@ -114,10 +116,15 @@ class P2P:
         self._client_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pclient-{socket_uid}.sock')
 
         need_bootstrap = bool(bootstrap_peers) or use_ipfs
-        bootstrap_peers = cls._make_bootstrap_peers(bootstrap_peers)
-        dht = cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0})
-        force_reachability = cls.FORCE_REACHABILITY_MAPPING.get(force_reachability, {})
-        host_maddrs = {'hostAddrs': ','.join(str(maddr) for maddr in host_maddrs)} if host_maddrs else {}
+        process_kwargs = kwargs.copy()
+        process_kwargs.update(cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0}))
+        process_kwargs.update(cls.FORCE_REACHABILITY_MAPPING.get(force_reachability, {}))
+        for param, value in [('bootstrapPeers', bootstrap_peers),
+                             ('hostAddrs', host_maddrs),
+                             ('announceAddrs', announce_maddrs)]:
+            if value:
+                process_kwargs[param] = self._maddrs_to_str(value)
+
         proc_args = self._make_process_args(
             str(p2pd_path), *args,
             listen=self._daemon_listen_maddr,
@@ -125,17 +132,15 @@ class P2P:
             natPortMap=nat_port_map, autonat=auto_nat,
             relay=use_relay, relayHop=use_relay_hop, relayDiscovery=use_relay_discovery,
             autoRelay=use_auto_relay, relayHopLimit=relay_hop_limit,
-            b=need_bootstrap, q=quiet, **{**bootstrap_peers, **dht, **force_reachability, **host_maddrs, **kwargs})
+            b=need_bootstrap, q=quiet, **process_kwargs)
 
-        self._initialize(proc_args)
-        await self._ping_daemon_with_retries(ping_n_retries, ping_retry_delay)
-
-        return self
-
-    def _initialize(self, proc_args: List[str]) -> None:
         self._child = Popen(args=proc_args, encoding="utf8")
         self._alive = True
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
+
+        await self._ping_daemon_with_retries(ping_n_retries, ping_retry_delay)
+
+        return self
 
     async def _ping_daemon_with_retries(self, ping_n_retries: int, ping_retry_delay: float) -> None:
         for try_number in range(ping_n_retries):
@@ -405,11 +410,8 @@ class P2P:
         return val
 
     @staticmethod
-    def _make_bootstrap_peers(maddrs: Optional[List[Multiaddr]]) -> Dict[str, str]:
-        if maddrs is None:
-            return {}
-
-        return {'bootstrapPeers': ','.join(str(addr) for addr in maddrs)}
+    def _maddrs_to_str(maddrs: List[Multiaddr]) -> str:
+        return ','.join(str(addr) for addr in maddrs)
 
 
 class P2PInterruptedError(Exception):

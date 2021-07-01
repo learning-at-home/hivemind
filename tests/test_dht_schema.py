@@ -1,6 +1,8 @@
+import asyncio
+from typing import Dict
+
 import pytest
 from pydantic import BaseModel, StrictInt, conint
-from typing import Dict
 
 import hivemind
 from hivemind.dht import get_dht_time
@@ -21,7 +23,9 @@ async def dht_nodes_with_schema():
 
     alice = await DHTNode.create(record_validator=validator)
     bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.identify_maddrs())
-    return alice, bob
+    yield alice, bob
+
+    await asyncio.gather(alice.shutdown(), bob.shutdown())
 
 
 @pytest.mark.forked
@@ -139,6 +143,8 @@ async def test_prefix():
         assert (await peer.get('prefix_field', latest=True)).value == 777
         assert (await peer.get('field', latest=True)) is None
 
+    await asyncio.gather(alice.shutdown(), bob.shutdown())
+
 
 @pytest.mark.forked
 @pytest.mark.asyncio
@@ -185,7 +191,7 @@ async def test_merging_schema_validators(dht_nodes_with_schema):
 @pytest.mark.forked
 def test_sending_validator_instance_between_processes():
     alice = hivemind.DHT(start=True)
-    bob = hivemind.DHT(start=True, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+    bob = hivemind.DHT(start=True, initial_peers=alice.get_visible_maddrs())
 
     alice.add_validators([SchemaValidator(SampleSchema)])
     bob.add_validators([SchemaValidator(SampleSchema)])
@@ -193,3 +199,6 @@ def test_sending_validator_instance_between_processes():
     assert bob.store('experiment_name', b'foo_bar', get_dht_time() + 10)
     assert not bob.store('experiment_name', 777, get_dht_time() + 10)
     assert alice.get('experiment_name', latest=True).value == b'foo_bar'
+
+    alice.shutdown()
+    bob.shutdown()

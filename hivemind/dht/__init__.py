@@ -21,6 +21,8 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Iterable, Optional, Sequence, Union, Callable, Awaitable, TypeVar
 
+from multiaddr import Multiaddr
+
 from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
@@ -66,7 +68,6 @@ class DHT(mp.Process):
         self.parallel_rpc = parallel_rpc
 
         self._record_validator = CompositeValidator(record_validators)
-        self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)
         self.shutdown_timeout = shutdown_timeout
         self.ready = mp.Event()
@@ -84,8 +85,6 @@ class DHT(mp.Process):
                     p2p=self.p2p, initial_peers=self.initial_peers, parallel_rpc=self.parallel_rpc,
                     num_workers=self.max_workers or 1, record_validator=self._record_validator,
                     **self.kwargs)
-                if self._node.port is not None:
-                    self._port.value = self._node.port
                 self.ready.set()
 
                 while True:
@@ -115,15 +114,9 @@ class DHT(mp.Process):
             if self.is_alive():
                 logger.warning("DHT did not shut down within the grace period; terminating it the hard way.")
                 self.terminate()
-        else:
-            logger.warning("DHT shutdown has no effect: dht process is already not alive")
 
     async def _shutdown(self):
         await self._node.shutdown()
-
-    @property
-    def port(self) -> Optional[int]:
-        return self._port.value if self._port.value != 0 else None
 
     def get(self, key: DHTKey, latest: bool = False, return_future: bool = False, **kwargs
             ) -> Union[Optional[ValueWithExpiration[DHTValue]], MPFuture]:
@@ -223,58 +216,11 @@ class DHT(mp.Process):
             self, node: DHTNode, record_validators: Iterable[RecordValidatorBase]) -> None:
         node.protocol.record_validator.extend(record_validators)
 
-    def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
-        """
-        Get this machine's visible address by requesting other peers or using pre-specified network addresses.
-        If no parameters are specified, this function will check for manual endpoint; if unavailable, ask 1 random peer.
+    def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
+        return self.run_coroutine(partial(DHT._get_visible_maddrs, latest=latest))
 
-        :param num_peers: if specified, ask multiple peers and check that they perceive the same endpoint
-        :param peers: if specified, ask these exact peers instead of choosing random known peers
-        :note: if this node has no known peers in routing table, one must specify :peers: manually
-        """
-        assert num_peers is None or peers == (), "please specify either a num_peers or the list of peers, not both"
-        assert not isinstance(peers, str) and isinstance(peers, Sequence), "Please send a list / tuple of endpoints"
-        future, _future = MPFuture.make_pair()
-        self._outer_pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=_future)))
-        return future.result()
-
-    async def _get_visible_address(self, num_peers: Optional[int], peers: Sequence[Endpoint],
-                                   future: Optional[MPFuture]):
-        if not peers and (num_peers or not self._node.protocol.node_info.endpoint):
-            # if we can't resolve the endpoint locally, ask one random peer
-            peers_and_endpoints = self._node.protocol.routing_table.get_nearest_neighbors(
-                DHTID.generate(), num_peers or 1, exclude=self._node.node_id)
-            peers = tuple(endpoint for node_id, endpoint in peers_and_endpoints)
-
-        chosen_address = None
-        if peers:
-            possible_endpoints: Sequence[Optional[Endpoint]] = await asyncio.gather(*(
-                self._node.protocol.get_outgoing_request_endpoint(peer) for peer in peers))
-
-            for endpoint in possible_endpoints:
-                if endpoint is None:
-                    continue
-                address = strip_port(endpoint)
-                if chosen_address is not None and address != chosen_address:
-                    logger.warning("At least two peers returned different visible addresses for this node:"
-                                   f"{address} and {chosen_address} (keeping the former one)")
-                else:
-                    chosen_address = address
-
-            if chosen_address is None:
-                logger.warning(f"None of the selected peers responded with an address ({peers})")
-
-        if self._node.protocol.node_info.endpoint:
-            address = strip_port(self._node.protocol.node_info.endpoint)
-            if chosen_address is not None and address != chosen_address:
-                logger.warning(f"Node was manually given endpoint {address} , but other peers report {chosen_address}")
-            chosen_address = chosen_address or address
-
-        if chosen_address:
-            future.set_result(chosen_address)
-        else:
-            future.set_exception(ValueError(f"Can't get address: DHT node has no peers and no public endpoint."
-                                            f" Please ensure the node is connected or specify peers=... manually."))
+    async def _get_visible_maddrs(self, node: DHTNode, latest: bool = False) -> List[Multiaddr]:
+        return await node.identify_maddrs(latest=latest)
 
     def __del__(self):
         if self._parent_pid == os.getpid() and self.is_alive():

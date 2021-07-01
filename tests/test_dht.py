@@ -3,18 +3,17 @@ import random
 import time
 
 import pytest
+from multiaddr import Multiaddr
 
 import hivemind
-from hivemind import LOCALHOST, strip_port
 
 
 
 @pytest.mark.forked
-def test_get_store():
-    peers = []
-    for i in range(10):
-        neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(hivemind.DHT(initial_peers=neighbors_i, start=True))
+def test_get_store(n_peers=10):
+    peers = [hivemind.DHT(start=True)]
+    initial_peers = peers[0].get_visible_maddrs()
+    peers += [hivemind.DHT(initial_peers=initial_peers, start=True) for _ in range(n_peers - 1)]
 
     node1, node2 = random.sample(peers, 2)
     assert node1.store('key1', 'value1', expiration_time=hivemind.get_dht_time() + 30)
@@ -87,18 +86,24 @@ def test_run_coroutine():
     future.cancel()
     assert dht.run_coroutine(dummy_dht_coro_stateful) == -99
 
+    dht.shutdown()
+
 
 @pytest.mark.forked
-def test_dht_get_address(addr=LOCALHOST, dummy_endpoint='123.45.67.89:*'):
-    node1 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*")
-    node2 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", initial_peers=[f"{addr}:{node1.port}"])
-    node3 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", initial_peers=[f"{addr}:{node2.port}"])
-    assert addr in node3.get_visible_address(num_peers=2)
+@pytest.mark.asyncio
+async def test_dht_get_visible_maddrs():
+    # test 1: IPv4 localhost multiaddr is visible by default
 
-    node4 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*")
-    with pytest.raises(ValueError):
-        node4.get_visible_address()
-    assert node4.get_visible_address(peers=[f'{addr}:{node1.port}']).endswith(addr)
+    dht = hivemind.DHT(start=True)
 
-    node5 = hivemind.DHT(start=True, listen_on=f"0.0.0.0:*", endpoint=f"{dummy_endpoint}")
-    assert node5.get_visible_address() == strip_port(dummy_endpoint)
+    assert any(str(maddr).startswith('/ip4/127.0.0.1') for maddr in dht.get_visible_maddrs())
+    dht.shutdown()
+
+    # test 2: announce_maddrs are the single visible multiaddrs if defined
+
+    dummy_endpoint = Multiaddr('/ip4/123.45.67.89/tcp/31337')
+    p2p = await hivemind.p2p.P2P.create(announce_maddrs=[dummy_endpoint])
+    dht = hivemind.DHT(p2p, start=True)
+
+    assert dht.get_visible_maddrs() == [dummy_endpoint.encapsulate(f'/p2p/{p2p.id}')]
+    dht.shutdown()
