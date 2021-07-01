@@ -478,7 +478,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         The exact contents of both metadata and tensors are determined by get_current_state method
         """
         future = MPFuture()
-        self._outer_pipe.send(('_load_state_from_peers', [], dict(future=future))
+        self._outer_pipe.send(('_load_state_from_peers', [], dict(future=future)))
         return future.result() if wait else future
 
     async def _load_state_from_peers(self, future: MPFuture):
