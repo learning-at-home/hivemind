@@ -1,5 +1,6 @@
 import asyncio
 import random
+import time
 
 import numpy as np
 import pytest
@@ -36,8 +37,14 @@ def test_store_get_experts():
     assert isinstance(first_found, hivemind.RemoteExpert)
     assert first_found.endpoint == f'that_host:{other_port}'
 
-    for peer in peers:
-        peer.shutdown()
+    # test graceful shutdown
+    first_peer.shutdown()
+    other_peer.shutdown()
+    time.sleep(1.0)
+    remaining_peer1 = random.choice([peer for peer in peers if peer.is_alive()])
+    remaining_peer2 = random.choice([peer for peer in peers if peer.is_alive()])
+    assert all(hivemind.declare_experts(remaining_peer1, ['new_expert.1'], 'dummy'))
+    assert hivemind.get_experts(remaining_peer2, ['new_expert.1'])[0].endpoint == 'dummy'
 
 
 @pytest.mark.forked
@@ -156,3 +163,8 @@ async def test_negative_caching():
         assert fetched[i] is not None, f"node should have cached ffn.{i}."
     for i in range(6, len(fetched)):
         assert fetched[i] is None, f"node shouldn't have cached ffn.{i}."
+
+    await node.shutdown()
+    neg_caching_peer.shutdown()
+    for peer in peers:
+        peer.shutdown()
