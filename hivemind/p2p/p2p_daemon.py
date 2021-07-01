@@ -77,7 +77,7 @@ class P2P:
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      quiet: bool = True,
-                     ping_n_retries: int = 3, ping_retry_delay = 0.4, **kwargs) -> 'P2P':
+                     ping_n_retries: int = 3, ping_retry_delay: float = 0.4, **kwargs) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
         :param quic: Enables the QUIC transport
@@ -128,20 +128,33 @@ class P2P:
             b=need_bootstrap, q=quiet, **{**bootstrap_peers, **dht, **force_reachability, **host_maddrs, **kwargs})
 
         self._initialize(proc_args)
-        for try_count in range(ping_n_retries):
-            try:
-                await asyncio.sleep(ping_retry_delay * (2 ** try_count))
-                await self._ping_client()
-                break
-            except Exception as e:
-                if try_count == ping_n_retries - 1:
-                    logger.error(f'Failed to ping p2pd: {e}')
-                    await self.shutdown()
-                    if isinstance(e, FileNotFoundError):  # The daemon's Unix socket is not found
-                        raise RuntimeError('The p2p daemon failed to start, see its stderr above for the reasons')
-                    raise
+        await self._ping_daemon_with_retries(ping_n_retries, ping_retry_delay)
 
         return self
+
+    def _initialize(self, proc_args: List[str]) -> None:
+        self._child = Popen(args=proc_args, encoding="utf8")
+        self._alive = True
+        self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
+
+    async def _ping_daemon_with_retries(self, ping_n_retries: int, ping_retry_delay: float) -> None:
+        for try_number in range(ping_n_retries):
+            await asyncio.sleep(ping_retry_delay * (2 ** try_number))
+
+            if self._child.poll() is not None:  # Process died
+                break
+
+            try:
+                await self._ping_daemon()
+                break
+            except Exception as e:
+                if try_number == ping_n_retries - 1:
+                    logger.error(f'Failed to ping p2pd: {e}')
+                    await self.shutdown()
+                    raise
+
+        if self._child.returncode is not None:
+            raise RuntimeError(f'The p2p daemon has died with return code {self._child.returncode}')
 
     @classmethod
     async def replicate(cls, daemon_listen_maddr: Multiaddr) -> 'P2P':
@@ -163,10 +176,10 @@ class P2P:
 
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
-        await self._ping_client()
+        await self._ping_daemon()
         return self
 
-    async def _ping_client(self) -> None:
+    async def _ping_daemon(self) -> None:
         self.id, maddrs = await self._client.identify()
         logger.debug(f'Launched p2pd with id = {self.id}, host multiaddrs = {maddrs}')
 
@@ -189,11 +202,6 @@ class P2P:
             await asyncio.sleep(delay)
 
         raise RuntimeError('Not enough peers')
-
-    def _initialize(self, proc_args: List[str]) -> None:
-        self._child = Popen(args=proc_args, encoding="utf8")
-        self._alive = True
-        self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
     @property
     def daemon_listen_maddr(self) -> Multiaddr:
