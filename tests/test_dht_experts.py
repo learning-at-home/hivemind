@@ -1,6 +1,8 @@
 import asyncio
 import random
+import time
 
+import psutil
 import numpy as np
 import pytest
 
@@ -9,6 +11,13 @@ import hivemind.server.expert_uid
 from hivemind import LOCALHOST, declare_experts, get_experts
 from hivemind.client.beam_search import MoEBeamSearcher
 from hivemind.server.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefix, split_uid
+
+
+@pytest.fixture(autouse=True)
+def cleanup_children():
+    yield
+    for child in psutil.Process().children(recursive=True):
+        child.terminate()
 
 
 @pytest.mark.forked
@@ -39,11 +48,14 @@ def test_store_get_experts():
     # test graceful shutdown
     first_peer.shutdown()
     other_peer.shutdown()
+    time.sleep(0.1)
     assert sum(peer.is_alive() for peer in peers) == len(peers) - 2
     remaining_peer1 = random.choice([peer for peer in peers if peer.is_alive()])
     remaining_peer2 = random.choice([peer for peer in peers if peer.is_alive()])
     assert all(hivemind.declare_experts(remaining_peer1, ['new_expert.1'], 'dummy'))
     assert hivemind.get_experts(remaining_peer2, ['new_expert.1'])[0].endpoint == 'dummy'
+
+
 
 
 @pytest.mark.forked
@@ -162,3 +174,8 @@ async def test_negative_caching():
         assert fetched[i] is not None, f"node should have cached ffn.{i}."
     for i in range(6, len(fetched)):
         assert fetched[i] is None, f"node shouldn't have cached ffn.{i}."
+
+    await node.shutdown()
+    neg_caching_peer.shutdown()
+    for peer in peers:
+        peer.shutdown()
