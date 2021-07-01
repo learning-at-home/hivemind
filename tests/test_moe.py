@@ -7,7 +7,6 @@ import hivemind
 from hivemind import background_server
 from hivemind.client.expert import DUMMY
 from hivemind.server import layers
-from test_utils.fixtures import cleanup_children
 
 
 @pytest.mark.forked

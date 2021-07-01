@@ -9,7 +9,6 @@ from hivemind.client.averaging.allreduce import AveragingMode
 from hivemind.client.averaging.load_balancing import load_balance_peers
 from hivemind.client.averaging.key_manager import GroupKeyManager
 from hivemind.proto.runtime_pb2 import CompressionType
-from test_utils.fixtures import cleanup_children
 
 
 @pytest.mark.forked

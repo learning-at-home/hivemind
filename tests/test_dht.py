@@ -6,7 +6,7 @@ import pytest
 
 import hivemind
 from hivemind import LOCALHOST, strip_port
-from test_utils.fixtures import cleanup_children
+
 
 
 @pytest.mark.forked

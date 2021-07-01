@@ -9,7 +9,6 @@ from sklearn.datasets import load_digits
 
 from hivemind import RemoteExpert, RemoteMixtureOfExperts, RemoteSwitchMixtureOfExperts, background_server, DHT, \
     DecentralizedSGD, DecentralizedAdam
-from test_utils.fixtures import cleanup_children
 
 
 @pytest.mark.forked
