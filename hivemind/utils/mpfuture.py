@@ -43,22 +43,17 @@ class MPFuture(base.Future, Generic[ResultType]):
     Any process can access future status and set the result / exception and check for state.
     However, only the original process (i.e. the process that created the future) can await the result or exception.
 
-    This primitive works between processes created through inheritance (e.g. fork), *not* for arbitrary processes.
-    For independently spawned processes, please instead use mp.Pipe / mp.connection.Connection.
-
-    :param use_lock: if True, operations with MPFuture use a global lock to prevent concurrent writes to the same pipe;
-      If set to False, writing to this future ignores global lock, slightly improving performance, but making user
-      responsible for avoiding concurrent set_result / set_exception calls to futures with the same process of origin.
-    :param loop: if specified, overrides default asyncio event loop for the purpose of awaiting MPFuture
+    :note: This is an internal primitive that is not guaranteed to work outside of hivemind applications.
+     More specifically, there are two known limitations:
+       - MPFuture works between processes created through inheritance (e.g. fork), *not* for independent processes
+       - Different executors (non-origin processes) cannot call set_result / set_exception / cancel simultaneously
     """
-    lock = mp.Lock()  # global lock that prevents simultaneous initialization and writing
     pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
     global_mpfuture_receivers: Dict[PID, PipeEnd] = mp.Manager().dict()
     active_futures: Optional[Dict[PID, MPFuture]] = None  # pending or running futures originated from current process
     active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
-    def __init__(self, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
-        self.use_lock = use_lock
+    def __init__(self, loop: Optional[asyncio.BaseEventLoop] = None):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state_cache = {}  # mapping from global to cached local future used that makes updates immediately
@@ -113,12 +108,11 @@ class MPFuture(base.Future, Generic[ResultType]):
         logger.debug(f"Initializing MPFuture backend for pid {pid}")
         assert pid != cls.active_pid and pid not in cls.global_mpfuture_receivers, "already initialized"
 
-        with cls.lock:
-            recv_pipe, send_pipe = mp.Pipe(duplex=False)
-            cls.active_pid, cls.active_futures, cls.global_mpfuture_receivers[pid] = pid, {}, send_pipe
-            cls.pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[recv_pipe],
-                                                      name=f'{__name__}.BACKEND', daemon=True)
-            cls.pipe_waiter_thread.start()
+        recv_pipe, send_pipe = mp.Pipe(duplex=False)
+        cls.active_pid, cls.active_futures, cls.global_mpfuture_receivers[pid] = pid, {}, send_pipe
+        cls.pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[recv_pipe],
+                                                  name=f'{__name__}.BACKEND', daemon=True)
+        cls.pipe_waiter_thread.start()
 
     @classmethod
     def _process_updates_in_background(cls, receiver_pipe: mp.connection.Connection):
@@ -144,8 +138,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """ this method sends result, exception or cancel to the MPFuture origin. """
-        with self.lock if self.use_lock else contextlib.nullcontext():
-            self._sender_pipe.send((self._uid, update_type, payload))
+        self._sender_pipe.send((self._uid, update_type, payload))
 
     def set_result(self, result: ResultType):
         if os.getpid() == self._origin_pid:
@@ -242,13 +235,12 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __getstate__(self):
         return dict(_shared_state_code=self._shared_state_code, _origin_pid=self._origin_pid, _uid=self._uid,
-                    use_lock=self.use_lock, _result=self._result, _exception=self._exception)
+                    _result=self._result, _exception=self._exception)
 
     def __setstate__(self, state):
         self._shared_state_code = state['_shared_state_code']
         self._origin_pid, self._uid = state['_origin_pid'], state['_uid']
         self._result, self._exception = state['_result'], state['_exception']
-        self.use_lock = state['use_lock']
 
         self._waiters, self._done_callbacks = [], []
         self._condition = threading.Condition()
