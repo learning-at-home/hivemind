@@ -75,7 +75,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
           local tensors for averaging
     :param allow_state_sharing: if set to True, other peers can download this peer's state. Can be overwritten
       with averager.allow_state_sharing = True / False
-    :param shutdown_grace_seconds: when calling .shutdown, wait for up to this many seconds before terminating
+    :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
 
     Example:
 
@@ -103,7 +103,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  auxiliary: bool = False, allow_state_sharing: Optional[bool] = None,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', daemon: bool = True,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None,
-                 shutdown_grace_seconds: float = 5, **kwargs):
+                 shutdown_timeout: float = 5, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
             "throughput must be a non-negative float32"
@@ -133,7 +133,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             tensor.share_memory_()
         self.total_size = sum(map(torch.Tensor.numel, self._averaged_tensors))
         self.schema_hash = compute_schema_hash(self._averaged_tensors)
-        self.shutdown_grace_seconds = shutdown_grace_seconds
+        self.shutdown_timeout = shutdown_timeout
         self.throughput = throughput
 
         self.matchmaking_kwargs = dict(
@@ -250,7 +250,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if self.is_alive():
             self._outer_pipe.send(('_shutdown', [None], {}))  # shut down the daemon process
             self._inner_pipe.send(('_SHUTDOWN', None))  # shut down background thread in master
-            self.join(self.shutdown_grace_seconds)
+            self.join(self.shutdown_timeout)
             if self.is_alive():
                 logger.warning("Averager did not shut down within the grace period; terminating it the hard way.")
                 self.terminate()

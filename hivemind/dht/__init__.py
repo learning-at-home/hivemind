@@ -45,22 +45,22 @@ class DHT(mp.Process):
     :param max_workers: declare_experts and get_experts will use up to this many parallel workers
         (but no more than one per key)
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
-    :param shutdown_grace_seconds: when calling .shutdown, wait for up to this many seconds before terminating
+    :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
     :param kwargs: any other params will be forwarded to DHTNode upon creation
     """
     _node: DHTNode
 
     def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 record_validators: Iterable[RecordValidatorBase] = (), shutdown_grace_seconds: float = 3, **kwargs):
+                 record_validators: Iterable[RecordValidatorBase] = (), shutdown_timeout: float = 3, **kwargs):
         super().__init__()
         assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
         self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
         self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
-        self.shutdown_grace_seconds = shutdown_grace_seconds
         self._record_validator = CompositeValidator(record_validators)
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)
+        self.shutdown_timeout = shutdown_timeout
         self.ready = mp.Event()
         self.daemon = daemon
         if start:
@@ -103,7 +103,7 @@ class DHT(mp.Process):
         """ Shut down a running dht process """
         if self.is_alive():
             self._outer_pipe.send(('_shutdown', [], {}))
-            self.join(self.shutdown_grace_seconds)
+            self.join(self.shutdown_timeout)
             if self.is_alive():
                 logger.warning("DHT did not shut down within the grace period; terminating it the hard way.")
                 self.terminate()
