@@ -2,8 +2,9 @@ import asyncio
 import heapq
 import multiprocessing as mp
 import random
+import threading
 from itertools import chain, product
-from typing import Dict, List, Optional, Sequence, TypeVar
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pytest
@@ -165,54 +166,80 @@ def test_empty_table():
     peer_proc.terminate()
 
 
-def run_node(node_id: DHTID, bootstrap_peers: List[Multiaddr], status_pipe: mp.Pipe):
+def run_node(bootstrap_peers: List[Multiaddr], info_queue: mp.Queue):
     if asyncio.get_event_loop().is_running():
         asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
         asyncio.set_event_loop(asyncio.new_event_loop())
     loop = asyncio.get_event_loop()
 
-    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
+    p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers, ping_n_retries=10))
     maddrs = loop.run_until_complete(p2p.identify_maddrs())
-    node = loop.run_until_complete(DHTNode.create(p2p, node_id, initial_peers=maddrs_to_peer_ids(bootstrap_peers)))
+    node = loop.run_until_complete(DHTNode.create(p2p, initial_peers=maddrs_to_peer_ids(bootstrap_peers)))
 
-    status_pipe.send((p2p.id, maddrs))
+    info_queue.put((node.node_id, p2p.id, maddrs))
 
     while True:
         loop.run_forever()
 
 
-T = TypeVar('T')
+def launch_swarm(n_peers: int, n_sequential_peers: int) -> \
+        Tuple[List[mp.Process], Dict[Endpoint, DHTID], List[List[Multiaddr]]]:
+    assert n_sequential_peers < n_peers, \
+        'Parameters imply that first n_sequential_peers of n_peers will be run sequentially'
 
+    processes = []
+    dht = {}
+    swarm_maddrs = []
 
-def sample_at_most_n(seq: Sequence[T], n: int) -> Sequence[T]:
-    return random.sample(seq, min(n, len(seq)))
+    info_queue = mp.Queue()
+    info_lock = mp.RLock()
+
+    for i in range(n_sequential_peers):
+        bootstrap_peers = random.choice(swarm_maddrs) if swarm_maddrs else []
+
+        proc = mp.Process(target=run_node, args=(bootstrap_peers, info_queue), daemon=True)
+        proc.start()
+        processes.append(proc)
+
+        node_id, peer_endpoint, peer_maddrs = info_queue.get()
+        dht[peer_endpoint] = node_id
+        swarm_maddrs.append(peer_maddrs)
+
+    def collect_info():
+        while True:
+            node_id, peer_endpoint, peer_maddrs = info_queue.get()
+            with info_lock:
+                dht[peer_endpoint] = node_id
+                swarm_maddrs.append(peer_maddrs)
+
+                if len(dht) == n_peers:
+                    break
+
+    collect_thread = threading.Thread(target=collect_info)
+    collect_thread.start()
+
+    for i in range(n_peers - n_sequential_peers):
+        with info_lock:
+            bootstrap_peers = random.choice(swarm_maddrs)
+
+        proc = mp.Process(target=run_node, args=(bootstrap_peers, info_queue), daemon=True)
+        proc.start()
+        processes.append(proc)
+
+    collect_thread.join()
+
+    return processes, dht, swarm_maddrs
 
 
 @pytest.mark.forked
 def test_dht_node():
-    # create dht with 50 nodes + your 51-st node
-    processes: List[mp.Process] = []
-    dht: Dict[Endpoint, DHTID] = {}
-    swarm_maddrs: List[List[Multiaddr]] = []
+    # step A: create a swarm of 50 dht nodes in parallel processes
+    #         (first 5 created sequentially, others created in parallel)
+    processes, dht, swarm_maddrs = launch_swarm(n_peers=50, n_sequential_peers=5)
 
-    for i in range(50):
-        node_id = DHTID.generate()
-
-        # Sample multiaddrs for <= 5 different bootstrap peers
-        bootstrap_peers = sum(sample_at_most_n(swarm_maddrs, 5), [])
-
-        pipe_recv, pipe_send = mp.Pipe(duplex=False)
-        proc = mp.Process(target=run_node, args=(node_id, bootstrap_peers, pipe_send), daemon=True)
-        proc.start()
-        processes.append(proc)
-
-        peer_endpoint, peer_maddrs = pipe_recv.recv()
-        dht[peer_endpoint] = node_id
-        swarm_maddrs.append(peer_maddrs)
-
+    # step B: run 51-st node in this process
     loop = asyncio.get_event_loop()
-
-    bootstrap_peers = sum(sample_at_most_n(swarm_maddrs, 5), [])
+    bootstrap_peers = random.choice(swarm_maddrs)
     p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
     me = loop.run_until_complete(DHTNode.create(p2p, initial_peers=maddrs_to_peer_ids(bootstrap_peers), parallel_rpc=10,
                                                 cache_refresh_before_expiry=False))
@@ -272,8 +299,7 @@ def test_dht_node():
     assert len(set.difference(set(nearest.keys()), set(all_node_ids) | {me.node_id})) == 0
 
     # test 5: node without peers (when P2P is connected to the swarm)
-
-    bootstrap_peers = sum(sample_at_most_n(swarm_maddrs, 5), [])
+    bootstrap_peers = random.choice(swarm_maddrs)
     p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
 
     detached_node = loop.run_until_complete(DHTNode.create(p2p))
@@ -282,12 +308,11 @@ def test_dht_node():
     nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy], exclude_self=True))[dummy]
     assert len(nearest) == 0
 
-    # test 6 store and get value
-
+    # test 6: store and get value
     true_time = get_dht_time() + 1200
     assert loop.run_until_complete(me.store("mykey", ["Value", 10], true_time))
 
-    bootstrap_peers = sum(sample_at_most_n(swarm_maddrs, 5), [])
+    bootstrap_peers = random.choice(swarm_maddrs)
     p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
 
     that_guy = loop.run_until_complete(DHTNode.create(p2p, initial_peers=random.sample(dht.keys(), 3), parallel_rpc=10,
