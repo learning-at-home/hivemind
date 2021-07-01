@@ -39,8 +39,9 @@ class DHT(mp.Process):
     * hivemind servers periodically announce their experts via declare_experts (dht_handler.py)
     * trainers find most suitable experts via RemoteMixtureOfExperts (beam_search.py)
 
-    :param initial_peers: one or multiple endpoints pointing to active DHT peers. Similar format to listen_on.
-    :param listen_on: an interface for incoming connections, e.g. "127.0.0.1:*", "0.0.0.0:1234" or "ipv6:[::]:*"
+    :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
+                if None, creates one with default parameters and initial_peers as bootstrap peers.
+    :param initial_peers: one or multiple multiaddrs pointing to active DHT peers
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
     :param max_workers: declare_experts and get_experts will use up to this many parallel workers
@@ -49,13 +50,20 @@ class DHT(mp.Process):
     :param kwargs: any other params will be forwarded to DHTNode upon creation
     """
 
-    def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
+    def __init__(self, p2p: Optional[P2P] = None, initial_peers: Optional[Sequence[Multiaddr]] = None, *, start: bool,
                  daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
                  record_validators: Iterable[RecordValidatorBase] = (), **kwargs):
         super().__init__()
-        assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
-        self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
-        self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
+
+        self.p2p = p2p
+        assert (initial_peers is None or (isinstance(initial_peers, Sequence) and
+                                          all(isinstance(item, Multiaddr) for item in initial_peers))), \
+            'initial_peers should be of type Optional[Sequence[Multiaddr]]'
+        self.initial_peers = initial_peers
+        self.kwargs = kwargs
+        self.max_workers = max_workers
+        self.parallel_rpc = parallel_rpc
+
         self._record_validator = CompositeValidator(record_validators)
         self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._pipe, self.pipe = mp.Pipe(duplex=True)
@@ -71,7 +79,7 @@ class DHT(mp.Process):
         with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
             async def _run():
                 node = await DHTNode.create(
-                    initial_peers=list(self.initial_peers), listen_on=self.listen_on, parallel_rpc=self.parallel_rpc,
+                    p2p=self.p2p, initial_peers=self.initial_peers, parallel_rpc=self.parallel_rpc,
                     num_workers=self.max_workers or 1, record_validator=self._record_validator,
                     **self.kwargs)
                 if node.port is not None:
