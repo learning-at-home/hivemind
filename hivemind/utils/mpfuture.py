@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures._base as base
+import contextlib
 import multiprocessing as mp
 import multiprocessing.connection
 import os
@@ -29,79 +30,40 @@ except ImportError:
         """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
 
 
-INITIALIZER_LOCK = mp.Lock()
-PIPE_WAITER: Optional[threading.Thread] = None
-MPFUTURE_PIPES: Dict[PID, Tuple[PipeEnd, PipeEnd]] = mp.Manager().dict()
-ACTIVE_FUTURES: Optional[Dict[PID, MPFuture]] = None
-ACTIVE_PID: Optional[PID] = None
-
-
-def _initialize_mpfuture_backend():
-    global ACTIVE_PID, ACTIVE_FUTURES, PIPE_WAITER
-    pid = os.getpid()
-    logger.debug(f"Initializing MPFuture backend for pid {pid}")
-    assert pid != ACTIVE_PID and pid not in MPFUTURE_PIPES, "already initialized"
-
-    with INITIALIZER_LOCK:
-        ACTIVE_PID, ACTIVE_FUTURES, MPFUTURE_PIPES[pid] = pid, {}, mp.Pipe(duplex=False)
-        PIPE_WAITER = threading.Thread(target=_process_updates_in_background, name=f'{__name__}.BACKEND', daemon=True)
-        PIPE_WAITER.start()
-
-
-def _send_update(pid: PID, uid: UID, message_type: State, payload: Any = None):
-    pipes = MPFUTURE_PIPES.get(pid)
-    if pipes:
-        receiver_pipe, sender_pipe = pipes
-        sender_pipe.send((uid, message_type, payload))
-    else:
-        logger.warning(f"Could not update MPFuture(pid={pid}, uid={uid}): unknown pid.")
-
-
-def _process_updates_in_background():
-    pid = os.getpid()
-    receiver_pipe, sender_pipe = MPFUTURE_PIPES[pid]
-    while True:
-        try:
-            uid, message_type, payload = receiver_pipe.recv()
-            if uid not in ACTIVE_FUTURES:
-                logger.debug(f"Ignoring update to future with uid={uid}: the future is no longer active.")
-            elif message_type == Exception:
-                base.Future.set_exception(ACTIVE_FUTURES[uid], payload)
-            elif message_type == base.FINISHED:
-                base.Future.set_result(ACTIVE_FUTURES[uid], payload)
-            elif message_type == base.CANCELLED:
-                base.Future.cancel(ACTIVE_FUTURES[uid])
-            else:
-                raise ValueError(f"Unexpected message type {message_type}")
-
-        except BrokenPipeError:
-            logger.debug(f"MPFuture backend was shut down (pid={pid}).")
-        except Exception as e:
-            logger.warning(f"Internal error (type={e}, pid={pid}): could not retrieve update for MPFuture.")
-            logger.exception(e)
-
-
 class MPFuture(base.Future, Generic[ResultType]):
     """
-    Multiprocessing-aware version of concurrent.futures.Future / asyncio.Future.
-    Any process can access future status and set the result / exception. However, only the
-    original process (i.e. the process that created the future) can retrieve the result or exception.
+    A version of concurrent.futures.Future / asyncio.Future that can be fulfilled from a separate process.
+    Any process can access future status and set the result / exception and check for state.
+    However, only the original process (i.e. the process that created the future) can await the result or exception.
 
     This primitive works between processes created through inheritance (e.g. fork), *not* for arbitrary processes.
     For independently spawned processes, please instead use mp.Pipe / mp.connection.Connection.
+
+    :param use_lock: if True, operations with MPFuture use a global lock to prevent concurrent writes to the same pipe;
+      If set to False, writing to this future ignores global lock, slightly improving performance, but making user
+      responsible for avoiding concurrent set_result / set_exception calls to futures with the same process of origin.
+    :param loop: if specified, overrides default asyncio event loop for the purpose of awaiting MPFuture
     """
+    lock = mp.Lock()  # global lock that prevents simultaneous initialization and writing
+    pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
+    global_mpfuture_receivers: Dict[PID, PipeEnd] = mp.Manager().dict()
+    active_futures: Optional[Dict[PID, MPFuture]] = None  # pending or running futures originated from current process
+    active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
-    def __init__(self, loop: Optional[asyncio.BaseEventLoop] = None):
-        self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int#TODO
+    def __init__(self, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
+        self.use_lock = use_lock
+        self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
-        self._state, self._result, self._exception = base.PENDING, None, None
-        # note: self._uid is only unique inside process that spawned it
+        self._state_cache = {}  # mapping from global to cached local future used that makes updates immediately
+        # available on setter side; dictionary-based cache works because future can visit any state at most once
 
-        super().__init__()
-        if ACTIVE_PID != self._origin_pid:
-            _initialize_mpfuture_backend()
-        assert self._uid not in ACTIVE_FUTURES
-        ACTIVE_FUTURES[self._uid] = self
+        base.Future.__init__(self)
+        self._state, self._result, self._exception = base.PENDING, None, None
+
+        if self.active_pid != self._origin_pid:
+            self._initialize_mpfuture_backend()
+        assert self._uid not in self.active_futures
+        self.active_futures[self._uid] = self
 
         try:
             self._loop = loop or asyncio.get_event_loop()
@@ -111,10 +73,11 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     @property
     def _state(self) -> State:
-        return ALL_STATES[self._shared_state_code.item()]
+        shared_state = ALL_STATES[self._shared_state_code.item()]
+        return self._state_cache.get(shared_state, shared_state)
 
     @_state.setter
-    def _state(self, new_state):
+    def _state(self, new_state: State):
         self._shared_state_code[...] = ALL_STATES.index(new_state)
         if self._state in TERMINAL_STATES and self._aio_event is not None and not self._aio_event.is_set():
             asyncio.run_coroutine_threadsafe(self._set_event(), self.get_loop())
@@ -122,21 +85,67 @@ class MPFuture(base.Future, Generic[ResultType]):
     async def _set_event(self):
         self._aio_event.set()
 
+    @property
+    def _sender_pipe(self) -> mp.connection.Connection:
+        """ a pipe that can be used to send updates to the MPFuture creator """
+        return self.global_mpfuture_receivers[self._origin_pid]
+
+    @classmethod
+    def _initialize_mpfuture_backend(cls):
+        pid = os.getpid()
+        logger.debug(f"Initializing MPFuture backend for pid {pid}")
+        assert pid != cls.active_pid and pid not in cls.global_mpfuture_receivers, "already initialized"
+
+        with cls.lock:
+            recv_pipe, send_pipe = mp.Pipe(duplex=False)
+            cls.active_pid, cls.active_futures, cls.global_mpfuture_receivers[pid] = pid, {}, send_pipe
+            cls.pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[recv_pipe],
+                                                      name=f'{__name__}.BACKEND', daemon=True)
+            cls.pipe_waiter_thread.start()
+
+    @classmethod
+    def _process_updates_in_background(cls, receiver_pipe: mp.connection.Connection):
+        pid = os.getpid()
+        while True:
+            try:
+                uid, is_exception, payload = receiver_pipe.recv()
+                if uid not in cls.active_futures:
+                    logger.debug(f"Ignoring update to future with uid={uid}: the future is no longer active.")
+                elif is_exception:
+                    cls.active_futures.pop(uid).set_result(payload)
+                else:
+                    cls.active_futures.pop(uid).set_exception(payload)
+            except BrokenPipeError:
+                logger.debug(f"MPFuture backend was shut down (pid={pid}).")
+            except Exception as e:
+                logger.warning(f"Internal error (type={e}, pid={pid}): could not retrieve update for MPFuture.")
+                logger.exception(e)
+
+    def _send_update(self, result: Optional[ResultType] = None, exception: Optional[BaseException] = None):
+        """ this method sends result, exception or cancel to the MPFuture origin. """
+        assert exception is None or result is None, "please provide result or exception, but not both"
+        with self.lock if self.use_lock else contextlib.nullcontext():
+            self._sender_pipe.send((self._uid, exception is None, exception or result))
+
     def set_result(self, result: ResultType):
         if os.getpid() == self._origin_pid:
+            self.active_futures.pop(self._uid, None)
             super().set_result(result)
         elif self._state in TERMINAL_STATES:
             raise InvalidStateError(f"Can't set_result to a future that is {self._state} ({self._uid})")
         else:
-            _send_update(self._origin_pid, self._uid, base.FINISHED, result)
+            self._state_cache[self._state], self._result = base.FINISHED, result
+            self._send_update(result=result)
 
     def set_exception(self, exception: BaseException):
         if os.getpid() == self._origin_pid:
+            self.active_futures.pop(self._uid, None)
             super().set_exception(exception)
         elif self._state in TERMINAL_STATES:
             raise InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self._uid})")
         else:
-            _send_update(self._origin_pid, self._uid, Exception, exception)
+            self._state_cache[self._state], self._exception = base.FINISHED, exception
+            self._send_update(exception=exception)
 
     def set_running_or_notify_cancel(self):
         if self._state == base.PENDING:
@@ -148,13 +157,8 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise InvalidStateError(f"Can't set_running_or_notify_cancel when future is in {self._state} ({self._uid})")
 
     def cancel(self):
-        if os.getpid() == self._origin_pid:
-            return super().cancel()
-        elif self._state in TERMINAL_STATES:
-            return False
-        else:
-            _send_update(self._origin_pid, self._uid, base.CANCELLED)
-            return True
+        assert os.getpid() == self._origin_pid, "MPFuture can only be cancelled by its creator."
+        return super().cancel()
 
     def result(self, timeout: Optional[float] = None) -> ResultType:
         if self._state not in TERMINAL_STATES:
@@ -206,20 +210,21 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __del__(self):
         if getattr(self, '_origin_pid', None) == os.getpid():
-            del ACTIVE_FUTURES[self._uid]
+            self.active_futures.pop(self._uid, None)
         if getattr(self, '_aio_event', None):
             self._aio_event.set()
 
     def __getstate__(self):
-        return dict(_shared_state_code=self._shared_state_code,
-                    _state=self._state, _origin_pid=self._origin_pid, _uid=self._uid,
-                    _result=self._result, _exception=self._exception)
+        return dict(_shared_state_code=self._shared_state_code, _origin_pid=self._origin_pid, _uid=self._uid,
+                    use_lock=self.use_lock, _result=self._result, _exception=self._exception)
 
     def __setstate__(self, state):
         self._shared_state_code = state['_shared_state_code']
         self._origin_pid, self._uid = state['_origin_pid'], state['_uid']
         self._result, self._exception = state['_result'], state['_exception']
+        self.use_lock = state['use_lock']
+
         self._waiters, self._done_callbacks = [], []
         self._condition = threading.Condition()
         self._aio_event = self._loop = None
-        self._state = state['_state']
+        self._state_cache = {}
