@@ -180,16 +180,18 @@ class P2P:
         return self
 
     async def _ping_daemon(self) -> None:
-        self.id, maddrs = await self._client.identify()
-        logger.debug(f'Launched p2pd with id = {self.id}, host multiaddrs = {maddrs}')
+        self.id, self._identified_maddrs = await self._client.identify()
+        logger.debug(f'Launched p2pd with id = {self.id}, host multiaddrs = {self._identified_maddrs}')
 
-    async def identify_maddrs(self) -> List[Multiaddr]:
-        _, maddrs = await self._client.identify()
-        if not maddrs:
+    async def identify_maddrs(self, latest: bool = False) -> List[Multiaddr]:
+        if latest:
+            _, self._identified_maddrs = await self._client.identify()
+
+        if not self._identified_maddrs:
             raise ValueError(f"No multiaddrs found for peer {self.id}")
 
         p2p_maddr = Multiaddr(f'/p2p/{self.id.to_base58()}')
-        return [addr.encapsulate(p2p_maddr) for addr in maddrs]
+        return [addr.encapsulate(p2p_maddr) for addr in self._identified_maddrs]
 
     async def list_peers(self) -> List[PeerInfo]:
         return list(await self._client.list_peers())
