@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import ctypes
 import multiprocessing as mp
+import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Iterable, Optional, Sequence, Union, Callable, Awaitable, TypeVar
@@ -266,3 +267,7 @@ class DHT(mp.Process):
         else:
             future.set_exception(ValueError(f"Can't get address: DHT node has no peers and no public endpoint."
                                             f" Please ensure the node is connected or specify peers=... manually."))
+
+    def __del__(self):
+        if self._parent_pid == os.getpid() and self.is_alive():
+            self.shutdown()

@@ -7,6 +7,7 @@ from hivemind.dht import get_dht_time
 from hivemind.dht.node import DHTNode, LOCALHOST
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
+from test_utils.fixtures import cleanup_children
 
 
 class SampleSchema(BaseModel):

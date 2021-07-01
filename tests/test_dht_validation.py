@@ -10,6 +10,7 @@ from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import DHTRecord, CompositeValidator
+from test_utils.fixtures import cleanup_children
 
 
 class SchemaA(BaseModel):

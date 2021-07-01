@@ -11,13 +11,7 @@ import hivemind.server.expert_uid
 from hivemind import LOCALHOST, declare_experts, get_experts
 from hivemind.client.beam_search import MoEBeamSearcher
 from hivemind.server.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefix, split_uid
-
-
-@pytest.fixture(autouse=True)
-def cleanup_children():
-    yield
-    for child in psutil.Process().children(recursive=True):
-        child.terminate()
+from test_utils.fixtures import cleanup_children
 
 
 @pytest.mark.forked
