@@ -104,7 +104,7 @@ def test_signing_in_different_process():
 @pytest.mark.asyncio
 async def test_dhtnode_signatures():
     alice = await hivemind.DHTNode.create(record_validator=RSASignatureValidator())
-    initial_peers = await alice.identify_maddrs()
+    initial_peers = await alice.get_visible_maddrs()
     bob = await hivemind.DHTNode.create(
         record_validator=RSASignatureValidator(RSAPrivateKey()), initial_peers=initial_peers)
     mallory = await hivemind.DHTNode.create(

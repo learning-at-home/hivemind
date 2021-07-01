@@ -28,7 +28,7 @@ async def replicate_if_needed(p2p: P2P, replicate: bool) -> P2P:
 async def bootstrap_from(daemons: List[P2P]) -> List[Multiaddr]:
     maddrs = []
     for d in daemons:
-        maddrs += await d.identify_maddrs()
+        maddrs += await d.get_visible_maddrs()
     return maddrs
 
 
@@ -274,7 +274,7 @@ async def run_server(handler_name, server_side, client_side, response_received):
     assert is_process_running(server_pid)
 
     server_side.send(server.id)
-    server_side.send(await server.identify_maddrs())
+    server_side.send(await server.get_visible_maddrs())
     while response_received.value == 0:
         await asyncio.sleep(0.5)
 

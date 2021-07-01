@@ -29,7 +29,7 @@ def run_protocol_listener(dhtid: DHTID, maddr_conn: mp.connection.Connection,
 
     # FIXME: Set external_host = localhost
     p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-    maddrs = loop.run_until_complete(p2p.identify_maddrs())
+    maddrs = loop.run_until_complete(p2p.get_visible_maddrs())
 
     protocol = loop.run_until_complete(DHTProtocol.create(
         p2p, dhtid, bucket_size=20, depth_modulo=5, num_replicas=3, wait_timeout=5))
@@ -173,7 +173,7 @@ def run_node(bootstrap_peers: List[Multiaddr], info_queue: mp.Queue):
     loop = asyncio.get_event_loop()
 
     p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers, ping_n_retries=10))
-    maddrs = loop.run_until_complete(p2p.identify_maddrs())
+    maddrs = loop.run_until_complete(p2p.get_visible_maddrs())
     node = loop.run_until_complete(DHTNode.create(p2p, initial_peers=bootstrap_peers))
 
     info_queue.put((node.node_id, p2p.id, maddrs))
@@ -361,7 +361,7 @@ def test_dht_node():
 
 async def launch_star_shaped_swarm(n_peers: int, **kwargs) -> List[DHTNode]:
     nodes = [await hivemind.DHTNode.create(**kwargs)]
-    initial_peers = await nodes[0].identify_maddrs()
+    initial_peers = await nodes[0].get_visible_maddrs()
     nodes += await asyncio.gather(*[hivemind.DHTNode.create(initial_peers=initial_peers, **kwargs)
                                     for _ in range(n_peers - 1)])
     return nodes
@@ -392,7 +392,7 @@ async def test_dhtnode_replicas():
 @pytest.mark.asyncio
 async def test_dhtnode_caching(T=0.05):
     node2 = await hivemind.DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
-    node1 = await hivemind.DHTNode.create(initial_peers=await node2.protocol.p2p.identify_maddrs(),
+    node1 = await hivemind.DHTNode.create(initial_peers=await node2.protocol.p2p.get_visible_maddrs(),
                                           cache_refresh_before_expiry=5 * T, listen=False, reuse_get_requests=False)
     await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
     await node2.store('k2', [654, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)

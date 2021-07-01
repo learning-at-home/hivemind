@@ -220,7 +220,7 @@ class DHT(mp.Process):
         return self.run_coroutine(partial(DHT._get_visible_maddrs, latest=latest))
 
     async def _get_visible_maddrs(self, node: DHTNode, latest: bool = False) -> List[Multiaddr]:
-        return await node.identify_maddrs(latest=latest)
+        return await node.get_visible_maddrs(latest=latest)
 
     def __del__(self):
         if self._parent_pid == os.getpid() and self.is_alive():

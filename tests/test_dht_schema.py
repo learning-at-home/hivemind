@@ -22,7 +22,7 @@ async def dht_nodes_with_schema():
     validator = SchemaValidator(SampleSchema)
 
     alice = await DHTNode.create(record_validator=validator)
-    bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.identify_maddrs())
+    bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.get_visible_maddrs())
     yield alice, bob
 
     await asyncio.gather(alice.shutdown(), bob.shutdown())
@@ -111,7 +111,7 @@ async def test_keys_outside_schema(dht_nodes_with_schema):
         assert validator.merge_with(SchemaValidator(MergedSchema, allow_extra_keys=False))
 
         alice = await DHTNode.create(record_validator=validator)
-        bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.identify_maddrs())
+        bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.get_visible_maddrs())
 
         store_ok = await bob.store('unknown_key', b'foo_bar', get_dht_time() + 10)
         assert store_ok == allow_extra_keys
@@ -133,7 +133,7 @@ async def test_prefix():
     validator = SchemaValidator(Schema, allow_extra_keys=False, prefix='prefix')
 
     alice = await DHTNode.create(record_validator=validator)
-    bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.identify_maddrs())
+    bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.get_visible_maddrs())
 
     assert await bob.store('prefix_field', 777, get_dht_time() + 10)
     assert not await bob.store('prefix_field', 'string_value', get_dht_time() + 10)
