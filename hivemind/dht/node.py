@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Optional, Tuple, List, Dict, DefaultDict, Collection, Union, Set, Awaitable, Callable, Any
 
+from multiaddr import Multiaddr
 from sortedcontainers import SortedSet
 
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
@@ -76,7 +77,8 @@ class DHTNode:
 
     @classmethod
     async def create(
-            cls, p2p: P2P, node_id: Optional[DHTID] = None, initial_peers: List[Endpoint] = (),
+            cls, p2p: P2P, node_id: Optional[DHTID] = None,
+            initial_peers: Optional[Union[List[Multiaddr], List[Endpoint]]] = None,
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 3, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
@@ -88,7 +90,7 @@ class DHTNode:
         """
         :param p2p: instance of hivemind.p2p.P2P that will be used for communication
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
-        :param initial_peers: connects to these peers to populate routing table, defaults to no peers
+        :param initial_peers: connects to these peers (defined by multiaddr or peer ID) to populate routing table
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
           either split in two buckets along the midpoint or reject the new node (but still save it as a replacement)
           Recommended value: k is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
@@ -144,6 +146,9 @@ class DHTNode:
         self.endpoint = p2p.id
 
         if initial_peers:
+            initial_peers = {Endpoint.from_base58(item['p2p']) if isinstance(item, Multiaddr) else item
+                             for item in initial_peers}
+
             # stage 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
             start_time = get_dht_time()

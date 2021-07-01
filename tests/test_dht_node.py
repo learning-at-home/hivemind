@@ -174,7 +174,7 @@ def run_node(bootstrap_peers: List[Multiaddr], info_queue: mp.Queue):
 
     p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers, ping_n_retries=10))
     maddrs = loop.run_until_complete(p2p.identify_maddrs())
-    node = loop.run_until_complete(DHTNode.create(p2p, initial_peers=maddrs_to_peer_ids(bootstrap_peers)))
+    node = loop.run_until_complete(DHTNode.create(p2p, initial_peers=bootstrap_peers))
 
     info_queue.put((node.node_id, p2p.id, maddrs))
 
@@ -241,7 +241,7 @@ def test_dht_node():
     loop = asyncio.get_event_loop()
     bootstrap_peers = random.choice(swarm_maddrs)
     p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
-    me = loop.run_until_complete(DHTNode.create(p2p, initial_peers=maddrs_to_peer_ids(bootstrap_peers), parallel_rpc=10,
+    me = loop.run_until_complete(DHTNode.create(p2p, initial_peers=bootstrap_peers, parallel_rpc=10,
                                                 cache_refresh_before_expiry=False))
 
     # test 1: find self
@@ -315,7 +315,7 @@ def test_dht_node():
     bootstrap_peers = random.choice(swarm_maddrs)
     p2p = loop.run_until_complete(P2P.create(bootstrap_peers=bootstrap_peers))
     that_guy = loop.run_until_complete(
-        DHTNode.create(p2p, initial_peers=maddrs_to_peer_ids(bootstrap_peers), parallel_rpc=10,
+        DHTNode.create(p2p, initial_peers=bootstrap_peers, parallel_rpc=10,
                        cache_refresh_before_expiry=False, cache_locally=False))
 
     for node in [me, that_guy]:
