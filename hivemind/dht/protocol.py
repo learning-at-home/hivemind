@@ -66,14 +66,11 @@ class DHTProtocol:
 
         if listen:
             await self.p2p.add_unary_handler(
-                DHTProtocol.PING_NAME, functools.partial(DHTProtocol.rpc_ping, self),
-                dht_pb2.PingRequest, dht_pb2.PingResponse)
+                DHTProtocol.PING_NAME, self.rpc_ping, dht_pb2.PingRequest, dht_pb2.PingResponse)
             await self.p2p.add_unary_handler(
-                DHTProtocol.STORE_NAME, functools.partial(DHTProtocol.rpc_store, self),
-                dht_pb2.StoreRequest, dht_pb2.StoreResponse)
+                DHTProtocol.STORE_NAME, self.rpc_store, dht_pb2.StoreRequest, dht_pb2.StoreResponse)
             await self.p2p.add_unary_handler(
-                DHTProtocol.FIND_NAME, functools.partial(DHTProtocol.rpc_find, self),
-                dht_pb2.FindRequest, dht_pb2.FindResponse)
+                DHTProtocol.FIND_NAME, self.rpc_find, dht_pb2.FindRequest, dht_pb2.FindResponse)
 
             self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes())
         else:  # client-only mode
