@@ -359,16 +359,19 @@ def test_dht_node():
     loop.run_until_complete(asyncio.wait([node.shutdown() for node in [me, detached_node, that_guy]]))
 
 
+async def launch_star_shaped_swarm(n_peers: int, **kwargs) -> List[DHTNode]:
+    nodes = [await hivemind.DHTNode.create(**kwargs)]
+    initial_peers = await nodes[0].identify_maddrs()
+    nodes += await asyncio.gather(*[hivemind.DHTNode.create(initial_peers=initial_peers, **kwargs)
+                                    for _ in range(n_peers - 1)])
+    return nodes
+
+
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_replicas():
-    dht_size = 20
     num_replicas = random.randint(1, 20)
-
-    peers = [await hivemind.DHTNode.create(num_replicas=num_replicas)]
-    initial_peers = await peers[0].identify_maddrs()
-    peers += await asyncio.gather(*[hivemind.DHTNode.create(initial_peers=initial_peers, num_replicas=num_replicas)
-                                    for _ in range(dht_size - 1)])
+    peers = await launch_star_shaped_swarm(n_peers=20, num_replicas=num_replicas)
 
     you = random.choice(peers)
     assert await you.store('key1', 'foo', get_dht_time() + 999)
@@ -434,10 +437,7 @@ async def test_dhtnode_caching(T=0.05):
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_reuse_get():
-    peers = [await hivemind.DHTNode.create(parallel_rpc=256)]
-    initial_peers = await peers[0].identify_maddrs()
-    peers += await asyncio.gather(*[hivemind.DHTNode.create(initial_peers=initial_peers, parallel_rpc=256)
-                                    for _ in range(9)])
+    peers = await launch_star_shaped_swarm(n_peers=10, parallel_rpc=256)
 
     await asyncio.gather(
         random.choice(peers).store('k1', 123, hivemind.get_dht_time() + 999),
@@ -467,11 +467,7 @@ async def test_dhtnode_reuse_get():
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_blacklist():
-    node1 = await hivemind.DHTNode.create(blacklist_time=999)
-    initial_peers = await node1.identify_maddrs()
-    node2, node3, node4 = await asyncio.gather(
-        *[hivemind.DHTNode.create(blacklist_time=999, initial_peers=initial_peers)
-          for _ in range(3)])
+    node1, node2, node3, node4 = await launch_star_shaped_swarm(n_peers=4, blacklist_time=999)
 
     assert await node2.store('abc', 123, expiration_time=hivemind.get_dht_time() + 99)
     assert len(node2.blacklist.ban_counter) == 0
@@ -494,10 +490,7 @@ async def test_dhtnode_blacklist():
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_edge_cases():
-    peers = [await hivemind.DHTNode.create(parallel_rpc=4)]
-    initial_peers = await peers[0].identify_maddrs()
-    peers += await asyncio.gather(*[hivemind.DHTNode.create(initial_peers=initial_peers, parallel_rpc=4)
-                                    for _ in range(4)])
+    peers = await launch_star_shaped_swarm(n_peers=4, parallel_rpc=4)
 
     subkeys = [0, '', False, True, 'abyrvalg', 4555]
     keys = subkeys + [()]
