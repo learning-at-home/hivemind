@@ -8,7 +8,8 @@ import multiprocessing.connection
 import os
 import threading
 import uuid
-from typing import Tuple, Generic, TypeVar, Dict, Optional, Any, Callable
+from enum import Enum, auto
+from typing import Generic, TypeVar, Dict, Optional, Any, Callable
 
 import torch
 
@@ -28,6 +29,12 @@ try:
 except ImportError:
     class InvalidStateError(Exception):
         """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
+
+
+class UpdateType(Enum):
+    RESULT = auto()
+    EXCEPTION = auto()
+    CANCEL = auto()
 
 
 class MPFuture(base.Future, Generic[ResultType]):
@@ -108,24 +115,27 @@ class MPFuture(base.Future, Generic[ResultType]):
         pid = os.getpid()
         while True:
             try:
-                uid, is_exception, payload = receiver_pipe.recv()
+                uid, update_type, payload = receiver_pipe.recv()
                 if uid not in cls.active_futures:
                     logger.debug(f"Ignoring update to future with uid={uid}: the future is no longer active.")
-                elif is_exception:
+                elif update_type == UpdateType.RESULT:
                     cls.active_futures.pop(uid).set_result(payload)
-                else:
+                elif update_type == UpdateType.EXCEPTION:
                     cls.active_futures.pop(uid).set_exception(payload)
-            except BrokenPipeError:
+                elif update_type == UpdateType.CANCEL:
+                    cls.active_futures.pop(uid).cancel()
+                else:
+                    raise RuntimeError(f"MPFuture received unexpected update type {update_type}")
+            except (BrokenPipeError, EOFError):
                 logger.debug(f"MPFuture backend was shut down (pid={pid}).")
             except Exception as e:
                 logger.warning(f"Internal error (type={e}, pid={pid}): could not retrieve update for MPFuture.")
                 logger.exception(e)
 
-    def _send_update(self, result: Optional[ResultType] = None, exception: Optional[BaseException] = None):
+    def _send_update(self, update_type: UpdateType, payload: Any = None):
         """ this method sends result, exception or cancel to the MPFuture origin. """
-        assert exception is None or result is None, "please provide result or exception, but not both"
         with self.lock if self.use_lock else contextlib.nullcontext():
-            self._sender_pipe.send((self._uid, exception is None, exception or result))
+            self._sender_pipe.send((self._uid, update_type, payload))
 
     def set_result(self, result: ResultType):
         if os.getpid() == self._origin_pid:
@@ -135,7 +145,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise InvalidStateError(f"Can't set_result to a future that is {self._state} ({self._uid})")
         else:
             self._state_cache[self._state], self._result = base.FINISHED, result
-            self._send_update(result=result)
+            self._send_update(UpdateType.RESULT, result)
 
     def set_exception(self, exception: BaseException):
         if os.getpid() == self._origin_pid:
@@ -145,7 +155,17 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self._uid})")
         else:
             self._state_cache[self._state], self._exception = base.FINISHED, exception
-            self._send_update(exception=exception)
+            self._send_update(UpdateType.EXCEPTION, exception)
+
+    def cancel(self):
+        if os.getpid() == self._origin_pid:
+            self.active_futures.pop(self._uid, None)
+            return super().cancel()
+        elif self._state in [base.RUNNING, base.FINISHED]:
+            return False
+        else:
+            self._state_cache[self._state] = base.CANCELLED
+            self._send_update(UpdateType.CANCEL)
 
     def set_running_or_notify_cancel(self):
         if self._state == base.PENDING:
@@ -155,10 +175,6 @@ class MPFuture(base.Future, Generic[ResultType]):
             return False
         else:
             raise InvalidStateError(f"Can't set_running_or_notify_cancel when future is in {self._state} ({self._uid})")
-
-    def cancel(self):
-        assert os.getpid() == self._origin_pid, "MPFuture can only be cancelled by its creator."
-        return super().cancel()
 
     def result(self, timeout: Optional[float] = None) -> ResultType:
         if self._state not in TERMINAL_STATES:
