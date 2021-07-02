@@ -91,7 +91,7 @@ class DHTNode:
         :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
                     if None, creates one with default parameters and initial_peers as bootstrap peers.
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
-        :param initial_peers: connects to these peers (defined by multiaddr or peer ID) to populate routing table
+        :param initial_peers: connects to peers with these multiaddrs to populate routing table, defaults to no peers
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
           either split in two buckets along the midpoint or reject the new node (but still save it as a replacement)
           Recommended value: k is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
@@ -120,6 +120,7 @@ class DHTNode:
         :param strict: if True, any error encountered in validation will interrupt the creation of DHTNode
         :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
           if False, this node will refuse any incoming request, effectively being only a "client"
+        :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
         :param kwargs: extra parameters used in grpc.aio.server
         """
         self = cls(_initialized_with_create=True)
