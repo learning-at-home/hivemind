@@ -68,7 +68,10 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._use_lock = use_lock
 
         if self.active_pid != self._origin_pid:
-            self._initialize_mpfuture_backend()
+            with self.lock:
+                if self.active_pid != self._origin_pid:
+                    # note: the second if is intentional, see https://en.wikipedia.org/wiki/Double-checked_locking
+                    self._initialize_mpfuture_backend()
         assert self._uid not in self.active_futures
         self.active_futures[self._uid] = self
 
@@ -114,11 +117,10 @@ class MPFuture(base.Future, Generic[ResultType]):
         assert pid != cls.active_pid and pid not in cls.global_mpfuture_receivers, "already initialized"
 
         recv_pipe, send_pipe = mp.Pipe(duplex=False)
-        with cls.lock:
-            cls.active_pid, cls.active_futures, cls.global_mpfuture_receivers[pid] = pid, {}, send_pipe
-            cls.pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[recv_pipe],
-                                                      name=f'{__name__}.BACKEND', daemon=True)
-            cls.pipe_waiter_thread.start()
+        cls.active_pid, cls.active_futures, cls.global_mpfuture_receivers[pid] = pid, {}, send_pipe
+        cls.pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[recv_pipe],
+                                                  name=f'{__name__}.BACKEND', daemon=True)
+        cls.pipe_waiter_thread.start()
 
     @classmethod
     def _process_updates_in_background(cls, receiver_pipe: mp.connection.Connection):
