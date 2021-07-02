@@ -1,4 +1,5 @@
 """ An extension of averager that supports common optimization use cases. """
+from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 from threading import Lock
 from typing import Sequence, Dict, Iterator, Optional
@@ -39,6 +40,7 @@ class TrainingAverager(DecentralizedAverager):
         self.opt, self.extra_tensors, self.local_step = opt, tuple(extra_tensors), 0
         self.opt_statistics = tuple(average_opt_statistics)
         self.average_parameters, self.average_gradients = average_parameters, average_gradients
+        self.step_executor = ThreadPoolExecutor(max_workers=1)
         self.lock_averager_step = Lock()
         if initialize_optimizer:
             initialize_optimizer_state(opt)  # note: this will run one optimizer step!
@@ -54,9 +56,11 @@ class TrainingAverager(DecentralizedAverager):
         :param data_lock: averager locks it when model parameters are modified. Otherwise it's assumed that no model
         modifications occur during averaging step
         """
+        if not wait:
+            return self.step_executor.submit(self.step, data_lock, wait=True, **kwargs)
 
         # if data_lock is supplied, tensors might change during averaging, so we need to copy them
-        old_local_tensors = None
+        use_old_local_tensors = data_lock is not None
         if data_lock is None:
             data_lock = nullcontext()
 
@@ -64,41 +68,36 @@ class TrainingAverager(DecentralizedAverager):
         with self.lock_averager_step, torch.no_grad():
             # fill averager's tensors with current local tensors
             with data_lock, self.get_tensors() as averaged_tensors:
-                if data_lock is not None:
+                if use_old_local_tensors:
                     old_local_tensors = tuple(x.cpu().float().clone() for x in local_tensors)
                 assert len(local_tensors) == len(
                     averaged_tensors), "The number of optimized parameters should not change."
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                     averaged_tensor[...] = local_tensor.cpu().float()
 
-            # find a group and hopefully average tensors with peers
-            future = MPFuture()
-            super().step(wait=True, **kwargs).add_done_callback(
-                lambda step_future: future.set_result(self._on_step_finished(
-                    local_tensors, old_local_tensors, step_future.result(), data_lock)))
-            return future.result() if wait else future
+            # find a group and hopefully average tensors with peers, use batch size as weights
+            gathered = super().step(**kwargs)
+            if gathered is not None:
+                # load averaged tensors back into model
+                with data_lock, self.get_tensors() as averaged_tensors:
+                    if len(averaged_tensors) != len(local_tensors):
+                        raise RuntimeError("The number of optimized parameters should not change.")
 
-    def _on_step_finished(self, local_tensors, old_local_tensors, gathered, data_lock: Optional[Lock]):
-        if gathered is not None:
-            # load averaged tensors back into model
-            with data_lock, torch.no_grad(), self.get_tensors() as averaged_tensors:
-                if len(averaged_tensors) != len(local_tensors):
-                    raise RuntimeError("The number of optimized parameters should not change.")
+                    if old_local_tensors is not None:
+                        # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents
+                        # losing local updates that might have occurred during averaging
+                        for averaged_tensor, local_tensor, old_local_tensor in zip(averaged_tensors, local_tensors,
+                                                                                   old_local_tensors):
+                            local_tensor[...] += averaged_tensor.to(dtype=local_tensor.dtype,
+                                                                    device=local_tensor.device) - \
+                                                 old_local_tensor.to(dtype=local_tensor.dtype,
+                                                                     device=local_tensor.device)
+                    else:
+                        for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
+                            local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
 
-                if old_local_tensors is not None:
-                    # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents
-                    # losing local updates that might have occurred during averaging
-                    for averaged_tensor, local_tensor, old_local_tensor in zip(averaged_tensors, local_tensors,
-                                                                               old_local_tensors):
-                        local_tensor[...] += averaged_tensor.to(dtype=local_tensor.dtype,
-                                                                device=local_tensor.device) - \
-                                             old_local_tensor.to(dtype=local_tensor.dtype,
-                                                                 device=local_tensor.device)
-                else:
-                    for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                        local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
-
-        self.local_step += 1
+            self.local_step += 1
+            return gathered
 
     def local_tensors(self, replace_none: bool = True) -> Iterator[torch.Tensor]:
         """
