@@ -20,7 +20,11 @@ def cleanup_after_test():
 
         for child in psutil.Process().children(recursive=True):
             child.terminate()
-        manager.join(1)
-        manager.shutdown()
+
+        try:
+            manager.join(1)
+            manager.shutdown()
+        except:
+            pass
     finally:
         MPFuture._global_mpfuture_senders, MPFuture._active_pid, MPFuture._active_futures = old_values
