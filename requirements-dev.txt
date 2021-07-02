@@ -5,3 +5,4 @@ pytest-cov
 codecov
 tqdm
 scikit-learn
+psutil

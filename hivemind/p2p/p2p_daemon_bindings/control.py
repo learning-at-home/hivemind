@@ -105,10 +105,10 @@ class ControlClient:
             )
 
         async with server:
-            logger.info(f"DaemonConnector {self} starts listening to {self.listen_maddr}")
+            logger.debug(f"DaemonConnector {self} starts listening to {self.listen_maddr}")
             yield self
 
-        logger.info(f"DaemonConnector {self} closed")
+        logger.debug(f"DaemonConnector {self} closed")
 
     async def identify(self) -> Tuple[PeerID, Tuple[Multiaddr, ...]]:
         reader, writer = await self.daemon_connector.open_connection()
