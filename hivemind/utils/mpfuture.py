@@ -59,8 +59,8 @@ class MPFuture(base.Future, Generic[ResultType]):
     """
     lock = mp.Lock()  # global lock that prevents simultaneous initialization and writing
     pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
-    global_mpfuture_senders: Dict[PID, PipeEnd] = mp.Manager().dict()
-    active_futures: Optional[Dict[PID, MPFuture]] = None  # pending or running futures originated from current process
+    global_mpfuture_senders: MutableMapping[PID, PipeEnd] = mp.Manager().dict()
+    active_futures: Optional[Dict[UID, MPFuture]] = None  # pending or running futures originated from current process
     active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
     def __init__(self, use_lock: bool = True,  loop: Optional[asyncio.BaseEventLoop] = None):
@@ -136,7 +136,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             try:
                 uid, update_type, payload = receiver_pipe.recv()
                 if uid not in cls.active_futures:
-                    logger.debug(f"Ignoring update to future with uid={uid}: the future is no longer active.")
+                    logger.debug(f"Ignoring update to future with uid={uid}: the future is already done or destroyed.")
                 elif update_type == UpdateType.RESULT:
                     cls.active_futures.pop(uid).set_result(payload)
                 elif update_type == UpdateType.EXCEPTION:
@@ -185,6 +185,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         else:
             self._state_cache[self._state] = base.CANCELLED
             self._send_update(UpdateType.CANCEL)
+            return True
 
     def set_running_or_notify_cancel(self):
         if self._state == base.PENDING:
@@ -243,7 +244,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         if getattr(self, '_origin_pid', None) == os.getpid():
             self.active_futures.pop(self._uid, None)
         if getattr(self, '_aio_event', None):
-            self._aio_event.set()
+            self._set_event_threadsafe()
 
     def __getstate__(self):
         return dict(_shared_state_code=self._shared_state_code, _origin_pid=self._origin_pid, _uid=self._uid,
