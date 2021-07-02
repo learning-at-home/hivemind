@@ -46,10 +46,16 @@ class MPFuture(base.Future, Generic[ResultType]):
     Any process can access future status and set the result / exception and check for state.
     However, only the original process (i.e. the process that created the future) can await the result or exception.
 
+    :param use_lock: if True, operations with MPFuture use a global lock to prevent concurrent writes to the same pipe;
+      If set to False, writing to this future ignores global lock, slightly improving performance, but making user
+      responsible for avoiding concurrent set_result / set_exception calls to futures with the same process of origin.
+    :param loop: if specified, overrides default asyncio event loop for the purpose of awaiting MPFuture
+
     :note: This is an internal primitive that is not guaranteed to work outside of hivemind applications.
      More specifically, there are two known limitations:
        - MPFuture works between processes created through inheritance (e.g. fork), *not* for independent processes
-       - Different executors (non-origin processes) cannot call set_result / set_exception / cancel simultaneously
+       - MPFuture is deterministic if only one process can call set_result/set_exception/set_running_or_notify_cancel
+         and only the origin process can call result/exception/cancel.
     """
     lock = mp.Lock()  # global lock that prevents simultaneous initialization and writing
     pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
