@@ -417,9 +417,9 @@ def test_training_averager(n_steps: int = 10, n_dims: int = 16):
         f1.result()
         f2.result()
 
-        assert torch.allclose(x1, x_avg, atol=1e-6, rtol=0)
-        assert torch.allclose(x2, x_avg, atol=1e-6, rtol=0)
-        assert torch.allclose(x1.grad, grad_avg, atol=1e-6, rtol=0)
-        assert torch.allclose(x2.grad, grad_avg, atol=1e-6, rtol=0)
+        assert torch.allclose(x1, x_avg)
+        assert torch.allclose(x2, x_avg)
+        assert torch.allclose(x1.grad, grad_avg)
+        assert torch.allclose(x2.grad, grad_avg)
         assert torch.allclose(opt1.state[x1]["exp_avg_sq"], stats_avg)
         assert torch.allclose(opt2.state[x2]["exp_avg_sq"], stats_avg)
