@@ -227,7 +227,6 @@ class DHT(mp.Process):
         assert num_peers is None or peers == (), "please specify either a num_peers or the list of peers, not both"
         assert not isinstance(peers, str) and isinstance(peers, Sequence), "Please send a list / tuple of endpoints"
         future = MPFuture()
-        self.pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=future)))
         self._outer_pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=future)))
         return future.result()
 
