@@ -207,7 +207,7 @@ def test_mpfuture_bidirectional():
 
 def test_mpfuture_done_callback():
     receiver, sender = mp.Pipe(duplex=False)
-    evt1, evt2, evt3, evt4 = mp.Event(), mp.Event(), mp.Event(), mp.Event()
+    evt1, evt2, evt3, evt4, evt5 = (mp.Event() for _ in range(5))
 
     def _future_creator():
         future1, future2, future3 = hivemind.MPFuture(), hivemind.MPFuture(), hivemind.MPFuture()
@@ -218,13 +218,15 @@ def test_mpfuture_done_callback():
             evt1.set()
 
         future1.add_done_callback(_check_result_and_set)
-        future2.add_done_callback(lambda future: evt2.set())
-        future3.add_done_callback(lambda future: evt3.set())
+        future1.add_done_callback(lambda future: evt2.set())
+        future2.add_done_callback(lambda future: evt3.set())
+        future3.add_done_callback(lambda future: evt4.set())
+
         sender.send((future1, future2))
         future2.cancel()  # trigger future2 callback from the same process
 
         evt1.wait()
-        future1.add_done_callback(lambda future: evt4.set())  # schedule callback after future1 is already finished
+        future1.add_done_callback(lambda future: evt5.set())  # schedule callback after future1 is already finished
 
     p = mp.Process(target=_future_creator)
     p.start()
@@ -240,8 +242,8 @@ def test_mpfuture_done_callback():
     evt2.wait(1)
     assert future1.done() and not future1.cancelled()
     assert future2.done() and future2.cancelled()
-    assert evt1.is_set() and evt2.is_set() and evt4.is_set()
-    assert not evt3.is_set()
+    assert evt1.is_set() and evt2.is_set() and evt3.is_set() and evt5.is_set()
+    assert not evt4.is_set()
 
 
 def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):

@@ -5,8 +5,6 @@ from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-EXECUTOR_PID, GLOBAL_EXECUTOR = None, None
-
 
 def run_in_background(func: callable, *args, **kwargs) -> Future:
     """ run func(*args, **kwargs) in background and return Future for its outputs """

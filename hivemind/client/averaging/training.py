@@ -73,7 +73,7 @@ class TrainingAverager(DecentralizedAverager):
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                     averaged_tensor[...] = local_tensor.cpu().float()
 
-            # find a group and hopefully average tensors with peers, scaled by peer's weight
+            # find a group and hopefully average tensors with peers
             gathered = super().step(**kwargs)
             if gathered is not None:
                 # load averaged tensors back into model

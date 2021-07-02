@@ -211,10 +211,6 @@ class MPFuture(base.Future, Generic[ResultType]):
         assert os.getpid() == self._origin_pid, "only the process that created MPFuture can set callbacks."
         return super().add_done_callback(callback)
 
-    def remove_done_callback(self, callback: Callable):
-        assert os.getpid() == self._origin_pid, "only the process that created MPFuture can set callbacks."
-        return super().add_done_callback(callback)
-
     def get_loop(self) -> Optional[asyncio.BaseEventLoop]:
         return self._loop
 
