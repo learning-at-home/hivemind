@@ -73,7 +73,7 @@ class TrainingAverager(DecentralizedAverager):
 
             # find a group and hopefully average tensors with peers
             future = MPFuture()
-            super().step(wait=False, **kwargs).add_done_callback(
+            super().step(wait=True, **kwargs).add_done_callback(
                 lambda step_future: future.set_result(self._on_step_finished(
                     local_tensors, old_local_tensors, step_future.result(), data_lock)))
             return future.result() if wait else future
