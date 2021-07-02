@@ -32,6 +32,7 @@ def test_mpfuture_result():
     p.join()
 
     assert future.result() == 321
+    assert future.exception() is None
     assert future.cancel() is False
     assert future.done() and not future.running() and not future.cancelled()
 
