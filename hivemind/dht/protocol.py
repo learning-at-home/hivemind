@@ -92,26 +92,31 @@ class DHTProtocol:
         pass
 
     class DHTStub: #TODO refactor this
-        # TODO: timeouts
-        def __init__(self, protocol: DHTProtocol, peer: Endpoint):
-            self.protocol = protocol
+        def __init__(self, p2p: P2P, peer: Endpoint):
+            self.p2p = p2p
             self.peer = peer
 
-        async def rpc_ping(self, request: dht_pb2.PingRequest, timeout=None) -> dht_pb2.PingResponse:
-            return await self.protocol.p2p.call_unary_handler(
-                self.peer, DHTProtocol.PING_NAME, request, dht_pb2.PingResponse)
+        async def rpc_ping(self, request: dht_pb2.PingRequest,
+                           timeout: Optional[float] = None) -> dht_pb2.PingResponse:
+            return await asyncio.wait_for(
+                self.p2p.call_unary_handler(self.peer, DHTProtocol.PING_NAME, request, dht_pb2.PingResponse),
+                timeout=timeout)
 
-        async def rpc_store(self, request: dht_pb2.StoreRequest, timeout=None) -> dht_pb2.StoreResponse:
-            return await self.protocol.p2p.call_unary_handler(
-                self.peer, DHTProtocol.STORE_NAME, request, dht_pb2.StoreResponse)
+        async def rpc_store(self, request: dht_pb2.StoreRequest,
+                            timeout: Optional[float] = None) -> dht_pb2.StoreResponse:
+            return await asyncio.wait_for(
+                self.p2p.call_unary_handler(self.peer, DHTProtocol.STORE_NAME, request, dht_pb2.StoreResponse),
+                timeout=timeout)
 
-        async def rpc_find(self, request: dht_pb2.FindRequest, timeout=None) -> dht_pb2.FindResponse:
-            return await self.protocol.p2p.call_unary_handler(
-                self.peer, DHTProtocol.FIND_NAME, request, dht_pb2.FindResponse)
+        async def rpc_find(self, request: dht_pb2.FindRequest,
+                           timeout: Optional[float] = None) -> dht_pb2.FindResponse:
+            return await asyncio.wait_for(
+                self.p2p.call_unary_handler(self.peer, DHTProtocol.FIND_NAME, request, dht_pb2.FindResponse),
+                timeout=timeout)
 
-    def _get_dht_stub(self, peer: Endpoint) -> dht_grpc.DHTStub:
+    def _get_dht_stub(self, peer: Endpoint) -> DHTStub:
         """ get a DHTStub that sends requests to a given peer """
-        stub = DHTProtocol.DHTStub(self, peer)
+        stub = DHTProtocol.DHTStub(self.p2p, peer)
         return AuthRPCWrapper(stub, AuthRole.CLIENT, self.authorizer, service_public_key=None)
 
     async def call_ping(self, peer: Endpoint, validate: bool = False, strict: bool = True) -> Optional[DHTID]:
