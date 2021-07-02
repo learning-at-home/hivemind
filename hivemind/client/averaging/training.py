@@ -7,7 +7,7 @@ from contextlib import nullcontext
 import torch
 
 from hivemind.client.averaging import DecentralizedAverager
-from hivemind.utils import nested_flatten, nested_pack, get_logger, run_in_background
+from hivemind.utils import nested_flatten, nested_pack, get_logger
 
 logger = get_logger(__name__)
 
@@ -49,16 +49,15 @@ class TrainingAverager(DecentralizedAverager):
 
     @torch.no_grad()
     def step(self, data_lock: Optional[Lock] = None, wait: bool = True, **kwargs):
-        """ Average optimizer weights and gradients with peers.
+        """
+        Average optimizer weights and gradients with peers.
+
         :param data_lock: averager locks it when model parameters are modified. Otherwise it's assumed that no model
         modifications occur during averaging step
-        :param wait: if True waits, otherwise returns Future
         """
-        if not wait:
-            return run_in_background(self.step, data_lock, wait=True, **kwargs)
 
         # if data_lock is supplied, tensors might change during averaging, so we need to copy them
-        use_old_local_tensors = data_lock is not None
+        old_local_tensors = None
         if data_lock is None:
             data_lock = nullcontext()
 
@@ -66,7 +65,7 @@ class TrainingAverager(DecentralizedAverager):
         with self.lock_averager_step:
             # fill averager's tensors with current local tensors
             with data_lock, self.get_tensors() as averaged_tensors:
-                if use_old_local_tensors:
+                if data_lock is not None:
                     old_local_tensors = tuple(x.cpu().float().clone() for x in local_tensors)
                 assert len(local_tensors) == len(
                     averaged_tensors), "The number of optimized parameters should not change."
@@ -74,28 +73,38 @@ class TrainingAverager(DecentralizedAverager):
                     averaged_tensor[...] = local_tensor.cpu().float()
 
             # find a group and hopefully average tensors with peers
-            gathered = super().step(**kwargs)
-            if gathered is not None:
-                # load averaged tensors back into model
-                with data_lock, self.get_tensors() as averaged_tensors:
-                    if len(averaged_tensors) != len(local_tensors):
-                        raise RuntimeError("The number of optimized parameters should not change.")
+            if wait:
+                gathered = super().step(wait=True, **kwargs)
+                self._on_step_finished(local_tensors, old_local_tensors, gathered, data_lock)
+                return gathered
+            else:
+                future = super().step(wait=False, **kwargs)
+                future.add_done_callback(lambda future:  self._on_step_finished(
+                    local_tensors, old_local_tensors, future.result(), data_lock))
+                return future
 
-                    if use_old_local_tensors:
-                        # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents
-                        # losing local updates that might have occurred during averaging
-                        for averaged_tensor, local_tensor, old_local_tensor in zip(averaged_tensors, local_tensors,
-                                                                                   old_local_tensors):
-                            local_tensor[...] += averaged_tensor.to(dtype=local_tensor.dtype,
-                                                                    device=local_tensor.device) - \
-                                                 old_local_tensor.to(dtype=local_tensor.dtype,
-                                                                     device=local_tensor.device)
-                    else:
-                        for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                            local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
+    @torch.no_grad()
+    def _on_step_finished(self, local_tensors, old_local_tensors, gathered, data_lock: Optional[Lock]):
+        if gathered is not None:
+            # load averaged tensors back into model
+            with data_lock, self.get_tensors() as averaged_tensors:
+                if len(averaged_tensors) != len(local_tensors):
+                    raise RuntimeError("The number of optimized parameters should not change.")
 
-            self.local_step += 1
-            return gathered
+                if old_local_tensors is not None:
+                    # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents
+                    # losing local updates that might have occurred during averaging
+                    for averaged_tensor, local_tensor, old_local_tensor in zip(averaged_tensors, local_tensors,
+                                                                               old_local_tensors):
+                        local_tensor[...] += averaged_tensor.to(dtype=local_tensor.dtype,
+                                                                device=local_tensor.device) - \
+                                             old_local_tensor.to(dtype=local_tensor.dtype,
+                                                                 device=local_tensor.device)
+                else:
+                    for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
+                        local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
+
+        self.local_step += 1
 
     def local_tensors(self, replace_none: bool = True) -> Iterator[torch.Tensor]:
         """
