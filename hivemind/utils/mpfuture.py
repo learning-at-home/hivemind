@@ -64,7 +64,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     _active_futures: Optional[Dict[PID, MPFuture]] = None  # pending or running futures originated from current process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
-    def __init__(self, use_lock: bool = True,  loop: Optional[asyncio.BaseEventLoop] = None):
+    def __init__(self, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state_cache = {}  # mapping from global to cached local future used that makes updates immediately
@@ -224,7 +224,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     def cancelled(self):
         return self._state == base.CANCELLED
 
-    def add_done_callback(self, callback: Callable):
+    def add_done_callback(self, callback: Callable[[MPFuture], None]):
         assert os.getpid() == self._origin_pid, "only the process that created MPFuture can set callbacks."
         return super().add_done_callback(callback)
 
