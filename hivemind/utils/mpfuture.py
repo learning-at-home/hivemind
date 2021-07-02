@@ -27,6 +27,9 @@ TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
 try:
     from concurrent.futures import InvalidStateError
 except ImportError:
+    # Python 3.7 doesn't raise concurrent.futures.InvalidStateError for repeating set_result/set_exception calls and
+    # doesn't even define this error. In this module, we simulate the Python 3.8+ behavior,
+    # defining and raising this error if necessary.
     class InvalidStateError(Exception):
         """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
 
