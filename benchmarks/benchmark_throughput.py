@@ -9,7 +9,7 @@ import torch
 import hivemind
 from hivemind import find_open_port
 from hivemind.server import layers
-from hivemind.utils.file_limit import increase_file_limit
+from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger
 
 
