@@ -8,6 +8,7 @@ from hivemind.utils.mpfuture import MPFuture
 
 @pytest.fixture(autouse=True, scope='session')
 def cleanup_after_test():
+    """ reset shared memory manager for isolation, terminate any leftover processes after the test is finished """
     old_values = MPFuture.global_mpfuture_senders, MPFuture.active_pid, MPFuture.active_futures
     try:
         with mp.managers.SyncManager() as manager:
