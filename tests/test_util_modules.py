@@ -247,6 +247,55 @@ def test_mpfuture_done_callback():
     assert not evt4.is_set()
 
 
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_many_futures():
+    evt = mp.Event()
+    receiver, sender = mp.Pipe()
+    main_futures = [hivemind.MPFuture() for _ in range(1000)]
+    assert len(hivemind.MPFuture.active_futures) == 1000
+
+    def _peer():
+        fork_futures = [hivemind.MPFuture() for _ in range(500)]
+        assert len(hivemind.MPFuture.active_futures) == 500
+
+        for i, future in enumerate(random.sample(main_futures, 300)):
+            if random.random() < 0.5:
+                future.set_result(i)
+            else:
+                future.set_exception(ValueError(f"{i}"))
+
+        sender.send(fork_futures[:-100])
+        for future in fork_futures[100:]:
+            future.cancel()
+
+        evt.wait()
+        assert len(hivemind.MPFuture.active_futures) == 200
+        for future in fork_futures:
+            future.cancel()
+        assert len(hivemind.MPFuture.active_futures) == 0
+
+    p = mp.Process(target=_peer)
+    p.start()
+
+    some_fork_futures = receiver.recv()
+    assert len(hivemind.MPFuture.active_futures) == 700
+
+    for future in some_fork_futures:
+        future.set_running_or_notify_cancel()
+    for future in random.sample(some_fork_futures, 200):
+        try:
+            future.set_result(321)
+        except hivemind.utils.mpfuture.InvalidStateError:
+            pass
+
+    evt.set()
+    for future in main_futures:
+        future.cancel()
+    assert len(hivemind.MPFuture.active_futures) == 0
+    p.join()
+
+
 def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     torch.manual_seed(0)
     X = torch.randn(*size)
