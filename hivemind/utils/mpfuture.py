@@ -245,7 +245,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         if getattr(self, '_origin_pid', None) == os.getpid():
             self._active_futures.pop(self._uid, None)
         if getattr(self, '_aio_event', None):
-            self._set_event_threadsafe()
+            self._aio_event.set()
 
     def __getstate__(self):
         return dict(_shared_state_code=self._shared_state_code, _origin_pid=self._origin_pid, _uid=self._uid,
