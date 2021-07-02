@@ -48,6 +48,7 @@ class MPFuture(base.Future, Generic[ResultType]):
        - MPFuture works between processes created through inheritance (e.g. fork), *not* for independent processes
        - Different executors (non-origin processes) cannot call set_result / set_exception / cancel simultaneously
     """
+    lock = mp.Lock()  # global lock that prevents simultaneous initialization and writing
     pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
     global_mpfuture_receivers: Dict[PID, PipeEnd] = mp.Manager().dict()
     active_futures: Optional[Dict[PID, MPFuture]] = None  # pending or running futures originated from current process
@@ -109,10 +110,11 @@ class MPFuture(base.Future, Generic[ResultType]):
         assert pid != cls.active_pid and pid not in cls.global_mpfuture_receivers, "already initialized"
 
         recv_pipe, send_pipe = mp.Pipe(duplex=False)
-        cls.active_pid, cls.active_futures, cls.global_mpfuture_receivers[pid] = pid, {}, send_pipe
-        cls.pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[recv_pipe],
-                                                  name=f'{__name__}.BACKEND', daemon=True)
-        cls.pipe_waiter_thread.start()
+        with cls.lock:
+            cls.active_pid, cls.active_futures, cls.global_mpfuture_receivers[pid] = pid, {}, send_pipe
+            cls.pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[recv_pipe],
+                                                      name=f'{__name__}.BACKEND', daemon=True)
+            cls.pipe_waiter_thread.start()
 
     @classmethod
     def _process_updates_in_background(cls, receiver_pipe: mp.connection.Connection):
@@ -138,7 +140,8 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """ this method sends result, exception or cancel to the MPFuture origin. """
-        self._sender_pipe.send((self._uid, update_type, payload))
+        with self.lock:
+            self._sender_pipe.send((self._uid, update_type, payload))
 
     def set_result(self, result: ResultType):
         if os.getpid() == self._origin_pid:
