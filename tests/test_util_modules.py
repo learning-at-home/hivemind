@@ -259,25 +259,25 @@ def test_mpfuture_done_callback():
 async def test_many_futures():
     evt = mp.Event()
     receiver, sender = mp.Pipe()
-    main_futures = [hivemind.MPFuture() for _ in range(100)]
-    assert len(hivemind.MPFuture._active_futures) == 100
+    main_futures = [hivemind.MPFuture() for _ in range(1000)]
+    assert len(hivemind.MPFuture._active_futures) == 1000
 
     def _peer():
-        fork_futures = [hivemind.MPFuture() for _ in range(50)]
-        assert len(hivemind.MPFuture._active_futures) == 50
+        fork_futures = [hivemind.MPFuture() for _ in range(500)]
+        assert len(hivemind.MPFuture._active_futures) == 500
 
-        for i, future in enumerate(random.sample(main_futures, 30)):
+        for i, future in enumerate(random.sample(main_futures, 300)):
             if random.random() < 0.5:
                 future.set_result(i)
             else:
                 future.set_exception(ValueError(f"{i}"))
 
-        sender.send(fork_futures[:-10])
-        for future in fork_futures[10:]:
+        sender.send(fork_futures[:-100])
+        for future in fork_futures[100:]:
             future.cancel()
 
         evt.wait()
-        assert len(hivemind.MPFuture._active_futures) == 20
+        assert len(hivemind.MPFuture._active_futures) == 200
         for future in fork_futures:
             future.cancel()
         assert len(hivemind.MPFuture._active_futures) == 0
@@ -286,11 +286,11 @@ async def test_many_futures():
     p.start()
 
     some_fork_futures = receiver.recv()
-    assert len(hivemind.MPFuture._active_futures) == 70
+    assert len(hivemind.MPFuture._active_futures) == 700
 
     for future in some_fork_futures:
         future.set_running_or_notify_cancel()
-    for future in random.sample(some_fork_futures, 20):
+    for future in random.sample(some_fork_futures, 200):
         try:
             future.set_result(321)
         except hivemind.utils.mpfuture.InvalidStateError:

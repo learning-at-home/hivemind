@@ -59,8 +59,8 @@ class MPFuture(base.Future, Generic[ResultType]):
     """
     _lock_initialize = mp.Lock()  # global lock that prevents simultaneous initialization of two processes
     _lock_update = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
+    _sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
-    _global_mpfuture_senders: Dict[PID, PipeEnd] = mp.Manager().dict()
     _active_futures: Optional[Dict[UID, MPFuture]] = None  # pending or running futures originated from current process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
@@ -113,20 +113,15 @@ class MPFuture(base.Future, Generic[ResultType]):
         else:
             asyncio.run_coroutine_threadsafe(_event_setter(), self._loop)
 
-    @property
-    def _sender_pipe(self) -> mp.connection.Connection:
-        """ a pipe that can be used to send updates to the MPFuture creator """
-        return self._global_mpfuture_senders[self._origin_pid]
-
     @classmethod
     def _initialize_mpfuture_backend(cls):
         pid = os.getpid()
         logger.debug(f"Initializing MPFuture backend for pid {pid}")
-        assert pid != cls._active_pid and pid not in cls._global_mpfuture_senders, "already initialized"
+        assert pid != cls._active_pid, "already initialized"
 
-        recv_pipe, send_pipe = mp.Pipe(duplex=False)
-        cls._active_pid, cls._active_futures, cls._global_mpfuture_senders[pid] = pid, {}, send_pipe
-        cls._pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[recv_pipe],
+        receiver_pipe, sender_pipe = mp.Pipe(duplex=False)
+        cls._active_pid, cls._active_futures, cls._sender_pipe = pid, {}, sender_pipe
+        cls._pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[receiver_pipe],
                                                    name=f'{__name__}.BACKEND', daemon=True)
         cls._pipe_waiter_thread.start()
 
@@ -248,10 +243,12 @@ class MPFuture(base.Future, Generic[ResultType]):
             self._aio_event.set()
 
     def __getstate__(self):
-        return dict(_shared_state_code=self._shared_state_code, _origin_pid=self._origin_pid, _uid=self._uid,
-                    _use_lock=self._use_lock, _result=self._result, _exception=self._exception)
+        return dict(_sender_pipe=self._sender_pipe, _shared_state_code=self._shared_state_code,
+                    _origin_pid=self._origin_pid, _uid=self._uid, _use_lock=self._use_lock,
+                    _result=self._result, _exception=self._exception)
 
     def __setstate__(self, state):
+        self._sender_pipe = state['_sender_pipe']
         self._shared_state_code = state['_shared_state_code']
         self._origin_pid, self._uid = state['_origin_pid'], state['_uid']
         self._result, self._exception = state['_result'], state['_exception']
