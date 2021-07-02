@@ -83,7 +83,7 @@ class TrainingAverager(DecentralizedAverager):
                     if len(averaged_tensors) != len(local_tensors):
                         raise RuntimeError("The number of optimized parameters should not change.")
 
-                    if old_local_tensors is not None:
+                    if use_old_local_tensors:
                         # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents
                         # losing local updates that might have occurred during averaging
                         for averaged_tensor, local_tensor, old_local_tensor in zip(averaged_tensors, local_tensors,
