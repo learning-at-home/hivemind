@@ -140,8 +140,8 @@ class DHTNode:
         self.cache_refresh_evt = asyncio.Event()
         self.cache_refresh_task = None
 
-        self.need_manage_p2p = p2p is None
-        if self.need_manage_p2p:
+        self._need_manage_p2p = p2p is None
+        if self._need_manage_p2p:
             p2p = await P2P.create(bootstrap_peers=initial_peers)
         self.p2p = p2p
 
@@ -196,7 +196,7 @@ class DHTNode:
         self.is_alive = False
         if self.protocol.listen:
             await self.protocol.shutdown(timeout)
-        if self.need_manage_p2p:
+        if self._need_manage_p2p:
             await self.p2p.shutdown()
 
     async def find_nearest_nodes(
