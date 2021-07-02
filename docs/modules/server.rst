@@ -3,8 +3,8 @@
 
 A hivemind server hosts one or several experts and processes incoming requests to those experts. It periodically
 re-publishes these experts to the dht via a dedicated **hivemind.dht.DHT** peer that runs in background.
-The experts can be accessed directly as **hivemind.client.RemoteExpert("addr:port", "expert.uid.here")**
-or as a part of **hivemind.client.RemoteMixtureOfExperts** that finds the most suitable experts across the DHT.
+The experts can be accessed directly as **hivemind.moe.client.RemoteExpert("addr:port", "expert.uid.here")**
+or as a part of **hivemind.moe.client.RemoteMixtureOfExperts** that finds the most suitable experts across the DHT.
 
 The hivemind.moe.server module is organized as follows:
 

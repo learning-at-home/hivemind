@@ -60,7 +60,7 @@ def test_call_many(hidden_dim=16):
         e0, e1, e2, e3, e4 = [hivemind.RemoteExpert(f'expert.{i}', server_endpoint) for i in range(5)]
         e5 = hivemind.RemoteExpert(f'thisshouldnotexist', '127.0.0.1:80')
 
-        mask, expert_outputs = hivemind.client.moe._RemoteCallMany.apply(
+        mask, expert_outputs = hivemind.moe.client.moe._RemoteCallMany.apply(
             DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []], k_min, backward_k_min, timeout_after_k_min,
             forward_timeout, backward_timeout, detect_anomalies, allow_zero_outputs, e1.info, inputs
         )
@@ -168,7 +168,7 @@ def test_determinism(hidden_dim=16):
 def test_compute_expert_scores():
     try:
         dht = hivemind.DHT(start=True)
-        moe = hivemind.client.moe.RemoteMixtureOfExperts(
+        moe = hivemind.moe.RemoteMixtureOfExperts(
             dht=dht, in_features=16, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1,
             uid_prefix='expert.')
         gx, gy = torch.randn(4, 5, requires_grad=True), torch.randn(4, 3, requires_grad=True)

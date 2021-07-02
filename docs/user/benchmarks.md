@@ -6,7 +6,7 @@ hivemind.
 ### Server throughput
 
 You can use [this benchmark](https://github.com/learning-at-home/hivemind/blob/master/benchmarks/benchmark_throughput.py) to
-check the performance impact of your changes to hivemind.client and server. The benchmark will start one server without
+check the performance impact of your changes to hivemind.moe. The benchmark will start one server without
 DHT with several experts, and then spawn trainer processes that load the server with requests. The two main statistics
 in this benchmark samples/s and startup time.
 
