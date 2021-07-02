@@ -103,13 +103,14 @@ class MPFuture(base.Future, Generic[ResultType]):
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
-        if loop == self.get_loop():
-            asyncio.create_task(self._event_setter())
-        else:
-            asyncio.run_coroutine_threadsafe(self._event_setter(), self._loop)
 
-    async def _event_setter(self):
-        self._aio_event.set()
+        async def _event_setter():
+            self._aio_event.set()
+
+        if loop == self.get_loop():
+            asyncio.create_task(_event_setter())
+        else:
+            asyncio.run_coroutine_threadsafe(_event_setter(), self._loop)
 
     @property
     def _sender_pipe(self) -> mp.connection.Connection:
