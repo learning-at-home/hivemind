@@ -8,7 +8,7 @@ import torch
 
 import hivemind
 from hivemind import find_open_port
-from hivemind.server import layers
+from hivemind.moe.server import layers
 from hivemind.utils.threading import increase_file_limit
 from hivemind.utils.logging import get_logger
 
@@ -88,7 +88,7 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
                                                            max_batch_size=max_batch_size,
                                                            )
         timestamps['created_experts'] = time.perf_counter()
-        server = hivemind.Server(None, experts, listen_on=f"{hivemind.LOCALHOST}:{port}",
+        server = hivemind.moe.Server(None, experts, listen_on=f"{hivemind.LOCALHOST}:{port}",
                                  num_connection_handlers=num_handlers, device=device)
         server.start()
         server.ready.wait()

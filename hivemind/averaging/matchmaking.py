@@ -12,13 +12,12 @@ import asyncio
 import grpc
 import grpc._cython.cygrpc
 
-from hivemind.client.averaging.group_info import GroupInfo
-from hivemind.client.averaging.key_manager import GroupKeyManager, GroupKey
+from hivemind.averaging.group_info import GroupInfo
+from hivemind.averaging.key_manager import GroupKeyManager, GroupKey
 from hivemind.dht import DHT, DHTID, DHTExpiration, get_dht_time
 from hivemind.utils import get_logger, Endpoint, timed_storage, TimedStorage
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 from hivemind.utils.grpc import ChannelCache
-
 
 logger = get_logger(__name__)
 

@@ -3,16 +3,16 @@ import random
 import time
 from typing import Sequence
 
+import grpc
 import pytest
 import torch
-import grpc
 
 from hivemind import aenumerate, Endpoint
-from hivemind.client.averaging.allreduce import AllReduceRunner, AveragingMode
-from hivemind.client.averaging.partition import TensorPartContainer, TensorPartReducer
-from hivemind.utils import deserialize_torch_tensor, ChannelCache
-from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.averaging.allreduce import AllReduceRunner, AveragingMode
+from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer
 from hivemind.proto import averaging_pb2_grpc
+from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.utils import deserialize_torch_tensor, ChannelCache
 
 
 @pytest.mark.forked
@@ -140,6 +140,7 @@ async def test_reducer(num_senders: int, num_parts: int, synchronize_prob: float
 
 class AllreduceRunnerForTesting(AllReduceRunner):
     """ a version of AllReduceRunner that was monkey-patched to accept custom endpoint names """
+
     def __init__(self, *args, peer_endpoints, **kwargs):
         self.__peer_endpoints = peer_endpoints
         super().__init__(*args, **kwargs)
@@ -162,7 +163,7 @@ NODE, CLIENT, AUX = AveragingMode.NODE, AveragingMode.CLIENT, AveragingMode.AUX
     ((NODE, AUX, NODE, CLIENT), (0.15, 0.0, 0.35, 0.45), (150, 200, 67, 0)),
     ((AUX, AUX, AUX, AUX), (0.0, 0.0, 0.0, 0.0), (1, 2, 3, 4)),
 ])
-@pytest.mark.parametrize("part_size_bytes", [2 ** 20, 256, 19],)
+@pytest.mark.parametrize("part_size_bytes", [2 ** 20, 256, 19], )
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions, part_size_bytes):

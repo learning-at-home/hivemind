@@ -4,9 +4,9 @@ import pytest
 import torch
 
 import hivemind
-from hivemind import background_server
-from hivemind.client.expert import DUMMY
-from hivemind.server import layers
+from hivemind.moe.server import background_server, declare_experts
+from hivemind.moe.client.expert import DUMMY
+from hivemind.moe.server import layers
 
 
 @pytest.mark.forked
@@ -120,7 +120,7 @@ def test_remote_module_call(hidden_dim=16):
 def test_beam_search_correctness():
     all_expert_uids = [f'ffn.{5 + i}.{10 + j}.{15 + k}' for i in range(10) for j in range(10) for k in range(10)]
     dht = hivemind.DHT(start=True)
-    assert all(hivemind.declare_experts(dht, all_expert_uids, endpoint='fake-endpoint'))
+    assert all(declare_experts(dht, all_expert_uids, endpoint='fake-endpoint'))
 
     dmoe = hivemind.RemoteMixtureOfExperts(
         in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix='ffn.')
@@ -209,7 +209,7 @@ def test_client_anomaly_detection():
     experts['expert.3'].expert.ffn.weight.data[0, 0] = float('nan')
 
     dht = hivemind.DHT(start=True)
-    server = hivemind.Server(dht, experts, num_connection_handlers=1)
+    server = hivemind.moe.Server(dht, experts, num_connection_handlers=1)
     server.start()
     try:
         server.ready.wait()

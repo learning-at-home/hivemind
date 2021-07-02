@@ -6,7 +6,7 @@ from contextlib import nullcontext
 
 import torch
 
-from hivemind.client.averaging import DecentralizedAverager
+from hivemind.averaging import DecentralizedAverager
 from hivemind.utils import nested_flatten, nested_pack, get_logger, run_in_background
 
 logger = get_logger(__name__)

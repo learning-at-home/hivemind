@@ -1,4 +1,4 @@
-**hivemind.server**
+**hivemind.moe.server**
 ========================================
 
 A hivemind server hosts one or several experts and processes incoming requests to those experts. It periodically
@@ -6,7 +6,7 @@ re-publishes these experts to the dht via a dedicated **hivemind.dht.DHT** peer 
 The experts can be accessed directly as **hivemind.client.RemoteExpert("addr:port", "expert.uid.here")**
 or as a part of **hivemind.client.RemoteMixtureOfExperts** that finds the most suitable experts across the DHT.
 
-The hivemind.server module is organized as follows:
+The hivemind.moe.server module is organized as follows:
 
 - Server_ is the main class that publishes experts, accepts incoming requests, and passes them to Runtime_ for compute.
 - Runtime_ balances the device (GPU) usage between several ExpertBackend_ instances that each service one expert.
@@ -16,9 +16,9 @@ The hivemind.server module is organized as follows:
   and offers those batches to Runtime_ for processing.
 
 
-.. automodule:: hivemind.server
+.. automodule:: hivemind.moe.server
 
-.. currentmodule:: hivemind.server
+.. currentmodule:: hivemind.moe.server
 
 .. _Server:
 .. autoclass:: Server

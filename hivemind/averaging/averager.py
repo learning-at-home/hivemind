@@ -20,11 +20,11 @@ import torch
 import numpy as np
 
 from hivemind.dht import DHT, DHTID
-from hivemind.client.averaging.partition import DEFAULT_PART_SIZE_BYTES
-from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
-from hivemind.client.averaging.load_balancing import load_balance_peers
-from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
-from hivemind.client.averaging.group_info import GroupInfo
+from hivemind.averaging.partition import DEFAULT_PART_SIZE_BYTES
+from hivemind.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
+from hivemind.averaging.load_balancing import load_balance_peers
+from hivemind.averaging.matchmaking import Matchmaking, MatchmakingException
+from hivemind.averaging.group_info import GroupInfo
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
 from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, split_for_streaming, combine_from_streaming
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
@@ -582,7 +582,7 @@ def _background_thread_fetch_current_state(serializer: SerializerBase, pipe: mp.
         except BaseException as e:
             logger.debug(f"Averager background thread finished: {repr(e)}")
             break
-            
+
         if trigger == '_SHUTDOWN':
             break
 

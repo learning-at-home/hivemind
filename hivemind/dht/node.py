@@ -27,7 +27,7 @@ class DHTNode:
     Each DHTNode has an identifier, a local storage and access too other nodes via DHTProtocol.
 
     :note: Hivemind DHT is optimized to store a lot of temporary metadata that is regularly updated.
-     For example, expert heartbeat emitted by a hivemind.Server responsible for that expert.
+     For example, expert heartbeat emitted by a hivemind.moe.Server responsible for that expert.
      Such metadata does not require regular maintenance by peers or persistence on shutdown.
      Instead, DHTNode is designed to rapidly send bulk data and resolve conflicts.
 

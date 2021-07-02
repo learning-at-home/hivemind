@@ -12,15 +12,14 @@ import torch
 
 import hivemind
 from hivemind.dht import DHT
-from hivemind.server.expert_uid import UID_DELIMITER, generate_uids_from_pattern
-from hivemind.server.checkpoints import CheckpointSaver, load_experts, is_directory
-from hivemind.server.connection_handler import ConnectionHandler
-from hivemind.server.dht_handler import DHTHandlerThread, declare_experts, get_experts
-from hivemind.server.expert_backend import ExpertBackend
-from hivemind.server.layers import name_to_block, name_to_input
-from hivemind.server.layers import add_custom_models_from_file, schedule_name_to_scheduler
-from hivemind.server.runtime import Runtime
-from hivemind.server.task_pool import Task, TaskPool, TaskPoolBase
+from hivemind.moe.server.expert_uid import UID_DELIMITER, generate_uids_from_pattern
+from hivemind.moe.server.checkpoints import CheckpointSaver, load_experts, is_directory
+from hivemind.moe.server.connection_handler import ConnectionHandler
+from hivemind.moe.server.dht_handler import DHTHandlerThread, declare_experts, get_experts
+from hivemind.moe.server.expert_backend import ExpertBackend
+from hivemind.moe.server.layers import name_to_block, name_to_input, register_expert_class
+from hivemind.moe.server.layers import add_custom_models_from_file, schedule_name_to_scheduler
+from hivemind.moe.server.runtime import Runtime
 from hivemind.utils import Endpoint, get_port, replace_port, find_open_port, get_logger, BatchTensorDescriptor
 from hivemind.proto.runtime_pb2 import CompressionType
 
@@ -86,7 +85,7 @@ class Server(threading.Thread):
         :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]\
            means "sample random experts between myprefix.0.0 and myprefix.255.255;
         :param expert_uids: spawn experts with these exact uids, overrides num_experts and expert_pattern
-        :param expert_cls: expert type from hivemind.server.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop';
+        :param expert_cls: expert type from hivemind.moe.server.layers, e.g. 'ffn' or 'transformer';
         :param hidden_dim: main dimension for expert_cls
         :param num_handlers: server will use this many parallel processes to handle incoming requests
         :param min_batch_size: total num examples in the same batch will be greater than this value
