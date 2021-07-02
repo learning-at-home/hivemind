@@ -72,16 +72,11 @@ class TrainingAverager(DecentralizedAverager):
                     averaged_tensor[...] = local_tensor.cpu().float()
 
             # find a group and hopefully average tensors with peers
-            if wait:
-                gathered = super().step(wait=True, **kwargs)
-                self._on_step_finished(local_tensors, old_local_tensors, gathered, data_lock)
-                return gathered
-            else:
-                result_future = MPFuture()
-                super().step(wait=False, **kwargs).add_done_callback(
-                    lambda step_future:  result_future.set_result(self._on_step_finished(
-                        local_tensors, old_local_tensors, step_future.result(), data_lock)))
-                return result_future
+            future = MPFuture()
+            super().step(wait=False, **kwargs).add_done_callback(
+                lambda step_future: future.set_result(self._on_step_finished(
+                    local_tensors, old_local_tensors, step_future.result(), data_lock)))
+            return future.result() if wait else future
 
     def _on_step_finished(self, local_tensors, old_local_tensors, gathered, data_lock: Optional[Lock]):
         if gathered is not None:
