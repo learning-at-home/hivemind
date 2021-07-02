@@ -59,7 +59,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     """
     lock = mp.Lock()  # global lock that prevents simultaneous initialization and writing
     pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
-    global_mpfuture_receivers: Dict[PID, PipeEnd] = mp.Manager().dict()
+    global_mpfuture_senders: Dict[PID, PipeEnd] = mp.Manager().dict()
     active_futures: Optional[Dict[PID, MPFuture]] = None  # pending or running futures originated from current process
     active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
@@ -114,16 +114,16 @@ class MPFuture(base.Future, Generic[ResultType]):
     @property
     def _sender_pipe(self) -> mp.connection.Connection:
         """ a pipe that can be used to send updates to the MPFuture creator """
-        return self.global_mpfuture_receivers[self._origin_pid]
+        return self.global_mpfuture_senders[self._origin_pid]
 
     @classmethod
     def _initialize_mpfuture_backend(cls):
         pid = os.getpid()
         logger.debug(f"Initializing MPFuture backend for pid {pid}")
-        assert pid != cls.active_pid and pid not in cls.global_mpfuture_receivers, "already initialized"
+        assert pid != cls.active_pid and pid not in cls.global_mpfuture_senders, "already initialized"
 
         recv_pipe, send_pipe = mp.Pipe(duplex=False)
-        cls.active_pid, cls.active_futures, cls.global_mpfuture_receivers[pid] = pid, {}, send_pipe
+        cls.active_pid, cls.active_futures, cls.global_mpfuture_senders[pid] = pid, {}, send_pipe
         cls.pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[recv_pipe],
                                                   name=f'{__name__}.BACKEND', daemon=True)
         cls.pipe_waiter_thread.start()
