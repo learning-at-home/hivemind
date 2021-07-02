@@ -312,12 +312,10 @@ class P2P:
                     error = p2pd_pb2.RPCError(message=str(exc))
                     await P2P.send_protobuf(error, p2pd_pb2.RPCError, writer)
                 finally:
-                    pending_task = pending.pop()
-                    pending_task.cancel()
-                    try:
-                        await pending_task
-                    except asyncio.CancelledError:
-                        pass
+                    if pending:
+                        for task in pending:
+                            task.cancel()
+                        await asyncio.wait(pending)
             finally:
                 writer.close()
 
