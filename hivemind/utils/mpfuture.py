@@ -54,7 +54,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     active_futures: Optional[Dict[PID, MPFuture]] = None  # pending or running futures originated from current process
     active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
-    def __init__(self, loop: Optional[asyncio.BaseEventLoop] = None):
+    def __init__(self, use_lock: bool = True,  loop: Optional[asyncio.BaseEventLoop] = None):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state_cache = {}  # mapping from global to cached local future used that makes updates immediately
@@ -62,6 +62,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
         base.Future.__init__(self)
         self._state, self._result, self._exception = base.PENDING, None, None
+        self._use_lock = use_lock
 
         if self.active_pid != self._origin_pid:
             self._initialize_mpfuture_backend()
@@ -140,7 +141,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """ this method sends result, exception or cancel to the MPFuture origin. """
-        with self.lock:
+        with self.lock if self._use_lock else contextlib.nullcontext():
             self._sender_pipe.send((self._uid, update_type, payload))
 
     def set_result(self, result: ResultType):
@@ -234,12 +235,13 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __getstate__(self):
         return dict(_shared_state_code=self._shared_state_code, _origin_pid=self._origin_pid, _uid=self._uid,
-                    _result=self._result, _exception=self._exception)
+                    _use_lock=self._use_lock, _result=self._result, _exception=self._exception)
 
     def __setstate__(self, state):
         self._shared_state_code = state['_shared_state_code']
         self._origin_pid, self._uid = state['_origin_pid'], state['_uid']
         self._result, self._exception = state['_result'], state['_exception']
+        self._use_lock = state['_use_lock']
 
         self._waiters, self._done_callbacks = [], []
         self._condition = threading.Condition()

@@ -6,7 +6,8 @@ import argparse
 import torch
 
 import hivemind
-from hivemind.utils import LOCALHOST, increase_file_limit, get_logger
+from hivemind.utils import LOCALHOST, get_logger
+from test_utils.file_limit import increase_file_limit
 from hivemind.proto import runtime_pb2
 
 

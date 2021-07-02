@@ -6,7 +6,7 @@ import warnings
 
 from hivemind.proto import runtime_pb2
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils.threading import run_in_background
+
 
 FP32_EPS = 1e-06
 NUM_BYTES_FLOAT32 = 4
