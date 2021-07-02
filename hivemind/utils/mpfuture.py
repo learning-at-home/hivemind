@@ -176,7 +176,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             self._state_cache[self._state], self._exception = base.FINISHED, exception
             self._send_update(UpdateType.EXCEPTION, exception)
 
-    def cancel(self):
+    def cancel(self) -> bool:
         if os.getpid() == self._origin_pid:
             self.active_futures.pop(self._uid, None)
             return super().cancel()
