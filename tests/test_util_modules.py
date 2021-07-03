@@ -18,11 +18,12 @@ from hivemind.utils.asyncio import amap_in_executor, aiter, aenumerate, achain, 
 from hivemind.utils.mpfuture import InvalidStateError
 
 
+@pytest.mark.forked
 def test_mpfuture_result():
     future = hivemind.MPFuture()
 
     def _proc(future):
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             future.result()  # only creator process can await result
 
         future.set_result(321)
@@ -44,6 +45,7 @@ def test_mpfuture_result():
     assert future.result() == ['abacaba', 123]
 
 
+@pytest.mark.forked
 def test_mpfuture_exception():
     future = hivemind.MPFuture()
     with pytest.raises(concurrent.futures.TimeoutError):
@@ -63,6 +65,7 @@ def test_mpfuture_exception():
     assert future.done() and not future.running() and not future.cancelled()
 
 
+@pytest.mark.forked
 def test_mpfuture_cancel():
     future = hivemind.MPFuture()
     assert not future.cancelled()
@@ -87,6 +90,7 @@ def test_mpfuture_cancel():
     assert evt.is_set()
 
 
+@pytest.mark.forked
 def test_mpfuture_status():
     evt = mp.Event()
     future = hivemind.MPFuture()
@@ -191,6 +195,7 @@ async def test_await_mpfuture():
     p.join()
 
 
+@pytest.mark.forked
 def test_mpfuture_bidirectional():
     evt = mp.Event()
     future_from_main = hivemind.MPFuture()
@@ -213,6 +218,7 @@ def test_mpfuture_bidirectional():
     assert evt.is_set()
 
 
+@pytest.mark.forked
 def test_mpfuture_done_callback():
     receiver, sender = mp.Pipe(duplex=False)
     events = [mp.Event() for _ in range(5)]
@@ -242,7 +248,7 @@ def test_mpfuture_done_callback():
     future1, future2 = receiver.recv()
     future1.set_result(123)
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(RuntimeError):
         future1.add_done_callback(lambda future: (1, 2, 3))
 
     p.join()
