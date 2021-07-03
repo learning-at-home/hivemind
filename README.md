@@ -17,8 +17,8 @@ single Transformer model on hundreds of computers from different universities, c
   network.
 * Fault-tolerant backpropagation: forward and backward passes succeed even if some nodes are unresponsive or take too
   long to respond.
-* Decentralized parameter averaging: iteratively aggregate updates from multiple workers without the need to synchronize
-  across the entire network.
+* Decentralized parameter averaging: iteratively aggregate updates from multiple workers without the need to
+  synchronize across the entire network.
 
 To learn more about the ideas behind this library, see https://learning-at-home.github.io or read
 the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).

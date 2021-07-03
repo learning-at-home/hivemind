@@ -4,9 +4,9 @@ This document covers the technical details of making your contributions to the c
 contribute, read the [contributing guide](https://learning-at-home.readthedocs.io/en/latest/user/contributing.html) in
 our documentation.
 
-Before you begin, file a new issue on [GitHub](https://github.com/learning-at-home/hivemind/issues) or announce that you
-are going to work on an existing one to avoid duplicate effort. After you finish, submit a pull request and wait for it
-to be reviewed by the library maintainers (and possibly other community members).
+Before you begin, file a new issue on [GitHub](https://github.com/learning-at-home/hivemind/issues) or announce that
+you are going to work on an existing one to avoid duplicate effort. After you finish, submit a pull request and wait
+for it to be reviewed by the library maintainers (and possibly other community members).
 
 ## Environment setup
 
@@ -41,11 +41,11 @@ with the following rules:
 * We highly encourage the use of [typing](https://docs.python.org/3/library/typing.html) where applicable.
 * Use `get_logger` from `hivemind.utils.logging` to log any information instead of `print`ing directly to standard
   output/error streams.
-* Comments should be used sparingly and never describe the obvious. Usually it's best to clean up the code logic instead
-  of describing it, as it might lead to redundant (or worse, stale or incorrect) messages.
-* In general, strive for code readability instead of compactness. In particular, prefer to create a new variable instead
-  of a long one-liner and to break up a long method into several meaningful parts. This rule can be overridden in case
-  of major performance considerations, but only if verified by benchmarks.
+* Comments should be used sparingly and never describe the obvious. Usually it's best to clean up the code logic
+  instead of describing it, as it might lead to redundant (or worse, stale or incorrect) messages.
+* In general, strive for code readability instead of compactness. In particular, prefer to create a new variable
+  instead of a long one-liner and to break up a long method into several meaningful parts. This rule can be overridden
+  in case of major performance considerations, but only if verified by benchmarks.
 * Each user-facing function must have a [correct](#building-documentation) docstring that describes the intended usage,
   the input arguments and the return value. Both in comments and docstrings, please try to follow the capitalization
   rules for all terms and objects and to use proper grammar.
@@ -69,8 +69,9 @@ It is not required to use this format while you are still working on your pull r
 message has to adhere to these guidelines, and it will be easier for the maintainers to accept the PR if you have
 already done most of the necessary formatting work.
 
-For further reading on the commit message format, see this [guide](https://chris.beams.io/posts/git-commit/#seven-rules)
-on good Git commit messages, as well as this [repository](https://github.com/RomuloOliveira/commit-messages-guide).
+For further reading on the commit message format, see
+this [guide](https://chris.beams.io/posts/git-commit/#seven-rules) on good Git commit messages, as well as
+this [repository](https://github.com/RomuloOliveira/commit-messages-guide).
 
 ### Pull requests
 
@@ -79,9 +80,9 @@ merge commit title is the name of the pull request along with the PR number refe
 the pull request description (if it adheres to the format) or a cleaned up compilation of PR branch commit messages.
 
 * As such, the name and the description of your PR should follow the same guidelines as commit messages.
-* Try to make your pull requests more narrow in scope and split significant changes to the code base in separate pieces.
-  This will ensure [faster and better](https://essenceofcode.com/2019/10/29/the-art-of-small-pull-requests/) feedback
-  from the reviewers.
+* Try to make your pull requests more narrow in scope and split significant changes to the code base in separate
+  pieces. This will ensure [faster and better](https://essenceofcode.com/2019/10/29/the-art-of-small-pull-requests/)
+  feedback from the reviewers.
 * In particular, try to separate functional and non-functional code changes, as well as independent functional changes
   if they make the pull request too large to review in a short period of time.
 * In general, when naming a pull request instead of a commit, it's best to highlight the major change in its title
@@ -90,9 +91,10 @@ the pull request description (if it adheres to the format) or a cleaned up compi
   compare `Implement decentralized parameter averaging` with `Add hivemind.client.averaging`.
 
 For more on the philosophy of easy-to-review pull requests, read these
-guides: [1](https://mtlynch.io/code-review-love/) [2](https://www.atlassian.com/blog/git/written-unwritten-guide-pull-requests)
-. If the changelist is not very large (more than a hundred lines) already, we encourage making small improvements to the
-codebase in the files already changed by the PR; however, they should not dilute its major purpose.
+guides: [1](https://mtlynch.io/code-review-love/)
+[2](https://www.atlassian.com/blog/git/written-unwritten-guide-pull-requests). If the changelist is not very large
+(more than a hundred lines) already, we encourage making small improvements to the codebase in the files already
+changed by the PR; however, they should not dilute its major purpose.
 
 ## Running tests
 
