@@ -162,7 +162,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             self._state_cache[self._state], self._result = base.FINISHED, result
             self._send_update(UpdateType.RESULT, result)
 
-    def set_exception(self, exception: BaseException):
+    def set_exception(self, exception: Optional[BaseException]):
         if os.getpid() == self._origin_pid:
             super().set_exception(exception)
             MPFuture._active_futures.pop(self._uid, None)
@@ -204,7 +204,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         else:
             return self._result
 
-    def exception(self, timeout: Optional[float] = None) -> BaseException:
+    def exception(self, timeout: Optional[float] = None) -> Optional[BaseException]:
         if self._state not in TERMINAL_STATES:
             if os.getpid() != self._origin_pid:
                 raise RuntimeError("Only the process that created MPFuture can await exception")
