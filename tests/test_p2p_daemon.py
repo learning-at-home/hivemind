@@ -163,7 +163,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
             handler_cancelled = True
         return dht_pb2.PingResponse(
             peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()),
-            sender_endpoint=context.handle_name, available=True)
+            available=True)
 
     server_pid = server_primary._child.pid
     await server.add_unary_handler(handle_name, ping_handler, dht_pb2.PingRequest,
@@ -182,7 +182,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
         validate=True)
     expected_response = dht_pb2.PingResponse(
         peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()),
-        sender_endpoint=handle_name, available=True)
+        available=True)
 
     if should_cancel:
         stream_info, reader, writer = await client._client.stream_open(server.id, (handle_name,))
