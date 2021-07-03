@@ -74,14 +74,14 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._state, self._result, self._exception = base.PENDING, None, None
         self._use_lock = use_lock
 
-        if self._active_pid != self._origin_pid:
-            with self._lock_initialize:
-                if self._active_pid != self._origin_pid:
+        if self._origin_pid != MPFuture._active_pid:
+            with MPFuture._lock_initialize:
+                if self._origin_pid != MPFuture._active_pid:
                     # note: the second if is intentional, see https://en.wikipedia.org/wiki/Double-checked_locking
                     self._initialize_mpfuture_backend()
-        assert self._uid not in self._active_futures
-        self._active_futures[self._uid] = self
-        self._sender_pipe = self._global_sender_pipe
+        assert self._uid not in MPFuture._active_futures
+        MPFuture._active_futures[self._uid] = self
+        self._sender_pipe = MPFuture._global_sender_pipe
 
         try:
             self._loop = loop or asyncio.get_event_loop()
@@ -150,13 +150,13 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """ this method sends result, exception or cancel to the MPFuture origin. """
-        with self._lock_update if self._use_lock else contextlib.nullcontext():
+        with MPFuture._lock_update if self._use_lock else contextlib.nullcontext():
             self._sender_pipe.send((self._uid, update_type, payload))
 
     def set_result(self, result: ResultType):
         if os.getpid() == self._origin_pid:
-            self._active_futures.pop(self._uid, None)
             super().set_result(result)
+            MPFuture._active_futures.pop(self._uid, None)
         elif self._state in TERMINAL_STATES:
             raise InvalidStateError(f"Can't set_result to a future that is {self._state} ({self._uid})")
         else:
@@ -165,8 +165,8 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def set_exception(self, exception: BaseException):
         if os.getpid() == self._origin_pid:
-            self._active_futures.pop(self._uid, None)
             super().set_exception(exception)
+            MPFuture._active_futures.pop(self._uid, None)
         elif self._state in TERMINAL_STATES:
             raise InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self._uid})")
         else:
@@ -175,7 +175,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def cancel(self) -> bool:
         if os.getpid() == self._origin_pid:
-            self._active_futures.pop(self._uid, None)
+            MPFuture._active_futures.pop(self._uid, None)
             return super().cancel()
         elif self._state in [base.RUNNING, base.FINISHED]:
             return False
@@ -239,7 +239,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __del__(self):
         if getattr(self, '_origin_pid', None) == os.getpid():
-            self._active_futures.pop(self._uid, None)
+            MPFuture._active_futures.pop(self._uid, None)
         if getattr(self, '_aio_event', None):
             self._aio_event.set()
 

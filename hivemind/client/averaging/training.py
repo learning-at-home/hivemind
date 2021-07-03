@@ -8,7 +8,7 @@ from contextlib import nullcontext
 import torch
 
 from hivemind.client.averaging import DecentralizedAverager
-from hivemind.utils import nested_flatten, nested_pack, get_logger, MPFuture
+from hivemind.utils import nested_flatten, nested_pack, get_logger
 
 logger = get_logger(__name__)
 
