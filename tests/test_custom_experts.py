@@ -3,7 +3,8 @@ import os
 import pytest
 import torch
 
-from hivemind import RemoteExpert, background_server
+from hivemind import RemoteExpert
+from hivemind.moe.server import background_server
 
 CUSTOM_EXPERTS_PATH = os.path.join(os.path.dirname(__file__), 'test_utils', 'custom_networks.py')
 

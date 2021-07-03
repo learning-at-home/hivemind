@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import threading
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from cryptography import exceptions
 from cryptography.hazmat.primitives import hashes, serialization

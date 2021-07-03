@@ -5,7 +5,7 @@ import multiprocessing as mp
 import pytest
 
 import hivemind
-from hivemind.dht import get_dht_time
+from hivemind.utils.timed_storage import get_dht_time
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.node import LOCALHOST
 from hivemind.dht.validation import DHTRecord
