@@ -122,8 +122,7 @@ class Server(threading.Thread):
         if no_dht:
             dht = None
         else:
-            dht_endpoint = replace_port(listen_on, dht_port or hivemind.find_open_port())
-            dht = hivemind.DHT(initial_peers=initial_peers, start=True, listen_on=dht_endpoint)
+            dht = hivemind.DHT(initial_peers=initial_peers, start=True)
             logger.info(f"Running DHT node on {dht.get_visible_maddrs()}, initial peers = {initial_peers}")
 
         assert ((expert_pattern is None and num_experts is None and expert_uids is not None) or
