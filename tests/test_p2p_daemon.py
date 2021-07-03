@@ -58,12 +58,12 @@ async def test_error_for_wrong_daemon_arguments():
 )
 @pytest.mark.asyncio
 async def test_transports(host_maddrs: List[Multiaddr]):
-    server = await P2P.create(host_maddrs=host_maddrs)
+    server = await P2P.create(quic=True, host_maddrs=host_maddrs)
     peers = await server.list_peers()
     assert len(peers) == 0
 
     nodes = await bootstrap_from([server])
-    client = await P2P.create(host_maddrs=host_maddrs, bootstrap_peers=nodes)
+    client = await P2P.create(quic=True, host_maddrs=host_maddrs, bootstrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
     peers = await client.list_peers()
