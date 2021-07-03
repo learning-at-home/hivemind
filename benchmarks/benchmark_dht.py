@@ -6,7 +6,7 @@ from tqdm import trange
 
 import hivemind
 from hivemind.moe.server import declare_experts, get_experts
-from hivemind.utils.threading import increase_file_limit
+from hivemind.utils.limits import increase_file_limit
 
 logger = hivemind.get_logger(__name__)
 

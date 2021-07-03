@@ -1,4 +1,5 @@
 """ An extension of averager that supports common optimization use cases. """
+from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 from threading import Lock
 from typing import Sequence, Dict, Iterator, Optional
@@ -7,7 +8,7 @@ from contextlib import nullcontext
 import torch
 
 from hivemind.averaging import DecentralizedAverager
-from hivemind.utils import nested_flatten, nested_pack, get_logger, run_in_background
+from hivemind.utils import nested_flatten, nested_pack, get_logger
 
 logger = get_logger(__name__)
 
@@ -39,6 +40,7 @@ class TrainingAverager(DecentralizedAverager):
         self.opt, self.extra_tensors, self.local_step = opt, tuple(extra_tensors), 0
         self.opt_statistics = tuple(average_opt_statistics)
         self.average_parameters, self.average_gradients = average_parameters, average_gradients
+        self.step_executor = ThreadPoolExecutor(max_workers=1)
         self.lock_averager_step = Lock()
         if initialize_optimizer:
             initialize_optimizer_state(opt)  # note: this will run one optimizer step!
@@ -47,15 +49,15 @@ class TrainingAverager(DecentralizedAverager):
             averaged_tensors = [tensor.detach().cpu().float().clone() for tensor in self.local_tensors()]
         super().__init__(averaged_tensors=averaged_tensors, **kwargs)
 
-    @torch.no_grad()
     def step(self, data_lock: Optional[Lock] = None, wait: bool = True, **kwargs):
-        """ Average optimizer weights and gradients with peers.
+        """
+        Average optimizer weights and gradients with peers.
+
         :param data_lock: averager locks it when model parameters are modified. Otherwise it's assumed that no model
         modifications occur during averaging step
-        :param wait: if True waits, otherwise returns Future
         """
         if not wait:
-            return run_in_background(self.step, data_lock, wait=True, **kwargs)
+            return self.step_executor.submit(self.step, data_lock, wait=True, **kwargs)
 
         # if data_lock is supplied, tensors might change during averaging, so we need to copy them
         use_old_local_tensors = data_lock is not None
@@ -63,7 +65,7 @@ class TrainingAverager(DecentralizedAverager):
             data_lock = nullcontext()
 
         local_tensors = list(self.local_tensors())
-        with self.lock_averager_step:
+        with self.lock_averager_step, torch.no_grad():
             # fill averager's tensors with current local tensors
             with data_lock, self.get_tensors() as averaged_tensors:
                 if use_old_local_tensors:
@@ -73,7 +75,7 @@ class TrainingAverager(DecentralizedAverager):
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                     averaged_tensor[...] = local_tensor.cpu().float()
 
-            # find a group and hopefully average tensors with peers, scaled by peer's weight
+            # find a group and hopefully average tensors with peers, use batch sizes as weights
             gathered = super().step(**kwargs)
             if gathered is not None:
                 # load averaged tensors back into model
