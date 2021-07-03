@@ -133,7 +133,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             try:
                 uid, update_type, payload = receiver_pipe.recv()
                 if uid not in cls._active_futures:
-                    logger.debug(f"Ignoring update to future with uid={uid}: the future is already done or destroyed.")
+                    logger.debug(f"Ignoring update to future with uid={uid}: the future is already done or destroyed")
                 elif update_type == UpdateType.RESULT:
                     cls._active_futures.pop(uid).set_result(payload)
                 elif update_type == UpdateType.EXCEPTION:
@@ -143,12 +143,12 @@ class MPFuture(base.Future, Generic[ResultType]):
                 else:
                     raise RuntimeError(f"MPFuture received unexpected update type {update_type}")
             except (BrokenPipeError, EOFError):
-                logger.debug(f"MPFuture backend was shut down (pid={pid}).")
+                logger.debug(f"MPFuture backend was shut down (pid={pid})")
             except Exception as e:
-                logger.exception(f"MPFuture: could not retrieve update: caught {repr(e)} (pid={pid}).")
+                logger.exception(f"MPFuture: could not retrieve update: caught {repr(e)} (pid={pid})")
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
-        """ this method sends result, exception or cancel to the MPFuture origin. """
+        """ This method sends result, exception or cancel to the MPFuture origin. """
         with MPFuture._lock_update if self._use_lock else nullcontext():
             self._sender_pipe.send((self._uid, update_type, payload))
 
@@ -194,7 +194,8 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def result(self, timeout: Optional[float] = None) -> ResultType:
         if self._state not in TERMINAL_STATES:
-            assert os.getpid() == self._origin_pid, "only the process that created MPFuture can await result."
+            if os.getpid() != self._origin_pid:
+                raise RuntimeError("Only the process that created MPFuture can await result")
             return super().result(timeout)
         elif self._state == base.CANCELLED:
             raise base.CancelledError()
@@ -205,7 +206,8 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def exception(self, timeout: Optional[float] = None) -> BaseException:
         if self._state not in TERMINAL_STATES:
-            assert os.getpid() == self._origin_pid, "only the process that created MPFuture can await exception."
+            if os.getpid() != self._origin_pid:
+                raise RuntimeError("Only the process that created MPFuture can await exception")
             return super().exception(timeout)
         elif self._state == base.CANCELLED:
             raise base.CancelledError()
@@ -221,7 +223,8 @@ class MPFuture(base.Future, Generic[ResultType]):
         return self._state == base.CANCELLED
 
     def add_done_callback(self, callback: Callable[[MPFuture], None]):
-        assert os.getpid() == self._origin_pid, "only the process that created MPFuture can set callbacks."
+        if os.getpid() != self._origin_pid:
+            raise RuntimeError("only the process that created MPFuture can set callbacks")
         return super().add_done_callback(callback)
 
     def get_loop(self) -> Optional[asyncio.BaseEventLoop]:
@@ -229,7 +232,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __await__(self):
         if not self._aio_event:
-            raise RuntimeError("Can't await: MPFuture was created with no event loop.")
+            raise RuntimeError("can't await: MPFuture was created with no event loop")
         yield from self._aio_event.wait().__await__()
         try:
             return super().result(timeout=0)
