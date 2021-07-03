@@ -11,7 +11,7 @@ import uuid
 from enum import Enum, auto
 from typing import Generic, TypeVar, Dict, Optional, Any, Callable
 
-import torch    # used for py3.7-compatible shared memory
+import torch  # used for py3.7-compatible shared memory
 
 from hivemind.utils.logging import get_logger
 
@@ -19,7 +19,7 @@ from hivemind.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # flavour types
-ResultType = TypeVar('ResultType')
+ResultType = TypeVar("ResultType")
 PID, UID, State, PipeEnd = int, int, str, mp.connection.Connection
 ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED
 TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
@@ -57,6 +57,7 @@ class MPFuture(base.Future, Generic[ResultType]):
        - MPFuture is deterministic if only one process can call set_result/set_exception/set_running_or_notify_cancel
          and only the origin process can call result/exception/cancel.
     """
+
     _initialization_lock = mp.Lock()  # global lock that prevents simultaneous initialization of two processes
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
     _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
@@ -67,10 +68,12 @@ class MPFuture(base.Future, Generic[ResultType]):
     def __init__(self, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
-        self._state_cache:  Dict[State, State] = {}  # mapping from global to cached local future used that makes updates immediately
+        self._state_cache: Dict[
+            State, State
+        ] = {}  # mapping from global to cached local future used that makes updates immediately
         # available on setter side; dictionary-based cache works because future can visit any state at most once
 
-        base.Future.__init__(self)   # parent init is deferred because it uses self._shared_state_code
+        base.Future.__init__(self)  # parent init is deferred because it uses self._shared_state_code
         self._state, self._result, self._exception = base.PENDING, None, None
         self._use_lock = use_lock
 
@@ -122,8 +125,9 @@ class MPFuture(base.Future, Generic[ResultType]):
 
         receiver_pipe, cls._global_sender_pipe = mp.Pipe(duplex=False)
         cls._active_pid, cls._active_futures = pid, {}
-        cls._pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[receiver_pipe],
-                                                   name=f'{__name__}.BACKEND', daemon=True)
+        cls._pipe_waiter_thread = threading.Thread(
+            target=cls._process_updates_in_background, args=[receiver_pipe], name=f"{__name__}.BACKEND", daemon=True
+        )
         cls._pipe_waiter_thread.start()
 
     @classmethod
@@ -148,7 +152,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                 logger.exception(f"Could not retrieve update: caught {repr(e)} (pid={pid})")
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
-        """ This method sends result, exception or cancel to the MPFuture origin. """
+        """This method sends result, exception or cancel to the MPFuture origin."""
         with MPFuture._update_lock if self._use_lock else nullcontext():
             self._sender_pipe.send((self._uid, update_type, payload))
 
@@ -190,7 +194,9 @@ class MPFuture(base.Future, Generic[ResultType]):
         elif self._state == base.CANCELLED:
             return False
         else:
-            raise InvalidStateError(f"Can't set_running_or_notify_cancel when future is in {self._state} ({self._uid})")
+            raise InvalidStateError(
+                f"Can't set_running_or_notify_cancel when future is in {self._state} ({self._uid})"
+            )
 
     def result(self, timeout: Optional[float] = None) -> ResultType:
         if self._state not in TERMINAL_STATES:
@@ -240,22 +246,28 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise asyncio.CancelledError()
 
     def __del__(self):
-        if getattr(self, '_origin_pid', None) == os.getpid():
+        if getattr(self, "_origin_pid", None) == os.getpid():
             MPFuture._active_futures.pop(self._uid, None)
-        if getattr(self, '_aio_event', None):
+        if getattr(self, "_aio_event", None):
             self._aio_event.set()
 
     def __getstate__(self):
-        return dict(_sender_pipe=self._sender_pipe, _shared_state_code=self._shared_state_code,
-                    _origin_pid=self._origin_pid, _uid=self._uid, _use_lock=self._use_lock,
-                    _result=self._result, _exception=self._exception)
+        return dict(
+            _sender_pipe=self._sender_pipe,
+            _shared_state_code=self._shared_state_code,
+            _origin_pid=self._origin_pid,
+            _uid=self._uid,
+            _use_lock=self._use_lock,
+            _result=self._result,
+            _exception=self._exception,
+        )
 
     def __setstate__(self, state):
-        self._sender_pipe = state['_sender_pipe']
-        self._shared_state_code = state['_shared_state_code']
-        self._origin_pid, self._uid = state['_origin_pid'], state['_uid']
-        self._result, self._exception = state['_result'], state['_exception']
-        self._use_lock = state['_use_lock']
+        self._sender_pipe = state["_sender_pipe"]
+        self._shared_state_code = state["_shared_state_code"]
+        self._origin_pid, self._uid = state["_origin_pid"], state["_uid"]
+        self._result, self._exception = state["_result"], state["_exception"]
+        self._use_lock = state["_use_lock"]
 
         self._waiters, self._done_callbacks = [], []
         self._condition = threading.Condition()

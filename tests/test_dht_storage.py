@@ -9,7 +9,6 @@ def test_store():
     d = DHTLocalStorage()
     d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.5)
     assert d.get(DHTID.generate("key"))[0] == b"val", "Wrong value"
-    print("Test store passed")
 
 
 def test_get_expired():
@@ -17,13 +16,11 @@ def test_get_expired():
     d.store(DHTID.generate("key"), b"val", get_dht_time() + 0.1)
     time.sleep(0.5)
     assert d.get(DHTID.generate("key")) is None, "Expired value must be deleted"
-    print("Test get expired passed")
 
 
 def test_get_empty():
     d = DHTLocalStorage()
     assert d.get(DHTID.generate(source="key")) is None, "DHTLocalStorage returned non-existent value"
-    print("Test get expired passed")
 
 
 def test_change_expiration_time():
@@ -33,7 +30,6 @@ def test_change_expiration_time():
     d.store(DHTID.generate("key"), b"val2", get_dht_time() + 200)
     time.sleep(1)
     assert d.get(DHTID.generate("key"))[0] == b"val2", "Value must be changed, but still kept in table"
-    print("Test change expiration time passed")
 
 
 def test_maxsize_cache():

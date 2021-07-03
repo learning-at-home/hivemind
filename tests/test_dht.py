@@ -8,7 +8,6 @@ from multiaddr import Multiaddr
 import hivemind
 
 
-
 @pytest.mark.forked
 def test_get_store(n_peers=10):
     peers = [hivemind.DHT(start=True)]

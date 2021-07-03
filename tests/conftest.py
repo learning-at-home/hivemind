@@ -10,7 +10,7 @@ from hivemind.utils import get_logger
 logger = get_logger(__name__)
 
 
-@pytest.fixture(autouse=True, scope='session')
+@pytest.fixture(autouse=True, scope="session")
 def cleanup_children():
     yield
 

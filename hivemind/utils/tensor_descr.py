@@ -35,7 +35,7 @@ class TensorDescriptor(DescriptorBase):
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor):
         return cls(
-            tensor.shape, tensor.dtype, tensor.layout, tensor.device, tensor.requires_grad, safe_check_pinned(tensor)
+            tensor.shape, tensor.dtype, tensor.layout, tensor.device, tensor.requires_grad, _safe_check_pinned(tensor)
         )
 
     def make_empty(self, **kwargs):
@@ -62,7 +62,7 @@ class BatchTensorDescriptor(TensorDescriptor):
             layout=tensor.layout,
             device=tensor.device,
             requires_grad=tensor.requires_grad,
-            pin_memory=safe_check_pinned(tensor),
+            pin_memory=_safe_check_pinned(tensor),
             compression=compression if tensor.is_floating_point() else CompressionType.NONE
         )
 
@@ -71,7 +71,7 @@ class BatchTensorDescriptor(TensorDescriptor):
         return super().make_empty(size=(*batch_size, *self.shape[1:]), **kwargs)
 
 
-def safe_check_pinned(tensor: torch.Tensor) -> bool:
+def _safe_check_pinned(tensor: torch.Tensor) -> bool:
     """Check whether or not a tensor is pinned. If torch cannot initialize cuda, returns False instead of error."""
     try:
         return torch.cuda.is_available() and tensor.is_pinned()

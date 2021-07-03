@@ -229,7 +229,7 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
         await stream.done_writing()
 
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):
-        """ finish or terminate AllReduceRunner, propagate any errors / cancellations to peers. """
+        """finish or terminate AllReduceRunner, propagate any errors / cancellations to peers."""
         assert not cancel or not exception, "finalize accepts either exception or cancel, but not both"
         pending_tasks = set()
         if cancel or exception:

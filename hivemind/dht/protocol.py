@@ -11,8 +11,12 @@ from hivemind.p2p import P2P, P2PContext, PeerID, Servicer
 from hivemind.proto import dht_pb2
 from hivemind.utils import get_logger, MSGPackSerializer
 from hivemind.utils.auth import AuthRole, AuthRPCWrapper, AuthorizerBase
-from hivemind.utils.timed_storage import DHTExpiration, get_dht_time, MAX_DHT_TIME_DISCREPANCY_SECONDS, \
-    ValueWithExpiration
+from hivemind.utils.timed_storage import (
+    DHTExpiration,
+    get_dht_time,
+    MAX_DHT_TIME_DISCREPANCY_SECONDS,
+    ValueWithExpiration,
+)
 
 logger = get_logger(__name__)
 
