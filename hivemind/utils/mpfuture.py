@@ -224,7 +224,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def add_done_callback(self, callback: Callable[[MPFuture], None]):
         if os.getpid() != self._origin_pid:
-            raise RuntimeError("only the process that created MPFuture can set callbacks")
+            raise RuntimeError("Only the process that created MPFuture can set callbacks")
         return super().add_done_callback(callback)
 
     def get_loop(self) -> Optional[asyncio.BaseEventLoop]:
@@ -232,7 +232,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __await__(self):
         if not self._aio_event:
-            raise RuntimeError("can't await: MPFuture was created with no event loop")
+            raise RuntimeError("Can't await: MPFuture was created with no event loop")
         yield from self._aio_event.wait().__await__()
         try:
             return super().result(timeout=0)
