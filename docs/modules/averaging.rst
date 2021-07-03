@@ -4,10 +4,10 @@
 .. automodule:: hivemind.averaging
 
 .. currentmodule:: hivemind.averaging
-
 .. raw:: html
 
   This module lets you average tensors in a decentralized manner.
+  <br><br>
 
 .. autoclass:: DecentralizedAverager
    :members:

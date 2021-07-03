@@ -7,6 +7,6 @@
 
    optim
    averaging
+   dht
    client
    server
-   dht
