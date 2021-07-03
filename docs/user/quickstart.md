@@ -24,7 +24,7 @@ You can also install it in the editable mode with `pip install -e .`.
 
 ## Host a server
 
-`hivemind.Server` hosts one or several experts (PyTorch modules) for remote access. These experts are responsible for
+`hivemind.moe.Server` hosts one or several experts (PyTorch modules) for remote access. These experts are responsible for
 most of the model parameters and computation. The server can be started using either Python or
 [a shell script](https://github.com/learning-at-home/hivemind/blob/master/hivemind/hivemind_cli/run_server.py). We'll use the shell
 for now. To host a server with default experts, run this in your shell:

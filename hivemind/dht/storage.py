@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 from typing import Optional, Union
 
-from hivemind.dht.routing import DHTID, DHTExpiration, BinaryDHTValue, Subkey
+from hivemind.dht.routing import DHTID, BinaryDHTValue, Subkey
 from hivemind.utils.serializer import MSGPackSerializer
-from hivemind.utils.timed_storage import KeyType, ValueType, TimedStorage
+from hivemind.utils.timed_storage import KeyType, ValueType, TimedStorage, DHTExpiration
 
 
 @MSGPackSerializer.ext_serializable(0x50)
@@ -32,6 +33,7 @@ class DictionaryDHTValue(TimedStorage[Subkey, BinaryDHTValue]):
 
 class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTValue]]):
     """ A dictionary-like storage that can store binary values and/or nested dictionaries until expiration """
+
     def store(self, key: DHTID, value: BinaryDHTValue, expiration_time: DHTExpiration,
               subkey: Optional[Subkey] = None) -> bool:
         """
@@ -63,5 +65,3 @@ class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTVal
             return previous_value.store(subkey, value, expiration_time)
         else:
             return False
-
-

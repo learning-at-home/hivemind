@@ -8,7 +8,8 @@ import random
 from collections.abc import Iterable
 from itertools import chain
 from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
-from hivemind.utils import Endpoint, MSGPackSerializer, get_dht_time, DHTExpiration
+
+from hivemind.utils import Endpoint, MSGPackSerializer, get_dht_time
 
 DHTKey, Subkey, DHTValue, BinaryDHTID, BinaryDHTValue, = Any, Any, Any, bytes, bytes
 

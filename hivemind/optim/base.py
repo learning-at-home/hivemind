@@ -1,5 +1,3 @@
-from typing import Any
-
 import torch
 
 from hivemind.dht import DHT

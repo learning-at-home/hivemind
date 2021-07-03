@@ -5,7 +5,7 @@ from typing import Optional, Sequence, Tuple
 import torch
 
 from hivemind.dht import DHT
-from hivemind.client import TrainingAverager
+from hivemind.averaging import TrainingAverager
 from hivemind.optim.base import DecentralizedOptimizerBase
 from hivemind.utils import get_logger, get_dht_time
 

@@ -5,10 +5,10 @@ import configargparse
 import torch
 
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.server import Server
-from hivemind.utils.threading import increase_file_limit
+from hivemind.moe.server import Server
+from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger
-from hivemind.server.layers import schedule_name_to_scheduler
+from hivemind.moe.server.layers import schedule_name_to_scheduler
 
 logger = get_logger(__name__)
 

@@ -9,14 +9,13 @@ import numpy as np
 import torch
 from pydantic import BaseModel, StrictBool, StrictFloat, confloat, conint
 
-from hivemind.client.averaging.training import TrainingAverager
+from hivemind.averaging.training import TrainingAverager
 from hivemind.dht import DHT
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.optim.base import DecentralizedOptimizerBase
 from hivemind.optim.performance_ema import PerformanceEMA
-from hivemind.utils import Endpoint, ValueWithExpiration, get_dht_time, get_logger
-
+from hivemind.utils import Endpoint, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
@@ -115,7 +114,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
         self.prefix, self.scheduler = prefix, scheduler
         self.target_batch_size, self.batch_size_per_step = target_batch_size, batch_size_per_step
-        self.min_refresh_period, self.max_refresh_period, self.default_refresh_period =\
+        self.min_refresh_period, self.max_refresh_period, self.default_refresh_period = \
             min_refresh_period, max_refresh_period, default_refresh_period
         self.expected_drift_peers, self.expected_drift_rate = expected_drift_peers, expected_drift_rate
         self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration

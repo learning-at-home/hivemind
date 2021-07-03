@@ -5,9 +5,9 @@ from typing import Tuple, List
 import grpc
 import torch
 
-from hivemind.client.expert import RemoteExpert, DUMMY
-from hivemind.client.moe import RemoteMixtureOfExperts, _RemoteCallMany
-from hivemind.server.expert_uid import UID_DELIMITER
+from hivemind.moe.client.expert import RemoteExpert, DUMMY
+from hivemind.moe.client.moe import RemoteMixtureOfExperts, _RemoteCallMany
+from hivemind.moe.server.expert_uid import UID_DELIMITER
 from hivemind.utils import nested_pack, nested_flatten
 from hivemind.utils.logging import get_logger
 

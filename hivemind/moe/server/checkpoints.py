@@ -8,7 +8,7 @@ from typing import Dict
 
 import torch
 
-from hivemind.server.expert_backend import ExpertBackend
+from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)

@@ -1,6 +1,6 @@
 import time
 
-from hivemind.dht.routing import get_dht_time
+from hivemind.utils.timed_storage import get_dht_time
 from hivemind.dht.storage import DHTLocalStorage, DHTID, DictionaryDHTValue
 from hivemind.utils.serializer import MSGPackSerializer
 

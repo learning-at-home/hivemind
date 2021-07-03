@@ -1,5 +1,6 @@
 import asyncio
 import multiprocessing as mp
+import socket
 import subprocess
 from functools import partial
 from typing import List
@@ -7,28 +8,28 @@ from typing import List
 import numpy as np
 import pytest
 import torch
+from multiaddr import Multiaddr
 
-from hivemind.p2p import P2P
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
+from hivemind.p2p import P2P, P2PHandlerError
 from hivemind.proto import dht_pb2, runtime_pb2
 from hivemind.utils import MSGPackSerializer
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.utils.networking import find_open_port
 
 
 def is_process_running(pid: int) -> bool:
     return subprocess.run(["ps", "-p", str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
 
 
-async def replicate_if_needed(p2p: P2P, replicate: bool):
-    return await P2P.replicate(p2p._daemon_listen_port, p2p._host_port) if replicate else p2p
+async def replicate_if_needed(p2p: P2P, replicate: bool) -> P2P:
+    return await P2P.replicate(p2p.daemon_listen_maddr) if replicate else p2p
 
 
-def bootstrap_addr(host_port, id_):
-    return f'/ip4/127.0.0.1/tcp/{host_port}/p2p/{id_}'
-
-
-def bootstrap_from(daemons: List[P2P]) -> List[str]:
-    return [bootstrap_addr(d._host_port, d.id) for d in daemons]
+async def bootstrap_from(daemons: List[P2P]) -> List[Multiaddr]:
+    maddrs = []
+    for d in daemons:
+        maddrs += await d.identify_maddrs()
+    return maddrs
 
 
 @pytest.mark.asyncio
@@ -43,25 +44,50 @@ async def test_daemon_killed_on_del():
 
 
 @pytest.mark.asyncio
+async def test_error_for_wrong_daemon_arguments():
+    with pytest.raises(RuntimeError):
+        await P2P.create(unknown_argument=True)
+
+
+@pytest.mark.asyncio
 async def test_server_client_connection():
     server = await P2P.create()
-    peers = await server._client.list_peers()
+    peers = await server.list_peers()
     assert len(peers) == 0
 
-    nodes = bootstrap_from([server])
-    client = await P2P.create(bootstrap=True, bootstrap_peers=nodes)
+    nodes = await bootstrap_from([server])
+    client = await P2P.create(bootstrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
-    peers = await client._client.list_peers()
+    peers = await client.list_peers()
     assert len(peers) == 1
-    peers = await server._client.list_peers()
+    peers = await server.list_peers()
+    assert len(peers) == 1
+
+
+@pytest.mark.asyncio
+async def test_quic_transport():
+    server_port = find_open_port((socket.AF_INET, socket.SOCK_DGRAM))
+    server = await P2P.create(quic=True, host_maddrs=[Multiaddr(f'/ip4/127.0.0.1/udp/{server_port}/quic')])
+    peers = await server.list_peers()
+    assert len(peers) == 0
+
+    nodes = await bootstrap_from([server])
+    client_port = find_open_port((socket.AF_INET, socket.SOCK_DGRAM))
+    client = await P2P.create(quic=True, host_maddrs=[Multiaddr(f'/ip4/127.0.0.1/udp/{client_port}/quic')],
+                              bootstrap_peers=nodes)
+    await client.wait_for_at_least_n_peers(1)
+
+    peers = await client.list_peers()
+    assert len(peers) == 1
+    peers = await server.list_peers()
     assert len(peers) == 1
 
 
 @pytest.mark.asyncio
 async def test_daemon_replica_does_not_affect_primary():
     p2p_daemon = await P2P.create()
-    p2p_replica = await P2P.replicate(p2p_daemon._daemon_listen_port, p2p_daemon._host_port)
+    p2p_replica = await P2P.replicate(p2p_daemon.daemon_listen_maddr)
 
     child_pid = p2p_daemon._child.pid
     assert is_process_running(child_pid)
@@ -126,6 +152,8 @@ def handle_add_torch_with_exc(args):
 @pytest.mark.asyncio
 async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"):
     handler_cancelled = False
+    server_primary = await P2P.create()
+    server = await replicate_if_needed(server_primary, replicate)
 
     async def ping_handler(request, context):
         try:
@@ -134,47 +162,41 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
             nonlocal handler_cancelled
             handler_cancelled = True
         return dht_pb2.PingResponse(
-            peer=dht_pb2.NodeInfo(
-                node_id=context.id.encode(), rpc_port=context.port),
+            peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()),
             sender_endpoint=context.handle_name, available=True)
 
-    server_primary = await P2P.create()
-    server = await replicate_if_needed(server_primary, replicate)
     server_pid = server_primary._child.pid
     await server.add_unary_handler(handle_name, ping_handler, dht_pb2.PingRequest,
                                    dht_pb2.PingResponse)
     assert is_process_running(server_pid)
 
-    nodes = bootstrap_from([server])
-    client_primary = await P2P.create(bootstrap=True, bootstrap_peers=nodes)
+    nodes = await bootstrap_from([server])
+    client_primary = await P2P.create(bootstrap_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
     client_pid = client_primary._child.pid
     assert is_process_running(client_pid)
+    await client.wait_for_at_least_n_peers(1)
 
     ping_request = dht_pb2.PingRequest(
-        peer=dht_pb2.NodeInfo(node_id=client.id.encode(), rpc_port=client._host_port),
+        peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()),
         validate=True)
     expected_response = dht_pb2.PingResponse(
-        peer=dht_pb2.NodeInfo(node_id=server.id.encode(), rpc_port=server._host_port),
+        peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()),
         sender_endpoint=handle_name, available=True)
 
-    await client.wait_for_at_least_n_peers(1)
-    libp2p_server_id = PeerID.from_base58(server.id)
-    stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
-
-    await P2P.send_protobuf(ping_request, dht_pb2.PingRequest, writer)
-
     if should_cancel:
+        stream_info, reader, writer = await client._client.stream_open(server.id, (handle_name,))
+        await P2P.send_protobuf(ping_request, dht_pb2.PingRequest, writer)
+
         writer.close()
         await asyncio.sleep(1)
         assert handler_cancelled
     else:
-        result, err = await P2P.receive_protobuf(dht_pb2.PingResponse, reader)
-        assert err is None
-        assert result == expected_response
+        actual_response = await client.call_unary_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)
+        assert actual_response == expected_response
         assert not handler_cancelled
 
-    await server.stop_listening()
+    await server.shutdown()
     await server_primary.shutdown()
     assert not is_process_running(server_pid)
 
@@ -192,24 +214,20 @@ async def test_call_unary_handler_error(handle_name="handle"):
     await server.add_unary_handler(handle_name, error_handler, dht_pb2.PingRequest, dht_pb2.PingResponse)
     assert is_process_running(server_pid)
 
-    nodes = bootstrap_from([server])
-    client = await P2P.create(bootstrap=True, bootstrap_peers=nodes)
+    nodes = await bootstrap_from([server])
+    client = await P2P.create(bootstrap_peers=nodes)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
     await client.wait_for_at_least_n_peers(1)
 
     ping_request = dht_pb2.PingRequest(
-        peer=dht_pb2.NodeInfo(node_id=client.id.encode(), rpc_port=client._host_port),
+        peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()),
         validate=True)
-    libp2p_server_id = PeerID.from_base58(server.id)
-    stream_info, reader, writer = await client._client.stream_open(libp2p_server_id, (handle_name,))
 
-    await P2P.send_protobuf(ping_request, dht_pb2.PingRequest, writer)
-    result, err = await P2P.receive_protobuf(dht_pb2.PingResponse, reader)
-    assert result is None
-    assert err.message == 'boom'
+    with pytest.raises(P2PHandlerError) as excinfo:
+        await client.call_unary_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)
+    assert 'boom' in str(excinfo.value)
 
-    await server.stop_listening()
     await server.shutdown()
     await client.shutdown()
 
@@ -230,8 +248,8 @@ async def test_call_peer_single_process(test_input, expected, handle, handler_na
     await server.add_stream_handler(handler_name, handle)
     assert is_process_running(server_pid)
 
-    nodes = bootstrap_from([server])
-    client = await P2P.create(bootstrap=True, bootstrap_peers=nodes)
+    nodes = await bootstrap_from([server])
+    client = await P2P.create(bootstrap_peers=nodes)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
@@ -242,7 +260,6 @@ async def test_call_peer_single_process(test_input, expected, handle, handler_na
     result = MSGPackSerializer.loads(result_msgp)
     assert result == expected
 
-    await server.stop_listening()
     await server.shutdown()
     assert not is_process_running(server_pid)
 
@@ -257,11 +274,10 @@ async def run_server(handler_name, server_side, client_side, response_received):
     assert is_process_running(server_pid)
 
     server_side.send(server.id)
-    server_side.send(server._host_port)
+    server_side.send(await server.identify_maddrs())
     while response_received.value == 0:
         await asyncio.sleep(0.5)
 
-    await server.stop_listening()
     await server.shutdown()
     assert not is_process_running(server_pid)
 
@@ -283,10 +299,9 @@ async def test_call_peer_different_processes():
     proc.start()
 
     peer_id = client_side.recv()
-    peer_port = client_side.recv()
+    peer_maddrs = client_side.recv()
 
-    nodes = [bootstrap_addr(peer_port, peer_id)]
-    client = await P2P.create(bootstrap=True, bootstrap_peers=nodes)
+    client = await P2P.create(bootstrap_peers=peer_maddrs)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
@@ -319,8 +334,8 @@ async def test_call_peer_torch_square(test_input, expected, handler_name="handle
     server = await P2P.create()
     await server.add_stream_handler(handler_name, handle)
 
-    nodes = bootstrap_from([server])
-    client = await P2P.create(bootstrap=True, bootstrap_peers=nodes)
+    nodes = await bootstrap_from([server])
+    client = await P2P.create(bootstrap_peers=nodes)
 
     await client.wait_for_at_least_n_peers(1)
 
@@ -331,7 +346,6 @@ async def test_call_peer_torch_square(test_input, expected, handler_name="handle
     result = deserialize_torch_tensor(result)
     assert torch.allclose(result, expected)
 
-    await server.stop_listening()
     await server.shutdown()
     await client.shutdown()
 
@@ -351,8 +365,8 @@ async def test_call_peer_torch_add(test_input, expected, handler_name="handle"):
     server = await P2P.create()
     await server.add_stream_handler(handler_name, handle)
 
-    nodes = bootstrap_from([server])
-    client = await P2P.create(bootstrap=True, bootstrap_peers=nodes)
+    nodes = await bootstrap_from([server])
+    client = await P2P.create(bootstrap_peers=nodes)
 
     await client.wait_for_at_least_n_peers(1)
 
@@ -364,7 +378,6 @@ async def test_call_peer_torch_add(test_input, expected, handler_name="handle"):
     result = deserialize_torch_tensor(result)
     assert torch.allclose(result, expected)
 
-    await server.stop_listening()
     await server.shutdown()
     await client.shutdown()
 
@@ -382,8 +395,8 @@ async def test_call_peer_error(replicate, handler_name="handle"):
     server = await replicate_if_needed(server_primary, replicate)
     await server.add_stream_handler(handler_name, handle_add_torch_with_exc)
 
-    nodes = bootstrap_from([server])
-    client_primary = await P2P.create(bootstrap=True, bootstrap_peers=nodes)
+    nodes = await bootstrap_from([server])
+    client_primary = await P2P.create(bootstrap_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
 
     await client.wait_for_at_least_n_peers(1)
@@ -393,9 +406,10 @@ async def test_call_peer_error(replicate, handler_name="handle"):
     result = await client.call_peer_handler(server.id, handler_name, inp_msgp)
     assert result == b'something went wrong :('
 
-    await server.stop_listening()
     await server_primary.shutdown()
+    await server.shutdown()
     await client_primary.shutdown()
+    await client.shutdown()
 
 
 @pytest.mark.asyncio
@@ -403,7 +417,7 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     def handler(arg, key):
         return key
 
-    server_primary = await P2P.create(bootstrap=False)
+    server_primary = await P2P.create()
     server_id = server_primary.id
     await server_primary.add_stream_handler(handler_name, partial(handler, key=b'primary'))
 
@@ -413,8 +427,8 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     server_replica2 = await replicate_if_needed(server_primary, True)
     await server_replica2.add_stream_handler(handler_name + '2', partial(handler, key=b'replica2'))
 
-    nodes = bootstrap_from([server_primary])
-    client = await P2P.create(bootstrap=True, bootstrap_peers=nodes)
+    nodes = await bootstrap_from([server_primary])
+    client = await P2P.create(bootstrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
     result = await client.call_peer_handler(server_id, handler_name, b'1')
@@ -426,8 +440,8 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     result = await client.call_peer_handler(server_id, handler_name + '2', b'3')
     assert result == b"replica2"
 
-    await server_replica1.stop_listening()
-    await server_replica2.stop_listening()
+    await server_replica1.shutdown()
+    await server_replica2.shutdown()
 
     # Primary does not handle replicas protocols
     with pytest.raises(Exception):
@@ -435,6 +449,5 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     with pytest.raises(Exception):
         await client.call_peer_handler(server_id, handler_name + '2', b'')
 
-    await server_primary.stop_listening()
     await server_primary.shutdown()
     await client.shutdown()

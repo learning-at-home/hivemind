@@ -14,7 +14,8 @@ from typing import List, Tuple, Dict, Any, Generator
 
 import torch
 
-from hivemind.utils import MPFuture, get_logger, FutureStateError
+from hivemind.utils import get_logger
+from hivemind.utils.mpfuture import MPFuture, InvalidStateError
 
 logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))
@@ -89,15 +90,14 @@ class TaskPool(TaskPoolBase):
 
     def submit_task(self, *args: torch.Tensor) -> Future:
         """ Add task to this pool's queue, return Future for its output """
-        future1, future2 = MPFuture.make_pair()
-        task = Task(future1, args)
+        task = Task(MPFuture(), args)
         if self.get_task_size(task) > self.max_batch_size:
             exc = ValueError(f"Task size greater than max_batch_size ({self.max_batch_size}), it can't be processed")
-            future2.set_exception(exc)
+            task.future.set_exception(exc)
         else:
             self.tasks.put(task)
             self.undispatched_task_timestamps.put(time.time())
-        return future2
+        return task.future
 
     def iterate_minibatches(self, *args, **kwargs):
         """ Form minibatches by grouping one or more tasks together up to self.max_batch_size """
@@ -127,7 +127,7 @@ class TaskPool(TaskPoolBase):
                 if task.future.set_running_or_notify_cancel():
                     batch.append(task)
                     total_size += task_size
-            except FutureStateError as e:
+            except InvalidStateError as e:
                 logger.debug(f"Failed to add task to batch: {task.future} raised {e}")
 
     def run(self, *args, **kwargs):
@@ -196,7 +196,7 @@ class TaskPool(TaskPoolBase):
             for task, task_outputs in zip(batch_tasks, outputs_per_task):
                 try:
                     task.future.set_result(tuple(task_outputs))
-                except FutureStateError as e:
+                except InvalidStateError as e:
                     logger.debug(f"Failed to send task result due to an exception: {e}")
 
     @property

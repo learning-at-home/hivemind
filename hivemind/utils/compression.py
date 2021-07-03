@@ -1,3 +1,5 @@
+import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple, Sequence, Optional
 
 import numpy as np
@@ -6,7 +8,7 @@ import warnings
 
 from hivemind.proto import runtime_pb2
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils.threading import run_in_background
+
 
 FP32_EPS = 1e-06
 NUM_BYTES_FLOAT32 = 4
@@ -16,6 +18,8 @@ NUM_COMPRESSION_QUANTILES = 2 ** NUM_BITS_QUANTILE_COMPRESSION
 UNIFORM_BUCKETS_STD_RANGE = 6
 FP16_MAX = 65_504
 UINT8_RANGE = 256
+
+COMPRESSION_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("QUANTILE_COMPRESSION_THREADS", 128)))
 
 warnings.filterwarnings("ignore", message="The given NumPy array is not writeable", category=UserWarning)
 
@@ -48,8 +52,7 @@ def _quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size
     jobs = []
     for i in range(num_chunks):
         chunk = slice(chunk_size * i, chunk_size * (i + 1))
-        jobs.append(run_in_background(
-            np.quantile, array[chunk], quantiles, out=partition_quantiles[i]))
+        jobs.append(COMPRESSION_EXECUTOR.submit(np.quantile, array[chunk], quantiles, out=partition_quantiles[i]))
 
     for job in jobs:
         job.result()
@@ -188,3 +191,15 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
 
     tensor.requires_grad_(serialized_tensor.requires_grad)
     return tensor
+
+
+def get_nbytes_per_value(dtype: torch.dtype, compression: CompressionType) -> int:
+    """ returns the number of bytes per value for a given tensor (excluding metadata) """
+    if compression in (CompressionType.QUANTILE_8BIT, CompressionType.UNIFORM_8BIT):
+        return 1
+    elif compression in (CompressionType.FLOAT16, CompressionType.MEANSTD_16BIT):
+        return 2
+    elif compression == CompressionType.NONE:
+        return torch.finfo(dtype).bits // 8
+    else:
+        raise NotImplementedError(f"Unknown compression type: {CompressionType.Name(compression)}")

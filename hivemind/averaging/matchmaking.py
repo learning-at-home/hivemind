@@ -12,13 +12,12 @@ import asyncio
 import grpc
 import grpc._cython.cygrpc
 
-from hivemind.client.averaging.group_info import GroupInfo
-from hivemind.client.averaging.key_manager import GroupKeyManager, GroupKey
-from hivemind.dht import DHT, DHTID, DHTExpiration, get_dht_time
-from hivemind.utils import get_logger, Endpoint, timed_storage, TimedStorage
+from hivemind.averaging.group_info import GroupInfo
+from hivemind.averaging.key_manager import GroupKeyManager, GroupKey
+from hivemind.dht import DHT, DHTID, DHTExpiration
+from hivemind.utils import get_logger, Endpoint, timed_storage, TimedStorage, get_dht_time
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
 from hivemind.utils.grpc import ChannelCache
-
 
 logger = get_logger(__name__)
 
@@ -391,7 +390,8 @@ class PotentialLeaders:
             if maybe_next_leader is None or self.max_assured_time <= entry.expiration_time <= self.search_end_time:
                 self.update_triggered.set()
 
-            if maybe_next_leader is None or (entry.expiration_time, maybe_next_leader) > (self.declared_expiration_time, self.endpoint):
+            if maybe_next_leader is None or (entry.expiration_time, maybe_next_leader) > (
+                    self.declared_expiration_time, self.endpoint):
                 await asyncio.wait({self.update_finished.wait(), self.declared_expiration.wait()},
                                    return_when=asyncio.FIRST_COMPLETED)
                 self.declared_expiration.clear()
