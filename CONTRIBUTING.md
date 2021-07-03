@@ -10,12 +10,12 @@ to be reviewed by the library maintainers (and possibly other community members)
 
 ## Environment setup
 
-First, install hivemind in the development mode, preferably with Python 3.8 on Linux.
+First, install hivemind in the development mode, preferably with Python 3.8+ on Linux.
 
 ```
 git clone https://github.com/learning-at-home/hivemind
 cd hivemind
-pip install -e .
+pip install -e .[dev]
 ``` 
 
 ## Pull Request checklist
@@ -34,13 +34,15 @@ with the following rules:
 
 ## Code style
 
+* We use [black](https://github.com/psf/black) for code formatting. Before submitting a PR, make sure to install and
+  run `black .` in the root of the repository.
 * The code must follow [PEP8](https://www.python.org/dev/peps/pep-0008/) unless absolutely necessary. Also, each line
-  cannot be longer than 120 characters.
+  cannot be longer than 119 characters.
 * We highly encourage the use of [typing](https://docs.python.org/3/library/typing.html) where applicable.
 * Use `get_logger` from `hivemind.utils.logging` to log any information instead of `print`ing directly to standard
   output/error streams.
-* Comments should be used sparingly and never describe the obvious; usually it's best to clean up the code logic instead
-  of describing it, as it might lead to redundant (or worse, stale or incorrect).
+* Comments should be used sparingly and never describe the obvious. Usually it's best to clean up the code logic instead
+  of describing it, as it might lead to redundant (or worse, stale or incorrect) messages.
 * In general, strive for code readability instead of compactness. In particular, prefer to create a new variable instead
   of a long one-liner and to break up a long method into several meaningful parts. This rule can be overridden in case
   of major performance considerations, but only if verified by benchmarks.
@@ -103,8 +105,8 @@ To run tests, you need to install hivemind in development mode with additional d
 You can run all tests with `pytest tests/` or choose a specific subset, e.g., `pytest tests/test_dht.py`.
 
 When investigating test behavior, please note that pytest automatically wraps all hivemind tests with fixtures defined
-in a global configuration file [`tests/conftest.py`](./tests/conftest.py), some of which will run automatically. 
-For more informantion, refer to the [pytest documentation on fixtures](https://docs.pytest.org/en/6.2.x/fixture.html).
+in a global configuration file [`tests/conftest.py`](./tests/conftest.py), some of which will run automatically. For
+more informantion, refer to the [pytest documentation on fixtures](https://docs.pytest.org/en/6.2.x/fixture.html).
 
 ## Building documentation
 
@@ -128,8 +130,8 @@ the maintainers to provide the benchmarking results for your branch and a compar
 
 * `benchmarks/benchmark_averaging.py` measures the performance of decentralized parameter averaging across the DHT.
 * `benchmarks/benchmark_dht.py` measures the performance of core DHT operations.
-* `benchmarks/benchmark_throughput.py` measures the performance of a server hosting several expert layers under heavy load
-  from multiple clients.
+* `benchmarks/benchmark_throughput.py` measures the performance of a server hosting several expert layers under heavy
+  load from multiple clients.
 
 Example benchmark runs are available in
 the [benchmarking](https://learning-at-home.readthedocs.io/en/latest/user/benchmarks.html) page of the documentation.
