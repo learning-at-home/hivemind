@@ -79,7 +79,7 @@ class P2P:
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      quiet: bool = True,
-                     ping_n_retries: int = 3, ping_retry_delay: float = 0.4, **kwargs) -> 'P2P':
+                     ping_n_retries: int = 5, ping_retry_delay: float = 0.4, **kwargs) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
         :param quic: Enables the QUIC transport
