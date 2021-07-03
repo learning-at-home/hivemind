@@ -317,8 +317,8 @@ async def test_dhtnode_replicas():
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_caching(T=0.05):
-    node2 = await hivemind.DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
-    node1 = await hivemind.DHTNode.create(initial_peers=[f'localhost:{node2.port}'],
+    node2 = await DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
+    node1 = await DHTNode.create(initial_peers=[f'localhost:{node2.port}'],
                                           cache_refresh_before_expiry=5 * T, listen=False, reuse_get_requests=False)
     await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
     await node2.store('k2', [654, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
@@ -366,7 +366,7 @@ async def test_dhtnode_reuse_get():
     peers = []
     for i in range(10):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
+        peers.append(await DHTNode.create(initial_peers=neighbors_i, parallel_rpc=256))
 
     await asyncio.gather(
         random.choice(peers).store('k1', 123, hivemind.get_dht_time() + 999),
@@ -396,10 +396,10 @@ async def test_dhtnode_reuse_get():
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_blacklist():
-    node1 = await hivemind.DHTNode.create(blacklist_time=999)
-    node2 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
-    node3 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
-    node4 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
+    node1 = await DHTNode.create(blacklist_time=999)
+    node2 = await DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
+    node3 = await DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
+    node4 = await DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"])
 
     assert await node2.store('abc', 123, expiration_time=hivemind.get_dht_time() + 99)
     assert len(node2.blacklist.ban_counter) == 0
@@ -428,9 +428,9 @@ async def test_dhtnode_blacklist():
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_validate(fake_endpoint='127.0.0.721:*'):
-    node1 = await hivemind.DHTNode.create(blacklist_time=999)
+    node1 = await DHTNode.create(blacklist_time=999)
     with pytest.raises(ValidationError):
-        node2 = await hivemind.DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"],
+        node2 = await DHTNode.create(blacklist_time=999, initial_peers=[f"{LOCALHOST}:{node1.port}"],
                                               endpoint=fake_endpoint)
 
 
@@ -440,7 +440,7 @@ async def test_dhtnode_edge_cases():
     peers = []
     for i in range(5):
         neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
-        peers.append(await hivemind.DHTNode.create(initial_peers=neighbors_i, parallel_rpc=4))
+        peers.append(await DHTNode.create(initial_peers=neighbors_i, parallel_rpc=4))
 
     subkeys = [0, '', False, True, 'abyrvalg', 4555]
     keys = subkeys + [()]

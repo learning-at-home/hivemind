@@ -1,26 +1,13 @@
-**hivemind.client**
+**hivemind.averaging**
 ====================
 
-.. automodule:: hivemind.client
+.. automodule:: hivemind.averaging
 
-.. currentmodule:: hivemind.client
+.. currentmodule:: hivemind.averaging
 
 .. raw:: html
 
-  This module lets you connect to distributed Mixture-of-Experts or individual experts hosted
-  <strike>in the cloud cloud</strike> on someone else's computer.
-  <br><br>
-
-.. autoclass:: RemoteExpert
-   :members: forward
-
-.. autoclass:: RemoteMixtureOfExperts
-   :members:
-   :member-order: bysource
-
-.. autoclass:: RemoteSwitchMixtureOfExperts
-   :members:
-   :member-order: bysource
+  This module lets you average tensors in a decentralized manner.
 
 .. autoclass:: DecentralizedAverager
    :members:
