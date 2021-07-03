@@ -60,6 +60,7 @@ class P2P:
         'public': {'forceReachabilityPublic': 1},
         'private': {'forceReachabilityPrivate': 1},
     }
+    _UNIX_SOCKET_PREFIX = '/unix/tmp/hivemind-'
 
     def __init__(self):
         self.id = None
@@ -112,8 +113,8 @@ class P2P:
             p2pd_path = p
 
         socket_uid = secrets.token_urlsafe(8)
-        self._daemon_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pd-{socket_uid}.sock')
-        self._client_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pclient-{socket_uid}.sock')
+        self._daemon_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f'p2pd-{socket_uid}.sock')
+        self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f'p2pclient-{socket_uid}.sock')
 
         need_bootstrap = bool(bootstrap_peers) or use_ipfs
         process_kwargs = kwargs.copy()
@@ -177,7 +178,7 @@ class P2P:
 
         socket_uid = secrets.token_urlsafe(8)
         self._daemon_listen_maddr = daemon_listen_maddr
-        self._client_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pclient-{socket_uid}.sock')
+        self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f'p2pclient-{socket_uid}.sock')
 
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 

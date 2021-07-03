@@ -1,9 +1,37 @@
-import pytest
+import gc
+import glob
+import os
+from contextlib import suppress
+
 import psutil
+import pytest
+
+from hivemind.p2p import P2P
+from hivemind.utils import get_logger
+
+
+logger = get_logger(__name__)
 
 
 @pytest.fixture(autouse=True, scope='session')
 def cleanup_children():
     yield
-    for child in psutil.Process().children(recursive=True):
-        child.terminate()
+
+    gc.collect()  # Call .__del__() for removed objects
+
+    children = psutil.Process().children(recursive=True)
+    if children:
+        logger.info(f'Cleaning up {len(children)} child processes')
+        for child in children:
+            with suppress(psutil.NoSuchProcess):
+                child.terminate()
+        psutil.wait_procs(children, timeout=1)
+        for child in children:
+            with suppress(psutil.NoSuchProcess):
+                child.kill()
+
+    unix_sockets = glob.glob('/tmp/hivemind-*')
+    if unix_sockets:
+        logger.info(f'Cleaning up {len(unix_sockets)} Unix sockets')
+        for path in unix_sockets:
+            os.remove(path)
