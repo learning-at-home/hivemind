@@ -87,7 +87,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             self._loop = loop or asyncio.get_event_loop()
             self._aio_event = asyncio.Event()
         except RuntimeError:
-            self._loop = self._aio_event = None
+            self._loop, self._aio_event = None, None
 
     @property
     def _state(self) -> State:
@@ -259,5 +259,5 @@ class MPFuture(base.Future, Generic[ResultType]):
 
         self._waiters, self._done_callbacks = [], []
         self._condition = threading.Condition()
-        self._aio_event = self._loop = None
+        self._aio_event, self._loop = None, None
         self._state_cache = {}
