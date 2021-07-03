@@ -423,3 +423,7 @@ def test_training_averager(n_steps: int = 10, n_dims: int = 16):
         assert torch.allclose(x2.grad, grad_avg)
         assert torch.allclose(opt1.state[x1]["exp_avg_sq"], stats_avg)
         assert torch.allclose(opt2.state[x2]["exp_avg_sq"], stats_avg)
+
+    averager1.shutdown()
+    averager2.shutdown()
+    dht.shutdown()
