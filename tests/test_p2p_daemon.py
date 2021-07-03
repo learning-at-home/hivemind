@@ -10,11 +10,11 @@ import pytest
 import torch
 from multiaddr import Multiaddr
 
-from hivemind.p2p import P2P, P2PHandlerError, PeerID, PeerInfo
+from hivemind.p2p import P2P, P2PHandlerError
 from hivemind.proto import dht_pb2, runtime_pb2
 from hivemind.utils import MSGPackSerializer
-from hivemind.utils.networking import find_open_port
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.utils.networking import find_open_port
 
 
 def is_process_running(pid: int) -> bool:

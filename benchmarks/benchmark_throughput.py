@@ -8,10 +8,9 @@ import torch
 
 import hivemind
 from hivemind import find_open_port
-from hivemind.server import layers
+from hivemind.moe.server import layers
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger
-
 
 logger = get_logger(__name__)
 
@@ -88,8 +87,8 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
                                                            max_batch_size=max_batch_size,
                                                            )
         timestamps['created_experts'] = time.perf_counter()
-        server = hivemind.Server(None, experts, listen_on=f"{hivemind.LOCALHOST}:{port}",
-                                 num_connection_handlers=num_handlers, device=device)
+        server = hivemind.moe.Server(None, experts, listen_on=f"{hivemind.LOCALHOST}:{port}",
+                                     num_connection_handlers=num_handlers, device=device)
         server.start()
         server.ready.wait()
         timestamps['server_ready'] = time.perf_counter()
@@ -116,18 +115,18 @@ def benchmark_throughput(num_experts=16, num_handlers=None, num_clients=128, num
     total_examples = batch_size * num_clients * num_batches_per_client
 
     logger.info("Benchmark finished, status:" + ["Success", "Failure"][benchmarking_failed.is_set()])
-    logger.info(f"Server parameters: num_experts={num_experts}, num_handlers={num_handlers}, max_batch_size={max_batch_size},"
-          f" expert_cls={expert_cls}, hid_dim={hid_dim}, device={device}")
+    logger.info(f"Server parameters: num_experts={num_experts}, num_handlers={num_handlers}, "
+                f"max_batch_size={max_batch_size}, expert_cls={expert_cls}, hid_dim={hid_dim}, device={device}")
     logger.info(f"Client parameters: num_clients={num_clients}, num_batches_per_client={num_batches_per_client}, "
-          f"batch_size={batch_size}, backprop={backprop}")
+                f"batch_size={batch_size}, backprop={backprop}")
 
     logger.info("Results: ")
     logger.info(f"\tServer startup took {time_between('began_launching_server', 'server_ready') :.3f} s. "
-          f"({time_between('began_launching_server', 'created_experts') :.3f} s. experts + "
-          f"{time_between('created_experts', 'server_ready') :.3f} s. networking)")
+                f"({time_between('began_launching_server', 'created_experts') :.3f} s. experts + "
+                f"{time_between('created_experts', 'server_ready') :.3f} s. networking)")
     logger.info(f"\tProcessed {total_examples} examples in {time_between('server_ready', 'clients_finished') :.3f}")
     logger.info(f"\tThroughput for {'forward + backward' if backprop else 'forward'} passes: "
-          f"{total_examples / time_between('server_ready', 'clients_finished') :.3f} samples / s.")
+                f"{total_examples / time_between('server_ready', 'clients_finished') :.3f} samples / s.")
     logger.info(f"\tBenchmarking took {time_between('started', 'server_shutdown_finished') :.3f} s.")
     if benchmarking_failed.is_set():
         logger.info("Note: benchmark code failed, timing/memory results only indicate time till failure!")

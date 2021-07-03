@@ -15,23 +15,23 @@ from dataclasses import asdict
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 
 import grpc
-from grpc._cython.cygrpc import InternalError
-import torch
 import numpy as np
+import torch
+from grpc._cython.cygrpc import InternalError
 
+from hivemind.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
+from hivemind.averaging.group_info import GroupInfo
+from hivemind.averaging.load_balancing import load_balance_peers
+from hivemind.averaging.matchmaking import Matchmaking, MatchmakingException
+from hivemind.averaging.partition import DEFAULT_PART_SIZE_BYTES
 from hivemind.dht import DHT, DHTID
-from hivemind.client.averaging.partition import DEFAULT_PART_SIZE_BYTES
-from hivemind.client.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
-from hivemind.client.averaging.load_balancing import load_balance_peers
-from hivemind.client.averaging.matchmaking import Matchmaking, MatchmakingException
-from hivemind.client.averaging.group_info import GroupInfo
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
-from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, split_for_streaming, combine_from_streaming
-from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
-from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
-from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
-from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils import Endpoint, Port, MPFuture, get_logger, TensorDescriptor
+from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
+from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, split_for_streaming, combine_from_streaming
+from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
+from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
 
 # flavour types
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
@@ -582,7 +582,7 @@ def _background_thread_fetch_current_state(serializer: SerializerBase, pipe: mp.
         except BaseException as e:
             logger.debug(f"Averager background thread finished: {repr(e)}")
             break
-            
+
         if trigger == '_SHUTDOWN':
             break
 

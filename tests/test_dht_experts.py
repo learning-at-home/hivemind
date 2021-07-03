@@ -6,10 +6,11 @@ import numpy as np
 import pytest
 
 import hivemind
-import hivemind.server.expert_uid
-from hivemind import LOCALHOST, declare_experts, get_experts
-from hivemind.client.beam_search import MoEBeamSearcher
-from hivemind.server.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefix, split_uid
+from hivemind.dht import DHTNode
+from hivemind import LOCALHOST
+from hivemind.moe.client.beam_search import MoEBeamSearcher
+from hivemind.moe.server import declare_experts, get_experts
+from hivemind.moe.server.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefix, split_uid
 
 
 @pytest.mark.forked
@@ -25,14 +26,14 @@ def test_store_get_experts():
     expert_uids = [f"my_expert.{i}" for i in range(50)]
     batch_size = 10
     for batch_start in range(0, len(expert_uids), batch_size):
-        hivemind.declare_experts(first_peer, expert_uids[batch_start: batch_start + batch_size], 'localhost:1234')
+        declare_experts(first_peer, expert_uids[batch_start: batch_start + batch_size], 'localhost:1234')
 
     found = get_experts(other_peer, random.sample(expert_uids, 5) + ['foo', 'bar'])
     assert all(res is not None for res in found[:-2]), "Could not find some existing experts"
     assert all(res is None for res in found[-2:]), "Found non-existing experts"
 
     other_expert, other_port = "my_other_expert.1337", random.randint(1000, 9999)
-    hivemind.declare_experts(other_peer, [other_expert], f'that_host:{other_port}')
+    declare_experts(other_peer, [other_expert], f'that_host:{other_port}')
     first_notfound, first_found = get_experts(first_peer, ['foobar', other_expert])
     assert isinstance(first_found, hivemind.RemoteExpert)
     assert first_found.endpoint == f'that_host:{other_port}'
@@ -43,8 +44,8 @@ def test_store_get_experts():
     time.sleep(1.0)
     remaining_peer1 = random.choice([peer for peer in peers if peer.is_alive()])
     remaining_peer2 = random.choice([peer for peer in peers if peer.is_alive()])
-    assert all(hivemind.declare_experts(remaining_peer1, ['new_expert.1'], 'dummy'))
-    assert hivemind.get_experts(remaining_peer2, ['new_expert.1'])[0].endpoint == 'dummy'
+    assert all(declare_experts(remaining_peer1, ['new_expert.1'], 'dummy'))
+    assert get_experts(remaining_peer2, ['new_expert.1'])[0].endpoint == 'dummy'
 
 
 @pytest.mark.forked
@@ -149,7 +150,7 @@ async def test_negative_caching():
         peers.append(hivemind.DHT(initial_peers=neighbors_i, cache_locally=False, start=True))
 
     writer_peer = random.choice(peers)
-    assert all(hivemind.declare_experts(writer_peer, ['ffn.1.2.3', 'ffn.3.4.5'], 'myaddr:1234').values())
+    assert all(declare_experts(writer_peer, ['ffn.1.2.3', 'ffn.3.4.5'], 'myaddr:1234').values())
 
     neighbors_i = [f'{LOCALHOST}:{node.port}' for node in random.sample(peers, min(3, len(peers)))]
     neg_caching_peer = hivemind.DHT(initial_peers=neighbors_i, cache_locally=False, start=True)
@@ -157,7 +158,7 @@ async def test_negative_caching():
     # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
     assert len(beam_search.get_initial_beam(scores=[.1, .2, .3, .4, .5, .6], beam_size=3)) == 2
 
-    node = await hivemind.DHTNode.create(initial_peers=neighbors_i)
+    node = await DHTNode.create(initial_peers=neighbors_i)
     fetched = await asyncio.gather(*(node.get(f'ffn.{i}.') for i in range(10)))
     for i in range(6):
         assert fetched[i] is not None, f"node should have cached ffn.{i}."

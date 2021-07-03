@@ -1,13 +1,13 @@
 """ An extension of averager that supports common optimization use cases. """
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from itertools import chain
 from threading import Lock
 from typing import Sequence, Dict, Iterator, Optional
-from contextlib import nullcontext
 
 import torch
 
-from hivemind.client.averaging import DecentralizedAverager
+from hivemind.averaging import DecentralizedAverager
 from hivemind.utils import nested_flatten, nested_pack, get_logger
 
 logger = get_logger(__name__)

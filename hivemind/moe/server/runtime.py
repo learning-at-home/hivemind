@@ -12,7 +12,7 @@ from typing import Dict, NamedTuple, Optional
 import torch
 from prefetch_generator import BackgroundGenerator
 
-from hivemind.server.expert_backend import ExpertBackend
+from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.utils import get_logger
 
 logger = get_logger(__name__)

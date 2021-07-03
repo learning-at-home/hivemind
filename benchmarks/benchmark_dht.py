@@ -5,7 +5,7 @@ import time
 from tqdm import trange
 
 import hivemind
-import hivemind.server.expert_uid
+from hivemind.moe.server import declare_experts, get_experts
 from hivemind.utils.limits import increase_file_limit
 
 logger = hivemind.get_logger(__name__)
@@ -43,8 +43,8 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     for start in trange(0, num_experts, expert_batch_size):
         store_start = time.perf_counter()
         endpoints.append(random_endpoint())
-        store_ok = hivemind.declare_experts(store_peer, expert_uids[start: start + expert_batch_size], endpoints[-1],
-                                            expiration=expiration)
+        store_ok = declare_experts(store_peer, expert_uids[start: start + expert_batch_size], endpoints[-1],
+                                   expiration=expiration)
         successes = store_ok.values()
         total_store_time += time.perf_counter() - store_start
 
@@ -52,7 +52,8 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
         successful_stores += sum(successes)
         time.sleep(wait_after_request)
 
-    logger.info(f"Store success rate: {successful_stores / total_stores * 100:.1f}% ({successful_stores} / {total_stores})")
+    logger.info(
+        f"Store success rate: {successful_stores / total_stores * 100:.1f}% ({successful_stores} / {total_stores})")
     logger.info(f"Mean store time: {total_store_time / total_stores:.5}, Total: {total_store_time:.5}")
     time.sleep(wait_before_read)
 
@@ -63,7 +64,7 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
 
     for start in trange(0, len(expert_uids), expert_batch_size):
         get_start = time.perf_counter()
-        get_result = hivemind.get_experts(get_peer, expert_uids[start: start + expert_batch_size])
+        get_result = get_experts(get_peer, expert_uids[start: start + expert_batch_size])
         total_get_time += time.perf_counter() - get_start
 
         for i, expert in enumerate(get_result):
@@ -74,7 +75,8 @@ def benchmark_dht(num_peers: int, initial_peers: int, num_experts: int, expert_b
     if time.perf_counter() - benchmark_started > expiration:
         logger.warning("keys expired midway during get requests. If that isn't desired, increase expiration_time param")
 
-    logger.info(f"Get success rate: {successful_gets / len(expert_uids) * 100:.1f} ({successful_gets} / {len(expert_uids)})")
+    logger.info(
+        f"Get success rate: {successful_gets / len(expert_uids) * 100:.1f} ({successful_gets} / {len(expert_uids)})")
     logger.info(f"Mean get time: {total_get_time / len(expert_uids):.5f}, Total: {total_get_time:.5f}")
 
     alive_peers = [peer.is_alive() for peer in peers]

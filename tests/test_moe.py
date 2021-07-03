@@ -4,9 +4,9 @@ import pytest
 import torch
 
 import hivemind
-from hivemind import background_server
-from hivemind.client.expert import DUMMY
-from hivemind.server import layers
+from hivemind.moe.server import background_server, declare_experts
+from hivemind.moe.client.expert import DUMMY
+from hivemind.moe.server import layers
 
 
 @pytest.mark.forked
@@ -60,7 +60,7 @@ def test_call_many(hidden_dim=16):
         e0, e1, e2, e3, e4 = [hivemind.RemoteExpert(f'expert.{i}', server_endpoint) for i in range(5)]
         e5 = hivemind.RemoteExpert(f'thisshouldnotexist', '127.0.0.1:80')
 
-        mask, expert_outputs = hivemind.client.moe._RemoteCallMany.apply(
+        mask, expert_outputs = hivemind.moe.client.moe._RemoteCallMany.apply(
             DUMMY, [[e0, e1, e2], [e2, e4], [e1, e5, e3], []], k_min, backward_k_min, timeout_after_k_min,
             forward_timeout, backward_timeout, detect_anomalies, allow_zero_outputs, e1.info, inputs
         )
@@ -120,7 +120,7 @@ def test_remote_module_call(hidden_dim=16):
 def test_beam_search_correctness():
     all_expert_uids = [f'ffn.{5 + i}.{10 + j}.{15 + k}' for i in range(10) for j in range(10) for k in range(10)]
     dht = hivemind.DHT(start=True)
-    assert all(hivemind.declare_experts(dht, all_expert_uids, endpoint='fake-endpoint'))
+    assert all(declare_experts(dht, all_expert_uids, endpoint='fake-endpoint'))
 
     dmoe = hivemind.RemoteMixtureOfExperts(
         in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix='ffn.')
@@ -168,7 +168,7 @@ def test_determinism(hidden_dim=16):
 def test_compute_expert_scores():
     try:
         dht = hivemind.DHT(start=True)
-        moe = hivemind.client.moe.RemoteMixtureOfExperts(
+        moe = hivemind.moe.RemoteMixtureOfExperts(
             dht=dht, in_features=16, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1,
             uid_prefix='expert.')
         gx, gy = torch.randn(4, 5, requires_grad=True), torch.randn(4, 3, requires_grad=True)
@@ -209,7 +209,7 @@ def test_client_anomaly_detection():
     experts['expert.3'].expert.ffn.weight.data[0, 0] = float('nan')
 
     dht = hivemind.DHT(start=True)
-    server = hivemind.Server(dht, experts, num_connection_handlers=1)
+    server = hivemind.moe.Server(dht, experts, num_connection_handlers=1)
     server.start()
     try:
         server.ready.wait()

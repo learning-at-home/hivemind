@@ -13,6 +13,7 @@ The code is organized as follows:
 - [2] https://github.com/bmuller/kademlia , Brian, if you're reading this: THANK YOU! you're awesome :)
 """
 from __future__ import annotations
+
 import asyncio
 import ctypes
 import multiprocessing as mp
@@ -21,11 +22,11 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Iterable, Optional, Sequence, Union, Callable, Awaitable, TypeVar
 
-from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
+from hivemind.dht.node import DHTNode, DHTID
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
+from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, DHTExpiration
 from hivemind.utils.networking import Hostname, Endpoint, strip_port
-from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, get_dht_time
 
 logger = get_logger(__name__)
 

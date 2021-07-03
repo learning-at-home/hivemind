@@ -1,9 +1,9 @@
 **hivemind.client**
 ====================
 
-.. automodule:: hivemind.client
+.. automodule:: hivemind.moe.client
 
-.. currentmodule:: hivemind.client
+.. currentmodule:: hivemind.moe.client
 
 .. raw:: html
 
@@ -21,8 +21,3 @@
 .. autoclass:: RemoteSwitchMixtureOfExperts
    :members:
    :member-order: bysource
-
-.. autoclass:: DecentralizedAverager
-   :members:
-   :member-order: bysource
-   :exclude-members: get_tensors, get_tensors_async, update_tensors, rpc_join_group, rpc_aggregate_part, register_allreduce_group

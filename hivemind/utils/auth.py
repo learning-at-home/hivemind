@@ -1,20 +1,15 @@
 import asyncio
 import functools
 import secrets
-import threading
-import time
 from abc import ABC, abstractmethod
-from enum import Enum
 from datetime import timedelta
-from typing import Optional, Tuple
-
-import grpc
+from enum import Enum
+from typing import Optional
 
 from hivemind.proto.auth_pb2 import AccessToken, RequestAuthInfo, ResponseAuthInfo
 from hivemind.utils.crypto import RSAPrivateKey, RSAPublicKey
 from hivemind.utils.logging import get_logger
 from hivemind.utils.timed_storage import TimedStorage, get_dht_time
-
 
 logger = get_logger(__name__)
 

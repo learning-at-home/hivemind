@@ -1,16 +1,13 @@
-import binascii
 import re
-from contextlib import contextmanager
 from typing import Any, Dict, Optional, Type
 
 import pydantic
 
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.protocol import DHTProtocol
-from hivemind.dht.routing import DHTID, DHTKey
+from hivemind.dht.routing import DHTID
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
 from hivemind.utils import get_logger
-
 
 logger = get_logger(__name__)
 
