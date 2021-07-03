@@ -1,6 +1,10 @@
 import socket
 from contextlib import closing
-from typing import Optional
+from ipaddress import ip_address
+from typing import Optional, Sequence
+
+from multiaddr import Multiaddr
+
 
 Hostname, Port = str, int  # flavour types
 Endpoint = str  # e.g. 1.2.3.4:1337 or [2a21:6с8:b192:2105]:8888, https://networkengineering.stackexchange.com/a/9435
@@ -36,3 +40,17 @@ def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_
             return sock.getsockname()[1]
     except Exception as e:
         raise e
+
+
+def choose_ip_address(maddrs: Sequence[Multiaddr],
+                      prefer_global: bool = True,
+                      protocol_priority: Sequence[str] = ('ip4', 'ip6')) -> Hostname:
+    for need_global in [prefer_global, not prefer_global]:
+        for protocol in protocol_priority:
+            for addr in maddrs:
+                if protocol in addr.protocols():
+                    value = addr[protocol]
+                    if ip_address(value).is_global == need_global:
+                        return value
+
+    raise ValueError(f'No IP address found among given multiaddrs: {maddrs}')

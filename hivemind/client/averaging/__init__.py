@@ -12,6 +12,7 @@ import uuid
 import weakref
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import asdict
+from ipaddress import ip_address
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 
 import grpc
@@ -32,6 +33,7 @@ from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
 from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils import Endpoint, Port, MPFuture, get_logger, TensorDescriptor
+from hivemind.utils.networking import choose_ip_address, strip_port
 
 # flavour types
 StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
@@ -102,6 +104,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  throughput: Optional[float] = None, min_vector_size: int = 0,
                  auxiliary: bool = False, allow_state_sharing: Optional[bool] = None,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', daemon: bool = True,
+                 visible_host: Optional[str] = None,
                  channel_options: Optional[Sequence[Tuple[str, Any]]] = None,
                  shutdown_timeout: float = 5, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
@@ -122,6 +125,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         else:
             self.mode = AveragingMode.NODE
 
+        if visible_host is None:
+            visible_host = self._choose_visible_host()
+        self.visible_host = visible_host
         self.channel_options = channel_options
         self.daemon = daemon
 
@@ -163,6 +169,17 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if start:
             self.run_in_background(await_ready=True)
 
+    def _choose_visible_host(self) -> Hostname:
+        visible_host = strip_port(self.listen_on)
+        if ip_address(visible_host) not in [ip_address('0.0.0.0'), ip_address('::')]:
+            return visible_host
+
+        maddrs = self.dht.get_visible_maddrs()
+        visible_host = choose_ip_address(maddrs)
+        logger.info(f'Choosing IP {visible_host} as endpoint for DecentralizedAverager '
+                    f'from visible multiaddrs {maddrs}')
+        return visible_host
+
     @property
     def port(self) -> Optional[Port]:
         return self._port.value if self._port.value != 0 else None
@@ -183,7 +200,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def endpoint(self) -> Optional[Endpoint]:
         if self.listen and self._averager_endpoint is None:
             assert self.port is not None, "Averager is not running yet"
-            self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
+            self._averager_endpoint = f"{self.visible_host}:{self.port}"
             logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
         return self._averager_endpoint
 
@@ -582,7 +599,7 @@ def _background_thread_fetch_current_state(serializer: SerializerBase, pipe: mp.
         except BaseException as e:
             logger.debug(f"Averager background thread finished: {repr(e)}")
             break
-            
+
         if trigger == '_SHUTDOWN':
             break
 
