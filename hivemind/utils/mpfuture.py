@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 # flavour types
 ResultType = TypeVar('ResultType')
-PID, UID, State, PipeEnd = int, int, Any, mp.connection.Connection
+PID, UID, State, PipeEnd = int, int, str, mp.connection.Connection
 ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED
 TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
 
@@ -141,11 +141,11 @@ class MPFuture(base.Future, Generic[ResultType]):
                 elif update_type == UpdateType.CANCEL:
                     cls._active_futures.pop(uid).cancel()
                 else:
-                    raise RuntimeError(f"MPFuture received unexpected update type {update_type}")
+                    raise RuntimeError(f"Received unexpected update type {update_type}")
             except (BrokenPipeError, EOFError):
-                logger.debug(f"MPFuture backend was shut down (pid={pid})")
+                logger.debug(f"Update pipe was was shut down unexpectedly (pid={pid})")
             except Exception as e:
-                logger.exception(f"MPFuture: could not retrieve update: caught {repr(e)} (pid={pid})")
+                logger.exception(f"Could not retrieve update: caught {repr(e)} (pid={pid})")
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """ This method sends result, exception or cancel to the MPFuture origin. """
