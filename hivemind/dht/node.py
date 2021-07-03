@@ -140,8 +140,7 @@ class DHTNode:
 
         self.protocol = await DHTProtocol.create(self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
                                                  parallel_rpc, cache_size, listen, listen_on, endpoint,
-                                                 record_validator,
-                                                 **kwargs)
+                                                 record_validator, **kwargs)
         self.port = self.protocol.port
 
         if initial_peers:
@@ -362,8 +361,8 @@ class DHTNode:
         try:
             await asyncio.gather(store_task, *(evt.wait() for evt in store_finished_events.values()))
             assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
-            return {(key, subkey) if subkey is not None else key: status or False for (key, subkey), status in
-                    store_ok.items()}
+            return {(key, subkey) if subkey is not None else key: status or False
+                    for (key, subkey), status in store_ok.items()}
         except asyncio.CancelledError as e:
             store_task.cancel()
             raise e

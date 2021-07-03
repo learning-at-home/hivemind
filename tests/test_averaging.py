@@ -47,7 +47,7 @@ def _test_allreduce_once(n_clients, n_aux):
 
     n_peers = 4
     modes = [AveragingMode.CLIENT] * n_clients + [AveragingMode.AUX] * n_aux + [AveragingMode.NODE] * (
-                n_peers - n_clients - n_aux)
+            n_peers - n_clients - n_aux)
     random.shuffle(modes)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
@@ -110,12 +110,10 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
     tensors2 = [torch.rand(123), torch.ones(3)]
     tensors3 = [-torch.rand(123), torch.arange(3).to(torch.float32)]
     tensors4 = [torch.randn(123) ** 3, torch.arange(3).to(torch.float32) / 2]
-    averagers = [hivemind.averaging.DecentralizedAverager(tensors, dht=dht, target_group_size=4,
-                                                          averaging_expiration=15,
-                                                          prefix='mygroup', listen=listen,
-                                                          listen_on='127.0.0.1:*',
-                                                          start=True)
-                 for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)]
+    averagers = [
+        hivemind.averaging.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
+                                                 prefix='mygroup', listen=listen, listen_on='127.0.0.1:*', start=True)
+        for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)]
     weights = list(map(float, np.random.rand(len(averagers)) * 10 + 0.01))
     reference = [(tensors1[i] * weights[0] + tensors2[i] * weights[1] + tensors3[i] * weights[2]
                   + tensors4[i] * weights[3]) / sum(weights) for i in range(len(tensors1))]
@@ -150,8 +148,8 @@ def test_allreduce_compression():
     for compression_type_pair in [(FLOAT16, FLOAT16), (FLOAT16, UINT8), (UINT8, FLOAT16), (UINT8, UINT8)]:
         averager1 = hivemind.averaging.DecentralizedAverager([x.clone() for x in tensors1], dht=dht,
                                                              compression_type=compression_type_pair,
-                                                             listen=False,
-                                                             target_group_size=2, prefix='mygroup', start=True)
+                                                             listen=False, target_group_size=2, prefix='mygroup',
+                                                             start=True)
         averager2 = hivemind.averaging.DecentralizedAverager([x.clone() for x in tensors2], dht=dht,
                                                              compression_type=compression_type_pair,
                                                              target_group_size=2, prefix='mygroup', start=True)
@@ -224,10 +222,8 @@ def test_allreduce_grid():
 def test_allgather():
     dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
     averagers = [hivemind.averaging.DecentralizedAverager([torch.ones(1)], dht=dht, target_group_size=4,
-                                                          averaging_expiration=15,
-                                                          prefix='mygroup', initial_group_bits='000',
-                                                          listen_on='127.0.0.1:*',
-                                                          start=True)
+                                                          averaging_expiration=15, prefix='mygroup',
+                                                          initial_group_bits='000', listen_on='127.0.0.1:*', start=True)
                  for _ in range(8)]
 
     futures = []
