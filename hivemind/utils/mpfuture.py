@@ -59,7 +59,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     """
     _lock_initialize = mp.Lock()  # global lock that prevents simultaneous initialization of two processes
     _lock_update = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
-    _sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
+    _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
     _active_futures: Optional[Dict[UID, MPFuture]] = None  # pending or running futures originated from current process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
@@ -81,6 +81,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     self._initialize_mpfuture_backend()
         assert self._uid not in self._active_futures
         self._active_futures[self._uid] = self
+        self._sender_pipe = self._global_sender_pipe
 
         try:
             self._loop = loop or asyncio.get_event_loop()
@@ -120,7 +121,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         assert pid != cls._active_pid, "already initialized"
 
         receiver_pipe, sender_pipe = mp.Pipe(duplex=False)
-        cls._active_pid, cls._active_futures, cls._sender_pipe = pid, {}, sender_pipe
+        cls._active_pid, cls._active_futures, cls._global_sender_pipe = pid, {}, sender_pipe
         cls._pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[receiver_pipe],
                                                    name=f'{__name__}.BACKEND', daemon=True)
         cls._pipe_waiter_thread.start()

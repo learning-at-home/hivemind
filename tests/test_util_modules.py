@@ -255,14 +255,13 @@ def test_mpfuture_done_callback():
 
 
 @pytest.mark.forked
-@pytest.mark.asyncio
-async def test_many_futures():
+def test_many_futures():
     evt = mp.Event()
     receiver, sender = mp.Pipe()
     main_futures = [hivemind.MPFuture() for _ in range(1000)]
     assert len(hivemind.MPFuture._active_futures) == 1000
 
-    def _peer():
+    def _run_peer():
         fork_futures = [hivemind.MPFuture() for _ in range(500)]
         assert len(hivemind.MPFuture._active_futures) == 500
 
@@ -273,16 +272,17 @@ async def test_many_futures():
                 future.set_exception(ValueError(f"{i}"))
 
         sender.send(fork_futures[:-100])
-        for future in fork_futures[100:]:
+        for future in fork_futures[-100:]:
             future.cancel()
 
         evt.wait()
+
         assert len(hivemind.MPFuture._active_futures) == 200
         for future in fork_futures:
             future.cancel()
         assert len(hivemind.MPFuture._active_futures) == 0
 
-    p = mp.Process(target=_peer)
+    p = mp.Process(target=_run_peer)
     p.start()
 
     some_fork_futures = receiver.recv()
@@ -291,11 +291,9 @@ async def test_many_futures():
     for future in some_fork_futures:
         future.set_running_or_notify_cancel()
     for future in random.sample(some_fork_futures, 200):
-        try:
-            future.set_result(321)
-        except hivemind.utils.mpfuture.InvalidStateError:
-            pass
+        future.set_result(321)
 
+    time.sleep(0.5)
     evt.set()
     for future in main_futures:
         future.cancel()
