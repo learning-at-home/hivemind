@@ -171,9 +171,8 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
         asyncio.set_event_loop(asyncio.new_event_loop())
     loop = asyncio.get_event_loop()
 
-    p2p = loop.run_until_complete(P2P.create(initial_peers=initial_peers, ping_n_retries=10))
-    maddrs = loop.run_until_complete(p2p.get_visible_maddrs())
-    node = loop.run_until_complete(DHTNode.create(p2p, initial_peers=initial_peers))
+    node = loop.run_until_complete(DHTNode.create(p2p=dict(ping_n_retries=10), initial_peers=initial_peers))
+    maddrs = loop.run_until_complete(node.get_visible_maddrs())
 
     info_queue.put((node.node_id, p2p.id, maddrs))
 

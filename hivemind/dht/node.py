@@ -77,7 +77,9 @@ class DHTNode:
 
     @classmethod
     async def create(
-            cls, p2p: Optional[P2P] = None, node_id: Optional[DHTID] = None,
+            cls,
+            p2p: Optional[Union[P2P, Dict[str, Any]]] = None,
+            node_id: Optional[DHTID] = None,
             initial_peers: Optional[Sequence[Multiaddr]] = None,
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 3, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
@@ -88,8 +90,11 @@ class DHTNode:
             record_validator: Optional[RecordValidatorBase] = None,
             validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
-        :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
-                    if None, creates one with default parameters and initial_peers as bootstrap peers.
+        :param p2p: one of the following:
+          (1) an existing instance of hivemind.p2p.P2P that will be used for communication
+          (2) a dictionary of parameters, if you want to create a new instance with these parameters
+              (initial_peers will be added to the parameters automatically)
+          (3) None, if you want to create a new instance with default parameters and initial_peers (if defined)
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
         :param initial_peers: connects to peers with these multiaddrs to populate routing table, defaults to no peers
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
@@ -140,9 +145,15 @@ class DHTNode:
         self.cache_refresh_evt = asyncio.Event()
         self.cache_refresh_task = None
 
-        self._need_manage_p2p = p2p is None
-        if self._need_manage_p2p:
-            p2p = await P2P.create(initial_peers=initial_peers)
+        if isinstance(p2p, P2P):
+            self._should_shutdown_p2p = False
+        elif p2p is None or isinstance(p2p, dict):
+            p2p_kwargs = {} if p2p is None else p2p
+            p2p = await P2P.create(initial_peers=initial_peers, **p2p_kwargs)
+            self._should_shutdown_p2p = True
+        else:
+            raise TypeError(
+                'DHTNode.create() expects the `p2p` argument to be a hivemind.p2p.P2P instance, dict, or None')
         self.p2p = p2p
 
         self.protocol = await DHTProtocol.create(
@@ -196,7 +207,7 @@ class DHTNode:
         self.is_alive = False
         if self.protocol.listen:
             await self.protocol.shutdown(timeout)
-        if self._need_manage_p2p:
+        if self._should_shutdown_p2p:
             await self.p2p.shutdown()
 
     async def find_nearest_nodes(

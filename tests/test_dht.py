@@ -90,8 +90,7 @@ def test_run_coroutine():
 
 
 @pytest.mark.forked
-@pytest.mark.asyncio
-async def test_dht_get_visible_maddrs():
+def test_dht_get_visible_maddrs():
     # test 1: IPv4 localhost multiaddr is visible by default
 
     dht = hivemind.DHT(start=True)
@@ -102,8 +101,7 @@ async def test_dht_get_visible_maddrs():
     # test 2: announce_maddrs are the single visible multiaddrs if defined
 
     dummy_endpoint = Multiaddr('/ip4/123.45.67.89/tcp/31337')
-    p2p = await hivemind.p2p.P2P.create(announce_maddrs=[dummy_endpoint])
-    dht = hivemind.DHT(p2p, start=True)
+    dht = hivemind.DHT(p2p=dict(announce_maddrs=[dummy_endpoint]), start=True)
 
     assert dht.get_visible_maddrs() == [dummy_endpoint.encapsulate(f'/p2p/{p2p.id}')]
     dht.shutdown()
