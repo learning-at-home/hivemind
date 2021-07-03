@@ -57,8 +57,8 @@ class MPFuture(base.Future, Generic[ResultType]):
        - MPFuture is deterministic if only one process can call set_result/set_exception/set_running_or_notify_cancel
          and only the origin process can call result/exception/cancel.
     """
-    _lock_initialize = mp.Lock()  # global lock that prevents simultaneous initialization of two processes
-    _lock_update = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
+    _initialization_lock = mp.Lock()  # global lock that prevents simultaneous initialization of two processes
+    _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
     _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
     _active_futures: Optional[Dict[UID, MPFuture]] = None  # pending or running futures originated from current process
@@ -75,7 +75,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._use_lock = use_lock
 
         if self._origin_pid != MPFuture._active_pid:
-            with MPFuture._lock_initialize:
+            with MPFuture._initialization_lock:
                 if self._origin_pid != MPFuture._active_pid:
                     # note: the second if is intentional, see https://en.wikipedia.org/wiki/Double-checked_locking
                     self._initialize_mpfuture_backend()
@@ -149,7 +149,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """ This method sends result, exception or cancel to the MPFuture origin. """
-        with MPFuture._lock_update if self._use_lock else nullcontext():
+        with MPFuture._update_lock if self._use_lock else nullcontext():
             self._sender_pipe.send((self._uid, update_type, payload))
 
     def set_result(self, result: ResultType):
