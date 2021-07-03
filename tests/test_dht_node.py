@@ -174,7 +174,7 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
     node = loop.run_until_complete(DHTNode.create(p2p=dict(ping_n_retries=10), initial_peers=initial_peers))
     maddrs = loop.run_until_complete(node.get_visible_maddrs())
 
-    info_queue.put((node.node_id, p2p.id, maddrs))
+    info_queue.put((node.node_id, node.endpoint, maddrs))
 
     while True:
         loop.run_forever()
