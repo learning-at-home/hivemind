@@ -91,10 +91,12 @@ class DHTNode:
             validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
         :param p2p: one of the following:
-          (1) an existing instance of hivemind.p2p.P2P that will be used for communication
-          (2) a dictionary of parameters, if you want to create a new instance with these parameters
-              (initial_peers will be added to the parameters automatically)
-          (3) None, if you want to create a new instance with default parameters and initial_peers (if defined)
+
+          - an existing instance of hivemind.p2p.P2P that will be used for communication
+          - a dictionary of parameters, if you want to create a new instance with these parameters
+            (initial_peers will be added to the parameters automatically)
+          - None, if you want to create a new instance with default parameters and initial_peers (if defined)
+
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
         :param initial_peers: connects to peers with these multiaddrs to populate routing table, defaults to no peers
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
