@@ -49,33 +49,21 @@ async def test_error_for_wrong_daemon_arguments():
         await P2P.create(unknown_argument=True)
 
 
+@pytest.mark.parametrize(
+    'host_maddrs', [
+        [Multiaddr('/ip4/127.0.0.1/tcp/0')],
+        [Multiaddr('/ip4/127.0.0.1/udp/0/quic')],
+        [Multiaddr('/ip4/127.0.0.1/tcp/0'), Multiaddr('/ip4/127.0.0.1/udp/0/quic')],
+    ]
+)
 @pytest.mark.asyncio
-async def test_server_client_connection():
-    server = await P2P.create()
+async def test_transports(host_maddrs: List[Multiaddr]):
+    server = await P2P.create(host_maddrs=host_maddrs)
     peers = await server.list_peers()
     assert len(peers) == 0
 
     nodes = await bootstrap_from([server])
-    client = await P2P.create(bootstrap_peers=nodes)
-    await client.wait_for_at_least_n_peers(1)
-
-    peers = await client.list_peers()
-    assert len(peers) == 1
-    peers = await server.list_peers()
-    assert len(peers) == 1
-
-
-@pytest.mark.asyncio
-async def test_quic_transport():
-    server_port = find_open_port((socket.AF_INET, socket.SOCK_DGRAM))
-    server = await P2P.create(quic=True, host_maddrs=[Multiaddr(f'/ip4/127.0.0.1/udp/{server_port}/quic')])
-    peers = await server.list_peers()
-    assert len(peers) == 0
-
-    nodes = await bootstrap_from([server])
-    client_port = find_open_port((socket.AF_INET, socket.SOCK_DGRAM))
-    client = await P2P.create(quic=True, host_maddrs=[Multiaddr(f'/ip4/127.0.0.1/udp/{client_port}/quic')],
-                              bootstrap_peers=nodes)
+    client = await P2P.create(host_maddrs=host_maddrs, bootstrap_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
     peers = await client.list_peers()

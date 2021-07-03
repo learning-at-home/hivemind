@@ -4,7 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import google.protobuf
 from multiaddr import Multiaddr
@@ -70,12 +70,14 @@ class P2P:
         self._server_stopped = asyncio.Event()
 
     @classmethod
-    async def create(cls, *args, quic: bool = False, tls: bool = True, conn_manager: bool = True,
+    async def create(cls, *args, quic: bool = True, tls: bool = True, conn_manager: bool = True,
                      dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
                      nat_port_map: bool = True, auto_nat: bool = True,
-                     bootstrap_peers: Optional[List[Multiaddr]] = None, use_ipfs: bool = False,
-                     host_maddrs: Optional[List[Multiaddr]] = None,
-                     announce_maddrs: Optional[List[Multiaddr]] = None,
+                     bootstrap_peers: Sequence[Multiaddr] = (),
+                     use_ipfs: bool = False,
+                     host_maddrs: Sequence[Multiaddr] = (Multiaddr('/ip4/0.0.0.0/tcp/0'),
+                                                         Multiaddr('/ip4/0.0.0.0/udp/0/quic')),
+                     announce_maddrs: Sequence[Multiaddr] = (),
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      quiet: bool = True,
