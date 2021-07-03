@@ -11,7 +11,7 @@ import uuid
 from enum import Enum, auto
 from typing import Generic, TypeVar, Dict, Optional, Any, Callable
 
-import torch
+import torch    # used for py3.7-compatible shared memory
 
 from hivemind.utils.logging import get_logger
 
@@ -145,8 +145,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             except (BrokenPipeError, EOFError):
                 logger.debug(f"MPFuture backend was shut down (pid={pid}).")
             except Exception as e:
-                logger.error(f"Internal error (type={e}, pid={pid}): could not retrieve update for MPFuture.")
-                logger.exception(e)
+                logger.exception(f"MPFuture: could not retrieve update: caught {repr(e)} (pid={pid}).")
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """ this method sends result, exception or cancel to the MPFuture origin. """
