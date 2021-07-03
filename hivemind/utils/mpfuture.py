@@ -204,7 +204,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         else:
             return self._result
 
-    def exception(self, timeout: Optional[float] = None) -> BaseException:
+    def exception(self, timeout: Optional[float] = None) -> Optional[BaseException]:
         if self._state not in TERMINAL_STATES:
             if os.getpid() != self._origin_pid:
                 raise RuntimeError("Only the process that created MPFuture can await exception")
