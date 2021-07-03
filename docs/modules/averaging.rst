@@ -1,5 +1,5 @@
 **hivemind.averaging**
-====================
+======================
 
 .. automodule:: hivemind.averaging
 
