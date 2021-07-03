@@ -40,7 +40,7 @@ class DHTProtocol:
             parallel_rpc: Optional[int] = None, cache_size: Optional[int] = None,
             listen=True, record_validator: Optional[RecordValidatorBase] = None,
             authorizer: Optional[AuthorizerBase] = None,
-            channel_options: Sequence[Tuple[str, Any]] = (), **kwargs) -> DHTProtocol:
+            channel_options: Sequence[Tuple[str, Any]] = ()) -> DHTProtocol:
         """
         A protocol that allows DHT nodes to request keys/neighbors from other DHT nodes.
         As a side-effect, DHTProtocol also maintains a routing table as described in

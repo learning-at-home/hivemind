@@ -121,7 +121,7 @@ class DHTNode:
         :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
           if False, this node will refuse any incoming request, effectively being only a "client"
         :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
-        :param kwargs: extra parameters used in grpc.aio.server
+        :param kwargs: extra parameters for DHTProtocol
         """
         self = cls(_initialized_with_create=True)
         self.node_id = node_id if node_id is not None else DHTID.generate()
@@ -142,7 +142,7 @@ class DHTNode:
 
         self._need_manage_p2p = p2p is None
         if self._need_manage_p2p:
-            p2p = await P2P.create(bootstrap_peers=initial_peers)
+            p2p = await P2P.create(initial_peers=initial_peers)
         self.p2p = p2p
 
         self.protocol = await DHTProtocol.create(

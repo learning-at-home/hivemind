@@ -34,9 +34,10 @@ class P2PContext(object):
 class P2P:
     """
     This class is responsible for establishing peer-to-peer connections through NAT and/or firewalls.
-    It creates and manages a libp2p daemon in a background process, then terminates it when P2P is shut down.
-    In order to communicate, a P2P instance should either use one or more bootstrap_peers that will connect it
-    to the rest of the swarm or use the public IPFS network (https://ipfs.io).
+    It creates and manages a libp2p daemon (https://libp2p.io) in a background process,
+    then terminates it when P2P is shut down. In order to communicate, a P2P instance should
+    either use one or more initial_peers that will connect it to the rest of the swarm or
+    use the public IPFS network (https://ipfs.io).
 
     For incoming connections, P2P instances add RPC handlers that may be accessed by other peers:
       - `P2P.add_unary_handler` accepts a protobuf message and returns another protobuf
@@ -70,19 +71,24 @@ class P2P:
         self._server_stopped = asyncio.Event()
 
     @classmethod
-    async def create(cls, *args, quic: bool = True, tls: bool = True, conn_manager: bool = True,
-                     dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
-                     nat_port_map: bool = True, auto_nat: bool = True,
-                     bootstrap_peers: Optional[Sequence[Multiaddr]] = None,
+    async def create(cls, *args,
+                     initial_peers: Optional[Sequence[Multiaddr]] = None,
                      use_ipfs: bool = False,
                      host_maddrs: Optional[Sequence[Multiaddr]] = (Multiaddr('/ip4/127.0.0.1/tcp/0'),),
                      announce_maddrs: Optional[Sequence[Multiaddr]] = None,
+                     quic: bool = True, tls: bool = True, conn_manager: bool = True,
+                     dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
+                     nat_port_map: bool = True, auto_nat: bool = True,
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      quiet: bool = True,
                      ping_n_retries: int = 5, ping_retry_delay: float = 0.4, **kwargs) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
+        :param initial_peers: List of bootstrap peers
+        :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
+        :param host_maddrs: multiaddresses for external connections from other p2p instances
+        :param announce_maddrs: multiaddresses the host should announce to the network
         :param quic: Enables the QUIC transport
         :param tls: Enables TLS1.3 channel security protocol
         :param conn_manager: Enables the Connection Manager
@@ -90,11 +96,6 @@ class P2P:
         :param force_reachability: Force reachability mode (public/private)
         :param nat_port_map: Enables NAT port mapping
         :param auto_nat: Enables the AutoNAT service
-        :param bootstrap: Connects to bootstrap peers and bootstraps the dht if enabled
-        :param bootstrap_peers: List of bootstrap peers
-        :param use_ipfs: Bootstrap to IPFS (works only if bootstrap=True and bootstrap_peers=None)
-        :param host_maddrs: multiaddresses for external connections from other p2p instances
-        :param announce_maddrs: multiaddresses the host should announce to the network
         :param use_relay: enables circuit relay
         :param use_relay_hop: enables hop for relay
         :param use_relay_discovery: enables passive discovery for relay
@@ -106,8 +107,8 @@ class P2P:
         :return: a wrapper for the p2p daemon
         """
 
-        assert not (bootstrap_peers and use_ipfs), \
-            'User-defined bootstrap_peers and use_ipfs=True are incompatible, please choose one option'
+        assert not (initial_peers and use_ipfs), \
+            'User-defined initial_peers and use_ipfs=True are incompatible, please choose one option'
 
         self = cls()
         with path(cli, P2PD_FILENAME) as p:
@@ -117,11 +118,11 @@ class P2P:
         self._daemon_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f'p2pd-{socket_uid}.sock')
         self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f'p2pclient-{socket_uid}.sock')
 
-        need_bootstrap = bool(bootstrap_peers) or use_ipfs
+        need_bootstrap = bool(initial_peers) or use_ipfs
         process_kwargs = kwargs.copy()
         process_kwargs.update(cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0}))
         process_kwargs.update(cls.FORCE_REACHABILITY_MAPPING.get(force_reachability, {}))
-        for param, value in [('bootstrapPeers', bootstrap_peers),
+        for param, value in [('bootstrapPeers', initial_peers),
                              ('hostAddrs', host_maddrs),
                              ('announceAddrs', announce_maddrs)]:
             if value:

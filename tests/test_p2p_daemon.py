@@ -63,7 +63,7 @@ async def test_transports(host_maddrs: List[Multiaddr]):
     assert len(peers) == 0
 
     nodes = await bootstrap_from([server])
-    client = await P2P.create(quic=True, host_maddrs=host_maddrs, bootstrap_peers=nodes)
+    client = await P2P.create(quic=True, host_maddrs=host_maddrs, initial_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
     peers = await client.list_peers()
@@ -159,7 +159,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
     assert is_process_running(server_pid)
 
     nodes = await bootstrap_from([server])
-    client_primary = await P2P.create(bootstrap_peers=nodes)
+    client_primary = await P2P.create(initial_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
     client_pid = client_primary._child.pid
     assert is_process_running(client_pid)
@@ -203,7 +203,7 @@ async def test_call_unary_handler_error(handle_name="handle"):
     assert is_process_running(server_pid)
 
     nodes = await bootstrap_from([server])
-    client = await P2P.create(bootstrap_peers=nodes)
+    client = await P2P.create(initial_peers=nodes)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
     await client.wait_for_at_least_n_peers(1)
@@ -237,7 +237,7 @@ async def test_call_peer_single_process(test_input, expected, handle, handler_na
     assert is_process_running(server_pid)
 
     nodes = await bootstrap_from([server])
-    client = await P2P.create(bootstrap_peers=nodes)
+    client = await P2P.create(initial_peers=nodes)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
@@ -289,7 +289,7 @@ async def test_call_peer_different_processes():
     peer_id = client_side.recv()
     peer_maddrs = client_side.recv()
 
-    client = await P2P.create(bootstrap_peers=peer_maddrs)
+    client = await P2P.create(initial_peers=peer_maddrs)
     client_pid = client._child.pid
     assert is_process_running(client_pid)
 
@@ -323,7 +323,7 @@ async def test_call_peer_torch_square(test_input, expected, handler_name="handle
     await server.add_stream_handler(handler_name, handle)
 
     nodes = await bootstrap_from([server])
-    client = await P2P.create(bootstrap_peers=nodes)
+    client = await P2P.create(initial_peers=nodes)
 
     await client.wait_for_at_least_n_peers(1)
 
@@ -354,7 +354,7 @@ async def test_call_peer_torch_add(test_input, expected, handler_name="handle"):
     await server.add_stream_handler(handler_name, handle)
 
     nodes = await bootstrap_from([server])
-    client = await P2P.create(bootstrap_peers=nodes)
+    client = await P2P.create(initial_peers=nodes)
 
     await client.wait_for_at_least_n_peers(1)
 
@@ -384,7 +384,7 @@ async def test_call_peer_error(replicate, handler_name="handle"):
     await server.add_stream_handler(handler_name, handle_add_torch_with_exc)
 
     nodes = await bootstrap_from([server])
-    client_primary = await P2P.create(bootstrap_peers=nodes)
+    client_primary = await P2P.create(initial_peers=nodes)
     client = await replicate_if_needed(client_primary, replicate)
 
     await client.wait_for_at_least_n_peers(1)
@@ -416,7 +416,7 @@ async def test_handlers_on_different_replicas(handler_name="handle"):
     await server_replica2.add_stream_handler(handler_name + '2', partial(handler, key=b'replica2'))
 
     nodes = await bootstrap_from([server_primary])
-    client = await P2P.create(bootstrap_peers=nodes)
+    client = await P2P.create(initial_peers=nodes)
     await client.wait_for_at_least_n_peers(1)
 
     result = await client.call_peer_handler(server_id, handler_name, b'1')
