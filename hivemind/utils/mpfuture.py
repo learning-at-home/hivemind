@@ -120,8 +120,8 @@ class MPFuture(base.Future, Generic[ResultType]):
         logger.debug(f"Initializing MPFuture backend for pid {pid}")
         assert pid != cls._active_pid, "already initialized"
 
-        receiver_pipe, sender_pipe = mp.Pipe(duplex=False)
-        cls._active_pid, cls._active_futures, cls._global_sender_pipe = pid, {}, sender_pipe
+        receiver_pipe, cls._global_sender_pipe = mp.Pipe(duplex=False)
+        cls._active_pid, cls._active_futures = pid, {}
         cls._pipe_waiter_thread = threading.Thread(target=cls._process_updates_in_background, args=[receiver_pipe],
                                                    name=f'{__name__}.BACKEND', daemon=True)
         cls._pipe_waiter_thread.start()
