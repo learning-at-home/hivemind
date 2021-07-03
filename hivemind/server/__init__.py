@@ -5,10 +5,11 @@ import multiprocessing.synchronize
 import threading
 from contextlib import contextmanager
 from functools import partial
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 
 import torch
+from multiaddr import Multiaddr
 
 import hivemind
 from hivemind.dht import DHT
@@ -100,8 +101,7 @@ class Server(threading.Thread):
         :param clip_grad_norm: maximum gradient norm used for clipping
 
         :param no_dht: if specified, the server will not be attached to a dht
-        :param initial_peers: a list of peers that will introduce this node to the dht,\
-           e.g. ('123.11.22.33:1337', '[fe80::abe2:db1c:be7d:5a85]:4567'), default = no peers
+        :param initial_peers: a list of multiaddrs that will introduce this node to the dht, default = no peers
 
         :param dht_port:  DHT node will listen on this port, default = find open port
            You can then use this node as initial peer for subsequent servers.
@@ -124,7 +124,7 @@ class Server(threading.Thread):
         else:
             dht_endpoint = replace_port(listen_on, dht_port or hivemind.find_open_port())
             dht = hivemind.DHT(initial_peers=initial_peers, start=True, listen_on=dht_endpoint)
-            logger.info(f"Running DHT node on port {dht.port}, initial peers = {initial_peers}")
+            logger.info(f"Running DHT node on {dht.get_visible_maddrs()}, initial peers = {initial_peers}")
 
         assert ((expert_pattern is None and num_experts is None and expert_uids is not None) or
                 (num_experts is not None and expert_uids is None)), \
@@ -267,7 +267,7 @@ class Server(threading.Thread):
 
 
 @contextmanager
-def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[hivemind.Endpoint, hivemind.Endpoint]:
+def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[hivemind.Endpoint, List[Multiaddr]]:
     """ A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit """
     pipe, runners_pipe = mp.Pipe(duplex=True)
     runner = mp.Process(target=_server_runner, args=(runners_pipe, *args), kwargs=kwargs)
@@ -297,11 +297,8 @@ def _server_runner(pipe, *args, **kwargs):
         return
 
     try:
-        if server.dht is not None:
-            dht_listen_on = hivemind.replace_port(server.dht.listen_on, server.dht.port)
-        else:
-            dht_listen_on = None
-        pipe.send((True, (server.listen_on, dht_listen_on)))
+        visible_maddrs = server.dht.get_visible_maddrs() if server.dht is not None else None
+        pipe.send((True, (server.listen_on, visible_maddrs)))
         pipe.recv()  # wait for shutdown signal
 
     finally:

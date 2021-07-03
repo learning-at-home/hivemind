@@ -14,8 +14,8 @@ def test_moe():
     all_expert_uids = [f'ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
                        for _ in range(10)]
     with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn', num_handlers=1,
-                           hidden_dim=16) as (server_endpoint, dht_endpoint):
-        dht = hivemind.DHT(start=True, initial_peers=[dht_endpoint])
+                           hidden_dim=16) as (server_endpoint, initial_peers):
+        dht = hivemind.DHT(start=True, initial_peers=initial_peers)
 
         dmoe = hivemind.RemoteMixtureOfExperts(
             in_features=16, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix='ffn.')
@@ -30,8 +30,8 @@ def test_no_experts():
     all_expert_uids = [f'expert.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
                        for _ in range(10)]
     with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='nop_delay', num_handlers=1,
-                           hidden_dim=16) as (server_endpoint, dht_endpoint):
-        dht = hivemind.DHT(start=True, initial_peers=[dht_endpoint])
+                           hidden_dim=16) as (server_endpoint, initial_peers):
+        dht = hivemind.DHT(start=True, initial_peers=initial_peers)
 
         dmoe = hivemind.RemoteSwitchMixtureOfExperts(
             in_features=16, grid_size=(4, 4, 4), dht=dht, uid_prefix='expert.', forward_timeout=0.1,
@@ -54,7 +54,7 @@ def test_call_many(hidden_dim=16):
     atol = 1e-5
 
     with background_server(num_experts=5, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=hidden_dim,
-                           optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
+                           optim_cls=None, no_dht=True) as (server_endpoint, _):
         inputs = torch.randn(4, hidden_dim, requires_grad=True)
         inputs_clone = inputs.clone().detach().requires_grad_(True)
         e0, e1, e2, e3, e4 = [hivemind.RemoteExpert(f'expert.{i}', server_endpoint) for i in range(5)]
@@ -96,7 +96,7 @@ def test_call_many(hidden_dim=16):
 @pytest.mark.forked
 def test_remote_module_call(hidden_dim=16):
     with background_server(num_experts=1, device='cpu', expert_cls='ffn', num_handlers=1, hidden_dim=hidden_dim,
-                           optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
+                           optim_cls=None, no_dht=True) as (server_endpoint, _):
         real_expert = hivemind.RemoteExpert('expert.0', server_endpoint)
         fake_expert = hivemind.RemoteExpert('oiasfjiasjf', server_endpoint)
 
@@ -151,7 +151,7 @@ def test_determinism(hidden_dim=16):
     mask = torch.randint(0, 1, (32, hidden_dim))
 
     with background_server(num_experts=1, device='cpu', expert_cls='det_dropout', num_handlers=1, hidden_dim=hidden_dim,
-                           optim_cls=None, no_dht=True) as (server_endpoint, dht_endpoint):
+                           optim_cls=None, no_dht=True) as (server_endpoint, _):
         expert = hivemind.RemoteExpert(uid=f'expert.0', endpoint=server_endpoint)
 
         out = expert(xx, mask)

@@ -47,8 +47,8 @@ def test_moe_training(max_steps: int = 100, threshold: float = 0.9, num_experts=
 
     all_expert_uids = [f'expert.{i}' for i in range(num_experts)]
     with background_server(expert_uids=all_expert_uids, device='cpu', optim_cls=SGD, hidden_dim=64, num_handlers=1) \
-            as (server_endpoint, dht_endpoint):
-        dht = DHT(start=True, initial_peers=[dht_endpoint])
+            as (server_endpoint, initial_peers):
+        dht = DHT(start=True, initial_peers=initial_peers)
 
         moe = RemoteMixtureOfExperts(in_features=64, grid_size=(num_experts,), dht=dht, uid_prefix='expert.', k_best=2)
         model = nn.Sequential(moe, nn.Linear(64, 2))
@@ -90,8 +90,8 @@ def test_switch_training(max_steps: int = 10, threshold: float = 0.9, num_expert
 
     all_expert_uids = [f'expert.{i}' for i in range(num_experts)]
     with background_server(expert_uids=all_expert_uids, device='cpu', optim_cls=SGD, hidden_dim=64,
-                           num_handlers=1) as (server_endpoint, dht_endpoint):
-        dht = DHT(start=True, initial_peers=[dht_endpoint])
+                           num_handlers=1) as (server_endpoint, initial_peers):
+        dht = DHT(start=True, initial_peers=initial_peers)
 
         model = SwitchNetwork(dht, 64, 2, num_experts)
         opt = SGD(model.parameters(), lr=0.05)
@@ -114,7 +114,7 @@ def test_switch_training(max_steps: int = 10, threshold: float = 0.9, num_expert
 @pytest.mark.forked
 def test_decentralized_optimizer_step():
     dht_root = DHT(start=True)
-    initial_peers = [f"127.0.0.1:{dht_root.port}"]
+    initial_peers = dht_root.get_visible_maddrs()
 
     param1 = torch.nn.Parameter(torch.zeros(32, 32), requires_grad=True)
     opt1 = DecentralizedSGD([param1], lr=0.1, dht=DHT(initial_peers=initial_peers, start=True),
@@ -140,7 +140,7 @@ def test_decentralized_optimizer_step():
 @pytest.mark.forked
 def test_decentralized_optimizer_averaging():
     dht_root = DHT(start=True)
-    initial_peers = [f"127.0.0.1:{dht_root.port}"]
+    initial_peers = dht_root.get_visible_maddrs()
 
     param1 = torch.nn.Parameter(torch.zeros(32, 32), requires_grad=True)
     opt1 = DecentralizedAdam([param1], lr=0.1, averaging_steps_period=1, dht=DHT(initial_peers=initial_peers, start=True),
