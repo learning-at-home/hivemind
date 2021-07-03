@@ -1,9 +1,9 @@
 """ An extension of averager that supports common optimization use cases. """
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from itertools import chain
 from threading import Lock
 from typing import Sequence, Dict, Iterator, Optional
-from contextlib import nullcontext
 
 import torch
 

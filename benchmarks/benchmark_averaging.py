@@ -1,14 +1,13 @@
-import math
-import time
-import threading
 import argparse
+import math
+import threading
+import time
 
 import torch
 
 import hivemind
-from hivemind.utils import LOCALHOST, get_logger, increase_file_limit
 from hivemind.proto import runtime_pb2
-
+from hivemind.utils import LOCALHOST, get_logger, increase_file_limit
 
 logger = get_logger(__name__)
 
