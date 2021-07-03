@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures._base as base
-import contextlib
+from contextlib import nullcontext
 import multiprocessing as mp
 import multiprocessing.connection
 import os
@@ -70,7 +70,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._state_cache = {}  # mapping from global to cached local future used that makes updates immediately
         # available on setter side; dictionary-based cache works because future can visit any state at most once
 
-        base.Future.__init__(self)
+        base.Future.__init__(self)   # parent init is deferred because it uses self._shared_state_code
         self._state, self._result, self._exception = base.PENDING, None, None
         self._use_lock = use_lock
 
@@ -149,7 +149,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """ this method sends result, exception or cancel to the MPFuture origin. """
-        with MPFuture._lock_update if self._use_lock else contextlib.nullcontext():
+        with MPFuture._lock_update if self._use_lock else nullcontext():
             self._sender_pipe.send((self._uid, update_type, payload))
 
     def set_result(self, result: ResultType):
