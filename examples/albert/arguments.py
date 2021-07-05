@@ -86,7 +86,7 @@ class CollaborativeOptimizerArguments:
         metadata={"help": "Available network bandwidth, in mbps (used for load balancing in all-reduce)"}
     )
     compression: str = field(
-        default="FLOAT16",
+        default="NONE",
         metadata={"help": "Use this compression when averaging parameters/gradients"}
     )
 
@@ -139,7 +139,7 @@ class AlbertTrainingArguments(TrainingArguments):
     max_grad_norm: float = 1.0
     clamp_value: float = 10000.0
 
-    fp16: bool = True
+    fp16: bool = False
     fp16_opt_level: str = 'O2'
     do_train: bool = True
 
