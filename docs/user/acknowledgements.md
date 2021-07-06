@@ -1,6 +1,6 @@
-# Credits
+# Acknowledgements
 
-We kindly thank (in random order)
+We kindly thank (in no particular order)
 
 * [Artem Babenko](https://research.yandex.com/people/102794) and
   [Vladimir Aliev](https://ru.linkedin.com/in/vladimir-aliev-19b93282) for helpful discussions and editorial review of
@@ -14,15 +14,15 @@ We kindly thank (in random order)
 * [Brian Muller](https://github.com/bmuller/kademlia) for his implementations
   of [kademlia](https://github.com/bmuller/kademlia) and [rpcudp](https://github.com/bmuller/rpcudp)
 * Alexander Sherbakov for helpful discussions on PC and server component architecture,
-* Our early adopters, [contributors](https://github.com/learning-at-home/hivemind/graphs/contributors), and reviewers
+* [Yandex School of Data Analysis](https://yandexdataschool.com) students, for helping us run first truly collaborative experiments.
+* The [Neuropark community](https://neuropark.co/), for hosting early collaborative training experiments of sahajBERT with hivemind.
+* Our early adopters, [contributors](https://github.com/learning-at-home/hivemind/graphs/contributors), and conference reviewers.
 
 # Related projects
 
-We also want to reference several projects that have similar ideas in mind:
-
+In this section, we list several organizations and research projects that bring humanity closer to the dream of world-scale deep learning with volunteer computing.
+* [Hugging Face](https://huggingface.co) — an AI community with world-leading NLP research that builds collaborative hub pre-training using hivemind. 
+* [EYDLE](https://www.eydle.com) — a start-up that works towards distributed deep learning on volunteer hardware using centralized infrastructure.
 * [BitTensor](https://github.com/opentensor/BitTensor) — a decentralized deep learning ecosystem with incentive
-  mechanism. Like hivemind, but peers are getting rewarded for their contribution to other peers. .
-* [GShard](https://arxiv.org/abs/2006.16668) — a paper by Dmitry Lepikhin et al. that demonstrate the effectiveness of
-  huge Mixture-of-Experts models on conventional hpc hardware. Those guys train models 4 times the size of GPT-3 on
-  thousands of TPUv3.
-* Also doing research in decentralized deep learning? Let us know!
+  mechanism. Each peer trains for its own objective and rewards others for useful features. 
+* Also building collaborative distributed deep learning? Let us know! [TODO EMAIL]

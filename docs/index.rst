@@ -21,6 +21,8 @@ documentation below.
 
   user/quickstart
   modules/index
+  user/dht
+  user/moe
   user/contributing
   user/benchmarks
   user/acknowledgements
