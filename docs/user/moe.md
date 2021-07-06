@@ -1,7 +1,7 @@
 # Mixture-of-Experts
 
 This tutorial covers the basics of Decentralized Mixture of Experts (DMoE).
-A DMoE consists of two parts: experts hosted on peer devices, and a gating/routing function that assigns input to one of these experts.
+From the infrastructure standpoint, DMoE consists of two parts: experts hosted on peer devices, and a gating/routing function that assigns input to one of these experts.
 
 ## Host experts with a server
 
