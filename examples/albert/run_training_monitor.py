@@ -160,7 +160,7 @@ if __name__ == '__main__':
                                 announce_maddrs=coordinator_args.announce_maddrs),
                        record_validators=validators)
 
-    initial_peers_str = ','.join(str(addr) for addr in dht.get_visible_maddrs())
+    initial_peers_str = ' '.join(str(addr) for addr in dht.get_visible_maddrs())
     logger.info(f"Running DHT. To connect, supply "
                 f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers_str}{TextStyle.RESET}")
 
