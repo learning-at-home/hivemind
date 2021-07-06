@@ -63,8 +63,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     :note: This optimizer behaves unlike regular pytorch optimizers in two ways:
 
-    - calling .step will periodically zero-out gradients w.r.t. model parameters after each step
-    - it may take multiple .step calls without updating model parameters, waiting for peers to accumulate enough samples
+      * calling .step will periodically zero-out gradients w.r.t. model parameters after each step
+      * it may take multiple .step calls without updating model parameters, waiting for peers to accumulate enough samples
+
 
     :param opt: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
     :param dht: a running hivemind.DHT daemon connected to other peers
@@ -76,7 +77,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param default_refresh_period: if no peers are detected, attempt to fetch collaboration state this often (seconds)
     :param expected_drift_peers: assume that this many new peers can join between steps
     :param expected_drift_rate: assumes that this fraction of current collaboration can join/leave between steps
-    :note: the expected collaboration drift parameters are used to adjust the frequency with which this optimizer will
+    :note: The expected collaboration drift parameters are used to adjust the frequency with which this optimizer will
       refresh the collaboration-wide statistics (to avoid missing the moment when to run the next step)
     :param bandwidth: peer's network bandwidth for the purpose of load balancing (recommended: internet speed in mbps)
     :param step_tolerance: a peer can temporarily be delayed by this many steps without being deemed out of sync
@@ -92,7 +93,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
      the cost of extra time per step. If reuse_gradient_accumulators is True, this parameter has no effect.
     :param client_mode: if True, runs training without incoming connections, in a firewall-compatible mode
     :param kwargs: additional parameters forwarded to DecentralizedAverager
-    :note: if you are using CollaborativeOptimizer with a lr_scheduler, it is recommended to pass this scheduler
+    :note: If you are using CollaborativeOptimizer with lr_scheduler, it is recommended to pass this scheduler
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
     """
 
