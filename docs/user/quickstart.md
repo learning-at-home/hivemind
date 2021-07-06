@@ -185,11 +185,13 @@ Congrats, you've just started a pocket-sized experiment with decentralized deep 
 However, this is just the bare minimum of what hivemind can do. In [this example](https://github.com/learning-at-home/hivemind/tree/master/examples/albert),
 we show how to use a more advanced version of DecentralizedOptimizer to collaboratively train a large Transformer over the internet.
 
-If 
-- View an
+If you want to learn more about each individual component,
 - Learn how to use `hivemind.DHT` using this basic [DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html),
+- Learn the underlying math behind DecentralizedOptimizer in
+  [(Li et al. 2020)](https://arxiv.org/abs/2005.00124) and [(Ryabinin et al. 2021)](https://arxiv.org/abs/2103.03239).
+  
 - Read about setting up Mixture-of-Experts layers in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
-- Learn the underlying 
+ 
 
 
 
