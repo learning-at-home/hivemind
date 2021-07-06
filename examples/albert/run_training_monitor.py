@@ -14,7 +14,7 @@ from whatsmyip.ip import get_ip
 from whatsmyip.providers import GoogleDnsProvider
 
 import hivemind
-import metrics_utils
+import utils
 from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
 from hivemind.utils.logging import get_logger
 
@@ -135,12 +135,6 @@ class CheckpointHandler:
             logger.warning("Error while uploading model:", e.output)
 
 
-class TextStyle:
-    BOLD = '\033[1m'
-    BLUE = '\033[34m'
-    RESET = '\033[0m'
-
-
 if __name__ == '__main__':
     parser = HfArgumentParser((CoordinatorArguments, CollaborativeOptimizerArguments, AveragerArguments))
     coordinator_args, collab_optimizer_args, averager_args = parser.parse_args_into_dataclasses()
@@ -152,17 +146,14 @@ if __name__ == '__main__':
         coordinator_args.announce_maddrs += [f'/ip{version}/{address}/tcp/0', f'/ip{version}/{address}/udp/0/quic']
 
     experiment_prefix = coordinator_args.experiment_prefix
-    validators, local_public_key = metrics_utils.make_validators(experiment_prefix)
+    validators, local_public_key = utils.make_validators(experiment_prefix)
     dht = hivemind.DHT(start=True,
                        initial_peers=coordinator_args.initial_peers,
                        p2p=dict(use_ipfs=coordinator_args.use_ipfs,
                                 host_maddrs=coordinator_args.host_maddrs,
                                 announce_maddrs=coordinator_args.announce_maddrs),
                        record_validators=validators)
-
-    initial_peers_str = ' '.join(str(addr) for addr in dht.get_visible_maddrs())
-    logger.info(f"Running DHT. To connect, supply "
-                f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers_str}{TextStyle.RESET}")
+    logger.info(f'Running a DHT node. To connect, supply {utils.format_visible_maddrs(dht)}')
 
     if coordinator_args.wandb_project is not None:
         wandb.init(project=coordinator_args.wandb_project)
@@ -175,7 +166,7 @@ if __name__ == '__main__':
         metrics_dict = dht.get(experiment_prefix + '_metrics', latest=True)
         if metrics_dict is not None:
             metrics_dict = metrics_dict.value
-            metrics = [metrics_utils.LocalMetrics.parse_obj(metrics_dict[peer].value)
+            metrics = [utils.LocalMetrics.parse_obj(metrics_dict[peer].value)
                        for peer in metrics_dict]
             latest_step = max(item.step for item in metrics)
             if latest_step != current_step:

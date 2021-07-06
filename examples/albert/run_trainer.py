@@ -18,8 +18,8 @@ from transformers.trainer import Trainer
 from torch_optimizer import Lamb
 
 import hivemind
+import utils
 from arguments import CollaborationArguments, DatasetArguments, AlbertTrainingArguments
-import metrics_utils
 
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
                 self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
                 self.total_samples_processed += self.samples
                 samples_per_second = self.collaborative_optimizer.performance_ema.samples_per_second
-                statistics = metrics_utils.LocalMetrics(
+                statistics = utils.LocalMetrics(
                     step=self.collaborative_optimizer.local_step,
                     samples_per_second=samples_per_second,
                     samples_accumulated=self.samples,
@@ -219,7 +219,7 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
-    validators, local_public_key = metrics_utils.make_validators(
+    validators, local_public_key = utils.make_validators(
         collaboration_args_dict['experiment_prefix'])
     dht = hivemind.DHT(start=True,
                        initial_peers=collaboration_args_dict.pop('initial_peers'),
@@ -228,6 +228,7 @@ def main():
                                 announce_maddrs=collaboration_args_dict.pop('announce_maddrs')),
                        listen=not collaboration_args_dict['client_mode'],
                        record_validators=validators)
+    logger.info(f'Running a DHT node. To connect, supply {utils.format_visible_maddrs(dht)}')
 
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     statistics_expiration = collaboration_args_dict.pop('statistics_expiration')
