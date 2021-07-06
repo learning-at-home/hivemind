@@ -72,7 +72,8 @@ For a more detailed explanation of DHT store/get and expiration time, please ref
 
 
 ### Advanced usage
-
+#TODO REMOVE!!!
+# but mention that they are awaitable
 In addition to regular store/get, hivemind.DHT implements a number of features that are often useful in the context of
 decentralized training.
 
