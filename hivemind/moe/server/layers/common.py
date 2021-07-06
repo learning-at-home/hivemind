@@ -3,7 +3,7 @@ import time
 import torch
 from torch import nn as nn
 
-from hivemind.server.layers.custom_experts import register_expert_class
+from hivemind.moe.server.layers.custom_experts import register_expert_class
 
 
 # https://github.com/huggingface/transformers/blob/master/src/transformers/activations.py

@@ -5,8 +5,9 @@ import multiprocessing as mp
 import pytest
 
 import hivemind
-from hivemind.dht import get_dht_time
+from hivemind.utils.timed_storage import get_dht_time
 from hivemind.dht.crypto import RSASignatureValidator
+from hivemind.dht.node import DHTNode
 from hivemind.dht.validation import DHTRecord
 from hivemind.utils.crypto import RSAPrivateKey
 
@@ -81,6 +82,7 @@ def get_signed_record(conn: mp.connection.Connection) -> DHTRecord:
     record = dataclasses.replace(record, value=validator.sign_value(record))
 
     conn.send(record)
+    return record
 
 
 def test_signing_in_different_process():
@@ -103,11 +105,11 @@ def test_signing_in_different_process():
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_signatures():
-    alice = await hivemind.DHTNode.create(record_validator=RSASignatureValidator())
+    alice = await DHTNode.create(record_validator=RSASignatureValidator())
     initial_peers = await alice.get_visible_maddrs()
-    bob = await hivemind.DHTNode.create(
+    bob = await DHTNode.create(
         record_validator=RSASignatureValidator(RSAPrivateKey()), initial_peers=initial_peers)
-    mallory = await hivemind.DHTNode.create(
+    mallory = await DHTNode.create(
         record_validator=RSASignatureValidator(RSAPrivateKey()), initial_peers=initial_peers)
 
     key = b'key'

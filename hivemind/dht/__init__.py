@@ -13,6 +13,7 @@ The code is organized as follows:
 - [2] https://github.com/bmuller/kademlia , Brian, if you're reading this: THANK YOU! you're awesome :)
 """
 from __future__ import annotations
+
 import asyncio
 import ctypes
 import multiprocessing as mp
@@ -23,11 +24,11 @@ from typing import Iterable, Optional, Sequence, Union, Callable, Awaitable, Typ
 
 from multiaddr import Multiaddr
 
-from hivemind.dht.node import DHTNode, DHTID, DHTExpiration
+from hivemind.dht.node import DHTNode, DHTID
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
+from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, DHTExpiration
 from hivemind.utils.networking import Hostname, Endpoint, strip_port
-from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, get_dht_time
 
 logger = get_logger(__name__)
 
@@ -128,8 +129,8 @@ class DHT(mp.Process):
         :param kwargs: parameters forwarded to DHTNode.get_many_by_id
         :returns: (value, expiration time); if value was not found, returns None
         """
-        future, _future = MPFuture.make_pair()
-        self._outer_pipe.send(('_get', [], dict(key=key, latest=latest, future=_future, **kwargs)))
+        future = MPFuture()
+        self._outer_pipe.send(('_get', [], dict(key=key, latest=latest, future=future, **kwargs)))
         return future if return_future else future.result()
 
     async def _get(self, key: DHTKey, latest: bool, future: MPFuture, **kwargs):
@@ -154,9 +155,9 @@ class DHT(mp.Process):
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
-        future, _future = MPFuture.make_pair()
+        future = MPFuture()
         self._outer_pipe.send(('_store', [], dict(key=key, value=value, expiration_time=expiration_time, subkey=subkey,
-                                                  future=_future, **kwargs)))
+                                                  future=future, **kwargs)))
         return future if return_future else future.result()
 
     async def _store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
@@ -185,8 +186,8 @@ class DHT(mp.Process):
           or use asyncio.get_event_loop().run_in_executor(...) to prevent coroutine from blocking background DHT tasks
         :note: when run_coroutine is called with wait=False, MPFuture can be cancelled to interrupt the task.
         """
-        future, _future = MPFuture.make_pair()
-        self._outer_pipe.send(('_run_coroutine', [], dict(coro=coro, future=_future)))
+        future = MPFuture()
+        self._outer_pipe.send(('_run_coroutine', [], dict(coro=coro, future=future)))
         return future if return_future else future.result()
 
     async def _run_coroutine(self, coro: Callable[[DHT, DHTNode], Awaitable[ReturnType]],

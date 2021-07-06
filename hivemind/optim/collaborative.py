@@ -9,14 +9,13 @@ import numpy as np
 import torch
 from pydantic import BaseModel, StrictBool, StrictFloat, confloat, conint
 
-from hivemind.client.averaging.training import TrainingAverager
+from hivemind.averaging.training import TrainingAverager
 from hivemind.dht import DHT
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.optim.base import DecentralizedOptimizerBase
 from hivemind.optim.performance_ema import PerformanceEMA
-from hivemind.utils import Endpoint, ValueWithExpiration, get_dht_time, get_logger
-
+from hivemind.utils import Endpoint, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, '_LRScheduler', None)
@@ -64,8 +63,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
     :note: This optimizer behaves unlike regular pytorch optimizers in two ways:
 
-    - calling .step will periodically zero-out gradients w.r.t. model parameters after each step
-    - it may take multiple .step calls without updating model parameters, waiting for peers to accumulate enough samples
+      * calling .step will periodically zero-out gradients w.r.t. model parameters after each step
+      * it may take multiple .step calls without updating model parameters, waiting for peers to accumulate enough samples
+
 
     :param opt: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
     :param dht: a running hivemind.DHT daemon connected to other peers
@@ -77,7 +77,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param default_refresh_period: if no peers are detected, attempt to fetch collaboration state this often (seconds)
     :param expected_drift_peers: assume that this many new peers can join between steps
     :param expected_drift_rate: assumes that this fraction of current collaboration can join/leave between steps
-    :note: the expected collaboration drift parameters are used to adjust the frequency with which this optimizer will
+    :note: The expected collaboration drift parameters are used to adjust the frequency with which this optimizer will
       refresh the collaboration-wide statistics (to avoid missing the moment when to run the next step)
     :param bandwidth: peer's network bandwidth for the purpose of load balancing (recommended: internet speed in mbps)
     :param step_tolerance: a peer can temporarily be delayed by this many steps without being deemed out of sync
@@ -93,7 +93,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
      the cost of extra time per step. If reuse_gradient_accumulators is True, this parameter has no effect.
     :param client_mode: if True, runs training without incoming connections, in a firewall-compatible mode
     :param kwargs: additional parameters forwarded to DecentralizedAverager
-    :note: if you are using CollaborativeOptimizer with a lr_scheduler, it is recommended to pass this scheduler
+    :note: If you are using CollaborativeOptimizer with lr_scheduler, it is recommended to pass this scheduler
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
     """
 
@@ -115,7 +115,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
         self.prefix, self.scheduler = prefix, scheduler
         self.target_batch_size, self.batch_size_per_step = target_batch_size, batch_size_per_step
-        self.min_refresh_period, self.max_refresh_period, self.default_refresh_period =\
+        self.min_refresh_period, self.max_refresh_period, self.default_refresh_period = \
             min_refresh_period, max_refresh_period, default_refresh_period
         self.expected_drift_peers, self.expected_drift_rate = expected_drift_peers, expected_drift_rate
         self.averaging_timeout, self.metadata_expiration = averaging_timeout, metadata_expiration

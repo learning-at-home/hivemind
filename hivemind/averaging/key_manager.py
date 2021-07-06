@@ -6,7 +6,7 @@ from typing import Optional, List, Tuple
 import numpy as np
 
 from hivemind.dht import DHT
-from hivemind.client.averaging.group_info import GroupInfo
+from hivemind.averaging.group_info import GroupInfo
 from hivemind.utils import get_logger, Endpoint, DHTExpiration, get_dht_time, ValueWithExpiration
 
 GroupKey = str

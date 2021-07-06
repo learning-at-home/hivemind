@@ -358,9 +358,9 @@ def test_dht_node():
 
 
 async def launch_star_shaped_swarm(n_peers: int, **kwargs) -> List[DHTNode]:
-    nodes = [await hivemind.DHTNode.create(**kwargs)]
+    nodes = [await DHTNode.create(**kwargs)]
     initial_peers = await nodes[0].get_visible_maddrs()
-    nodes += await asyncio.gather(*[hivemind.DHTNode.create(initial_peers=initial_peers, **kwargs)
+    nodes += await asyncio.gather(*[DHTNode.create(initial_peers=initial_peers, **kwargs)
                                     for _ in range(n_peers - 1)])
     return nodes
 
@@ -389,9 +389,9 @@ async def test_dhtnode_replicas():
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_caching(T=0.05):
-    node2 = await hivemind.DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
-    node1 = await hivemind.DHTNode.create(initial_peers=await node2.protocol.p2p.get_visible_maddrs(),
-                                          cache_refresh_before_expiry=5 * T, listen=False, reuse_get_requests=False)
+    node2 = await DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
+    node1 = await DHTNode.create(initial_peers=await node2.protocol.p2p.get_visible_maddrs(),
+                                 cache_refresh_before_expiry=5 * T, listen=False, reuse_get_requests=False)
     await node2.store('k', [123, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
     await node2.store('k2', [654, 'value'], expiration_time=hivemind.get_dht_time() + 7 * T)
     await node2.store('k3', [654, 'value'], expiration_time=hivemind.get_dht_time() + 15 * T)

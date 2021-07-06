@@ -1,7 +1,7 @@
 import torch.autograd
 from torch import nn as nn
 
-from hivemind.server.layers.custom_experts import register_expert_class
+from hivemind.moe.server.layers.custom_experts import register_expert_class
 
 
 class DeterministicDropoutFunction(torch.autograd.Function):

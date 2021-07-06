@@ -1,129 +1,310 @@
 import asyncio
-from concurrent.futures import CancelledError
+import concurrent.futures
+import multiprocessing as mp
+import random
+import time
 
 import numpy as np
 import pytest
 import torch
 
+import hivemind
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
-import hivemind
 from hivemind.utils import MSGPackSerializer
-from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.asyncio import amap_in_executor, aiter, aenumerate, achain, anext, azip
-from hivemind.utils.mpfuture import FutureStateError
+from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils.mpfuture import InvalidStateError
 
 
+@pytest.mark.forked
 def test_mpfuture_result():
-    f1, f2 = hivemind.MPFuture.make_pair()
-    f1.set_result(321)
-    assert f2.result() == 321
-    assert f1.result() == 321
+    future = hivemind.MPFuture()
 
-    for future in [f1, f2]:
-        with pytest.raises(FutureStateError):
-            future.set_result(123)
-        with pytest.raises(FutureStateError):
-            future.set_exception(ValueError())
-        assert future.cancel() is False
-        assert future.done() and not future.running() and not future.cancelled()
+    def _proc(future):
+        with pytest.raises(RuntimeError):
+            future.result()  # only creator process can await result
 
-    f1, f2 = hivemind.MPFuture.make_pair()
-    with pytest.raises(TimeoutError):
-        f1.result(timeout=1e-3)
+        future.set_result(321)
 
-    f2.set_result(['abacaba', 123])
-    assert f1.result() == ['abacaba', 123]
+    p = mp.Process(target=_proc, args=(future,))
+    p.start()
+    p.join()
+
+    assert future.result() == 321
+    assert future.exception() is None
+    assert future.cancel() is False
+    assert future.done() and not future.running() and not future.cancelled()
+
+    future = hivemind.MPFuture()
+    with pytest.raises(concurrent.futures.TimeoutError):
+        future.result(timeout=1e-3)
+
+    future.set_result(['abacaba', 123])
+    assert future.result() == ['abacaba', 123]
 
 
+@pytest.mark.forked
 def test_mpfuture_exception():
-    f1, f2 = hivemind.MPFuture.make_pair()
-    with pytest.raises(TimeoutError):
-        f1.exception(timeout=1e-3)
+    future = hivemind.MPFuture()
+    with pytest.raises(concurrent.futures.TimeoutError):
+        future.exception(timeout=1e-3)
 
-    f2.set_exception(NotImplementedError())
+    def _proc(future):
+        future.set_exception(NotImplementedError())
 
-    for future in [f1, f2]:
-        assert isinstance(future.exception(), NotImplementedError)
-        with pytest.raises(NotImplementedError):
-            future.result()
-        assert future.cancel() is False
-        assert future.done() and not future.running() and not future.cancelled()
+    p = mp.Process(target=_proc, args=(future,))
+    p.start()
+    p.join()
+
+    assert isinstance(future.exception(), NotImplementedError)
+    with pytest.raises(NotImplementedError):
+        future.result()
+    assert future.cancel() is False
+    assert future.done() and not future.running() and not future.cancelled()
 
 
+@pytest.mark.forked
 def test_mpfuture_cancel():
-    f1, f2 = hivemind.MPFuture.make_pair()
-    assert not f2.cancelled()
-    f1.cancel()
-    for future in [f1, f2]:
-        with pytest.raises(CancelledError):
+    future = hivemind.MPFuture()
+    assert not future.cancelled()
+    future.cancel()
+    evt = mp.Event()
+
+    def _proc():
+        with pytest.raises(concurrent.futures.CancelledError):
             future.result()
-        with pytest.raises(CancelledError):
+        with pytest.raises(concurrent.futures.CancelledError):
             future.exception()
-        with pytest.raises(FutureStateError):
+        with pytest.raises(InvalidStateError):
             future.set_result(123)
-        with pytest.raises(FutureStateError):
+        with pytest.raises(InvalidStateError):
             future.set_exception(NotImplementedError())
         assert future.cancelled() and future.done() and not future.running()
+        evt.set()
+
+    p = mp.Process(target=_proc)
+    p.start()
+    p.join()
+    assert evt.is_set()
 
 
+@pytest.mark.forked
 def test_mpfuture_status():
-    f1, f2 = hivemind.MPFuture.make_pair()
-    assert f1.set_running_or_notify_cancel() is True
-    for future in [f1, f2]:
-        assert future.running() and not future.done() and not future.cancelled()
-        with pytest.raises(RuntimeError):
-            future.set_running_or_notify_cancel()
-    f2.cancel()
-    for future in [f1, f2]:
+    evt = mp.Event()
+    future = hivemind.MPFuture()
+
+    def _proc1(future):
+        assert future.set_running_or_notify_cancel() is True
+        evt.set()
+
+    p = mp.Process(target=_proc1, args=(future,))
+    p.start()
+    p.join()
+    assert evt.is_set()
+    evt.clear()
+
+    assert future.running() and not future.done() and not future.cancelled()
+    with pytest.raises(InvalidStateError):
+        future.set_running_or_notify_cancel()
+
+    future = hivemind.MPFuture()
+    assert future.cancel()
+
+    def _proc2(future):
         assert not future.running() and future.done() and future.cancelled()
         assert future.set_running_or_notify_cancel() is False
+        evt.set()
 
-    f1, f2 = hivemind.MPFuture.make_pair()
-    f1.cancel()
-    for future in [f1, f2]:
-        assert future.set_running_or_notify_cancel() is False
+    p = mp.Process(target=_proc2, args=(future,))
+    p.start()
+    p.join()
+    evt.set()
+
+    future2 = hivemind.MPFuture()
+    future2.cancel()
+    assert future2.set_running_or_notify_cancel() is False
 
 
 @pytest.mark.asyncio
 async def test_await_mpfuture():
-    # await result
-    f1, f2 = hivemind.MPFuture.make_pair()
+    # await result from the same process, but a different coroutine
+    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
 
-    async def wait_and_assign():
+    async def wait_and_assign_async():
         assert f2.set_running_or_notify_cancel() is True
         await asyncio.sleep(0.1)
-        f2.set_result((123, 'ololo'))
+        f1.set_result((123, 'ololo'))
+        f2.set_result((456, 'pyshpysh'))
 
-    asyncio.create_task(wait_and_assign())
-    for future in [f1, f2]:
-        res = await future
-        assert res == (123, 'ololo')
+    asyncio.create_task(wait_and_assign_async())
+
+    assert (await asyncio.gather(f1, f2)) == [(123, 'ololo'), (456, 'pyshpysh')]
+
+    # await result from separate processes
+    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
+
+    def wait_and_assign(future, value):
+        time.sleep(0.1 * random.random())
+        future.set_result(value)
+
+    p1 = mp.Process(target=wait_and_assign, args=(f1, 'abc'))
+    p2 = mp.Process(target=wait_and_assign, args=(f2, 'def'))
+    for p in p1, p2:
+        p.start()
+
+    assert (await asyncio.gather(f1, f2)) == ['abc', 'def']
+    for p in p1, p2:
+        p.join()
 
     # await cancel
-    f1, f2 = hivemind.MPFuture.make_pair()
+    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
 
-    async def wait_and_cancel():
-        await asyncio.sleep(0.1)
+    def wait_and_cancel():
+        time.sleep(0.01)
+        f2.set_result(123456)
+        time.sleep(0.1)
         f1.cancel()
 
-    asyncio.create_task(wait_and_cancel())
-    for future in [f1, f2]:
-        with pytest.raises(CancelledError):
-            await future
+    p = mp.Process(target=wait_and_cancel)
+    p.start()
+
+    with pytest.raises(asyncio.CancelledError):
+        # note: it is intended that MPFuture raises Cancel
+        await asyncio.gather(f1, f2)
+
+    p.join()
 
     # await exception
-    f1, f2 = hivemind.MPFuture.make_pair()
+    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
 
-    async def wait_and_raise():
-        await asyncio.sleep(0.1)
-        f1.set_exception(SystemError())
+    def wait_and_raise():
+        time.sleep(0.01)
+        f2.set_result(123456)
+        time.sleep(0.1)
+        f1.set_exception(ValueError('we messed up'))
 
-    asyncio.create_task(wait_and_raise())
-    for future in [f1, f2]:
-        with pytest.raises(SystemError):
-            await future
+    p = mp.Process(target=wait_and_raise)
+    p.start()
+
+    with pytest.raises(ValueError):
+        # note: it is intended that MPFuture raises Cancel
+        await asyncio.gather(f1, f2)
+
+    p.join()
+
+
+@pytest.mark.forked
+def test_mpfuture_bidirectional():
+    evt = mp.Event()
+    future_from_main = hivemind.MPFuture()
+
+    def _future_creator():
+        future_from_fork = hivemind.MPFuture()
+        future_from_main.set_result(('abc', future_from_fork))
+
+        if future_from_fork.result() == ['we', 'need', 'to', 'go', 'deeper']:
+            evt.set()
+
+    p = mp.Process(target=_future_creator)
+    p.start()
+
+    out = future_from_main.result()
+    assert isinstance(out[1], hivemind.MPFuture)
+    out[1].set_result(['we', 'need', 'to', 'go', 'deeper'])
+
+    p.join()
+    assert evt.is_set()
+
+
+@pytest.mark.forked
+def test_mpfuture_done_callback():
+    receiver, sender = mp.Pipe(duplex=False)
+    events = [mp.Event() for _ in range(5)]
+
+    def _future_creator():
+        future1, future2, future3 = hivemind.MPFuture(), hivemind.MPFuture(), hivemind.MPFuture()
+
+        def _check_result_and_set(future):
+            assert future.done()
+            assert future.result() == 123
+            events[0].set()
+
+        future1.add_done_callback(_check_result_and_set)
+        future1.add_done_callback(lambda future: events[1].set())
+        future2.add_done_callback(lambda future: events[2].set())
+        future3.add_done_callback(lambda future: events[3].set())
+
+        sender.send((future1, future2))
+        future2.cancel()  # trigger future2 callback from the same process
+
+        events[0].wait()
+        future1.add_done_callback(lambda future: events[4].set())  # schedule callback after future1 is already finished
+
+    p = mp.Process(target=_future_creator)
+    p.start()
+
+    future1, future2 = receiver.recv()
+    future1.set_result(123)
+
+    with pytest.raises(RuntimeError):
+        future1.add_done_callback(lambda future: (1, 2, 3))
+
+    p.join()
+    events[0].wait(1)
+    events[1].wait(1)
+    assert future1.done() and not future1.cancelled()
+    assert future2.done() and future2.cancelled()
+    assert events[0].is_set() and events[1].is_set() and events[2].is_set() and events[4].is_set()
+    assert not events[3].is_set()
+
+
+@pytest.mark.forked
+def test_many_futures():
+    evt = mp.Event()
+    receiver, sender = mp.Pipe()
+    main_futures = [hivemind.MPFuture() for _ in range(1000)]
+    assert len(hivemind.MPFuture._active_futures) == 1000
+
+    def _run_peer():
+        fork_futures = [hivemind.MPFuture() for _ in range(500)]
+        assert len(hivemind.MPFuture._active_futures) == 500
+
+        for i, future in enumerate(random.sample(main_futures, 300)):
+            if random.random() < 0.5:
+                future.set_result(i)
+            else:
+                future.set_exception(ValueError(f"{i}"))
+
+        sender.send(fork_futures[:-100])
+        for future in fork_futures[-100:]:
+            future.cancel()
+
+        evt.wait()
+
+        assert len(hivemind.MPFuture._active_futures) == 200
+        for future in fork_futures:
+            future.cancel()
+        assert len(hivemind.MPFuture._active_futures) == 0
+
+    p = mp.Process(target=_run_peer)
+    p.start()
+
+    some_fork_futures = receiver.recv()
+    assert len(hivemind.MPFuture._active_futures) == 700
+
+    for future in some_fork_futures:
+        future.set_running_or_notify_cancel()
+    for future in random.sample(some_fork_futures, 200):
+        future.set_result(321)
+
+    time.sleep(0.5)
+    evt.set()
+    for future in main_futures:
+        future.cancel()
+    assert len(hivemind.MPFuture._active_futures) == 0
+    p.join()
 
 
 def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
@@ -139,7 +320,7 @@ def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.UNIFORM_8BIT)) - X
     assert error.square().mean() < beta
 
-    zeros = torch.zeros(5,5)
+    zeros = torch.zeros(5, 5)
     for compression_type in CompressionType.values():
         assert deserialize_torch_tensor(serialize_torch_tensor(zeros, compression_type)).isfinite().all()
 
@@ -258,7 +439,7 @@ def test_split_parts():
     for combined in combined_incomplete, combined_incomplete2, combined_incomplete3:
         with pytest.raises(RuntimeError):
             deserialize_torch_tensor(combined)
-            # note: we rely on this being RuntimeError in hivemind.client.averager.allreduce.AllreduceRunner
+            # note: we rely on this being RuntimeError in hivemind.averaging.allreduce.AllreduceRunner
 
 
 def test_generic_data_classes():

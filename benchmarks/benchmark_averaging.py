@@ -1,14 +1,13 @@
-import math
-import time
-import threading
 import argparse
+import math
+import threading
+import time
 
 import torch
 
 import hivemind
-from hivemind.utils import LOCALHOST, increase_file_limit, get_logger
 from hivemind.proto import runtime_pb2
-
+from hivemind.utils import LOCALHOST, get_logger, increase_file_limit
 
 logger = get_logger(__name__)
 
@@ -50,7 +49,7 @@ def benchmark_averaging(num_peers: int, target_group_size: int, num_rounds: int,
                            initial_peers=[f"{LOCALHOST}:{dht_root.port}"],
                            start=True)
         initial_bits = bin(index % num_groups)[2:].rjust(nbits, '0')
-        averager = hivemind.DecentralizedAverager(
+        averager = hivemind.averaging.DecentralizedAverager(
             peer_tensors[i], dht, prefix='my_tensor', initial_group_bits=initial_bits, listen_on=f"{LOCALHOST}:*",
             compression_type=runtime_pb2.CompressionType.FLOAT16, target_group_size=target_group_size,
             averaging_expiration=averaging_expiration, request_timeout=request_timeout, start=True)

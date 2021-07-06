@@ -1,6 +1,5 @@
 import asyncio
 import secrets
-from copy import deepcopy
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
@@ -15,7 +14,6 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, St
 from hivemind.proto import p2pd_pb2
 from hivemind.utils import MSGPackSerializer
 from hivemind.utils.logging import get_logger
-from hivemind.utils.networking import find_open_port
 
 logger = get_logger(__name__)
 

@@ -13,12 +13,12 @@ from sortedcontainers import SortedSet
 
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
 from hivemind.dht.protocol import DHTProtocol
-from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
+from hivemind.dht.routing import DHTID, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.dht.traverse import traverse_dht
 from hivemind.p2p import P2P, PeerID as Endpoint
 from hivemind.utils import MSGPackSerializer, get_logger, SerializerBase
-from hivemind.utils.timed_storage import TimedStorage, ValueWithExpiration
+from hivemind.utils.timed_storage import DHTExpiration, TimedStorage, ValueWithExpiration
 
 logger = get_logger(__name__)
 
@@ -29,7 +29,7 @@ class DHTNode:
     Each DHTNode has an identifier, a local storage and access too other nodes via DHTProtocol.
 
     :note: Hivemind DHT is optimized to store a lot of temporary metadata that is regularly updated.
-     For example, expert heartbeat emitted by a hivemind.Server responsible for that expert.
+     For example, expert heartbeat emitted by a hivemind.moe.Server responsible for that expert.
      Such metadata does not require regular maintenance by peers or persistence on shutdown.
      Instead, DHTNode is designed to rapidly send bulk data and resolve conflicts.
 
@@ -385,7 +385,8 @@ class DHTNode:
         try:
             await asyncio.gather(store_task, *(evt.wait() for evt in store_finished_events.values()))
             assert len(unfinished_key_ids) == 0, "Internal error: traverse_dht didn't finish search"
-            return {(key, subkey) if subkey is not None else key: status or False for (key, subkey), status in store_ok.items()}
+            return {(key, subkey) if subkey is not None else key: status or False
+                    for (key, subkey), status in store_ok.items()}
         except asyncio.CancelledError as e:
             store_task.cancel()
             raise e
@@ -738,6 +739,7 @@ class Blacklist:
     :param base_time: peers are suspended for this many seconds by default
     :param backoff_rate: suspension time increases by this factor after each successive failure
     """
+
     def __init__(self, base_time: float, backoff_rate: float, **kwargs):
         self.base_time, self.backoff = base_time, backoff_rate
         self.banned_peers = TimedStorage[Endpoint, int](**kwargs)

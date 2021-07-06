@@ -5,10 +5,10 @@ import pytest
 from pydantic import BaseModel, StrictInt, conint
 
 import hivemind
-from hivemind.dht import get_dht_time
 from hivemind.dht.node import DHTNode
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
+from hivemind.utils.timed_storage import get_dht_time
 
 
 class SampleSchema(BaseModel):

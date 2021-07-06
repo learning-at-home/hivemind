@@ -5,7 +5,7 @@ from typing import Callable, Type
 import torch
 import torch.nn as nn
 
-from hivemind.server.layers import name_to_block, name_to_input
+from hivemind.moe.server.layers import name_to_block, name_to_input
 
 
 def add_custom_models_from_file(path: str):
