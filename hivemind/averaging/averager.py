@@ -170,7 +170,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self.run_in_background(await_ready=True)
 
     def _choose_announced_host(self) -> Hostname:
-        announced_host = strip_port(self.listen_on)
+        announced_host = strip_port(self.listen_on).strip('[]')  # Stripping square brackets for IPv6
         if ip_address(announced_host) not in [ip_address('0.0.0.0'), ip_address('::')]:
             return announced_host
 

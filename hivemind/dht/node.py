@@ -80,7 +80,7 @@ class DHTNode:
             cls,
             p2p: Optional[Union[P2P, Dict[str, Any]]] = None,
             node_id: Optional[DHTID] = None,
-            initial_peers: Optional[Sequence[Multiaddr]] = None,
+            initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 3, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
@@ -151,7 +151,9 @@ class DHTNode:
             self._should_shutdown_p2p = False
         elif p2p is None or isinstance(p2p, dict):
             p2p_kwargs = {} if p2p is None else p2p
-            p2p = await P2P.create(initial_peers=initial_peers, **p2p_kwargs)
+            if not p2p_kwargs.get('use_ipfs'):
+                p2p_kwargs['initial_peers'] = initial_peers
+            p2p = await P2P.create(**p2p_kwargs)
             self._should_shutdown_p2p = True
         else:
             raise TypeError(
@@ -164,7 +166,7 @@ class DHTNode:
         self.endpoint = p2p.id
 
         if initial_peers:
-            initial_peers = {Endpoint.from_base58(item['p2p']) for item in initial_peers}
+            initial_peers = {Endpoint.from_base58(Multiaddr(item)['p2p']) for item in initial_peers}
 
             # stage 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout

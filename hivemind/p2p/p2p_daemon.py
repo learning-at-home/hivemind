@@ -3,7 +3,7 @@ import secrets
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import google.protobuf
 from multiaddr import Multiaddr
@@ -70,10 +70,10 @@ class P2P:
 
     @classmethod
     async def create(cls, *args,
-                     initial_peers: Optional[Sequence[Multiaddr]] = None,
+                     initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
                      use_ipfs: bool = False,
-                     host_maddrs: Optional[Sequence[Multiaddr]] = (Multiaddr('/ip4/127.0.0.1/tcp/0'),),
-                     announce_maddrs: Optional[Sequence[Multiaddr]] = None,
+                     host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ('/ip4/127.0.0.1/tcp/0',),
+                     announce_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = None,
                      quic: bool = True, tls: bool = True, conn_manager: bool = True,
                      dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
                      nat_port_map: bool = True, auto_nat: bool = True,
@@ -85,8 +85,8 @@ class P2P:
         Start a new p2pd process and connect to it.
         :param initial_peers: List of bootstrap peers
         :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
-        :param host_maddrs: multiaddresses for external connections from other p2p instances
-        :param announce_maddrs: multiaddresses the host should announce to the network
+        :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
+        :param announce_maddrs: Visible multiaddrs the host announces for external connections from other p2p instances
         :param quic: Enables the QUIC transport
         :param tls: Enables TLS1.3 channel security protocol
         :param conn_manager: Enables the Connection Manager

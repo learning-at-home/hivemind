@@ -1,21 +1,22 @@
 #!/usr/bin/env python
 
-from dataclasses import dataclass, field, asdict
 import subprocess
 import time
+from dataclasses import asdict, dataclass, field
+from ipaddress import ip_address
 from typing import Optional
 
 import torch
+import wandb
 from torch_optimizer import Lamb
 from transformers import AlbertForPreTraining, AlbertConfig, HfArgumentParser
-import wandb
-from whatsmyip.providers import GoogleDnsProvider
 from whatsmyip.ip import get_ip
+from whatsmyip.providers import GoogleDnsProvider
 
-from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
 import hivemind
-from hivemind.utils.logging import get_logger
 import metrics_utils
+from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
+from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -27,10 +28,9 @@ class CoordinatorArguments(BaseTrainingArguments):
     new workers still can join the collaboration via alive initial peers' addresses.
     Specify initial_peers argument for that purpose
     """
-    address: Optional[str] = field(
-        default=None,
-        metadata={"help": "This machine's network address. Use public IP for global experiments, "
-                          "local address for private runs"}
+    use_google_dns: bool = field(
+        default=False,
+        metadata={"help": "Use Google DNS to determine our public IP address (and add it to --announce_maddrs)"}
     )
     refresh_period: float = field(
         default=30,
@@ -135,21 +135,34 @@ class CheckpointHandler:
             logger.warning("Error while uploading model:", e.output)
 
 
+class TextStyle:
+    BOLD = '\033[1m'
+    BLUE = '\033[34m'
+    RESET = '\033[0m'
+
+
 if __name__ == '__main__':
     parser = HfArgumentParser((CoordinatorArguments, CollaborativeOptimizerArguments, AveragerArguments))
     coordinator_args, collab_optimizer_args, averager_args = parser.parse_args_into_dataclasses()
 
-    if coordinator_args.address is None:
-        logger.warning("No address specified. Attempting to infer address from DNS.")
-        coordinator_args.address = get_ip(GoogleDnsProvider)
+    if coordinator_args.use_google_dns:
+        address = get_ip(GoogleDnsProvider)
+        logger.info(f"Google DNS responds that our IP address is {address}")
+        version = ip_address(address).version
+        coordinator_args.announce_maddrs += [f'/ip{version}/{address}/tcp/0', f'/ip{version}/{address}/udp/0/quic']
 
     experiment_prefix = coordinator_args.experiment_prefix
     validators, local_public_key = metrics_utils.make_validators(experiment_prefix)
-    dht = hivemind.DHT(start=True, listen_on=coordinator_args.dht_listen_on,
-                       endpoint=f"{coordinator_args.address}:*", initial_peers=coordinator_args.initial_peers,
+    dht = hivemind.DHT(start=True,
+                       initial_peers=coordinator_args.initial_peers,
+                       p2p=dict(use_ipfs=coordinator_args.use_ipfs,
+                                host_maddrs=coordinator_args.host_maddrs,
+                                announce_maddrs=coordinator_args.announce_maddrs),
                        record_validators=validators)
 
-    logger.info(f"Running DHT root at {coordinator_args.address}:{dht.port}")
+    initial_peers_str = ','.join(str(addr) for addr in dht.get_visible_maddrs())
+    logger.info(f"Running DHT. To connect, supply "
+                f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers_str}{TextStyle.RESET}")
 
     if coordinator_args.wandb_project is not None:
         wandb.init(project=coordinator_args.wandb_project)
@@ -184,6 +197,7 @@ if __name__ == '__main__':
                     num_samples += item.samples_accumulated
                     sum_mini_steps += item.mini_steps
                 current_loss = sum_loss / sum_mini_steps
+                logger.info(f"Step #{current_step}\tloss = {current_loss:.5f}")
 
                 if coordinator_args.wandb_project is not None:
                     wandb.log({
@@ -198,6 +212,5 @@ if __name__ == '__main__':
                         checkpoint_handler.save_state(current_step)
                         if checkpoint_handler.is_time_to_upload():
                             checkpoint_handler.upload_checkpoint(current_loss)
-                    logger.info(f"Step #{current_step}\tloss = {current_loss:.5f}")
         logger.debug("Peer is still alive...")
         time.sleep(coordinator_args.refresh_period)

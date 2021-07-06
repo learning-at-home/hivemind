@@ -54,15 +54,17 @@ class DHT(mp.Process):
     """
     _node: DHTNode
 
-    def __init__(self, p2p: Optional[P2P] = None, initial_peers: Optional[Sequence[Multiaddr]] = None, *, start: bool,
-                 daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 record_validators: Iterable[RecordValidatorBase] = (), shutdown_timeout: float = 3, **kwargs):
+    def __init__(self, p2p: Optional[P2P] = None,
+                 initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
+                 *, start: bool, daemon: bool = True, max_workers: Optional[int] = None,
+                 parallel_rpc: Optional[int] = None, record_validators: Iterable[RecordValidatorBase] = (),
+                 shutdown_timeout: float = 3, **kwargs):
         super().__init__()
 
         self.p2p = p2p
         assert (initial_peers is None or (isinstance(initial_peers, Sequence) and
-                                          all(isinstance(item, Multiaddr) for item in initial_peers))), \
-            'initial_peers should be of type Optional[Sequence[Multiaddr]]'
+                                          all(isinstance(item, (Multiaddr, str)) for item in initial_peers))), \
+            'initial_peers should be of type Optional[Sequence[Union[Multiaddr, str]]]'
         self.initial_peers = initial_peers
         self.kwargs = kwargs
         self.max_workers = max_workers

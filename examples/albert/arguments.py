@@ -1,5 +1,5 @@
-from typing import Optional, List
 from dataclasses import dataclass, field
+from typing import Optional, List
 
 from transformers import TrainingArguments
 
@@ -11,11 +11,26 @@ class BaseTrainingArguments:
     )
     initial_peers: List[str] = field(
         default_factory=list,
-        metadata={"help": "One or more peers (comma-separated) that will welcome you into the collaboration"}
+        metadata={"help":
+            "Multiaddrs of the peers that will welcome you into the existing collaboration. "
+            "Example: /ip4/203.0.113.1/tcp/31337/p2p/XXXX /ip4/203.0.113.2/udp/7777/quic/p2p/YYYY"}
     )
-    dht_listen_on: str = field(
-        default="[::]:*",
-        metadata={"help": "Network interface used for incoming DHT communication. Default: all ipv6"}
+    use_ipfs: bool = field(
+        default=False,
+        metadata={"help":
+            "Use IPFS to find initial_peers. If enabled, you only need to provide /p2p/XXXX part of the multiaddrs "
+            "for the initial_peers (no need to specify a particular IPv4/IPv6 host and port)"}
+    )
+    host_maddrs: List[str] = field(
+        default_factory=lambda: ['/ip4/0.0.0.0/tcp/0', '/ip4/0.0.0.0/udp/0/quic'],
+        metadata={"help":
+            "Multiaddrs to listen for external connections from other p2p instances. "
+            "Defaults to all IPv4 interfaces with TCP and QUIC (over UDP) protocols: "
+            "/ip4/0.0.0.0/tcp/0 /ip4/0.0.0.0/udp/0/quic"}
+    )
+    announce_maddrs: List[str] = field(
+        default_factory=list,
+        metadata={"help": "Visible multiaddrs the host announces for external connections from other p2p instances"}
     )
 
 
@@ -96,10 +111,6 @@ class CollaborationArguments(AveragerArguments, CollaborativeOptimizerArguments,
     statistics_expiration: float = field(
         default=600,
         metadata={"help": "Statistics will be removed if not updated in this many seconds"}
-    )
-    endpoint: Optional[str] = field(
-        default=None,
-        metadata={"help": "This node's IP for inbound connections, used when running from behind a proxy"}
     )
 
 
