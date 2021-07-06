@@ -10,8 +10,8 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
 
 @dataclasses.dataclass
 class RPCHandler:
-    name: str
-    method: Callable[[Any, P2PContext], Any]
+    method_name: str
+    handle_name: str
     request_type: type
     response_type: type
 
@@ -38,7 +38,6 @@ class Servicer:
         class_name = self.__class__.__name__
 
         self._rpc_handlers = []
-        rpc_callers = {}
         for method_name, method in self.__class__.__dict__.items():
             if method_name.startswith('rpc_') and callable(method):
                 handle_name = f'{class_name}.{method_name}'
@@ -52,24 +51,28 @@ class Servicer:
                                      f'(a type from the hivemind.proto module) for the `request` parameter '
                                      f'and the return value')
 
-                self._rpc_handlers.append(RPCHandler(handle_name, partial(method, self), request_type, response_type))
-                rpc_callers[method_name] = self._make_rpc_caller(method_name, handle_name, request_type, response_type)
+                self._rpc_handlers.append(RPCHandler(method_name, handle_name, request_type, response_type))
 
-        self._stub_type = type(f'{class_name}Stub', (StubBase,), rpc_callers)
+        self._stub_type = type(f'{class_name}Stub', (StubBase,),
+                               {handler.method_name: self._make_rpc_caller(handler)
+                                for handler in self._rpc_handlers})
 
     @staticmethod
-    def _make_rpc_caller(method_name: str, handle_name: str, request_type: type, response_type: type):
-        async def caller(stub: StubBase, request: request_type, timeout: Optional[float] = None) -> response_type:
+    def _make_rpc_caller(handler: RPCHandler):
+        async def caller(stub: StubBase, request: handler.request_type,
+                         timeout: Optional[float] = None) -> handler.response_type:
             return await asyncio.wait_for(
-                stub.p2p.call_unary_handler(stub.peer, handle_name, request, response_type),
+                stub.p2p.call_unary_handler(stub.peer, handler.handle_name, request, handler.response_type),
                 timeout=timeout)
 
-        caller.__name__ = method_name
+        caller.__name__ = handler.method_name
         return caller
 
-    async def add_p2p_handlers(self, p2p: P2P) -> None:
+    async def add_p2p_handlers(self, p2p: P2P, wrapper: Any = None) -> None:
+        servicer = self if wrapper is None else wrapper
         for handler in self._rpc_handlers:
-            await p2p.add_unary_handler(handler.name, handler.method, handler.request_type, handler.response_type)
+            await p2p.add_unary_handler(handler.handle_name, getattr(servicer, handler.method_name),
+                                        handler.request_type, handler.response_type)
 
     def get_stub(self, p2p: P2P, peer: PeerID) -> StubBase:
         return self._stub_type(p2p, peer)

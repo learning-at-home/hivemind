@@ -62,7 +62,7 @@ class DHTProtocol(Servicer):
         self.authorizer = authorizer
 
         if listen:
-            await self.add_p2p_handlers(self.p2p)
+            await self.add_p2p_handlers(self.p2p, AuthRPCWrapper(self, AuthRole.SERVICER, self.authorizer))
 
             self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes())
         else:  # client-only mode
