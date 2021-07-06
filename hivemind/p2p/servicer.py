@@ -23,6 +23,17 @@ class StubBase:
 
 
 class Servicer:
+    """
+    Base class for P2P servicers (e.g. DHT, averager, MoE server). The interface mimicks gRPC servicers.
+
+    - ``add_p2p_handlers(self, p2p)`` registers all rpc_* methods of the derived class as P2P unary handlers, allowing
+      other peers to call them. It uses type annotations for the ``request`` parameter and the return value
+      to infer protobufs the methods operate with.
+
+    - ``get_stub(self, p2p, peer)`` creates a stub with all rpc_* methods. Calls to the stub methods are translated
+      to calls to the remote peer.
+    """
+
     def __init__(self):
         class_name = self.__class__.__name__
 
