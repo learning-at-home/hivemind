@@ -1,5 +1,5 @@
-**hivemind.client**
-====================
+**hivemind.moe.client**
+=======================
 
 .. automodule:: hivemind.moe.client
 
