@@ -75,14 +75,6 @@ class DHTProtocol(Servicer):
         assert _initialized_with_create, " Please use DHTProtocol.create coroutine to spawn new protocol instances "
         super().__init__()
 
-    async def shutdown(self, timeout=None):
-        """ Process existing requests, close all connections and stop the server """
-        # TODO: Remove handlers from self.p2p in shutdown()
-        # FIXME: Remove `timeout` argument if unused
-        # await self.client.stop_listening()
-        # await self.client.shutdown()
-        pass
-
     def get_stub(self, peer: Endpoint) -> AuthRPCWrapper:
         """ get a stub that sends requests to a given peer """
         stub = super().get_stub(self.p2p, peer)
