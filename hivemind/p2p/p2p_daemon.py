@@ -294,13 +294,14 @@ class P2P:
                 try:
                     request, err = await P2P.receive_protobuf(in_proto_type, reader)
                 except asyncio.IncompleteReadError:
-                    logger.debug('Incomplete read while receiving request from peer')
+                    logger.debug(f'Incomplete read while receiving request from peer in {handle_name}')
                     return
                 except google.protobuf.message.DecodeError as error:
-                    logger.debug(f'Failed to decode request protobuf: {error}')
+                    logger.debug(f'Failed to decode request protobuf '
+                                 f'of type {in_proto_type} in {handle_name}: {error}')
                     return
                 if err is not None:
-                    logger.debug(f'Got an error instead of a request: {err}')
+                    logger.debug(f'Got an error instead of a request in {handle_name}: {err}')
 
                 context = P2PContext(handle_name=handle_name, local_id=self.id,
                                      remote_id=stream_info.peer_id, remote_maddr=stream_info.addr)

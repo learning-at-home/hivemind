@@ -11,7 +11,7 @@ import grpc
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, DHTExpiration, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
-from hivemind.p2p import P2P, P2PContext, PeerID as Endpoint
+from hivemind.p2p import P2P, P2PContext, PeerID as Endpoint, Servicer
 from hivemind.proto import dht_pb2
 from hivemind.utils import get_logger, replace_port, MSGPackSerializer, ChannelCache, ValueWithExpiration
 from hivemind.utils import get_dht_time, GRPC_KEEPALIVE_OPTIONS, MAX_DHT_TIME_DISCREPANCY_SECONDS
@@ -20,7 +20,7 @@ from hivemind.utils.auth import AuthRole, AuthRPCWrapper, AuthorizerBase
 logger = get_logger(__name__)
 
 
-class DHTProtocol:
+class DHTProtocol(Servicer):
     # fmt:off
     p2p: P2P
     node_id: DHTID; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
@@ -31,8 +31,6 @@ class DHTProtocol:
 
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     RESERVED_SUBKEYS = IS_REGULAR_VALUE, IS_DICTIONARY = serializer.dumps(None), b''
-
-    PING_NAME, STORE_NAME, FIND_NAME = '__ping__', '__store__', '__find__'
 
     @classmethod
     async def create(
@@ -65,12 +63,7 @@ class DHTProtocol:
         self.authorizer = authorizer
 
         if listen:
-            await self.p2p.add_unary_handler(
-                DHTProtocol.PING_NAME, self.rpc_ping, dht_pb2.PingRequest, dht_pb2.PingResponse)
-            await self.p2p.add_unary_handler(
-                DHTProtocol.STORE_NAME, self.rpc_store, dht_pb2.StoreRequest, dht_pb2.StoreResponse)
-            await self.p2p.add_unary_handler(
-                DHTProtocol.FIND_NAME, self.rpc_find, dht_pb2.FindRequest, dht_pb2.FindResponse)
+            await self.add_p2p_handlers(self.p2p)
 
             self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes())
         else:  # client-only mode
@@ -91,32 +84,9 @@ class DHTProtocol:
         # await self.client.shutdown()
         pass
 
-    class DHTStub: #TODO refactor this
-        def __init__(self, p2p: P2P, peer: Endpoint):
-            self.p2p = p2p
-            self.peer = peer
-
-        async def rpc_ping(self, request: dht_pb2.PingRequest,
-                           timeout: Optional[float] = None) -> dht_pb2.PingResponse:
-            return await asyncio.wait_for(
-                self.p2p.call_unary_handler(self.peer, DHTProtocol.PING_NAME, request, dht_pb2.PingResponse),
-                timeout=timeout)
-
-        async def rpc_store(self, request: dht_pb2.StoreRequest,
-                            timeout: Optional[float] = None) -> dht_pb2.StoreResponse:
-            return await asyncio.wait_for(
-                self.p2p.call_unary_handler(self.peer, DHTProtocol.STORE_NAME, request, dht_pb2.StoreResponse),
-                timeout=timeout)
-
-        async def rpc_find(self, request: dht_pb2.FindRequest,
-                           timeout: Optional[float] = None) -> dht_pb2.FindResponse:
-            return await asyncio.wait_for(
-                self.p2p.call_unary_handler(self.peer, DHTProtocol.FIND_NAME, request, dht_pb2.FindResponse),
-                timeout=timeout)
-
-    def _get_dht_stub(self, peer: Endpoint) -> DHTStub:
-        """ get a DHTStub that sends requests to a given peer """
-        stub = DHTProtocol.DHTStub(self.p2p, peer)
+    def get_stub(self, peer: Endpoint) -> AuthRPCWrapper:
+        """ get a stub that sends requests to a given peer """
+        stub = super().get_stub(self.p2p, peer)
         return AuthRPCWrapper(stub, AuthRole.CLIENT, self.authorizer, service_public_key=None)
 
     async def call_ping(self, peer: Endpoint, validate: bool = False, strict: bool = True) -> Optional[DHTID]:
@@ -133,7 +103,7 @@ class DHTProtocol:
             async with self.rpc_semaphore:
                 ping_request = dht_pb2.PingRequest(peer=self.node_info, validate=validate)
                 time_requested = get_dht_time()
-                response = await self._get_dht_stub(peer).rpc_ping(ping_request, timeout=self.wait_timeout)
+                response = await self.get_stub(peer).rpc_ping(ping_request, timeout=self.wait_timeout)
                 time_responded = get_dht_time()
         except Exception as e:
             logger.debug(f"DHTProtocol failed to ping {peer}: {e}")
@@ -161,7 +131,7 @@ class DHTProtocol:
         asyncio.create_task(self.update_routing_table(peer_id, peer, responded=responded))
         return peer_id
 
-    async def rpc_ping(self, request: dht_pb2.PingRequest, context: P2PContext):
+    async def rpc_ping(self, request: dht_pb2.PingRequest, context: P2PContext) -> dht_pb2.PingResponse:
         """ Some node wants us to add it to our routing table. """
 
         response = dht_pb2.PingResponse(peer=self.node_info,
@@ -224,7 +194,7 @@ class DHTProtocol:
                                              expiration_time=expiration_time, in_cache=in_cache, peer=self.node_info)
         try:
             async with self.rpc_semaphore:
-                response = await self._get_dht_stub(peer).rpc_store(store_request, timeout=self.wait_timeout)
+                response = await self.get_stub(peer).rpc_store(store_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
@@ -283,7 +253,7 @@ class DHTProtocol:
         find_request = dht_pb2.FindRequest(keys=list(map(DHTID.to_bytes, keys)), peer=self.node_info)
         try:
             async with self.rpc_semaphore:
-                response = await self._get_dht_stub(peer).rpc_find(find_request, timeout=self.wait_timeout)
+                response = await self.get_stub(peer).rpc_find(find_request, timeout=self.wait_timeout)
             if response.peer and response.peer.node_id:
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
