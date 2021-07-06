@@ -67,22 +67,11 @@ print(attendees)
 
 ```
 
+When training over the internet, some `dht.get/store` requests may run for hundreds of milliseconds and even seconds.
+To minimize wait time, you can call these requests asynchronously via 
+[`dht.store/get/run_coroutine(..., return_future=True)`__](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#hivemind.dht.DHT.get)
+. This will run the corresponding command in background and return a [Future-like](https://docs.python.org/3/library/concurrent.futures.html) object that can be awaited.
+Please also note that the returned future is compatible with asyncio (i.e. can be awaited inside event loop).
 
-For a more detailed explanation of DHT store/get and expiration time, please refer to the [documentation for DHT and DHTNode](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#dht-and-dhtnode)
+For a more details on DHT store/get and expiration time, please refer to the [documentation for DHT and DHTNode](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#dht-and-dhtnode)
 
-
-### Advanced usage
-#TODO REMOVE!!!
-# but mention that they are awaitable
-In addition to regular store/get, hivemind.DHT implements a number of features that are often useful in the context of
-decentralized training.
-
-* [`DHT.run_coroutine`](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#hivemind.dht.DHT.run_coroutine)
-  allows user to define a composite async function that contains multiple bulk store/get request. This function will then
-  be executed on DHT side with less overhead, than using multiple independent store/get request.
-* [`dht.store/get/run_coroutine(..., return_future=True)`__](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#hivemind.dht.DHT.get)
-  will run the corresponding command in background and return an awaitable Future-like object.
-* [`cache_locally / cache_refresh_before_expiry`](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#hivemind.dht.DHTNode.create)
-  if will cache existing keys locally and, if they were accessed from cache, re-fetch them in background a few seconds before
-  expiration. This trick allows DHT to ensure that frequently accessed keys are always available instantly. This option is
-  enabled by default.
