@@ -34,7 +34,9 @@ def sample_tensors(hid_size, num_layers):
 def benchmark_averaging(num_peers: int, target_group_size: int, num_rounds: int,
                         averaging_expiration: float, request_timeout: float, round_timeout: float,
                         hid_size: int, num_layers: int, spawn_dtime: float):
-    dht_root = hivemind.DHT(listen_on=f'{LOCALHOST}:*', start=True)
+    dht_root = hivemind.DHT(start=True)
+    initial_peers = dht_root.get_visible_maddrs()
+
     num_groups = 2 ** int(round(math.log2(num_peers / target_group_size)))
     nbits = int(round(math.log2(num_groups)))
     peer_tensors = [sample_tensors(hid_size, num_layers)
@@ -45,9 +47,7 @@ def benchmark_averaging(num_peers: int, target_group_size: int, num_rounds: int,
 
     def run_averager(index):
         nonlocal successful_steps, total_steps, lock_stats
-        dht = hivemind.DHT(listen_on=f'{LOCALHOST}:*',
-                           initial_peers=[f"{LOCALHOST}:{dht_root.port}"],
-                           start=True)
+        dht = hivemind.DHT(initial_peers=initial_peers, start=True)
         initial_bits = bin(index % num_groups)[2:].rjust(nbits, '0')
         averager = hivemind.averaging.DecentralizedAverager(
             peer_tensors[i], dht, prefix='my_tensor', initial_group_bits=initial_bits, listen_on=f"{LOCALHOST}:*",
