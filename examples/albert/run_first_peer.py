@@ -130,7 +130,7 @@ class CheckpointHandler:
         logger.info('Start uploading model to Hub')
         self.model.push_to_hub(repo_name=self.repo_path, repo_url=self.repo_url,
                                commit_message=f'Step {current_step}, loss {current_loss:.3f}')
-        logger.info('Finish uploading model to hub')
+        logger.info('Finish uploading model to Hub')
 
 
 if __name__ == '__main__':
