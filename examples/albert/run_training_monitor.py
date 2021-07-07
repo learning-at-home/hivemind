@@ -131,7 +131,7 @@ class CheckpointHandler:
         logger.info("Saving optimizer")
         torch.save(self.collaborative_optimizer.opt.state_dict(), f"{self.repo_path}/optimizer_state.pt")
         self.previous_timestamp = time.time()
-        logger.info('Start uploading model to hub')
+        logger.info('Start uploading model to Hub')
         self.model.push_to_hub(repo_name=self.repo_path, repo_url=self.repo_url,
                                commit_message=f'Step {current_step}, loss {current_loss:.3f}')
         logger.info('Finish uploading model to hub')
