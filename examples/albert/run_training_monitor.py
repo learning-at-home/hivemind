@@ -54,7 +54,7 @@ class CoordinatorArguments(BaseTrainingArguments):
     )
     repo_url: Optional[str] = field(
         default=None,
-        metadata={"help": "Url to HuggingFace repo in which coordinator will upload the model and optimizer states"}
+        metadata={"help": "URL to Hugging Face repository to which the coordinator will upload the model and optimizer states"}
     )
     upload_interval: Optional[float] = field(
         default=None,
