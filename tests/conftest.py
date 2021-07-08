@@ -6,7 +6,6 @@ from contextlib import suppress
 import psutil
 import pytest
 
-from hivemind.p2p import P2P
 from hivemind.utils import get_logger
 
 

@@ -1,6 +1,6 @@
 import asyncio
-import dataclasses
 import importlib
+from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Optional, Union
 
@@ -8,7 +8,7 @@ from hivemind.p2p.p2p_daemon import P2P, P2PContext
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
 
 
-@dataclasses.dataclass
+@dataclass
 class RPCHandler:
     method_name: str
     handle_name: str

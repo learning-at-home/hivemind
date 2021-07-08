@@ -98,7 +98,7 @@ class DHTNode:
           - None, if you want to create a new instance with default parameters and initial_peers (if defined)
 
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
-        :param initial_peers: connects to peers with these multiaddrs to populate routing table, defaults to no peers
+        :param initial_peers: multiaddrs of peers to populate the routing table, no peers by default
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
           either split in two buckets along the midpoint or reject the new node (but still save it as a replacement)
           Recommended value: k is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout

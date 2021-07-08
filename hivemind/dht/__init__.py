@@ -62,9 +62,9 @@ class DHT(mp.Process):
         super().__init__()
 
         self.p2p = p2p
-        assert (initial_peers is None or (isinstance(initial_peers, Sequence) and
-                                          all(isinstance(item, (Multiaddr, str)) for item in initial_peers))), \
-            'initial_peers should be of type Optional[Sequence[Union[Multiaddr, str]]]'
+        if not (initial_peers is None or (isinstance(initial_peers, Sequence) and
+                                          all(isinstance(item, (Multiaddr, str)) for item in initial_peers))):
+            raise TypeError('initial_peers should be of type Optional[Sequence[Union[Multiaddr, str]]]')
         self.initial_peers = initial_peers
         self.kwargs = kwargs
         self.max_workers = max_workers

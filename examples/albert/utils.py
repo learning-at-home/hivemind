@@ -1,11 +1,15 @@
 from typing import Dict, List, Tuple
 
+from multiaddr import Multiaddr
 from pydantic import BaseModel, StrictFloat, confloat, conint
 
-import hivemind
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import RecordValidatorBase
+from hivemind.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 class LocalMetrics(BaseModel):
@@ -33,6 +37,7 @@ class TextStyle:
     RESET = '\033[0m'
 
 
-def format_visible_maddrs(dht: hivemind.DHT) -> None:
-    initial_peers_str = ' '.join(str(addr) for addr in dht.get_visible_maddrs())
-    return f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers_str}{TextStyle.RESET}"
+def log_visible_maddrs(visible_maddrs: List[Multiaddr]) -> None:
+    initial_peers_str = ' '.join(str(addr) for addr in visible_maddrs)
+    logger.info(f"Running a DHT node. To connect, supply "
+                f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers_str}{TextStyle.RESET}")

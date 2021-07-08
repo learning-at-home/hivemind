@@ -295,8 +295,8 @@ def _server_runner(pipe, *args, **kwargs):
         return
 
     try:
-        visible_maddrs = server.dht.get_visible_maddrs() if server.dht is not None else None
-        pipe.send((True, (server.listen_on, visible_maddrs)))
+        dht_maddrs = server.dht.get_visible_maddrs() if server.dht is not None else None
+        pipe.send((True, (server.listen_on, dht_maddrs)))
         pipe.recv()  # wait for shutdown signal
 
     finally:

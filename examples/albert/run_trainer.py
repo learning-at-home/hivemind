@@ -228,7 +228,7 @@ def main():
                                 announce_maddrs=collaboration_args_dict.pop('announce_maddrs')),
                        listen=not collaboration_args_dict['client_mode'],
                        record_validators=validators)
-    logger.info(f'Running a DHT node. To connect, supply {utils.format_visible_maddrs(dht)}')
+    utils.log_visible_maddrs(dht.get_visible_maddrs())
 
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     statistics_expiration = collaboration_args_dict.pop('statistics_expiration')

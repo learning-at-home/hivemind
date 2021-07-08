@@ -153,7 +153,7 @@ if __name__ == '__main__':
                                 host_maddrs=coordinator_args.host_maddrs,
                                 announce_maddrs=coordinator_args.announce_maddrs),
                        record_validators=validators)
-    logger.info(f'Running a DHT node. To connect, supply {utils.format_visible_maddrs(dht)}')
+    utils.log_visible_maddrs(dht.get_visible_maddrs())
 
     if coordinator_args.wandb_project is not None:
         wandb.init(project=coordinator_args.wandb_project)

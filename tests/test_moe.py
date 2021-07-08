@@ -14,8 +14,8 @@ def test_moe():
     all_expert_uids = [f'ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
                        for _ in range(10)]
     with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='ffn', num_handlers=1,
-                           hidden_dim=16) as (server_endpoint, initial_peers):
-        dht = hivemind.DHT(start=True, initial_peers=initial_peers)
+                           hidden_dim=16) as (server_endpoint, dht_maddrs):
+        dht = hivemind.DHT(start=True, initial_peers=dht_maddrs)
 
         dmoe = hivemind.RemoteMixtureOfExperts(
             in_features=16, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix='ffn.')
@@ -30,8 +30,8 @@ def test_no_experts():
     all_expert_uids = [f'expert.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}'
                        for _ in range(10)]
     with background_server(expert_uids=all_expert_uids, device='cpu', expert_cls='nop_delay', num_handlers=1,
-                           hidden_dim=16) as (server_endpoint, initial_peers):
-        dht = hivemind.DHT(start=True, initial_peers=initial_peers)
+                           hidden_dim=16) as (server_endpoint, dht_maddrs):
+        dht = hivemind.DHT(start=True, initial_peers=dht_maddrs)
 
         dmoe = hivemind.RemoteSwitchMixtureOfExperts(
             in_features=16, grid_size=(4, 4, 4), dht=dht, uid_prefix='expert.', forward_timeout=0.1,

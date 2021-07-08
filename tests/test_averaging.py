@@ -147,9 +147,9 @@ def test_allreduce_compression():
 
     for compression_type_pair in [(FLOAT16, FLOAT16), (FLOAT16, UINT8), (UINT8, FLOAT16), (UINT8, UINT8)]:
         averager1 = hivemind.averaging.DecentralizedAverager([x.clone() for x in tensors1], dht=dht,
-                                                             compression_type=compression_type_pair, listen=False,
-                                                             target_group_size=2, prefix='mygroup',
-                                                             listen_on='127.0.0.1:*', start=True)
+                                                             compression_type=compression_type_pair,
+                                                             listen=False, target_group_size=2, prefix='mygroup',
+                                                             start=True)
         averager2 = hivemind.averaging.DecentralizedAverager([x.clone() for x in tensors2], dht=dht,
                                                              compression_type=compression_type_pair,
                                                              target_group_size=2, prefix='mygroup',
