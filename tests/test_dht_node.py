@@ -2,6 +2,7 @@ import asyncio
 import heapq
 import multiprocessing as mp
 import random
+import signal
 import threading
 from itertools import chain, product
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -41,13 +42,17 @@ def run_protocol_listener(dhtid: DHTID, maddr_conn: mp.connection.Connection,
 
     maddr_conn.send((p2p.id, maddrs))
 
+    async def shutdown():
+        await p2p.shutdown()
+        print(f"Finished peer id={protocol.node_id} maddrs={maddrs}", flush=True)
+        loop.stop()
+
+    loop.add_signal_handler(signal.SIGTERM, lambda: loop.create_task(shutdown()))
     loop.run_forever()
-    # TODO: Implement graceful shutdown, like wait_for_termination() in the original PR
-    # print(f"Finished peer id={protocol.node_id} maddrs={maddrs}", flush=True)
 
 
-# note: we run grpc-related tests in a separate process to re-initialize all global states from scratch
-# this helps us avoid undesirable side-effects (e.g. segfaults) when running multiple tests in sequence
+# note: we run network-related tests in a separate process to re-initialize all global states from scratch
+# this helps us avoid undesirable gRPC side-effects (e.g. segfaults) when running multiple tests in sequence
 
 
 @pytest.mark.forked
@@ -176,8 +181,12 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
 
     info_queue.put((node.node_id, node.endpoint, maddrs))
 
-    while True:
-        loop.run_forever()
+    async def shutdown():
+        await node.shutdown()
+        loop.stop()
+
+    loop.add_signal_handler(signal.SIGTERM, lambda: loop.create_task(shutdown()))
+    loop.run_forever()
 
 
 def launch_swarm_in_separate_processes(n_peers: int, n_sequential_peers: int) -> \
