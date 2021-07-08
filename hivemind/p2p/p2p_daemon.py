@@ -71,7 +71,7 @@ class P2P:
         self._server_stopped = asyncio.Event()
 
     @classmethod
-    async def create(cls, *args,
+    async def create(cls,
                      initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
                      use_ipfs: bool = False,
                      host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ('/ip4/127.0.0.1/tcp/0',),
@@ -82,7 +82,7 @@ class P2P:
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      quiet: bool = True,
-                     ping_n_retries: int = 5, ping_retry_delay: float = 0.4, **kwargs) -> 'P2P':
+                     ping_n_retries: int = 5, ping_retry_delay: float = 0.4) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
         :param initial_peers: List of bootstrap peers
@@ -102,8 +102,6 @@ class P2P:
         :param use_auto_relay: enables autorelay
         :param relay_hop_limit: sets the hop limit for hop relays
         :param quiet: make the daemon process quiet
-        :param args: positional CLI arguments for the p2p daemon
-        :param kwargs: keyword CLI arguments for the p2p daemon
         :return: a wrapper for the p2p daemon
         """
 
@@ -119,8 +117,7 @@ class P2P:
         self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f'p2pclient-{socket_uid}.sock')
 
         need_bootstrap = bool(initial_peers) or use_ipfs
-        process_kwargs = kwargs.copy()
-        process_kwargs.update(cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0}))
+        process_kwargs = cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0})
         process_kwargs.update(cls.FORCE_REACHABILITY_MAPPING.get(force_reachability, {}))
         for param, value in [('bootstrapPeers', initial_peers),
                              ('hostAddrs', host_maddrs),
@@ -129,7 +126,7 @@ class P2P:
                 process_kwargs[param] = self._maddrs_to_str(value)
 
         proc_args = self._make_process_args(
-            str(p2pd_path), *args,
+            str(p2pd_path),
             listen=self._daemon_listen_maddr,
             quic=quic, tls=tls, connManager=conn_manager,
             natPortMap=nat_port_map, autonat=auto_nat,

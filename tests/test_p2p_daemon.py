@@ -43,12 +43,6 @@ async def test_daemon_killed_on_del():
     assert not is_process_running(child_pid)
 
 
-@pytest.mark.asyncio
-async def test_error_for_wrong_daemon_arguments():
-    with pytest.raises(RuntimeError):
-        await P2P.create(unknown_argument=True)
-
-
 @pytest.mark.parametrize(
     'host_maddrs', [
         [Multiaddr('/ip4/127.0.0.1/tcp/0')],
