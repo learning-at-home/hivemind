@@ -93,8 +93,8 @@ class DHTNode:
             validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
         :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
-                    If None, DHTNode will create and manage its own P2P instance with given initial_peers and
-                    parameters from **kwargs
+          If None, DHTNode will create and manage its own P2P instance with given initial_peers and
+          parameters from **kwargs
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
         :param initial_peers: multiaddrs of peers to populate the routing table, no peers by default
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
@@ -127,9 +127,9 @@ class DHTNode:
           if False, this node will refuse any incoming request, effectively being only a "client"
         :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
         :param authorizer: instance of AuthorizerBase used for signing and validating requests and response
-                           for following some authorization protocol
+          for following some authorization protocol
         :param kwargs: extra parameters for an internally created instance of hivemind.p2p.P2P.
-                       Should be empty if the P2P instance is provided in the constructor
+          Should be empty if the P2P instance is provided in the constructor
         """
         self = cls(_initialized_with_create=True)
         self.node_id = node_id if node_id is not None else DHTID.generate()

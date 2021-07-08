@@ -42,13 +42,13 @@ class DHT(mp.Process):
     * trainers find most suitable experts via RemoteMixtureOfExperts (beam_search.py)
 
     :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
-                If None, DHTNode will create and manage its own P2P instance with given initial_peers and
-                parameters from **kwargs
+      If None, DHTNode will create and manage its own P2P instance with given initial_peers and
+      parameters from **kwargs
     :param initial_peers: one or multiple multiaddrs pointing to active DHT peers
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
     :param max_workers: declare_experts and get_experts will use up to this many parallel workers
-        (but no more than one per key)
+      (but no more than one per key)
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
     :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
     :param kwargs: any other params will be forwarded to DHTNode and hivemind.p2p.P2P upon creation
