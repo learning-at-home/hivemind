@@ -1,6 +1,4 @@
 import gc
-import glob
-import os
 from contextlib import suppress
 
 import psutil
@@ -28,9 +26,3 @@ def cleanup_children():
         for child in children:
             with suppress(psutil.NoSuchProcess):
                 child.kill()
-
-    unix_sockets = glob.glob('/tmp/hivemind-*')
-    if unix_sockets:
-        logger.info(f'Cleaning up {len(unix_sockets)} Unix sockets')
-        for path in unix_sockets:
-            os.remove(path)

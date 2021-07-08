@@ -1,5 +1,7 @@
 import asyncio
+import os
 import secrets
+from contextlib import suppress
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
@@ -390,6 +392,11 @@ class P2P:
             self._child.terminate()
             self._child.wait()
             logger.debug(f'Terminated p2pd with id = {self.id}')
+
+            with suppress(FileNotFoundError):
+                os.remove(self._daemon_listen_maddr['unix'])
+        with suppress(FileNotFoundError):
+            os.remove(self._client_listen_maddr['unix'])
 
     @staticmethod
     def _make_process_args(*args, **kwargs) -> List[str]:
