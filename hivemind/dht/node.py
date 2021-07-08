@@ -95,8 +95,9 @@ class DHTNode:
         :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
           If None, DHTNode will create and manage its own P2P instance with given initial_peers and
           parameters from **kwargs
-        :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
-        :param initial_peers: multiaddrs of peers to populate the routing table, no peers by default
+        :param node_id: current node's DHTID for hivemind.dht, determines which keys it will store locally,
+          defaults to random id
+        :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
           either split in two buckets along the midpoint or reject the new node (but still save it as a replacement)
           Recommended value: k is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout

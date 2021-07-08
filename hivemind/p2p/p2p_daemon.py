@@ -88,7 +88,8 @@ class P2P:
         :param initial_peers: List of bootstrap peers
         :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
         :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
-        :param announce_maddrs: Visible multiaddrs the host announces for external connections from other p2p instances
+        :param announce_maddrs: Visible multiaddrs that the peer will announce
+          for external connections from other p2p instances
         :param quic: Enables the QUIC transport
         :param tls: Enables TLS1.3 channel security protocol
         :param conn_manager: Enables the Connection Manager
@@ -189,6 +190,12 @@ class P2P:
         logger.debug(f'Launched p2pd with id = {self.id}, host multiaddrs = {self._visible_maddrs}')
 
     async def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
+        """
+        Get multiaddrs of the current peer that should be accessible by other peers.
+
+        :param latest: ask the P2P daemon to refresh the visible multiaddrs
+        """
+
         if latest:
             _, self._visible_maddrs = await self._client.identify()
 

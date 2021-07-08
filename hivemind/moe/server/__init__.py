@@ -100,7 +100,7 @@ class Server(threading.Thread):
         :param clip_grad_norm: maximum gradient norm used for clipping
 
         :param no_dht: if specified, the server will not be attached to a dht
-        :param initial_peers: a list of multiaddrs that will introduce this node to the dht, default = no peers
+        :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
 
         :param dht_port:  DHT node will listen on this port, default = find open port
            You can then use this node as initial peer for subsequent servers.

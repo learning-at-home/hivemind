@@ -44,7 +44,7 @@ class DHT(mp.Process):
     :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
       If None, DHTNode will create and manage its own P2P instance with given initial_peers and
       parameters from **kwargs
-    :param initial_peers: one or multiple multiaddrs pointing to active DHT peers
+    :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
     :param max_workers: declare_experts and get_experts will use up to this many parallel workers
@@ -221,6 +221,12 @@ class DHT(mp.Process):
         node.protocol.record_validator.extend(record_validators)
 
     def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
+        """
+        Get multiaddrs of the current DHT node that should be accessible by other peers.
+
+        :param latest: ask the P2P daemon to refresh the visible multiaddrs
+        """
+
         return self.run_coroutine(partial(DHT._get_visible_maddrs, latest=latest))
 
     async def _get_visible_maddrs(self, node: DHTNode, latest: bool = False) -> List[Multiaddr]:
