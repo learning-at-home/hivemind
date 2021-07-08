@@ -23,7 +23,6 @@ class DHTProtocol(Servicer):
     # fmt:off
     p2p: P2P
     node_id: DHTID; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
-    channel_options: Tuple[Tuple[str, Any]]
     storage: DHTLocalStorage; cache: DHTLocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
     record_validator: Optional[RecordValidatorBase]
     # fmt:on
@@ -36,8 +35,7 @@ class DHTProtocol(Servicer):
             cls, p2p: P2P, node_id: DHTID, bucket_size: int, depth_modulo: int, num_replicas: int, wait_timeout: float,
             parallel_rpc: Optional[int] = None, cache_size: Optional[int] = None,
             listen=True, record_validator: Optional[RecordValidatorBase] = None,
-            authorizer: Optional[AuthorizerBase] = None,
-            channel_options: Sequence[Tuple[str, Any]] = ()) -> DHTProtocol:
+            authorizer: Optional[AuthorizerBase] = None) -> DHTProtocol:
         """
         A protocol that allows DHT nodes to request keys/neighbors from other DHT nodes.
         As a side-effect, DHTProtocol also maintains a routing table as described in
@@ -53,7 +51,7 @@ class DHTProtocol(Servicer):
         self = cls(_initialized_with_create=True)
         self.p2p = p2p
         self.node_id, self.bucket_size, self.num_replicas = node_id, bucket_size, num_replicas
-        self.wait_timeout, self.channel_options = wait_timeout, tuple(channel_options)
+        self.wait_timeout = wait_timeout
         self.storage, self.cache = DHTLocalStorage(), DHTLocalStorage(maxsize=cache_size)
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.rpc_semaphore = asyncio.Semaphore(parallel_rpc if parallel_rpc is not None else float('inf'))

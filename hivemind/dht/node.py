@@ -18,6 +18,7 @@ from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.dht.traverse import traverse_dht
 from hivemind.p2p import P2P, PeerID as Endpoint
 from hivemind.utils import MSGPackSerializer, get_logger, SerializerBase
+from hivemind.utils.auth import AuthorizerBase
 from hivemind.utils.timed_storage import DHTExpiration, TimedStorage, ValueWithExpiration
 
 logger = get_logger(__name__)
@@ -88,6 +89,7 @@ class DHTNode:
             blacklist_time: float = 5.0, backoff_rate: float = 2.0,
             listen: bool = True,
             record_validator: Optional[RecordValidatorBase] = None,
+            authorizer: Optional[AuthorizerBase] = None,
             validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
         :param p2p: one of the following:
@@ -128,6 +130,8 @@ class DHTNode:
         :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
           if False, this node will refuse any incoming request, effectively being only a "client"
         :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
+        :param authorizer: instance of AuthorizerBase used for signing and validating requests and response
+                           for following some authorization protocol
         :param kwargs: extra parameters for DHTProtocol
         """
         self = cls(_initialized_with_create=True)
@@ -162,7 +166,7 @@ class DHTNode:
 
         self.protocol = await DHTProtocol.create(
             p2p, self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
-            parallel_rpc, cache_size, listen, record_validator, **kwargs)
+            parallel_rpc, cache_size, listen, record_validator, authorizer)
         self.endpoint = p2p.id
 
         if initial_peers:
