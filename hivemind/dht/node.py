@@ -79,7 +79,7 @@ class DHTNode:
     @classmethod
     async def create(
             cls,
-            p2p: Optional[Union[P2P, Dict[str, Any]]] = None,
+            p2p: Optional[P2P] = None,
             node_id: Optional[DHTID] = None,
             initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
@@ -92,13 +92,9 @@ class DHTNode:
             authorizer: Optional[AuthorizerBase] = None,
             validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
-        :param p2p: one of the following:
-
-          - an existing instance of hivemind.p2p.P2P that will be used for communication
-          - a dictionary of parameters, if you want to create a new instance with these parameters
-            (initial_peers will be added to the parameters automatically)
-          - None, if you want to create a new instance with default parameters and initial_peers (if defined)
-
+        :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
+                    If None, DHTNode will create and manage its own P2P instance with given initial_peers and
+                    parameters from **kwargs
         :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
         :param initial_peers: multiaddrs of peers to populate the routing table, no peers by default
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
@@ -132,7 +128,8 @@ class DHTNode:
         :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
         :param authorizer: instance of AuthorizerBase used for signing and validating requests and response
                            for following some authorization protocol
-        :param kwargs: extra parameters for DHTProtocol
+        :param kwargs: extra parameters for an internally created instance of hivemind.p2p.P2P.
+                       Should be empty if the P2P instance is provided in the constructor
         """
         self = cls(_initialized_with_create=True)
         self.node_id = node_id if node_id is not None else DHTID.generate()
@@ -151,17 +148,18 @@ class DHTNode:
         self.cache_refresh_evt = asyncio.Event()
         self.cache_refresh_task = None
 
-        if isinstance(p2p, P2P):
-            self._should_shutdown_p2p = False
-        elif p2p is None or isinstance(p2p, dict):
-            p2p_kwargs = {} if p2p is None else p2p
-            if not p2p_kwargs.get('use_ipfs'):
-                p2p_kwargs['initial_peers'] = initial_peers
-            p2p = await P2P.create(**p2p_kwargs)
+        if p2p is None:
+            if not kwargs.get('use_ipfs'):
+                kwargs['initial_peers'] = initial_peers
+            p2p = await P2P.create(**kwargs)
             self._should_shutdown_p2p = True
         else:
-            raise TypeError(
-                'DHTNode.create() expects the `p2p` argument to be a hivemind.p2p.P2P instance, dict, or None')
+            if kwargs:
+                raise ValueError(
+                    f'**kwargs in DHTNode.create() should be empty if hivemind.p2p.P2P instance is provided'
+                    f'in the constructor. Got kwargs = {kwargs} instead. '
+                    f'You may have a typo in a DHTNode.create() parameter name')
+            self._should_shutdown_p2p = False
         self.p2p = p2p
 
         self.protocol = await DHTProtocol.create(

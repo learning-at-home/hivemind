@@ -223,11 +223,11 @@ def main():
         collaboration_args_dict['experiment_prefix'])
     dht = hivemind.DHT(start=True,
                        initial_peers=collaboration_args_dict.pop('initial_peers'),
-                       p2p=dict(use_ipfs=collaboration_args_dict.pop('use_ipfs'),
-                                host_maddrs=collaboration_args_dict.pop('host_maddrs'),
-                                announce_maddrs=collaboration_args_dict.pop('announce_maddrs')),
                        listen=not collaboration_args_dict['client_mode'],
-                       record_validators=validators)
+                       record_validators=validators,
+                       use_ipfs=collaboration_args_dict.pop('use_ipfs'),
+                       host_maddrs=collaboration_args_dict.pop('host_maddrs'),
+                       announce_maddrs=collaboration_args_dict.pop('announce_maddrs'))
     utils.log_visible_maddrs(dht.get_visible_maddrs())
 
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps

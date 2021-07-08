@@ -149,10 +149,10 @@ if __name__ == '__main__':
     validators, local_public_key = utils.make_validators(experiment_prefix)
     dht = hivemind.DHT(start=True,
                        initial_peers=coordinator_args.initial_peers,
-                       p2p=dict(use_ipfs=coordinator_args.use_ipfs,
-                                host_maddrs=coordinator_args.host_maddrs,
-                                announce_maddrs=coordinator_args.announce_maddrs),
-                       record_validators=validators)
+                       record_validators=validators
+                       use_ipfs=coordinator_args.use_ipfs,
+                       host_maddrs=coordinator_args.host_maddrs,
+                       announce_maddrs=coordinator_args.announce_maddrs)
     utils.log_visible_maddrs(dht.get_visible_maddrs())
 
     if coordinator_args.wandb_project is not None:
