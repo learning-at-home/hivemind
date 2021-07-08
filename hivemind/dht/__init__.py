@@ -43,7 +43,7 @@ class DHT(mp.Process):
 
     :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
       If None, DHTNode will create and manage its own P2P instance with given initial_peers and
-      parameters from **kwargs
+      parameters from ``kwargs``
     :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
