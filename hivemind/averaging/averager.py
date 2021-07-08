@@ -107,7 +107,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  auxiliary: bool = False, allow_state_sharing: Optional[bool] = None,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', daemon: bool = True,
                  announced_host: Optional[str] = None,
-                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None,
+                 channel_options: Sequence[Tuple[str, Any]] = (),
                  shutdown_timeout: float = 5, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
