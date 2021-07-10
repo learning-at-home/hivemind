@@ -41,7 +41,7 @@ def launch_swarm_in_separate_processes(n_peers: int, n_sequential_peers: int) ->
     info_queue = mp.Queue()
     info_lock = mp.RLock()
 
-    for i in range(n_sequential_peers):
+    for _ in range(n_sequential_peers):
         initial_peers = random.choice(swarm_maddrs) if swarm_maddrs else []
 
         proc = mp.Process(target=run_node, args=(initial_peers, info_queue), daemon=True)
@@ -65,7 +65,7 @@ def launch_swarm_in_separate_processes(n_peers: int, n_sequential_peers: int) ->
     collect_thread = threading.Thread(target=collect_info)
     collect_thread.start()
 
-    for i in range(n_peers - n_sequential_peers):
+    for _ in range(n_peers - n_sequential_peers):
         with info_lock:
             initial_peers = random.choice(swarm_maddrs)
 

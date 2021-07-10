@@ -184,7 +184,7 @@ def test_dht_node():
     assert len(nearest) == 1 and nearest[me.node_id] == me.endpoint
 
     # test 2: find others
-    for i in range(10):
+    for _ in range(10):
         ref_endpoint, query_id = random.choice(list(dht.items()))
         nearest = loop.run_until_complete(me.find_nearest_nodes([query_id], k_nearest=1))[query_id]
         assert len(nearest) == 1
@@ -196,7 +196,7 @@ def test_dht_node():
     jaccard_numerator = jaccard_denominator = 0  # jaccard similarity aka intersection over union
     all_node_ids = list(dht.values())
 
-    for i in range(10):
+    for _ in range(10):
         query_id = DHTID.generate()
         k_nearest = random.randint(1, 10)
         exclude_self = random.random() > 0.5
@@ -221,9 +221,9 @@ def test_dht_node():
         jaccard_denominator += k_nearest
 
     accuracy = accuracy_numerator / accuracy_denominator
-    logger.info(f"Top-1 accuracy: {accuracy}")  # should be 98-100%
+    logger.debug(f"Top-1 accuracy: {accuracy}")  # should be 98-100%
     jaccard_index = jaccard_numerator / jaccard_denominator
-    logger.info(f"Jaccard index (intersection over union): {jaccard_index}")  # should be 95-100%
+    logger.debug(f"Jaccard index (intersection over union): {jaccard_index}")  # should be 95-100%
     assert accuracy >= 0.9, f"Top-1 accuracy only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
     assert jaccard_index >= 0.9, f"Jaccard index only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
 
