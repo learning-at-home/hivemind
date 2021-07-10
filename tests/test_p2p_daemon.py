@@ -1,6 +1,5 @@
 import asyncio
 import multiprocessing as mp
-import socket
 import subprocess
 from functools import partial
 from typing import List
@@ -14,7 +13,6 @@ from hivemind.p2p import P2P, P2PHandlerError
 from hivemind.proto import dht_pb2, runtime_pb2
 from hivemind.utils import MSGPackSerializer
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
-from hivemind.utils.networking import find_open_port
 
 
 def is_process_running(pid: int) -> bool:

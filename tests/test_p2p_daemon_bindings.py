@@ -11,7 +11,7 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, St
 from hivemind.p2p.p2p_daemon_bindings.utils import (ControlFailure, raise_if_failed, read_pbmsg_safe,
                                                     read_unsigned_varint, write_pbmsg, write_unsigned_varint)
 from hivemind.proto import p2pd_pb2 as p2pd_pb
-from test_utils import make_p2pd_pair_ip4, connect_safe
+from test_utils.p2p_daemon import make_p2pd_pair_ip4, connect_safe
 
 
 def test_raise_if_failed_raises():

@@ -3,9 +3,8 @@ import heapq
 import multiprocessing as mp
 import random
 import signal
-import threading
 from itertools import product
-from typing import Dict, List, Optional, Tuple
+from typing import List, Sequence, Tuple
 
 import numpy as np
 import pytest
@@ -13,11 +12,12 @@ from multiaddr import Multiaddr
 
 import hivemind
 from hivemind import get_dht_time
-from hivemind.dht.node import DHTID, Endpoint, DHTNode
+from hivemind.dht.node import DHTID, DHTNode
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.p2p import P2P, PeerID
 from hivemind.utils.logging import get_logger
+from test_utils.dht_swarms import launch_swarm_in_separate_processes, launch_star_shaped_swarm
 
 
 logger = get_logger(__name__)
@@ -28,30 +28,40 @@ def maddrs_to_peer_ids(maddrs: List[Multiaddr]) -> List[PeerID]:
 
 
 def run_protocol_listener(dhtid: DHTID, maddr_conn: mp.connection.Connection,
-                          initial_peers: Optional[List[Multiaddr]] = None):
+                          initial_peers: Sequence[Multiaddr]) -> None:
     loop = asyncio.get_event_loop()
 
     p2p = loop.run_until_complete(P2P.create(initial_peers=initial_peers))
-    maddrs = loop.run_until_complete(p2p.get_visible_maddrs())
+    visible_maddrs = loop.run_until_complete(p2p.get_visible_maddrs())
 
     protocol = loop.run_until_complete(DHTProtocol.create(
         p2p, dhtid, bucket_size=20, depth_modulo=5, num_replicas=3, wait_timeout=5))
 
-    logger.info(f"Started peer id={protocol.node_id} maddrs={maddrs}")
+    logger.info(f"Started peer id={protocol.node_id} visible_maddrs={visible_maddrs}")
 
-    if initial_peers is not None:
-        for endpoint in maddrs_to_peer_ids(initial_peers):
-            loop.run_until_complete(protocol.call_ping(endpoint))
+    for endpoint in maddrs_to_peer_ids(initial_peers):
+        loop.run_until_complete(protocol.call_ping(endpoint))
 
-    maddr_conn.send((p2p.id, maddrs))
+    maddr_conn.send((p2p.id, visible_maddrs))
 
     async def shutdown():
         await p2p.shutdown()
-        logger.info(f"Finished peer id={protocol.node_id} maddrs={maddrs}")
+        logger.info(f"Finished peer id={protocol.node_id} maddrs={visible_maddrs}")
         loop.stop()
 
     loop.add_signal_handler(signal.SIGTERM, lambda: loop.create_task(shutdown()))
     loop.run_forever()
+
+
+def launch_protocol_listener(initial_peers: Sequence[Multiaddr] = ()) -> \
+        Tuple[DHTID, mp.Process, PeerID, List[Multiaddr]]:
+    remote_conn, local_conn = mp.Pipe()
+    dht_id = DHTID.generate()
+    process = mp.Process(target=run_protocol_listener, args=(dht_id, remote_conn, initial_peers), daemon=True)
+    process.start()
+    peer_id, visible_maddrs = local_conn.recv()
+
+    return dht_id, process, peer_id, visible_maddrs
 
 
 # note: we run network-related tests in a separate process to re-initialize all global states from scratch
@@ -60,20 +70,8 @@ def run_protocol_listener(dhtid: DHTID, maddr_conn: mp.connection.Connection,
 
 @pytest.mark.forked
 def test_dht_protocol():
-    # create the first peer
-    remote_conn, local_conn = mp.Pipe()
-    peer1_id = DHTID.generate()
-    peer1_proc = mp.Process(target=run_protocol_listener, args=(peer1_id, remote_conn), daemon=True)
-    peer1_proc.start()
-    peer1_endpoint, peer1_maddrs = local_conn.recv()
-
-    # create another peer that connects to the first peer
-    remote_conn, local_conn = mp.Pipe()
-    peer2_id = DHTID.generate()
-    peer2_proc = mp.Process(target=run_protocol_listener, args=(peer2_id, remote_conn), daemon=True,
-                            kwargs={'initial_peers': peer1_maddrs})
-    peer2_proc.start()
-    peer2_endpoint, peer2_maddrs = local_conn.recv()
+    peer1_id, peer1_proc, peer1_endpoint, peer1_maddrs = launch_protocol_listener()
+    peer2_id, peer2_proc, peer2_endpoint, _ = launch_protocol_listener(initial_peers=peer1_maddrs)
 
     loop = asyncio.get_event_loop()
     for listen in [False, True]:  # note: order matters, this test assumes that first run uses listen=False
@@ -142,11 +140,7 @@ def test_dht_protocol():
 @pytest.mark.forked
 def test_empty_table():
     """ Test RPC methods with empty routing table """
-    remote_conn, local_conn = mp.Pipe()
-    peer_id = DHTID.generate()
-    peer_proc = mp.Process(target=run_protocol_listener, args=(peer_id, remote_conn), daemon=True)
-    peer_proc.start()
-    peer_endpoint, peer_maddrs = local_conn.recv()
+    peer_id, peer_proc, peer_endpoint, peer_maddrs = launch_protocol_listener()
 
     loop = asyncio.get_event_loop()
     p2p = loop.run_until_complete(P2P.create(initial_peers=peer_maddrs))
@@ -171,74 +165,6 @@ def test_empty_table():
     assert loop.run_until_complete(protocol.call_ping(peer_endpoint)) == peer_id
     assert loop.run_until_complete(protocol.call_ping(PeerID.from_base58('fakeid'))) is None
     peer_proc.terminate()
-
-
-def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
-    if asyncio.get_event_loop().is_running():
-        asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
-        asyncio.set_event_loop(asyncio.new_event_loop())
-    loop = asyncio.get_event_loop()
-
-    node = loop.run_until_complete(DHTNode.create(initial_peers=initial_peers))
-    maddrs = loop.run_until_complete(node.get_visible_maddrs())
-
-    info_queue.put((node.node_id, node.endpoint, maddrs))
-
-    async def shutdown():
-        await node.shutdown()
-        loop.stop()
-
-    loop.add_signal_handler(signal.SIGTERM, lambda: loop.create_task(shutdown()))
-    loop.run_forever()
-
-
-def launch_swarm_in_separate_processes(n_peers: int, n_sequential_peers: int) -> \
-        Tuple[List[mp.Process], Dict[Endpoint, DHTID], List[List[Multiaddr]]]:
-    assert n_sequential_peers < n_peers, \
-        'Parameters imply that first n_sequential_peers of n_peers will be run sequentially'
-
-    processes = []
-    dht = {}
-    swarm_maddrs = []
-
-    info_queue = mp.Queue()
-    info_lock = mp.RLock()
-
-    for i in range(n_sequential_peers):
-        initial_peers = random.choice(swarm_maddrs) if swarm_maddrs else []
-
-        proc = mp.Process(target=run_node, args=(initial_peers, info_queue), daemon=True)
-        proc.start()
-        processes.append(proc)
-
-        node_id, peer_endpoint, peer_maddrs = info_queue.get()
-        dht[peer_endpoint] = node_id
-        swarm_maddrs.append(peer_maddrs)
-
-    def collect_info():
-        while True:
-            node_id, peer_endpoint, peer_maddrs = info_queue.get()
-            with info_lock:
-                dht[peer_endpoint] = node_id
-                swarm_maddrs.append(peer_maddrs)
-
-                if len(dht) == n_peers:
-                    break
-
-    collect_thread = threading.Thread(target=collect_info)
-    collect_thread.start()
-
-    for i in range(n_peers - n_sequential_peers):
-        with info_lock:
-            initial_peers = random.choice(swarm_maddrs)
-
-        proc = mp.Process(target=run_node, args=(initial_peers, info_queue), daemon=True)
-        proc.start()
-        processes.append(proc)
-
-    collect_thread.join()
-
-    return processes, dht, swarm_maddrs
 
 
 @pytest.mark.forked
@@ -367,14 +293,6 @@ def test_dht_node():
         proc.terminate()
     # The nodes don't own their hivemind.p2p.P2P instances, so we shutdown them separately
     loop.run_until_complete(asyncio.wait([node.shutdown() for node in [me, detached_node, that_guy]]))
-
-
-async def launch_star_shaped_swarm(n_peers: int, **kwargs) -> List[DHTNode]:
-    nodes = [await DHTNode.create(**kwargs)]
-    initial_peers = await nodes[0].get_visible_maddrs()
-    nodes += await asyncio.gather(*[DHTNode.create(initial_peers=initial_peers, **kwargs)
-                                    for _ in range(n_peers - 1)])
-    return nodes
 
 
 @pytest.mark.forked

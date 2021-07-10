@@ -49,8 +49,8 @@ def choose_ip_address(maddrs: Sequence[Multiaddr],
         for protocol in protocol_priority:
             for addr in maddrs:
                 if protocol in addr.protocols():
-                    value = addr[protocol]
-                    if ip_address(value).is_global == need_global:
-                        return value
+                    value_for_protocol = addr[protocol]
+                    if ip_address(value_for_protocol).is_global == need_global:
+                        return value_for_protocol
 
     raise ValueError(f'No IP address found among given multiaddrs: {maddrs}')
