@@ -65,8 +65,8 @@ message FindResult {
   double expiration_time = 3;          // n/a  | expiration time  | DictionaryDHTValue.latest_expiration_time
 
   // two aligned arrays: DHTIDs and Endpoints for nearest peers (sorted by XOR distance)
-  repeated bytes nearest_node_ids = 4;      // DHTIDs serialized with node_id.to_bytes()
-  repeated string nearest_endpoints = 5;    // e.g. 123.123.123.123:1337 or [2a21:6с8:b192:2105]:8888
+  repeated bytes nearest_node_ids = 4;      // DHTIDs of the nearest peers serialized with node_id.to_bytes()
+  repeated string nearest_endpoints = 5;    // Base58-serialized libp2p PeerIDs of the nearest peers
 }
 
 message FindResponse {

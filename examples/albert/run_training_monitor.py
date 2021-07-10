@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import subprocess
 import time
 from dataclasses import asdict, dataclass, field
 from ipaddress import ip_address

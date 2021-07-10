@@ -81,7 +81,7 @@ class DHTProtocol(Servicer):
     async def call_ping(self, peer: Endpoint, validate: bool = False, strict: bool = True) -> Optional[DHTID]:
         """
         Get peer's node id and add him to the routing table. If peer doesn't respond, return None
-        :param peer: string network address, e.g. 123.123.123.123:1337 or [2a21:6с8:b192:2105]:8888
+        :param peer: peer ID to ping
         :param validate: if True, validates that node's endpoint is available
         :param strict: if strict=True, validation will raise exception on fail, otherwise it will only warn
         :note: if DHTProtocol was created with listen=True, also request peer to add you to his routing table
