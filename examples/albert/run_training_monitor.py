@@ -30,7 +30,8 @@ class CoordinatorArguments(BaseTrainingArguments):
     """
     use_google_dns: bool = field(
         default=False,
-        metadata={"help": "Use Google DNS to determine our public IP address (and add it to --announce_maddrs)"}
+        metadata={"help":
+            "Use Google DNS to determine the public IP address of this machine (and add it to --announce_maddrs)"}
     )
     refresh_period: float = field(
         default=30,
@@ -141,7 +142,7 @@ if __name__ == '__main__':
 
     if coordinator_args.use_google_dns:
         address = get_ip(GoogleDnsProvider)
-        logger.info(f"Google DNS responds that our IP address is {address}")
+        logger.info(f"Received public IP address of this machine from Google DNS: {address}")
         version = ip_address(address).version
         coordinator_args.announce_maddrs += [f'/ip{version}/{address}/tcp/0', f'/ip{version}/{address}/udp/0/quic']
 
@@ -149,7 +150,7 @@ if __name__ == '__main__':
     validators, local_public_key = utils.make_validators(experiment_prefix)
     dht = hivemind.DHT(start=True,
                        initial_peers=coordinator_args.initial_peers,
-                       record_validators=validators
+                       record_validators=validators,
                        use_ipfs=coordinator_args.use_ipfs,
                        host_maddrs=coordinator_args.host_maddrs,
                        announce_maddrs=coordinator_args.announce_maddrs)
