@@ -12,6 +12,7 @@ import uuid
 import weakref
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import asdict
+from ipaddress import ip_address
 from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
 
 import grpc
@@ -30,6 +31,7 @@ from hivemind.utils import Endpoint, Port, MPFuture, get_logger, TensorDescripto
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, split_for_streaming, combine_from_streaming
+from hivemind.utils.networking import choose_ip_address, strip_port
 from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
 
@@ -68,6 +70,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param listen: if True (default), this averager will accept incoming requests from other peers and perform allreduce
             if False, the averager will register as a freeloader and attempt to fetch vectors from other averagers
     :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
+    :param announced_host: visible IP address the averager will announce for external connections from other peers.
+          If None, the address will be chosen from p2p.get_visible_maddrs() (global IPv4 addresses are preferred)
     :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
           see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
     :param kwargs: extra parameters forwarded to grpc.aio.server
@@ -102,7 +106,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                  throughput: Optional[float] = None, min_vector_size: int = 0,
                  auxiliary: bool = False, allow_state_sharing: Optional[bool] = None,
                  listen: bool = True, listen_on: Endpoint = '0.0.0.0:*', daemon: bool = True,
-                 channel_options: Optional[Sequence[Tuple[str, Any]]] = None,
+                 announced_host: Optional[str] = None,
+                 channel_options: Sequence[Tuple[str, Any]] = (),
                  shutdown_timeout: float = 5, **kwargs):
         assert '.' not in prefix, "group prefix must be a string without trailing '.'"
         assert throughput is None or (throughput >= 0 and np.isfinite(np.float32(throughput))), \
@@ -122,6 +127,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         else:
             self.mode = AveragingMode.NODE
 
+        if announced_host is None:
+            announced_host = self._choose_announced_host()
+        self.announced_host = announced_host
         self.channel_options = channel_options
         self.daemon = daemon
 
@@ -163,6 +171,17 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if start:
             self.run_in_background(await_ready=True)
 
+    def _choose_announced_host(self) -> Hostname:
+        announced_host = strip_port(self.listen_on).strip('[]')  # Stripping square brackets for IPv6
+        if ip_address(announced_host) not in [ip_address('0.0.0.0'), ip_address('::')]:
+            return announced_host
+
+        maddrs = self.dht.get_visible_maddrs()
+        announced_host = choose_ip_address(maddrs)
+        logger.info(f'Choosing IP {announced_host} as endpoint for DecentralizedAverager '
+                    f'from visible multiaddrs {maddrs}')
+        return announced_host
+
     @property
     def port(self) -> Optional[Port]:
         return self._port.value if self._port.value != 0 else None
@@ -183,7 +202,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     def endpoint(self) -> Optional[Endpoint]:
         if self.listen and self._averager_endpoint is None:
             assert self.port is not None, "Averager is not running yet"
-            self._averager_endpoint = f"{self.dht.get_visible_address()}:{self.port}"
+            self._averager_endpoint = f"{self.announced_host}:{self.port}"
             logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
         return self._averager_endpoint
 
@@ -499,7 +518,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     logger.info(f"Downloading parameters from peer {peer}")
                     stream = None
                     try:
-                        stub = ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
+                        stub = ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True,
+                                                     options=self.channel_options)
                         stream = stub.rpc_download_state(averaging_pb2.DownloadRequest())
                         current_tensor_parts, tensors = [], []
                         async for message in stream:

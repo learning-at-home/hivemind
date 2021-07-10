@@ -1,23 +1,24 @@
 #!/usr/bin/env python
 
-from dataclasses import dataclass, field, asdict
-import subprocess
+import logging
 import time
+from dataclasses import asdict, dataclass, field
+from ipaddress import ip_address
 from typing import Optional
 
 import torch
+import wandb
 from torch_optimizer import Lamb
 from transformers import AlbertForPreTraining, AlbertConfig, HfArgumentParser
-import wandb
-from whatsmyip.providers import GoogleDnsProvider
 from whatsmyip.ip import get_ip
+from whatsmyip.providers import GoogleDnsProvider
 
-from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
 import hivemind
-from hivemind.utils.logging import get_logger
-import metrics_utils
+import utils
+from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
 
-logger = get_logger(__name__)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -27,10 +28,10 @@ class CoordinatorArguments(BaseTrainingArguments):
     new workers still can join the collaboration via alive initial peers' addresses.
     Specify initial_peers argument for that purpose
     """
-    address: Optional[str] = field(
-        default=None,
-        metadata={"help": "This machine's network address. Use public IP for global experiments, "
-                          "local address for private runs"}
+    use_google_dns: bool = field(
+        default=False,
+        metadata={"help":
+            "Use Google DNS to determine the public IP address of this machine (and add it to --announce_maddrs)"}
     )
     refresh_period: float = field(
         default=30,
@@ -141,17 +142,21 @@ if __name__ == '__main__':
     parser = HfArgumentParser((CoordinatorArguments, CollaborativeOptimizerArguments, AveragerArguments))
     coordinator_args, collab_optimizer_args, averager_args = parser.parse_args_into_dataclasses()
 
-    if coordinator_args.address is None:
-        logger.warning("No address specified. Attempting to infer address from DNS.")
-        coordinator_args.address = get_ip(GoogleDnsProvider)
+    if coordinator_args.use_google_dns:
+        address = get_ip(GoogleDnsProvider)
+        logger.info(f"Received public IP address of this machine from Google DNS: {address}")
+        version = ip_address(address).version
+        coordinator_args.announce_maddrs += [f'/ip{version}/{address}/tcp/0', f'/ip{version}/{address}/udp/0/quic']
 
     experiment_prefix = coordinator_args.experiment_prefix
-    validators, local_public_key = metrics_utils.make_validators(experiment_prefix)
-    dht = hivemind.DHT(start=True, listen_on=coordinator_args.dht_listen_on,
-                       endpoint=f"{coordinator_args.address}:*", initial_peers=coordinator_args.initial_peers,
-                       record_validators=validators)
-
-    logger.info(f"Running DHT root at {coordinator_args.address}:{dht.port}")
+    validators, local_public_key = utils.make_validators(experiment_prefix)
+    dht = hivemind.DHT(start=True,
+                       initial_peers=coordinator_args.initial_peers,
+                       record_validators=validators,
+                       use_ipfs=coordinator_args.use_ipfs,
+                       host_maddrs=coordinator_args.host_maddrs,
+                       announce_maddrs=coordinator_args.announce_maddrs)
+    utils.log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=coordinator_args.use_ipfs)
 
     if coordinator_args.wandb_project is not None:
         wandb.init(project=coordinator_args.wandb_project)
@@ -164,7 +169,7 @@ if __name__ == '__main__':
         metrics_dict = dht.get(experiment_prefix + '_metrics', latest=True)
         if metrics_dict is not None:
             metrics_dict = metrics_dict.value
-            metrics = [metrics_utils.LocalMetrics.parse_obj(metrics_dict[peer].value)
+            metrics = [utils.LocalMetrics.parse_obj(metrics_dict[peer].value)
                        for peer in metrics_dict]
             latest_step = max(item.step for item in metrics)
             if latest_step != current_step:
@@ -186,6 +191,7 @@ if __name__ == '__main__':
                     num_samples += item.samples_accumulated
                     sum_mini_steps += item.mini_steps
                 current_loss = sum_loss / sum_mini_steps
+                logger.info(f"Step #{current_step}\tloss = {current_loss:.5f}")
 
                 if coordinator_args.wandb_project is not None:
                     wandb.log({
@@ -200,6 +206,5 @@ if __name__ == '__main__':
                         checkpoint_handler.save_state(current_step)
                         if checkpoint_handler.is_time_to_upload():
                             checkpoint_handler.upload_checkpoint(current_loss)
-                    logger.info(f"Step #{current_step}\tloss = {current_loss:.5f}")
         logger.debug("Peer is still alive...")
         time.sleep(coordinator_args.refresh_period)

@@ -73,12 +73,12 @@ async def test_valid_request_and_response():
     service_authorizer = MockAuthorizer(RSAPrivateKey())
 
     request = dht_pb2.PingRequest()
-    request.peer.endpoint = '127.0.0.1:7777'
+    request.peer.node_id = b'ping'
     await client_authorizer.sign_request(request, service_authorizer.local_public_key)
     assert await service_authorizer.validate_request(request)
 
     response = dht_pb2.PingResponse()
-    response.sender_endpoint = '127.0.0.1:31337'
+    response.peer.node_id = b'pong'
     await service_authorizer.sign_response(response, request)
     assert await client_authorizer.validate_response(response, request)
 
@@ -89,7 +89,7 @@ async def test_invalid_access_token():
     service_authorizer = MockAuthorizer(RSAPrivateKey())
 
     request = dht_pb2.PingRequest()
-    request.peer.endpoint = '127.0.0.1:7777'
+    request.peer.node_id = b'ping'
     await client_authorizer.sign_request(request, service_authorizer.local_public_key)
 
     # Break the access token signature
@@ -98,7 +98,7 @@ async def test_invalid_access_token():
     assert not await service_authorizer.validate_request(request)
 
     response = dht_pb2.PingResponse()
-    response.sender_endpoint = '127.0.0.1:31337'
+    response.peer.node_id = b'pong'
     await service_authorizer.sign_response(response, request)
 
     # Break the access token signature
@@ -113,20 +113,20 @@ async def test_invalid_signatures():
     service_authorizer = MockAuthorizer(RSAPrivateKey())
 
     request = dht_pb2.PingRequest()
-    request.peer.endpoint = '127.0.0.1:7777'
+    request.peer.node_id = b'true-ping'
     await client_authorizer.sign_request(request, service_authorizer.local_public_key)
 
     # A man-in-the-middle attacker changes the request content
-    request.peer.endpoint = '127.0.0.2:7777'
+    request.peer.node_id = b'fake-ping'
 
     assert not await service_authorizer.validate_request(request)
 
     response = dht_pb2.PingResponse()
-    response.sender_endpoint = '127.0.0.1:31337'
+    response.peer.node_id = b'true-pong'
     await service_authorizer.sign_response(response, request)
 
     # A man-in-the-middle attacker changes the response content
-    response.sender_endpoint = '127.0.0.2:31337'
+    response.peer.node_id = b'fake-pong'
 
     assert not await client_authorizer.validate_response(response, request)
 
@@ -135,11 +135,11 @@ async def test_invalid_signatures():
 async def test_auth_rpc_wrapper():
     class Servicer:
         async def rpc_increment(self, request: dht_pb2.PingRequest) -> dht_pb2.PingResponse:
-            assert request.peer.endpoint == '127.0.0.1:1111'
+            assert request.peer.node_id == b'ping'
             assert request.auth.client_access_token.username == 'alice'
 
             response = dht_pb2.PingResponse()
-            response.sender_endpoint = '127.0.0.1:2222'
+            response.peer.node_id = b'pong'
             return response
 
     class Client:
@@ -153,9 +153,9 @@ async def test_auth_rpc_wrapper():
     client = AuthRPCWrapper(Client(servicer), AuthRole.CLIENT, MockAuthorizer(RSAPrivateKey(), 'alice'))
 
     request = dht_pb2.PingRequest()
-    request.peer.endpoint = '127.0.0.1:1111'
+    request.peer.node_id = b'ping'
 
     response = await client.rpc_increment(request)
 
-    assert response.sender_endpoint == '127.0.0.1:2222'
+    assert response.peer.node_id == b'pong'
     assert response.auth.service_access_token.username == 'bob'

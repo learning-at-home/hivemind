@@ -1,9 +1,11 @@
 import asyncio
+import os
 import secrets
+from contextlib import suppress
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import google.protobuf
 from multiaddr import Multiaddr
@@ -32,9 +34,10 @@ class P2PContext(object):
 class P2P:
     """
     This class is responsible for establishing peer-to-peer connections through NAT and/or firewalls.
-    It creates and manages a libp2p daemon in a background process, then terminates it when P2P is shut down.
-    In order to communicate, a P2P instance should either use one or more bootstrap_peers that will connect it
-    to the rest of the swarm or use the public IPFS network (https://ipfs.io).
+    It creates and manages a libp2p daemon (https://libp2p.io) in a background process,
+    then terminates it when P2P is shut down. In order to communicate, a P2P instance should
+    either use one or more initial_peers that will connect it to the rest of the swarm or
+    use the public IPFS network (https://ipfs.io).
 
     For incoming connections, P2P instances add RPC handlers that may be accessed by other peers:
       - `P2P.add_unary_handler` accepts a protobuf message and returns another protobuf
@@ -58,6 +61,7 @@ class P2P:
         'public': {'forceReachabilityPublic': 1},
         'private': {'forceReachabilityPrivate': 1},
     }
+    _UNIX_SOCKET_PREFIX = '/unix/tmp/hivemind-'
 
     def __init__(self):
         self.id = None
@@ -67,17 +71,25 @@ class P2P:
         self._server_stopped = asyncio.Event()
 
     @classmethod
-    async def create(cls, *args, quic: bool = False, tls: bool = True, conn_manager: bool = True,
+    async def create(cls,
+                     initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
+                     use_ipfs: bool = False,
+                     host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ('/ip4/127.0.0.1/tcp/0',),
+                     announce_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = None,
+                     quic: bool = True, tls: bool = True, conn_manager: bool = True,
                      dht_mode: str = 'dht_server', force_reachability: Optional[str] = None,
                      nat_port_map: bool = True, auto_nat: bool = True,
-                     bootstrap_peers: Optional[List[Multiaddr]] = None, use_ipfs: bool = False,
-                     host_maddrs: Optional[List[Multiaddr]] = None,
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      quiet: bool = True,
-                     ping_n_retries: int = 3, ping_retry_delay: float = 0.4, **kwargs) -> 'P2P':
+                     ping_n_attempts: int = 5, ping_delay: float = 0.4) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
+        :param initial_peers: List of bootstrap peers
+        :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
+        :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
+        :param announce_maddrs: Visible multiaddrs that the peer will announce
+          for external connections from other p2p instances
         :param quic: Enables the QUIC transport
         :param tls: Enables TLS1.3 channel security protocol
         :param conn_manager: Enables the Connection Manager
@@ -85,59 +97,58 @@ class P2P:
         :param force_reachability: Force reachability mode (public/private)
         :param nat_port_map: Enables NAT port mapping
         :param auto_nat: Enables the AutoNAT service
-        :param bootstrap: Connects to bootstrap peers and bootstraps the dht if enabled
-        :param bootstrap_peers: List of bootstrap peers
-        :param use_ipfs: Bootstrap to IPFS (works only if bootstrap=True and bootstrap_peers=None)
-        :param host_maddrs: multiaddresses for external connections from other p2p instances
         :param use_relay: enables circuit relay
         :param use_relay_hop: enables hop for relay
         :param use_relay_discovery: enables passive discovery for relay
         :param use_auto_relay: enables autorelay
         :param relay_hop_limit: sets the hop limit for hop relays
         :param quiet: make the daemon process quiet
-        :param args: positional CLI arguments for the p2p daemon
-        :param kwargs: keyword CLI arguments for the p2p daemon
+        :param ping_n_attempts: try to ping the daemon with this number of attempts after starting it
+        :param ping_delay: wait for ``ping_delay * (2 ** (k - 1))`` seconds before the k-th attempt to ping the daemon
+          (in particular, wait for ``ping_delay`` seconds before the first attempt)
         :return: a wrapper for the p2p daemon
         """
 
-        assert not (bootstrap_peers and use_ipfs), \
-            'User-defined bootstrap_peers and use_ipfs=True are incompatible, please choose one option'
+        assert not (initial_peers and use_ipfs), \
+            'User-defined initial_peers and use_ipfs=True are incompatible, please choose one option'
 
         self = cls()
         with path(cli, P2PD_FILENAME) as p:
             p2pd_path = p
 
         socket_uid = secrets.token_urlsafe(8)
-        self._daemon_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pd-{socket_uid}.sock')
-        self._client_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pclient-{socket_uid}.sock')
+        self._daemon_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f'p2pd-{socket_uid}.sock')
+        self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f'p2pclient-{socket_uid}.sock')
 
-        need_bootstrap = bool(bootstrap_peers) or use_ipfs
-        bootstrap_peers = cls._make_bootstrap_peers(bootstrap_peers)
-        dht = cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0})
-        force_reachability = cls.FORCE_REACHABILITY_MAPPING.get(force_reachability, {})
-        host_maddrs = {'hostAddrs': ','.join(str(maddr) for maddr in host_maddrs)} if host_maddrs else {}
+        need_bootstrap = bool(initial_peers) or use_ipfs
+        process_kwargs = cls.DHT_MODE_MAPPING.get(dht_mode, {'dht': 0})
+        process_kwargs.update(cls.FORCE_REACHABILITY_MAPPING.get(force_reachability, {}))
+        for param, value in [('bootstrapPeers', initial_peers),
+                             ('hostAddrs', host_maddrs),
+                             ('announceAddrs', announce_maddrs)]:
+            if value:
+                process_kwargs[param] = self._maddrs_to_str(value)
+
         proc_args = self._make_process_args(
-            str(p2pd_path), *args,
+            str(p2pd_path),
             listen=self._daemon_listen_maddr,
             quic=quic, tls=tls, connManager=conn_manager,
             natPortMap=nat_port_map, autonat=auto_nat,
             relay=use_relay, relayHop=use_relay_hop, relayDiscovery=use_relay_discovery,
             autoRelay=use_auto_relay, relayHopLimit=relay_hop_limit,
-            b=need_bootstrap, q=quiet, **{**bootstrap_peers, **dht, **force_reachability, **host_maddrs, **kwargs})
+            b=need_bootstrap, q=quiet, **process_kwargs)
 
-        self._initialize(proc_args)
-        await self._ping_daemon_with_retries(ping_n_retries, ping_retry_delay)
-
-        return self
-
-    def _initialize(self, proc_args: List[str]) -> None:
         self._child = Popen(args=proc_args, encoding="utf8")
         self._alive = True
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
-    async def _ping_daemon_with_retries(self, ping_n_retries: int, ping_retry_delay: float) -> None:
-        for try_number in range(ping_n_retries):
-            await asyncio.sleep(ping_retry_delay * (2 ** try_number))
+        await self._ping_daemon_with_retries(ping_n_attempts, ping_delay)
+
+        return self
+
+    async def _ping_daemon_with_retries(self, ping_n_attempts: int, ping_delay: float) -> None:
+        for try_number in range(ping_n_attempts):
+            await asyncio.sleep(ping_delay * (2 ** try_number))
 
             if self._child.poll() is not None:  # Process died
                 break
@@ -146,8 +157,8 @@ class P2P:
                 await self._ping_daemon()
                 break
             except Exception as e:
-                if try_number == ping_n_retries - 1:
-                    logger.error(f'Failed to ping p2pd: {e}')
+                if try_number == ping_n_attempts - 1:
+                    logger.exception('Failed to ping p2pd that has just started')
                     await self.shutdown()
                     raise
 
@@ -170,7 +181,7 @@ class P2P:
 
         socket_uid = secrets.token_urlsafe(8)
         self._daemon_listen_maddr = daemon_listen_maddr
-        self._client_listen_maddr = Multiaddr(f'/unix/tmp/hivemind-p2pclient-{socket_uid}.sock')
+        self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f'p2pclient-{socket_uid}.sock')
 
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
@@ -178,16 +189,24 @@ class P2P:
         return self
 
     async def _ping_daemon(self) -> None:
-        self.id, maddrs = await self._client.identify()
-        logger.debug(f'Launched p2pd with id = {self.id}, host multiaddrs = {maddrs}')
+        self.id, self._visible_maddrs = await self._client.identify()
+        logger.debug(f'Launched p2pd with id = {self.id}, host multiaddrs = {self._visible_maddrs}')
 
-    async def identify_maddrs(self) -> List[Multiaddr]:
-        _, maddrs = await self._client.identify()
-        if not maddrs:
+    async def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
+        """
+        Get multiaddrs of the current peer that should be accessible by other peers.
+
+        :param latest: ask the P2P daemon to refresh the visible multiaddrs
+        """
+
+        if latest:
+            _, self._visible_maddrs = await self._client.identify()
+
+        if not self._visible_maddrs:
             raise ValueError(f"No multiaddrs found for peer {self.id}")
 
         p2p_maddr = Multiaddr(f'/p2p/{self.id.to_base58()}')
-        return [addr.encapsulate(p2p_maddr) for addr in maddrs]
+        return [addr.encapsulate(p2p_maddr) for addr in self._visible_maddrs]
 
     async def list_peers(self) -> List[PeerInfo]:
         return list(await self._client.list_peers())
@@ -282,13 +301,14 @@ class P2P:
                 try:
                     request, err = await P2P.receive_protobuf(in_proto_type, reader)
                 except asyncio.IncompleteReadError:
-                    logger.debug('Incomplete read while receiving request from peer')
+                    logger.debug(f'Incomplete read while receiving request from peer in {handle_name}')
                     return
                 except google.protobuf.message.DecodeError as error:
-                    logger.debug(f'Failed to decode request protobuf: {error}')
+                    logger.debug(f'Failed to decode request protobuf '
+                                 f'of type {in_proto_type} in {handle_name}: {error}')
                     return
                 if err is not None:
-                    logger.debug(f'Got an error instead of a request: {err}')
+                    logger.debug(f'Got an error instead of a request in {handle_name}: {err}')
 
                 context = P2PContext(handle_name=handle_name, local_id=self.id,
                                      remote_id=stream_info.peer_id, remote_maddr=stream_info.addr)
@@ -303,12 +323,10 @@ class P2P:
                     error = p2pd_pb2.RPCError(message=str(exc))
                     await P2P.send_protobuf(error, p2pd_pb2.RPCError, writer)
                 finally:
-                    pending_task = pending.pop()
-                    pending_task.cancel()
-                    try:
-                        await pending_task
-                    except asyncio.CancelledError:
-                        pass
+                    if pending:
+                        for task in pending:
+                            task.cancel()
+                        await asyncio.wait(pending)
             finally:
                 writer.close()
 
@@ -382,6 +400,11 @@ class P2P:
             self._child.wait()
             logger.debug(f'Terminated p2pd with id = {self.id}')
 
+            with suppress(FileNotFoundError):
+                os.remove(self._daemon_listen_maddr['unix'])
+        with suppress(FileNotFoundError):
+            os.remove(self._client_listen_maddr['unix'])
+
     @staticmethod
     def _make_process_args(*args, **kwargs) -> List[str]:
         proc_args = []
@@ -401,11 +424,8 @@ class P2P:
         return val
 
     @staticmethod
-    def _make_bootstrap_peers(maddrs: Optional[List[Multiaddr]]) -> Dict[str, str]:
-        if maddrs is None:
-            return {}
-
-        return {'bootstrapPeers': ','.join(str(addr) for addr in maddrs)}
+    def _maddrs_to_str(maddrs: List[Multiaddr]) -> str:
+        return ','.join(str(addr) for addr in maddrs)
 
 
 class P2PInterruptedError(Exception):

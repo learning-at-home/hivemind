@@ -15,18 +15,19 @@ The code is organized as follows:
 from __future__ import annotations
 
 import asyncio
-import ctypes
 import multiprocessing as mp
 import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Iterable, Optional, Sequence, Union, Callable, Awaitable, TypeVar
+from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, TypeVar, Union
 
-from hivemind.dht.node import DHTNode, DHTID
-from hivemind.dht.routing import DHTValue, DHTKey, Subkey
+from multiaddr import Multiaddr
+
+from hivemind.dht.node import DHTID, DHTNode
+from hivemind.dht.routing import DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
-from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, DHTExpiration
-from hivemind.utils.networking import Hostname, Endpoint, strip_port
+from hivemind.p2p import P2P
+from hivemind.utils import DHTExpiration, MPFuture, ValueWithExpiration, await_cancelled, get_logger, switch_to_uvloop
 
 logger = get_logger(__name__)
 
@@ -39,27 +40,39 @@ class DHT(mp.Process):
     * hivemind servers periodically announce their experts via declare_experts (dht_handler.py)
     * trainers find most suitable experts via RemoteMixtureOfExperts (beam_search.py)
 
-    :param initial_peers: one or multiple endpoints pointing to active DHT peers. Similar format to listen_on.
-    :param listen_on: an interface for incoming connections, e.g. "127.0.0.1:*", "0.0.0.0:1234" or "ipv6:[::]:*"
+    :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
+      If None, DHTNode will create and manage its own P2P instance with given initial_peers and
+      parameters from ``kwargs``
+    :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
     :param max_workers: declare_experts and get_experts will use up to this many parallel workers
-        (but no more than one per key)
+      (but no more than one per key)
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
+    :param record_validators: instances of RecordValidatorBase used for signing and validating stored records.
+      The validators will be combined using the CompositeValidator class. It merges them when possible
+      (according to their `.merge_with()` policies) and orders them according to the `.priority` properties.
     :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
-    :param kwargs: any other params will be forwarded to DHTNode upon creation
+    :param kwargs: any other params will be forwarded to DHTNode and hivemind.p2p.P2P upon creation
     """
     _node: DHTNode
 
-    def __init__(self, listen_on: Endpoint = "0.0.0.0:*", initial_peers: Sequence[Endpoint] = (), *, start: bool,
-                 daemon: bool = True, max_workers: Optional[int] = None, parallel_rpc: Optional[int] = None,
-                 record_validators: Iterable[RecordValidatorBase] = (), shutdown_timeout: float = 3, **kwargs):
+    def __init__(self, p2p: Optional[P2P] = None,
+                 initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
+                 *, start: bool, daemon: bool = True, max_workers: Optional[int] = None,
+                 record_validators: Iterable[RecordValidatorBase] = (),
+                 shutdown_timeout: float = 3, **kwargs):
         super().__init__()
-        assert not isinstance(initial_peers, str), "please specify a list/tuple of initial peers (even if there's one)"
-        self.listen_on, self.initial_peers, self.kwargs = listen_on, initial_peers, kwargs
-        self.max_workers, self.parallel_rpc = max_workers, parallel_rpc
+
+        self.p2p = p2p
+        if not (initial_peers is None or (isinstance(initial_peers, Sequence) and
+                                          all(isinstance(item, (Multiaddr, str)) for item in initial_peers))):
+            raise TypeError('initial_peers should be of type Optional[Sequence[Union[Multiaddr, str]]]')
+        self.initial_peers = initial_peers
+        self.kwargs = kwargs
+        self.max_workers = max_workers
+
         self._record_validator = CompositeValidator(record_validators)
-        self._port = mp.Value(ctypes.c_int32, 0)  # initialized after dht starts
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)
         self.shutdown_timeout = shutdown_timeout
         self.ready = mp.Event()
@@ -74,11 +87,9 @@ class DHT(mp.Process):
         with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
             async def _run():
                 self._node = await DHTNode.create(
-                    initial_peers=list(self.initial_peers), listen_on=self.listen_on, parallel_rpc=self.parallel_rpc,
+                    p2p=self.p2p, initial_peers=self.initial_peers,
                     num_workers=self.max_workers or 1, record_validator=self._record_validator,
                     **self.kwargs)
-                if self._node.port is not None:
-                    self._port.value = self._node.port
                 self.ready.set()
 
                 while True:
@@ -108,15 +119,9 @@ class DHT(mp.Process):
             if self.is_alive():
                 logger.warning("DHT did not shut down within the grace period; terminating it the hard way.")
                 self.terminate()
-        else:
-            logger.warning("DHT shutdown has no effect: dht process is already not alive")
 
     async def _shutdown(self):
         await self._node.shutdown()
-
-    @property
-    def port(self) -> Optional[int]:
-        return self._port.value if self._port.value != 0 else None
 
     def get(self, key: DHTKey, latest: bool = False, return_future: bool = False, **kwargs
             ) -> Union[Optional[ValueWithExpiration[DHTValue]], MPFuture]:
@@ -216,58 +221,17 @@ class DHT(mp.Process):
             self, node: DHTNode, record_validators: Iterable[RecordValidatorBase]) -> None:
         node.protocol.record_validator.extend(record_validators)
 
-    def get_visible_address(self, num_peers: Optional[int] = None, peers: Sequence[Endpoint] = ()) -> Hostname:
+    def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
         """
-        Get this machine's visible address by requesting other peers or using pre-specified network addresses.
-        If no parameters are specified, this function will check for manual endpoint; if unavailable, ask 1 random peer.
+        Get multiaddrs of the current DHT node that should be accessible by other peers.
 
-        :param num_peers: if specified, ask multiple peers and check that they perceive the same endpoint
-        :param peers: if specified, ask these exact peers instead of choosing random known peers
-        :note: if this node has no known peers in routing table, one must specify :peers: manually
+        :param latest: ask the P2P daemon to refresh the visible multiaddrs
         """
-        assert num_peers is None or peers == (), "please specify either a num_peers or the list of peers, not both"
-        assert not isinstance(peers, str) and isinstance(peers, Sequence), "Please send a list / tuple of endpoints"
-        future = MPFuture()
-        self._outer_pipe.send(('_get_visible_address', [], dict(num_peers=num_peers, peers=peers, future=future)))
-        return future.result()
 
-    async def _get_visible_address(self, num_peers: Optional[int], peers: Sequence[Endpoint],
-                                   future: Optional[MPFuture]):
-        if not peers and (num_peers or not self._node.protocol.node_info.endpoint):
-            # if we can't resolve the endpoint locally, ask one random peer
-            peers_and_endpoints = self._node.protocol.routing_table.get_nearest_neighbors(
-                DHTID.generate(), num_peers or 1, exclude=self._node.node_id)
-            peers = tuple(endpoint for node_id, endpoint in peers_and_endpoints)
+        return self.run_coroutine(partial(DHT._get_visible_maddrs, latest=latest))
 
-        chosen_address = None
-        if peers:
-            possible_endpoints: Sequence[Optional[Endpoint]] = await asyncio.gather(*(
-                self._node.protocol.get_outgoing_request_endpoint(peer) for peer in peers))
-
-            for endpoint in possible_endpoints:
-                if endpoint is None:
-                    continue
-                address = strip_port(endpoint)
-                if chosen_address is not None and address != chosen_address:
-                    logger.warning("At least two peers returned different visible addresses for this node:"
-                                   f"{address} and {chosen_address} (keeping the former one)")
-                else:
-                    chosen_address = address
-
-            if chosen_address is None:
-                logger.warning(f"None of the selected peers responded with an address ({peers})")
-
-        if self._node.protocol.node_info.endpoint:
-            address = strip_port(self._node.protocol.node_info.endpoint)
-            if chosen_address is not None and address != chosen_address:
-                logger.warning(f"Node was manually given endpoint {address} , but other peers report {chosen_address}")
-            chosen_address = chosen_address or address
-
-        if chosen_address:
-            future.set_result(chosen_address)
-        else:
-            future.set_exception(ValueError(f"Can't get address: DHT node has no peers and no public endpoint."
-                                            f" Please ensure the node is connected or specify peers=... manually."))
+    async def _get_visible_maddrs(self, node: DHTNode, latest: bool = False) -> List[Multiaddr]:
+        return await node.get_visible_maddrs(latest=latest)
 
     def __del__(self):
         if self._parent_pid == os.getpid() and self.is_alive():

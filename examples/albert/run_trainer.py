@@ -18,8 +18,8 @@ from transformers.trainer import Trainer
 from torch_optimizer import Lamb
 
 import hivemind
+import utils
 from arguments import CollaborationArguments, DatasetArguments, AlbertTrainingArguments
-import metrics_utils
 
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
                 self.last_reported_collaboration_step = self.collaborative_optimizer.local_step
                 self.total_samples_processed += self.samples
                 samples_per_second = self.collaborative_optimizer.performance_ema.samples_per_second
-                statistics = metrics_utils.LocalMetrics(
+                statistics = utils.LocalMetrics(
                     step=self.collaborative_optimizer.local_step,
                     samples_per_second=samples_per_second,
                     samples_accumulated=self.samples,
@@ -219,13 +219,16 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
-    validators, local_public_key = metrics_utils.make_validators(
+    validators, local_public_key = utils.make_validators(
         collaboration_args_dict['experiment_prefix'])
-    dht = hivemind.DHT(
-        start=True, initial_peers=collaboration_args_dict.pop('initial_peers'),
-        listen=not collaboration_args_dict['client_mode'],
-        listen_on=collaboration_args_dict.pop('dht_listen_on'),
-        endpoint=collaboration_args_dict.pop('endpoint'), record_validators=validators)
+    dht = hivemind.DHT(start=True,
+                       initial_peers=collaboration_args_dict.pop('initial_peers'),
+                       listen=not collaboration_args_dict['client_mode'],
+                       record_validators=validators,
+                       use_ipfs=collaboration_args_dict['use_ipfs'],
+                       host_maddrs=collaboration_args_dict.pop('host_maddrs'),
+                       announce_maddrs=collaboration_args_dict.pop('announce_maddrs'))
+    utils.log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=collaboration_args_dict.pop('use_ipfs'))
 
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     if torch.cuda.device_count() != 0:

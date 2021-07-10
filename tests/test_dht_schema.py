@@ -1,12 +1,14 @@
-import pytest
-from pydantic import BaseModel, StrictInt, conint
+import asyncio
 from typing import Dict
 
+import pytest
+from pydantic import BaseModel, StrictInt, conint
+
 import hivemind
-from hivemind.utils.timed_storage import get_dht_time
-from hivemind.dht.node import DHTNode, LOCALHOST
+from hivemind.dht.node import DHTNode
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
+from hivemind.utils.timed_storage import get_dht_time
 
 
 class SampleSchema(BaseModel):
@@ -20,9 +22,10 @@ async def dht_nodes_with_schema():
     validator = SchemaValidator(SampleSchema)
 
     alice = await DHTNode.create(record_validator=validator)
-    bob = await DHTNode.create(
-        record_validator=validator, initial_peers=[f"{LOCALHOST}:{alice.port}"])
-    return alice, bob
+    bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.get_visible_maddrs())
+    yield alice, bob
+
+    await asyncio.gather(alice.shutdown(), bob.shutdown())
 
 
 @pytest.mark.forked
@@ -108,8 +111,7 @@ async def test_keys_outside_schema(dht_nodes_with_schema):
         assert validator.merge_with(SchemaValidator(MergedSchema, allow_extra_keys=False))
 
         alice = await DHTNode.create(record_validator=validator)
-        bob = await DHTNode.create(
-            record_validator=validator, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+        bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.get_visible_maddrs())
 
         store_ok = await bob.store('unknown_key', b'foo_bar', get_dht_time() + 10)
         assert store_ok == allow_extra_keys
@@ -131,8 +133,7 @@ async def test_prefix():
     validator = SchemaValidator(Schema, allow_extra_keys=False, prefix='prefix')
 
     alice = await DHTNode.create(record_validator=validator)
-    bob = await DHTNode.create(
-        record_validator=validator, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+    bob = await DHTNode.create(record_validator=validator, initial_peers=await alice.get_visible_maddrs())
 
     assert await bob.store('prefix_field', 777, get_dht_time() + 10)
     assert not await bob.store('prefix_field', 'string_value', get_dht_time() + 10)
@@ -141,6 +142,8 @@ async def test_prefix():
     for peer in [alice, bob]:
         assert (await peer.get('prefix_field', latest=True)).value == 777
         assert (await peer.get('field', latest=True)) is None
+
+    await asyncio.gather(alice.shutdown(), bob.shutdown())
 
 
 @pytest.mark.forked
@@ -188,7 +191,7 @@ async def test_merging_schema_validators(dht_nodes_with_schema):
 @pytest.mark.forked
 def test_sending_validator_instance_between_processes():
     alice = hivemind.DHT(start=True)
-    bob = hivemind.DHT(start=True, initial_peers=[f"{LOCALHOST}:{alice.port}"])
+    bob = hivemind.DHT(start=True, initial_peers=alice.get_visible_maddrs())
 
     alice.add_validators([SchemaValidator(SampleSchema)])
     bob.add_validators([SchemaValidator(SampleSchema)])
@@ -196,3 +199,6 @@ def test_sending_validator_instance_between_processes():
     assert bob.store('experiment_name', b'foo_bar', get_dht_time() + 10)
     assert not bob.store('experiment_name', 777, get_dht_time() + 10)
     assert alice.get('experiment_name', latest=True).value == b'foo_bar'
+
+    alice.shutdown()
+    bob.shutdown()

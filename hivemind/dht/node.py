@@ -6,8 +6,10 @@ import random
 from collections import defaultdict, Counter
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Optional, Tuple, List, Dict, DefaultDict, Collection, Union, Set, Awaitable, Callable, Any
+from typing import (Any, Awaitable, Callable, Collection, DefaultDict, Dict, List, Optional, Sequence, Set, Tuple,
+                    Type, Union)
 
+from multiaddr import Multiaddr
 from sortedcontainers import SortedSet
 
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
@@ -15,8 +17,10 @@ from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.dht.traverse import traverse_dht
-from hivemind.utils import Endpoint, LOCALHOST, MSGPackSerializer, get_logger, SerializerBase, DHTExpiration
-from hivemind.utils.timed_storage import TimedStorage, ValueWithExpiration
+from hivemind.p2p import P2P, PeerID as Endpoint
+from hivemind.utils import MSGPackSerializer, get_logger, SerializerBase
+from hivemind.utils.auth import AuthorizerBase
+from hivemind.utils.timed_storage import DHTExpiration, TimedStorage, ValueWithExpiration
 
 logger = get_logger(__name__)
 
@@ -66,7 +70,7 @@ class DHTNode:
 
     """
     # fmt:off
-    node_id: DHTID; is_alive: bool; port: int; num_replicas: int; num_workers: int; protocol: DHTProtocol
+    node_id: DHTID; is_alive: bool; endpoint: Endpoint; num_replicas: int; num_workers: int; protocol: DHTProtocol
     chunk_size: int; refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
     cache_on_store: bool; reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedSet[_SearchState]]
     cache_refresh_task: Optional[asyncio.Task]; cache_refresh_evt: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
@@ -75,18 +79,26 @@ class DHTNode:
 
     @classmethod
     async def create(
-            cls, node_id: Optional[DHTID] = None, initial_peers: List[Endpoint] = (),
+            cls,
+            p2p: Optional[P2P] = None,
+            node_id: Optional[DHTID] = None,
+            initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
             bucket_size: int = 20, num_replicas: int = 5, depth_modulo: int = 5, parallel_rpc: int = None,
             wait_timeout: float = 3, refresh_timeout: Optional[float] = None, bootstrap_timeout: Optional[float] = None,
             cache_locally: bool = True, cache_nearest: int = 1, cache_size=None, cache_refresh_before_expiry: float = 5,
             cache_on_store: bool = True, reuse_get_requests: bool = True, num_workers: int = 1, chunk_size: int = 16,
             blacklist_time: float = 5.0, backoff_rate: float = 2.0,
-            listen: bool = True, listen_on: Endpoint = "0.0.0.0:*", endpoint: Optional[Endpoint] = None,
+            listen: bool = True,
             record_validator: Optional[RecordValidatorBase] = None,
+            authorizer: Optional[AuthorizerBase] = None,
             validate: bool = True, strict: bool = True, **kwargs) -> DHTNode:
         """
-        :param node_id: current node's identifier, determines which keys it will store locally, defaults to random id
-        :param initial_peers: connects to these peers to populate routing table, defaults to no peers
+        :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
+          If None, DHTNode will create and manage its own P2P instance with given initial_peers and
+          parameters from ``kwargs``
+        :param node_id: current node's DHTID for hivemind.dht, determines which keys it will store locally,
+          defaults to random id
+        :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
         :param bucket_size: max number of nodes in one k-bucket (k). Trying to add {k+1}st node will cause a bucket to
           either split in two buckets along the midpoint or reject the new node (but still save it as a replacement)
           Recommended value: k is chosen s.t. any given k nodes are very unlikely to all fail after staleness_timeout
@@ -115,11 +127,11 @@ class DHTNode:
         :param strict: if True, any error encountered in validation will interrupt the creation of DHTNode
         :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
           if False, this node will refuse any incoming request, effectively being only a "client"
-        :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
-        :param endpoint: if specified, this is peer's preferred public endpoint. Otherwise let peers infer endpoint
-        :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
-          see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
-        :param kwargs: extra parameters used in grpc.aio.server
+        :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
+        :param authorizer: instance of AuthorizerBase used for signing and validating requests and response
+          for a given authorization protocol
+        :param kwargs: extra parameters for an internally created instance of hivemind.p2p.P2P.
+          Should be empty if the P2P instance is provided in the constructor
         """
         self = cls(_initialized_with_create=True)
         self.node_id = node_id if node_id is not None else DHTID.generate()
@@ -138,12 +150,28 @@ class DHTNode:
         self.cache_refresh_evt = asyncio.Event()
         self.cache_refresh_task = None
 
-        self.protocol = await DHTProtocol.create(self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
-                                                 parallel_rpc, cache_size, listen, listen_on, endpoint,
-                                                 record_validator, **kwargs)
-        self.port = self.protocol.port
+        if p2p is None:
+            if not kwargs.get('use_ipfs'):
+                kwargs['initial_peers'] = initial_peers
+            p2p = await P2P.create(**kwargs)
+            self._should_shutdown_p2p = True
+        else:
+            if kwargs:
+                raise ValueError(
+                    f'**kwargs in DHTNode.create() should be empty if hivemind.p2p.P2P instance is provided'
+                    f'in the constructor. Got kwargs = {kwargs} instead. '
+                    f'You may have a typo in a DHTNode.create() parameter name')
+            self._should_shutdown_p2p = False
+        self.p2p = p2p
+
+        self.protocol = await DHTProtocol.create(
+            p2p, self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
+            parallel_rpc, cache_size, listen, record_validator, authorizer)
+        self.endpoint = p2p.id
 
         if initial_peers:
+            initial_peers = {Endpoint.from_base58(Multiaddr(item)['p2p']) for item in initial_peers}
+
             # stage 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
             start_time = get_dht_time()
@@ -182,11 +210,11 @@ class DHTNode:
         assert _initialized_with_create, " Please use DHTNode.create coroutine to spawn new node instances "
         super().__init__()
 
-    async def shutdown(self, timeout=None):
+    async def shutdown(self):
         """ Process existing requests, close all connections and stop the server """
         self.is_alive = False
-        if self.protocol.server:
-            await self.protocol.shutdown(timeout)
+        if self._should_shutdown_p2p:
+            await self.p2p.shutdown()
 
     async def find_nearest_nodes(
             self, queries: Collection[DHTID], k_nearest: Optional[int] = None, beam_size: Optional[int] = None,
@@ -234,7 +262,7 @@ class DHTNode:
         for query, nearest_nodes in nearest_nodes_per_query.items():
             if not exclude_self:
                 nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query.xor_distance)
-                node_to_endpoint[self.node_id] = f"{LOCALHOST}:{self.port}"
+                node_to_endpoint[self.node_id] = self.endpoint
             nearest_nodes_with_endpoints[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
         return nearest_nodes_with_endpoints
 
@@ -626,6 +654,9 @@ class DHTNode:
 
             await asyncio.sleep(max(0.0, period - (get_dht_time() - refresh_time)))
 
+    async def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
+        return await self.protocol.p2p.get_visible_maddrs(latest=latest)
+
 
 @dataclass(init=True, repr=True, frozen=False, order=False)
 class _SearchState:
@@ -636,7 +667,7 @@ class _SearchState:
     expiration_time: Optional[DHTExpiration] = None  # best expiration time so far
     source_node_id: Optional[DHTID] = None  # node that gave us the value
     future: asyncio.Future[Optional[ValueWithExpiration[DHTValue]]] = field(default_factory=asyncio.Future)
-    serializer: type(SerializerBase) = MSGPackSerializer
+    serializer: Type[SerializerBase] = MSGPackSerializer
     record_validator: Optional[RecordValidatorBase] = None
 
     def add_candidate(self, candidate: Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]],

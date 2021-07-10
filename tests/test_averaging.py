@@ -43,7 +43,7 @@ async def test_key_manager():
 
 
 def _test_allreduce_once(n_clients, n_aux):
-    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+    dht = hivemind.DHT(start=True)
 
     n_peers = 4
     modes = [AveragingMode.CLIENT] * n_clients + [AveragingMode.AUX] * n_aux + [AveragingMode.NODE] * (
@@ -100,7 +100,7 @@ def test_allreduce_once_edge_cases(n_clients, n_aux):
 
 @pytest.mark.forked
 def test_allreduce_weighted(n_client_mode_peers: int = 2):
-    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+    dht = hivemind.DHT(start=True)
 
     n_peers = 4
     should_listen = [False] * n_client_mode_peers + [True] * (n_peers - n_client_mode_peers)
@@ -137,7 +137,7 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
 @pytest.mark.forked
 def test_allreduce_compression():
     """ this test ensures that compression works correctly when multiple tensors have different compression types """
-    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+    dht = hivemind.DHT(start=True)
 
     tensors1 = [torch.linspace(0, 500, 1000) ** 0.5, torch.randn(1000)]
     tensors2 = [torch.linspace(300, 800, 1000) ** 0.5, torch.randn(1000)]
@@ -152,7 +152,8 @@ def test_allreduce_compression():
                                                              start=True)
         averager2 = hivemind.averaging.DecentralizedAverager([x.clone() for x in tensors2], dht=dht,
                                                              compression_type=compression_type_pair,
-                                                             target_group_size=2, prefix='mygroup', start=True)
+                                                             target_group_size=2, prefix='mygroup',
+                                                             listen_on='127.0.0.1:*', start=True)
 
         for future in averager1.step(wait=False), averager2.step(wait=False):
             future.result()
@@ -190,10 +191,10 @@ def compute_mean_std(averagers, unbiased=True):
 
 @pytest.mark.forked
 def test_allreduce_grid():
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    dht = hivemind.DHT(start=True)
     averagers = [hivemind.averaging.DecentralizedAverager(
         averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
-        prefix='mygroup', initial_group_bits=bin(i // 2)[2:].rjust(2, '0'), start=True)
+        prefix='mygroup', initial_group_bits=bin(i // 2)[2:].rjust(2, '0'), listen_on='127.0.0.1:*', start=True)
         for i in range(8)]
 
     [means0], [stds0] = compute_mean_std(averagers)
@@ -220,7 +221,7 @@ def test_allreduce_grid():
 
 @pytest.mark.forked
 def test_allgather():
-    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+    dht = hivemind.DHT(start=True)
     averagers = [hivemind.averaging.DecentralizedAverager([torch.ones(1)], dht=dht, target_group_size=4,
                                                           averaging_expiration=15, prefix='mygroup',
                                                           initial_group_bits='000', listen_on='127.0.0.1:*', start=True)
@@ -290,11 +291,11 @@ def test_load_balancing():
 
 @pytest.mark.forked
 def test_too_few_peers():
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    dht = hivemind.DHT(start=True)
     averagers = [hivemind.averaging.DecentralizedAverager(
         averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
         averaging_expiration=1, request_timeout=0.5,
-        prefix='mygroup', initial_group_bits=bin(i)[2:].rjust(3, '0'), start=True)
+        prefix='mygroup', initial_group_bits=bin(i)[2:].rjust(3, '0'), listen_on='127.0.0.1:*', start=True)
         for i in range(4)]
     step_futures = [averager.step(wait=False) for averager in averagers]
     for future in step_futures:
@@ -307,11 +308,11 @@ def test_too_few_peers():
 
 @pytest.mark.forked
 def test_overcrowded(num_peers=16):
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    dht = hivemind.DHT(start=True)
     averagers = [hivemind.averaging.DecentralizedAverager(
         averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
         averaging_expiration=1, request_timeout=0.5,
-        prefix='mygroup', initial_group_bits='', start=True)
+        prefix='mygroup', initial_group_bits='', listen_on='127.0.0.1:*', start=True)
         for _ in range(num_peers)]
     for t in range(5):
         step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
@@ -339,17 +340,17 @@ def test_load_state_from_peers():
             return super_metadata, super_tensors
 
     dht_root = hivemind.DHT(start=True)
-    initial_peers = [f'{hivemind.LOCALHOST}:{dht_root.port}']
+    initial_peers = dht_root.get_visible_maddrs()
     dht1 = hivemind.DHT(initial_peers=initial_peers, start=True)
     averager1 = TestAverager([torch.randn(3), torch.rand(5)],
                              dht=dht1, start=True,
-                             prefix='demo-run', target_group_size=2)
+                             prefix='demo-run', target_group_size=2, listen_on='127.0.0.1:*')
 
     dht2 = hivemind.DHT(initial_peers=initial_peers, start=True)
     dht2.get('demo-run.all_averagers')
     averager2 = TestAverager([torch.randn(3), torch.rand(5)],
                              dht=dht2, start=True,
-                             prefix='demo-run', target_group_size=2)
+                             prefix='demo-run', target_group_size=2, listen_on='127.0.0.1:*')
 
     assert num_calls == 0
     got_metadata, got_tensors = averager2.load_state_from_peers()
@@ -377,9 +378,9 @@ def test_load_state_from_peers():
 
 @pytest.mark.forked
 def test_getset_bits():
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
-    averager = hivemind.averaging.DecentralizedAverager([torch.randn(3)], dht=dht, start=True,
-                                                        prefix='test_prefix', target_group_size=2)
+    dht = hivemind.DHT(start=True)
+    averager = hivemind.averaging.DecentralizedAverager([torch.randn(3)], dht=dht, start=True, prefix='test_prefix',
+                                                        target_group_size=2, listen_on='127.0.0.1:*')
     averager.set_group_bits('00101011101010')
     assert averager.get_group_bits() == '00101011101010'
 
@@ -388,7 +389,7 @@ def test_getset_bits():
 def test_training_averager(n_steps: int = 10, n_dims: int = 16):
     torch.manual_seed(42)
 
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
+    dht = hivemind.DHT(start=True)
     common_kwargs = {'dht': dht, 'start': True, 'listen_on': '127.0.0.1:*',
                      'prefix': 'demo-run', 'target_group_size': 2}
 
