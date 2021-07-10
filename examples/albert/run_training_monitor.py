@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import logging
 import time
 from dataclasses import asdict, dataclass, field
 from ipaddress import ip_address
@@ -15,9 +16,9 @@ from whatsmyip.providers import GoogleDnsProvider
 import hivemind
 import utils
 from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
-from hivemind.utils.logging import get_logger
 
-logger = get_logger(__name__)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
