@@ -156,7 +156,7 @@ if __name__ == '__main__':
                        use_ipfs=coordinator_args.use_ipfs,
                        host_maddrs=coordinator_args.host_maddrs,
                        announce_maddrs=coordinator_args.announce_maddrs)
-    utils.log_visible_maddrs(dht.get_visible_maddrs())
+    utils.log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=coordinator_args.use_ipfs)
 
     if coordinator_args.wandb_project is not None:
         wandb.init(project=coordinator_args.wandb_project)
