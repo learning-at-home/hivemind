@@ -1,4 +1,4 @@
-""" RPC protocol that provides nodes a way to communicate with each other. Based on gRPC.AIO. """
+""" RPC protocol that provides nodes a way to communicate with each other """
 from __future__ import annotations
 
 import asyncio
@@ -95,7 +95,7 @@ class DHTProtocol(Servicer):
                 response = await self.get_stub(peer).rpc_ping(ping_request, timeout=self.wait_timeout)
                 time_responded = get_dht_time()
         except Exception as e:
-            logger.debug(f"DHTProtocol failed to ping {peer}: {e}")
+            logger.exception(f"DHTProtocol failed to ping {peer}")
             response = None
         responded = bool(response and response.peer and response.peer.node_id)
 
@@ -189,7 +189,7 @@ class DHTProtocol(Servicer):
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
             return response.store_ok
         except Exception as e:
-            logger.debug(f"DHTProtocol failed to store at {peer}: {e}")
+            logger.exception(f"DHTProtocol failed to store at {peer}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
             return None
 
@@ -275,7 +275,7 @@ class DHTProtocol(Servicer):
 
             return output
         except Exception as e:
-            logger.debug(f"DHTProtocol failed to find at {peer}: {e}")
+            logger.exception(f"DHTProtocol failed to find at {peer}")
             asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
 
     async def rpc_find(self, request: dht_pb2.FindRequest, context: P2PContext) -> dht_pb2.FindResponse:

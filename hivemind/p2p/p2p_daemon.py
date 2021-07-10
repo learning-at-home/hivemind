@@ -82,7 +82,7 @@ class P2P:
                      use_relay: bool = True, use_relay_hop: bool = False,
                      use_relay_discovery: bool = False, use_auto_relay: bool = False, relay_hop_limit: int = 0,
                      quiet: bool = True,
-                     ping_n_retries: int = 5, ping_retry_delay: float = 0.4) -> 'P2P':
+                     ping_n_attempts: int = 5, ping_delay: float = 0.4) -> 'P2P':
         """
         Start a new p2pd process and connect to it.
         :param initial_peers: List of bootstrap peers
@@ -103,6 +103,9 @@ class P2P:
         :param use_auto_relay: enables autorelay
         :param relay_hop_limit: sets the hop limit for hop relays
         :param quiet: make the daemon process quiet
+        :param ping_n_attempts: try to ping the daemon with this number of attempts after starting it
+        :param ping_delay: wait for ``ping_delay * (2 ** (k - 1))`` seconds before the k-th attempt to ping the daemon
+          (in particular, wait for ``ping_delay`` seconds before the first attempt)
         :return: a wrapper for the p2p daemon
         """
 
@@ -139,13 +142,13 @@ class P2P:
         self._alive = True
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
-        await self._ping_daemon_with_retries(ping_n_retries, ping_retry_delay)
+        await self._ping_daemon_with_retries(ping_n_attempts, ping_delay)
 
         return self
 
-    async def _ping_daemon_with_retries(self, ping_n_retries: int, ping_retry_delay: float) -> None:
-        for try_number in range(ping_n_retries):
-            await asyncio.sleep(ping_retry_delay * (2 ** try_number))
+    async def _ping_daemon_with_retries(self, ping_n_attempts: int, ping_delay: float) -> None:
+        for try_number in range(ping_n_attempts):
+            await asyncio.sleep(ping_delay * (2 ** try_number))
 
             if self._child.poll() is not None:  # Process died
                 break
@@ -154,8 +157,8 @@ class P2P:
                 await self._ping_daemon()
                 break
             except Exception as e:
-                if try_number == ping_n_retries - 1:
-                    logger.error(f'Failed to ping p2pd: {e}')
+                if try_number == ping_n_attempts - 1:
+                    logger.exception('Failed to ping p2pd that has just started')
                     await self.shutdown()
                     raise
 

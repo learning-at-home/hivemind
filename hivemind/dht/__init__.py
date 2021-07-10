@@ -15,7 +15,6 @@ The code is organized as follows:
 from __future__ import annotations
 
 import asyncio
-import ctypes
 import multiprocessing as mp
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -27,8 +26,8 @@ from multiaddr import Multiaddr
 from hivemind.dht.node import DHTNode, DHTID
 from hivemind.dht.routing import DHTValue, DHTKey, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
+from hivemind.p2p import P2P
 from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, DHTExpiration
-from hivemind.utils.networking import Hostname, Endpoint, strip_port
 
 logger = get_logger(__name__)
 
@@ -50,6 +49,9 @@ class DHT(mp.Process):
     :param max_workers: declare_experts and get_experts will use up to this many parallel workers
       (but no more than one per key)
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
+    :param record_validators: instances of RecordValidatorBase used for signing and validating stored records.
+      The validators will be combined using the CompositeValidator class. It merges them when possible
+      (according to their `.merge_with()` policies) and orders them according to the `.priority` properties.
     :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
     :param kwargs: any other params will be forwarded to DHTNode and hivemind.p2p.P2P upon creation
     """
@@ -58,7 +60,7 @@ class DHT(mp.Process):
     def __init__(self, p2p: Optional[P2P] = None,
                  initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
                  *, start: bool, daemon: bool = True, max_workers: Optional[int] = None,
-                 parallel_rpc: Optional[int] = None, record_validators: Iterable[RecordValidatorBase] = (),
+                 record_validators: Iterable[RecordValidatorBase] = (),
                  shutdown_timeout: float = 3, **kwargs):
         super().__init__()
 
@@ -69,7 +71,6 @@ class DHT(mp.Process):
         self.initial_peers = initial_peers
         self.kwargs = kwargs
         self.max_workers = max_workers
-        self.parallel_rpc = parallel_rpc
 
         self._record_validator = CompositeValidator(record_validators)
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)
@@ -86,7 +87,7 @@ class DHT(mp.Process):
         with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
             async def _run():
                 self._node = await DHTNode.create(
-                    p2p=self.p2p, initial_peers=self.initial_peers, parallel_rpc=self.parallel_rpc,
+                    p2p=self.p2p, initial_peers=self.initial_peers,
                     num_workers=self.max_workers or 1, record_validator=self._record_validator,
                     **self.kwargs)
                 self.ready.set()

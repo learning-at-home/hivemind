@@ -25,8 +25,8 @@ class StubBase:
     """
 
     def __init__(self, p2p: P2P, peer: PeerID):
-        self.p2p = p2p
-        self.peer = peer
+        self._p2p = p2p
+        self._peer = peer
 
 
 class Servicer:
@@ -66,10 +66,11 @@ class Servicer:
 
     @staticmethod
     def _make_rpc_caller(handler: RPCHandler):
-        async def caller(stub: StubBase, request: handler.request_type,
+        # This method will be added to a new Stub type (a subclass of StubBase)
+        async def caller(self: StubBase, request: handler.request_type,
                          timeout: Optional[float] = None) -> handler.response_type:
             return await asyncio.wait_for(
-                stub.p2p.call_unary_handler(stub.peer, handler.handle_name, request, handler.response_type),
+                self._p2p.call_unary_handler(self._peer, handler.handle_name, request, handler.response_type),
                 timeout=timeout)
 
         caller.__name__ = handler.method_name

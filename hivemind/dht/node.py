@@ -6,7 +6,8 @@ import random
 from collections import defaultdict, Counter
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Awaitable, Callable, Collection, DefaultDict, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import (Any, Awaitable, Callable, Collection, DefaultDict, Dict, List, Optional, Sequence, Set, Tuple,
+                    Type, Union)
 
 from multiaddr import Multiaddr
 from sortedcontainers import SortedSet
@@ -128,7 +129,7 @@ class DHTNode:
           if False, this node will refuse any incoming request, effectively being only a "client"
         :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
         :param authorizer: instance of AuthorizerBase used for signing and validating requests and response
-          for following some authorization protocol
+          for a given authorization protocol
         :param kwargs: extra parameters for an internally created instance of hivemind.p2p.P2P.
           Should be empty if the P2P instance is provided in the constructor
         """
@@ -666,7 +667,7 @@ class _SearchState:
     expiration_time: Optional[DHTExpiration] = None  # best expiration time so far
     source_node_id: Optional[DHTID] = None  # node that gave us the value
     future: asyncio.Future[Optional[ValueWithExpiration[DHTValue]]] = field(default_factory=asyncio.Future)
-    serializer: type(SerializerBase) = MSGPackSerializer
+    serializer: Type[SerializerBase] = MSGPackSerializer
     record_validator: Optional[RecordValidatorBase] = None
 
     def add_candidate(self, candidate: Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]],

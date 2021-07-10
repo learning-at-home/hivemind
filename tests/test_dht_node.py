@@ -4,20 +4,23 @@ import multiprocessing as mp
 import random
 import signal
 import threading
-from itertools import chain, product
-from typing import Dict, List, Optional, Sequence, Tuple
+from itertools import product
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pytest
 from multiaddr import Multiaddr
 
 import hivemind
-from hivemind import get_dht_time, replace_port
+from hivemind import get_dht_time
 from hivemind.dht.node import DHTID, Endpoint, DHTNode
-from hivemind.dht.protocol import DHTProtocol, ValidationError
+from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.p2p import P2P, PeerID
-from hivemind.utils.networking import LOCALHOST
+from hivemind.utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 def maddrs_to_peer_ids(maddrs: List[Multiaddr]) -> List[PeerID]:
@@ -34,7 +37,7 @@ def run_protocol_listener(dhtid: DHTID, maddr_conn: mp.connection.Connection,
     protocol = loop.run_until_complete(DHTProtocol.create(
         p2p, dhtid, bucket_size=20, depth_modulo=5, num_replicas=3, wait_timeout=5))
 
-    print(f"Started peer id={protocol.node_id} maddrs={maddrs}", flush=True)
+    logger.info(f"Started peer id={protocol.node_id} maddrs={maddrs}")
 
     if initial_peers is not None:
         for endpoint in maddrs_to_peer_ids(initial_peers):
@@ -44,7 +47,7 @@ def run_protocol_listener(dhtid: DHTID, maddr_conn: mp.connection.Connection,
 
     async def shutdown():
         await p2p.shutdown()
-        print(f"Finished peer id={protocol.node_id} maddrs={maddrs}", flush=True)
+        logger.info(f"Finished peer id={protocol.node_id} maddrs={maddrs}")
         loop.stop()
 
     loop.add_signal_handler(signal.SIGTERM, lambda: loop.create_task(shutdown()))
@@ -77,7 +80,7 @@ def test_dht_protocol():
         p2p = loop.run_until_complete(P2P.create(initial_peers=peer1_maddrs))
         protocol = loop.run_until_complete(DHTProtocol.create(
             p2p, DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, listen=listen))
-        print(f"Self id={protocol.node_id}", flush=True)
+        logger.info(f"Self id={protocol.node_id}")
 
         assert loop.run_until_complete(protocol.call_ping(peer1_endpoint)) == peer1_id
 
@@ -176,7 +179,7 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
         asyncio.set_event_loop(asyncio.new_event_loop())
     loop = asyncio.get_event_loop()
 
-    node = loop.run_until_complete(DHTNode.create(initial_peers=initial_peers, ping_n_retries=10))
+    node = loop.run_until_complete(DHTNode.create(initial_peers=initial_peers))
     maddrs = loop.run_until_complete(node.get_visible_maddrs())
 
     info_queue.put((node.node_id, node.endpoint, maddrs))
@@ -292,9 +295,9 @@ def test_dht_node():
         jaccard_denominator += k_nearest
 
     accuracy = accuracy_numerator / accuracy_denominator
-    print("Top-1 accuracy:", accuracy)  # should be 98-100%
+    logger.info(f"Top-1 accuracy: {accuracy}")  # should be 98-100%
     jaccard_index = jaccard_numerator / jaccard_denominator
-    print("Jaccard index (intersection over union):", jaccard_index)  # should be 95-100%
+    logger.info(f"Jaccard index (intersection over union): {jaccard_index}")  # should be 95-100%
     assert accuracy >= 0.9, f"Top-1 accuracy only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
     assert jaccard_index >= 0.9, f"Jaccard index only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
 
