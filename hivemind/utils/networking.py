@@ -42,9 +42,9 @@ def find_open_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_
         raise e
 
 
-def choose_ip_address(maddrs: Sequence[Multiaddr],
-                      prefer_global: bool = True,
-                      protocol_priority: Sequence[str] = ('ip4', 'ip6')) -> Hostname:
+def choose_ip_address(
+    maddrs: Sequence[Multiaddr], prefer_global: bool = True, protocol_priority: Sequence[str] = ("ip4", "ip6")
+) -> Hostname:
     """
     Currently, some components of hivemind are not converted to work over libp2p and use classical networking.
     To allow other peers reach a server when needed, these components announce a machine's IP address.
@@ -69,4 +69,4 @@ def choose_ip_address(maddrs: Sequence[Multiaddr],
                     if ip_address(value_for_protocol).is_global == need_global:
                         return value_for_protocol
 
-    raise ValueError(f'No IP address found among given multiaddrs: {maddrs}')
+    raise ValueError(f"No IP address found among given multiaddrs: {maddrs}")

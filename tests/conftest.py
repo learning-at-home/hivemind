@@ -18,7 +18,7 @@ def cleanup_children():
 
     children = psutil.Process().children(recursive=True)
     if children:
-        logger.info(f'Cleaning up {len(children)} leftover child processes')
+        logger.info(f"Cleaning up {len(children)} leftover child processes")
         for child in children:
             with suppress(psutil.NoSuchProcess):
                 child.terminate()

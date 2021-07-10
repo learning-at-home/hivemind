@@ -31,16 +31,18 @@ def make_validators(experiment_prefix: str) -> Tuple[List[RecordValidatorBase], 
 
 
 class TextStyle:
-    BOLD = '\033[1m'
-    BLUE = '\033[34m'
-    RESET = '\033[0m'
+    BOLD = "\033[1m"
+    BLUE = "\033[34m"
+    RESET = "\033[0m"
 
 
 def log_visible_maddrs(visible_maddrs: List[Multiaddr], only_p2p: bool) -> None:
     if only_p2p:
-        unique_addrs = {addr['p2p'] for addr in visible_maddrs}
-        initial_peers_str = ' '.join(f'/p2p/{addr}' for addr in unique_addrs)
+        unique_addrs = {addr["p2p"] for addr in visible_maddrs}
+        initial_peers_str = " ".join(f"/p2p/{addr}" for addr in unique_addrs)
     else:
-        initial_peers_str = ' '.join(str(addr) for addr in visible_maddrs)
-    logger.info(f"Running a DHT peer. To connect other peers to this one, use "
-                f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers_str}{TextStyle.RESET}")
+        initial_peers_str = " ".join(str(addr) for addr in visible_maddrs)
+    logger.info(
+        f"Running a DHT peer. To connect other peers to this one, use "
+        f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers_str}{TextStyle.RESET}"
+    )
