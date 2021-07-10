@@ -76,7 +76,7 @@ class Server(threading.Thread):
     def create(cls, listen_on='0.0.0.0:*', num_experts: int = None, expert_uids: str = None, expert_pattern: str = None,
                expert_cls='ffn', hidden_dim=1024, optim_cls=torch.optim.Adam, scheduler: str = 'none',
                num_warmup_steps=None, num_total_steps=None, clip_grad_norm=None, num_handlers=None, min_batch_size=1,
-               max_batch_size=4096, device=None, no_dht=False, initial_peers=(), dht_port=None,
+               max_batch_size=4096, device=None, no_dht=False, initial_peers=(),
                checkpoint_dir: Optional[Path] = None, compression=CompressionType.NONE,
                stats_report_interval: Optional[int] = None, custom_module_path=None, *, start: bool) -> Server:
         """
@@ -101,9 +101,6 @@ class Server(threading.Thread):
 
         :param no_dht: if specified, the server will not be attached to a dht
         :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
-
-        :param dht_port:  DHT node will listen on this port, default = find open port
-           You can then use this node as initial peer for subsequent servers.
 
         :param checkpoint_dir: directory to save and load expert checkpoints
 
@@ -271,7 +268,8 @@ def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[hivemind.End
     runner = mp.Process(target=_server_runner, args=(runners_pipe, *args), kwargs=kwargs)
     try:
         runner.start()
-        # once the server is ready, runner will send us either (False, exception) or (True, (server_port, dht_port))
+        # once the server is ready, runner will send us
+        # either (False, exception) or (True, (server.listen_on, dht_maddrs))
         start_ok, data = pipe.recv()
         if start_ok:
             yield data
