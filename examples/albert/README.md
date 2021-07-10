@@ -28,9 +28,9 @@ wandb: Run `wandb offline` to turn off syncing.
 [2021/04/19 02:26:41.064][INFO][optim.collaborative.fetch_collaboration_state:323] Found no active peers: None
 [2021/04/19 02:26:44.068][INFO][optim.collaborative.fetch_collaboration_state:323] Found no active peers: None
 ...
-[2021/04/19 02:37:37.246][INFO][root.<module>:74] 11.05164
-[2021/04/19 02:39:37.441][INFO][root.<module>:74] 11.03771
-[2021/04/19 02:40:37.541][INFO][root.<module>:74] 11.02886
+[2021/04/19 02:37:37.246][INFO][__main__.<module>:194] Step #1  loss = 11.05164
+[2021/04/19 02:39:37.441][INFO][__main__.<module>:194] Step #2  loss = 11.03771
+[2021/04/19 02:40:37.541][INFO][__main__.<module>:194] Step #3  loss = 11.02886
 ```
 
 - To join a collaboration with a GPU trainer,
@@ -55,8 +55,8 @@ wandb: Run `wandb offline` to turn off syncing.
     (e.g. the IPv4 address and TCP port `/ip4/8.8.8.8/tcp/31337` or
     the information about a relay used for [NAT traversal](https://docs.libp2p.io/concepts/nat/)).
 
-    You may need to change the IP address to a publicly visible one if some of initial peers are located behind NAT.
-    If you have a trouble doing this, check out the ["Using IPFS"](#using-ipfs) section.
+    You may need to change the IP address to a publicly visible one if some of the initial peers are located behind NAT.
+    If you have a trouble doing this, consider the ["Using IPFS"](#using-ipfs) section.
 
 See the ["Tips and tricks"](#tips-and-tricks) section for more information on setting up collaborative training.
 
@@ -75,7 +75,10 @@ As the peer begins training, it will periodically report training logs in the fo
 __Sanity check:__ a healthy peer will periodically report `Averaged tensors successfully with [N > 1]` peers.
 
 For convenience, you can view (and share!) the learning curves of your collaborative experiments in wandb:
-![image](https://user-images.githubusercontent.com/3491902/115177859-bed5e100-a0d8-11eb-82bc-55d1b12d335d.png)
+
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/3491902/115177859-bed5e100-a0d8-11eb-82bc-55d1b12d335d.png">
+</p>
 
 
 ## Tips and tricks
