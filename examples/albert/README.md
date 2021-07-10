@@ -56,7 +56,7 @@ wandb: Run `wandb offline` to turn off syncing.
     the information about a relay used for [NAT traversal](https://docs.libp2p.io/concepts/nat/)).
 
     You may need to change the IP address to a publicly visible one if some of the initial peers are located behind NAT.
-    If you have a trouble doing this, consider the ["Using IPFS"](#using-ipfs) section.
+    If you have any trouble doing this, consider the ["Using IPFS"](#using-ipfs) section.
 
 See the ["Tips and tricks"](#tips-and-tricks) section for more information on setting up collaborative training.
 
@@ -113,6 +113,6 @@ Here's an example of a full trainer script for Google Colab:
 ```
 
 ### Using IPFS
-If the initial peers for your experiment are located behind NAT and/or you have a trouble with figuring out their public IP addresses and ports, you can set up hivemind to use the [IPFS](https://ipfs.io) network to find the route to your peers automatically. To do this, you should specify the `--use_ipfs` option on all peers (both training monitors and trainers) you are starting.
+If the initial peers for your experiment are located behind NAT and/or you have any trouble with figuring out their public IP addresses and ports, you can set up hivemind to use the [IPFS](https://ipfs.io) network to find the route to your peers automatically. To do this, you should specify the `--use_ipfs` option on all peers (both training monitors and trainers) you are starting.
 
 After that, it is enough to provide only a [libp2p](https://libp2p.io/) peer ID (e.g. `/p2p/XXXX`) for each initial peer. No other information (like IP addresses or TCP/UDP ports) is required.
