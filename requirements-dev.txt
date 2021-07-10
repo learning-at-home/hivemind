@@ -3,6 +3,7 @@ pytest-forked
 pytest-asyncio
 pytest-cov
 codecov
+tqdm
 scikit-learn
 black==21.6b0
 psutil
