@@ -19,15 +19,15 @@ import multiprocessing as mp
 import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Iterable, Optional, Sequence, Union, Callable, Awaitable, TypeVar
+from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, TypeVar, Union
 
 from multiaddr import Multiaddr
 
-from hivemind.dht.node import DHTNode, DHTID
-from hivemind.dht.routing import DHTValue, DHTKey, Subkey
+from hivemind.dht.node import DHTID, DHTNode
+from hivemind.dht.routing import DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.p2p import P2P
-from hivemind.utils import MPFuture, get_logger, switch_to_uvloop, ValueWithExpiration, await_cancelled, DHTExpiration
+from hivemind.utils import DHTExpiration, MPFuture, ValueWithExpiration, await_cancelled, get_logger, switch_to_uvloop
 
 logger = get_logger(__name__)
 
