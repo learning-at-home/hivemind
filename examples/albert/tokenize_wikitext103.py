@@ -1,19 +1,21 @@
 #!/usr/bin/env python
-""" This script builds a pre-tokenized compressed representation of wikitext103 using huggingface/datasets """
+""" This script builds a pre-tokenized compressed representation of WikiText-103 using huggingface/datasets """
 import random
 from functools import partial
-from multiprocessing import cpu_count
 
 import nltk
 from datasets import load_dataset
 from transformers import AlbertTokenizerFast
 
-
-COLUMN_NAMES = ("attention_mask", "input_ids", "sentence_order_label", "special_tokens_mask", "token_type_ids")
+COLUMN_NAMES = ('attention_mask', 'input_ids', 'sentence_order_label', 'special_tokens_mask', 'token_type_ids')
 
 
 def create_instances_from_document(tokenizer, document, max_seq_length):
-    """Creates `TrainingInstance`s for a single document."""
+    """
+    Creates training instances from a single document.
+    Reuses code from the original ALBERT implementation (Google AI, 2018)
+    https://github.com/google-research/albert/blob/master/create_pretraining_data.py#L267
+    """
     # We DON'T just concatenate all of the tokens from a document into a long
     # sequence and choose an arbitrary split point because this would make the
     # next sentence prediction task too easy. Instead, we split the input into
@@ -56,15 +58,15 @@ def create_instances_from_document(tokenizer, document, max_seq_length):
                 assert len(tokens_b) >= 1
 
                 instance = tokenizer(
-                    " ".join(tokens_a),
-                    " ".join(tokens_b),
-                    truncation="longest_first",
+                    ' '.join(tokens_a),
+                    ' '.join(tokens_b),
+                    truncation='longest_first',
                     max_length=max_seq_length,
                     # We use this option because DataCollatorForLanguageModeling
                     # is more efficient when it receives the `special_tokens_mask`.
                     return_special_tokens_mask=True,
                 )
-                assert len(instance["input_ids"]) <= max_seq_length
+                assert len(instance['input_ids']) <= max_seq_length
                 instance["sentence_order_label"] = 1 if is_random_next else 0
                 instances.append(instance)
 
@@ -89,11 +91,11 @@ def tokenize_function(tokenizer, examples):
     return new_examples
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     random.seed(0)
-    nltk.download("punkt")
-    tokenizer = AlbertTokenizerFast.from_pretrained("albert-large-v2")
-    wikitext = load_dataset("wikitext", "wikitext-103-v1", cache_dir="./data/cache")
+    nltk.download('punkt')
+    tokenizer = AlbertTokenizerFast.from_pretrained('albert-large-v2')
+    wikitext = load_dataset('wikitext', 'wikitext-103-v1', cache_dir='./data/cache')
 
     tokenized_datasets = wikitext.map(
         partial(tokenize_function, tokenizer),
@@ -102,5 +104,5 @@ if __name__ == "__main__":
         remove_columns=["text"],
     )
 
-    tokenized_datasets.save_to_disk("./data/albert_tokenized_wikitext")
-    tokenizer.save_pretrained("./data/tokenizer")
+    tokenized_datasets.save_to_disk('./data/albert_tokenized_wikitext')
+    tokenizer.save_pretrained('./data/tokenizer')
