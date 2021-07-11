@@ -39,8 +39,8 @@ def run_protocol_listener(dhtid: DHTID, maddr_conn: mp.connection.Connection,
 
     logger.info(f"Started peer id={protocol.node_id} visible_maddrs={visible_maddrs}")
 
-    for endpoint in maddrs_to_peer_ids(initial_peers):
-        loop.run_until_complete(protocol.call_ping(endpoint))
+    for peer_id in maddrs_to_peer_ids(initial_peers):
+        loop.run_until_complete(protocol.call_ping(peer_id))
 
     maddr_conn.send((p2p.id, visible_maddrs))
 
@@ -70,8 +70,8 @@ def launch_protocol_listener(initial_peers: Sequence[Multiaddr] = ()) -> \
 
 @pytest.mark.forked
 def test_dht_protocol():
-    peer1_id, peer1_proc, peer1_endpoint, peer1_maddrs = launch_protocol_listener()
-    peer2_id, peer2_proc, peer2_endpoint, _ = launch_protocol_listener(initial_peers=peer1_maddrs)
+    peer1_node_id, peer1_proc, peer1_id, peer1_maddrs = launch_protocol_listener()
+    peer2_node_id, peer2_proc, peer2_id, _ = launch_protocol_listener(initial_peers=peer1_maddrs)
 
     loop = asyncio.get_event_loop()
     for listen in [False, True]:  # note: order matters, this test assumes that first run uses listen=False
@@ -80,21 +80,21 @@ def test_dht_protocol():
             p2p, DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, listen=listen))
         logger.info(f"Self id={protocol.node_id}")
 
-        assert loop.run_until_complete(protocol.call_ping(peer1_endpoint)) == peer1_id
+        assert loop.run_until_complete(protocol.call_ping(peer1_id)) == peer1_node_id
 
         key, value, expiration = DHTID.generate(), [random.random(), {'ololo': 'pyshpysh'}], get_dht_time() + 1e3
         store_ok = loop.run_until_complete(protocol.call_store(
-            peer1_endpoint, [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
+            peer1_id, [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
         )
         assert all(store_ok), "DHT rejected a trivial store"
 
         # peer 1 must know about peer 2
         (recv_value_bytes, recv_expiration), nodes_found = loop.run_until_complete(
-            protocol.call_find(peer1_endpoint, [key]))[key]
+            protocol.call_find(peer1_id, [key]))[key]
         recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
-        (recv_id, recv_endpoint) = next(iter(nodes_found.items()))
-        assert recv_id == peer2_id and recv_endpoint == peer2_endpoint, \
-            f"expected id={peer2_id}, peer={peer2_endpoint} but got {recv_id}, {recv_endpoint}"
+        (recv_id, recv_peer_id) = next(iter(nodes_found.items()))
+        assert recv_id == peer2_node_id and recv_peer_id == peer2_id, \
+            f"expected id={peer2_node_id}, peer={peer2_id} but got {recv_id}, {recv_peer_id}"
 
         assert recv_value == value and recv_expiration == expiration, \
             f"call_find_value expected {value} (expires by {expiration}) " \
@@ -103,11 +103,11 @@ def test_dht_protocol():
         # peer 2 must know about peer 1, but not have a *random* nonexistent value
         dummy_key = DHTID.generate()
         empty_item, nodes_found_2 = loop.run_until_complete(
-            protocol.call_find(peer2_endpoint, [dummy_key]))[dummy_key]
+            protocol.call_find(peer2_id, [dummy_key]))[dummy_key]
         assert empty_item is None, "Non-existent keys shouldn't have values"
-        (recv_id, recv_endpoint) = next(iter(nodes_found_2.items()))
-        assert recv_id == peer1_id and recv_endpoint == peer1_endpoint, \
-            f"expected id={peer1_id}, peer={peer1_endpoint} but got {recv_id}, {recv_endpoint}"
+        (recv_id, recv_peer_id) = next(iter(nodes_found_2.items()))
+        assert recv_id == peer1_node_id and recv_peer_id == peer1_id, \
+            f"expected id={peer1_node_id}, peer={peer1_id} but got {recv_id}, {recv_peer_id}"
 
         # cause a non-response by querying a nonexistent peer
         assert loop.run_until_complete(protocol.call_find(PeerID.from_base58('fakeid'), [key])) is None
@@ -116,15 +116,15 @@ def test_dht_protocol():
         nested_key, subkey1, subkey2 = DHTID.generate(), 'foo', 'bar'
         value1, value2 = [random.random(), {'ololo': 'pyshpysh'}], 'abacaba'
         assert loop.run_until_complete(protocol.call_store(
-            peer1_endpoint, keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value1)],
+            peer1_id, keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value1)],
             expiration_time=[expiration], subkeys=[subkey1])
         )
         assert loop.run_until_complete(protocol.call_store(
-            peer1_endpoint, keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value2)],
+            peer1_id, keys=[nested_key], values=[hivemind.MSGPackSerializer.dumps(value2)],
             expiration_time=[expiration + 5], subkeys=[subkey2])
         )
         (recv_dict, recv_expiration), nodes_found = loop.run_until_complete(
-            protocol.call_find(peer1_endpoint, [nested_key]))[nested_key]
+            protocol.call_find(peer1_id, [nested_key]))[nested_key]
         assert isinstance(recv_dict, DictionaryDHTValue)
         assert len(recv_dict.data) == 2 and recv_expiration == expiration + 5
         assert recv_dict.data[subkey1] == (protocol.serializer.dumps(value1), expiration)
@@ -140,7 +140,7 @@ def test_dht_protocol():
 @pytest.mark.forked
 def test_empty_table():
     """ Test RPC methods with empty routing table """
-    peer_id, peer_proc, peer_endpoint, peer_maddrs = launch_protocol_listener()
+    peer_id, peer_proc, peer_peer_id, peer_maddrs = launch_protocol_listener()
 
     loop = asyncio.get_event_loop()
     p2p = loop.run_until_complete(P2P.create(initial_peers=peer_maddrs))
@@ -150,19 +150,19 @@ def test_empty_table():
     key, value, expiration = DHTID.generate(), [random.random(), {'ololo': 'pyshpysh'}], get_dht_time() + 1e3
 
     empty_item, nodes_found = loop.run_until_complete(
-        protocol.call_find(peer_endpoint, [key]))[key]
+        protocol.call_find(peer_peer_id, [key]))[key]
     assert empty_item is None and len(nodes_found) == 0
     assert all(loop.run_until_complete(protocol.call_store(
-        peer_endpoint, [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
+        peer_peer_id, [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
     )), "peer rejected store"
 
     (recv_value_bytes, recv_expiration), nodes_found = loop.run_until_complete(
-        protocol.call_find(peer_endpoint, [key]))[key]
+        protocol.call_find(peer_peer_id, [key]))[key]
     recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
     assert len(nodes_found) == 0
     assert recv_value == value and recv_expiration == expiration
 
-    assert loop.run_until_complete(protocol.call_ping(peer_endpoint)) == peer_id
+    assert loop.run_until_complete(protocol.call_ping(peer_peer_id)) == peer_id
     assert loop.run_until_complete(protocol.call_ping(PeerID.from_base58('fakeid'))) is None
     peer_proc.terminate()
 
@@ -181,15 +181,15 @@ def test_dht_node():
 
     # test 1: find self
     nearest = loop.run_until_complete(me.find_nearest_nodes([me.node_id], k_nearest=1))[me.node_id]
-    assert len(nearest) == 1 and nearest[me.node_id] == me.endpoint
+    assert len(nearest) == 1 and nearest[me.node_id] == me.peer_id
 
     # test 2: find others
     for _ in range(10):
-        ref_endpoint, query_id = random.choice(list(dht.items()))
+        ref_peer_id, query_id = random.choice(list(dht.items()))
         nearest = loop.run_until_complete(me.find_nearest_nodes([query_id], k_nearest=1))[query_id]
         assert len(nearest) == 1
-        found_node_id, found_endpoint = next(iter(nearest.items()))
-        assert found_node_id == query_id and found_endpoint == ref_endpoint
+        found_node_id, found_peer_id = next(iter(nearest.items()))
+        assert found_node_id == query_id and found_peer_id == ref_peer_id
 
     # test 3: find neighbors to random nodes
     accuracy_numerator = accuracy_denominator = 0  # top-1 nearest neighbor accuracy
@@ -236,7 +236,7 @@ def test_dht_node():
     # test 5: node without peers
     detached_node = loop.run_until_complete(DHTNode.create())
     nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy]))[dummy]
-    assert len(nearest) == 1 and nearest[detached_node.node_id] == detached_node.endpoint
+    assert len(nearest) == 1 and nearest[detached_node.node_id] == detached_node.peer_id
     nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy], exclude_self=True))[dummy]
     assert len(nearest) == 0
 
@@ -404,13 +404,13 @@ async def test_dhtnode_blacklist():
 
     assert await node2.store('def', 456, expiration_time=hivemind.get_dht_time() + 99)
 
-    assert set(node2.blacklist.ban_counter.keys()) == {node3.endpoint, node4.endpoint}
+    assert set(node2.blacklist.ban_counter.keys()) == {node3.peer_id, node4.peer_id}
 
     assert await node1.get('abc', latest=True)  # force node1 to crawl dht and discover unresponsive peers
-    assert node3.endpoint in node1.blacklist
+    assert node3.peer_id in node1.blacklist
 
     assert await node1.get('abc', latest=True)  # force node1 to crawl dht and discover unresponsive peers
-    assert node2.endpoint not in node1.blacklist
+    assert node2.peer_id not in node1.blacklist
 
     await asyncio.gather(node1.shutdown(), node2.shutdown())
 

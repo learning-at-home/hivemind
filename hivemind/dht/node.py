@@ -17,7 +17,7 @@ from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID, DHTKey, get_dht_time, DHTValue, BinaryDHTValue, Subkey
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.dht.traverse import traverse_dht
-from hivemind.p2p import P2P, PeerID as Endpoint
+from hivemind.p2p import P2P, PeerID
 from hivemind.utils import MSGPackSerializer, get_logger, SerializerBase
 from hivemind.utils.auth import AuthorizerBase
 from hivemind.utils.timed_storage import DHTExpiration, TimedStorage, ValueWithExpiration
@@ -70,7 +70,7 @@ class DHTNode:
 
     """
     # fmt:off
-    node_id: DHTID; is_alive: bool; endpoint: Endpoint; num_replicas: int; num_workers: int; protocol: DHTProtocol
+    node_id: DHTID; is_alive: bool; peer_id: PeerID; num_replicas: int; num_workers: int; protocol: DHTProtocol
     chunk_size: int; refresh_timeout: float; cache_locally: bool; cache_nearest: int; cache_refresh_before_expiry: float
     cache_on_store: bool; reuse_get_requests: bool; pending_get_requests: DefaultDict[DHTID, SortedSet[_SearchState]]
     cache_refresh_task: Optional[asyncio.Task]; cache_refresh_evt: asyncio.Event; cache_refresh_queue: CacheRefreshQueue
@@ -167,10 +167,10 @@ class DHTNode:
         self.protocol = await DHTProtocol.create(
             p2p, self.node_id, bucket_size, depth_modulo, num_replicas, wait_timeout,
             parallel_rpc, cache_size, listen, record_validator, authorizer)
-        self.endpoint = p2p.id
+        self.peer_id = p2p.id
 
         if initial_peers:
-            initial_peers = {Endpoint.from_base58(Multiaddr(item)['p2p']) for item in initial_peers}
+            initial_peers = {PeerID.from_base58(Multiaddr(item)['p2p']) for item in initial_peers}
 
             # stage 1: ping initial_peers, add each other to the routing table
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
@@ -218,17 +218,17 @@ class DHTNode:
 
     async def find_nearest_nodes(
             self, queries: Collection[DHTID], k_nearest: Optional[int] = None, beam_size: Optional[int] = None,
-            num_workers: Optional[int] = None, node_to_endpoint: Optional[Dict[DHTID, Endpoint]] = None,
-            exclude_self: bool = False, **kwargs) -> Dict[DHTID, Dict[DHTID, Endpoint]]:
+            num_workers: Optional[int] = None, node_to_peer_id: Optional[Dict[DHTID, PeerID]] = None,
+            exclude_self: bool = False, **kwargs) -> Dict[DHTID, Dict[DHTID, PeerID]]:
         """
         :param queries: find k nearest nodes for each of these DHTIDs
         :param k_nearest: return this many nearest nodes for every query (if there are enough nodes)
         :param beam_size: replacement for self.beam_size, see traverse_dht beam_size param
         :param num_workers: replacement for self.num_workers, see traverse_dht num_workers param
-        :param node_to_endpoint: if specified, uses this dict[node_id => endpoint] as initial peers
+        :param node_to_peer_id: if specified, uses this dict[node_id => peer_id] as initial peers
         :param exclude_self: if True, nearest nodes will not contain self.node_id (default = use local peers)
         :param kwargs: additional params passed to traverse_dht
-        :returns: for every query, return nearest peers ordered dict[peer DHTID -> network Endpoint], nearest-first
+        :returns: for every query, return nearest peers ordered dict[peer DHTID -> network PeerID], nearest-first
         """
         queries = tuple(queries)
         k_nearest = k_nearest if k_nearest is not None else self.protocol.bucket_size
@@ -236,35 +236,35 @@ class DHTNode:
         beam_size = beam_size if beam_size is not None else max(self.protocol.bucket_size, k_nearest)
         if k_nearest > beam_size:
             logger.warning("Warning: beam_size is too small, beam search is not guaranteed to find enough nodes")
-        if node_to_endpoint is None:
-            node_to_endpoint: Dict[DHTID, Endpoint] = dict()
+        if node_to_peer_id is None:
+            node_to_peer_id: Dict[DHTID, PeerID] = dict()
             for query in queries:
                 neighbors = self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id)
-                node_to_endpoint.update(self._filter_blacklisted(dict(neighbors)))
+                node_to_peer_id.update(self._filter_blacklisted(dict(neighbors)))
 
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[Tuple[DHTID], bool]]:
-            response = await self._call_find_with_blacklist(node_to_endpoint[peer], queries)
+            response = await self._call_find_with_blacklist(node_to_peer_id[peer], queries)
             if not response:
                 return {query: ([], False) for query in queries}
 
             output: Dict[DHTID, Tuple[Tuple[DHTID], bool]] = {}
             for query, (_, peers) in response.items():
-                node_to_endpoint.update(peers)
+                node_to_peer_id.update(peers)
                 output[query] = tuple(peers.keys()), False  # False means "do not interrupt search"
             return output
 
         nearest_nodes_per_query, visited_nodes = await traverse_dht(
-            queries, initial_nodes=list(node_to_endpoint), beam_size=beam_size, num_workers=num_workers,
+            queries, initial_nodes=list(node_to_peer_id), beam_size=beam_size, num_workers=num_workers,
             queries_per_call=int(len(queries) ** 0.5), get_neighbors=get_neighbors,
             visited_nodes={query: {self.node_id} for query in queries}, **kwargs)
 
-        nearest_nodes_with_endpoints = {}
+        nearest_nodes_with_peer_ids = {}
         for query, nearest_nodes in nearest_nodes_per_query.items():
             if not exclude_self:
                 nearest_nodes = sorted(nearest_nodes + [self.node_id], key=query.xor_distance)
-                node_to_endpoint[self.node_id] = self.endpoint
-            nearest_nodes_with_endpoints[query] = {node: node_to_endpoint[node] for node in nearest_nodes[:k_nearest]}
-        return nearest_nodes_with_endpoints
+                node_to_peer_id[self.node_id] = self.peer_id
+            nearest_nodes_with_peer_ids[query] = {node: node_to_peer_id[node] for node in nearest_nodes[:k_nearest]}
+        return nearest_nodes_with_peer_ids
 
     async def store(self, key: DHTKey, value: DHTValue, expiration_time: DHTExpiration,
                     subkey: Optional[Subkey] = None, **kwargs) -> bool:
@@ -310,10 +310,10 @@ class DHTNode:
         store_ok = {(key, subkey): None for key, subkey in zip(keys, subkeys)}  # outputs, updated during search
         store_finished_events = {(key, subkey): asyncio.Event() for key, subkey in zip(keys, subkeys)}
 
-        # pre-populate node_to_endpoint
-        node_to_endpoint: Dict[DHTID, Endpoint] = dict()
+        # pre-populate node_to_peer_id
+        node_to_peer_id: Dict[DHTID, PeerID] = dict()
         for key_id in unfinished_key_ids:
-            node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
+            node_to_peer_id.update(self.protocol.routing_table.get_nearest_neighbors(
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
         async def on_found(key_id: DHTID, nearest_nodes: List[DHTID], visited_nodes: Set[DHTID]) -> None:
@@ -361,7 +361,7 @@ class DHTNode:
                                 store_finished_events[original_key, subkey].set()
                     else:
                         pending_store_tasks.add(asyncio.create_task(self.protocol.call_store(
-                            node_to_endpoint[node_id], keys=[key_id] * len(current_values), values=binary_values,
+                            node_to_peer_id[node_id], keys=[key_id] * len(current_values), values=binary_values,
                             expiration_time=current_expirations, subkeys=current_subkeys)))
 
                 # await nearest task. If it fails, dispatch more on the next iteration
@@ -384,7 +384,7 @@ class DHTNode:
                 store_finished_events[original_key, subkey].set()
 
         store_task = asyncio.create_task(self.find_nearest_nodes(
-            queries=set(unfinished_key_ids), k_nearest=self.num_replicas, node_to_endpoint=node_to_endpoint,
+            queries=set(unfinished_key_ids), k_nearest=self.num_replicas, node_to_peer_id=node_to_peer_id,
             found_callback=on_found, exclude_self=exclude_self, **kwargs))
         try:
             await asyncio.gather(store_task, *(evt.wait() for evt in store_finished_events.values()))
@@ -496,21 +496,21 @@ class DHTNode:
 
         # stage 2: traverse the DHT to get the remaining keys from remote peers
         unfinished_key_ids = [key_id for key_id in key_ids if not search_results[key_id].finished]
-        node_to_endpoint: Dict[DHTID, Endpoint] = dict()  # global routing table for all keys
+        node_to_peer_id: Dict[DHTID, PeerID] = dict()  # global routing table for all keys
         for key_id in unfinished_key_ids:
-            node_to_endpoint.update(self.protocol.routing_table.get_nearest_neighbors(
+            node_to_peer_id.update(self.protocol.routing_table.get_nearest_neighbors(
                 key_id, self.protocol.bucket_size, exclude=self.node_id))
 
         # V-- this function will be called every time traverse_dht decides to request neighbors from a remote peer
         async def get_neighbors(peer: DHTID, queries: Collection[DHTID]) -> Dict[DHTID, Tuple[Tuple[DHTID], bool]]:
             queries = list(queries)
-            response = await self._call_find_with_blacklist(node_to_endpoint[peer], queries)
+            response = await self._call_find_with_blacklist(node_to_peer_id[peer], queries)
             if not response:
                 return {query: ([], False) for query in queries}
 
             output: Dict[DHTID, Tuple[Tuple[DHTID], bool]] = {}
             for key_id, (maybe_value_with_expiration, peers) in response.items():
-                node_to_endpoint.update(peers)
+                node_to_peer_id.update(peers)
                 search_results[key_id].add_candidate(maybe_value_with_expiration, source_node_id=peer)
                 output[key_id] = tuple(peers.keys()), search_results[key_id].finished
                 # note: we interrupt search either if key is either found or finished otherwise (e.g. cancelled by user)
@@ -519,10 +519,10 @@ class DHTNode:
         # V-- this function will be called exactly once when traverse_dht finishes search for a given key
         async def found_callback(key_id: DHTID, nearest_nodes: List[DHTID], _visited: Set[DHTID]):
             search_results[key_id].finish_search()  # finish search whether or we found something
-            self._cache_new_result(search_results[key_id], nearest_nodes, node_to_endpoint, _is_refresh=_is_refresh)
+            self._cache_new_result(search_results[key_id], nearest_nodes, node_to_peer_id, _is_refresh=_is_refresh)
 
         asyncio.create_task(traverse_dht(
-            queries=list(unfinished_key_ids), initial_nodes=list(node_to_endpoint), beam_size=beam_size,
+            queries=list(unfinished_key_ids), initial_nodes=list(node_to_peer_id), beam_size=beam_size,
             num_workers=num_workers, queries_per_call=min(int(len(unfinished_key_ids) ** 0.5), self.chunk_size),
             get_neighbors=get_neighbors, visited_nodes={key_id: {self.node_id} for key_id in unfinished_key_ids},
             found_callback=found_callback, await_all_tasks=False))
@@ -551,21 +551,21 @@ class DHTNode:
         else:
             pending_requests.discard(finished)
 
-    async def _call_find_with_blacklist(self, endpoint: Endpoint, keys: Collection[DHTID]):
-        """ same as call_find, but skip if :endpoint: is blacklisted; also exclude blacklisted neighbors from result """
-        if endpoint in self.blacklist:
+    async def _call_find_with_blacklist(self, peer_id: PeerID, keys: Collection[DHTID]):
+        """ same as call_find, but skip if :peer_id: is blacklisted; also exclude blacklisted neighbors from result """
+        if peer_id in self.blacklist:
             return None
-        response = await self.protocol.call_find(endpoint, keys)
+        response = await self.protocol.call_find(peer_id, keys)
         if response:
-            self.blacklist.register_success(endpoint)
+            self.blacklist.register_success(peer_id)
             return {key: (maybe_value, self._filter_blacklisted(nearest_peers))
                     for key, (maybe_value, nearest_peers) in response.items()}
         else:
-            self.blacklist.register_failure(endpoint)
+            self.blacklist.register_failure(peer_id)
             return None
 
-    def _filter_blacklisted(self, peer_endpoints: Dict[DHTID, Endpoint]):
-        return {peer: endpoint for peer, endpoint in peer_endpoints.items() if endpoint not in self.blacklist}
+    def _filter_blacklisted(self, peer_ids: Dict[DHTID, PeerID]):
+        return {peer: peer_id for peer, peer_id in peer_ids.items() if peer_id not in self.blacklist}
 
     def _trigger_cache_refresh(self, search: _SearchState):
         """ Called after get request is finished (whether it was found, not found, hit cache, cancelled, or reused) """
@@ -620,7 +620,7 @@ class DHTNode:
                 await self.get_many_by_id(keys_to_refresh, sufficient_expiration_time, _is_refresh=True)
 
     def _cache_new_result(self, search: _SearchState, nearest_nodes: List[DHTID],
-                          node_to_endpoint: Dict[DHTID, Endpoint], _is_refresh: bool = False):
+                          node_to_peer_id: Dict[DHTID, PeerID], _is_refresh: bool = False):
         """ after key_id is found, update cache according to caching policy. used internally in get and get_many """
         if search.found_something:
             _, storage_expiration_time = self.protocol.storage.get(search.key_id) or (None, -float('inf'))
@@ -635,7 +635,7 @@ class DHTNode:
                         if node_id == search.source_node_id:
                             continue
                         asyncio.create_task(self.protocol.call_store(
-                            node_to_endpoint[node_id], [search.key_id], [search.binary_value], [search.expiration_time],
+                            node_to_peer_id[node_id], [search.key_id], [search.binary_value], [search.expiration_time],
                             in_cache=True))
                         num_cached_nodes += 1
                         if num_cached_nodes >= self.cache_nearest:
@@ -746,10 +746,10 @@ class Blacklist:
 
     def __init__(self, base_time: float, backoff_rate: float, **kwargs):
         self.base_time, self.backoff = base_time, backoff_rate
-        self.banned_peers = TimedStorage[Endpoint, int](**kwargs)
+        self.banned_peers = TimedStorage[PeerID, int](**kwargs)
         self.ban_counter = Counter()
 
-    def register_failure(self, peer: Endpoint):
+    def register_failure(self, peer: PeerID):
         """ peer failed to respond, add him to blacklist or increase his downtime """
         if peer not in self.banned_peers and self.base_time > 0:
             ban_duration = self.base_time * self.backoff ** self.ban_counter[peer]
@@ -760,7 +760,7 @@ class Blacklist:
         """ peer responded successfully, remove him from blacklist and reset his ban time """
         del self.banned_peers[peer], self.ban_counter[peer]
 
-    def __contains__(self, peer: Endpoint) -> bool:
+    def __contains__(self, peer: PeerID) -> bool:
         return peer in self.banned_peers
 
     def __repr__(self):
