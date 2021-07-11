@@ -65,14 +65,14 @@ def get_model(training_args, config, tokenizer):
 def get_optimizer_and_scheduler(training_args, model):
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
-            {
-                    "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-                    "weight_decay": training_args.weight_decay,
-            },
-            {
-                    "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-                    "weight_decay": 0.0,
-            },
+        {
+            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": training_args.weight_decay,
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
     ]
 
     opt = Lamb(
@@ -155,8 +155,8 @@ class CollaborativeCallback(transformers.TrainerCallback):
     @torch.no_grad()
     def get_current_state(self) -> Dict[str, Any]:
         return {
-                'model': self.model.state_dict(),
-                'opt': self.collaborative_optimizer.opt.state_dict()
+            'model': self.model.state_dict(),
+            'opt': self.collaborative_optimizer.opt.state_dict()
         }
 
     @torch.no_grad()

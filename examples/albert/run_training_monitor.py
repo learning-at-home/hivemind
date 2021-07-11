@@ -30,7 +30,7 @@ class TrainingMonitorArguments(BaseTrainingArguments):
     use_google_dns: bool = field(
         default=False,
         metadata={
-                "help": "Use Google DNS to determine the public IP address of this machine (and add it to --announce_maddrs)"}
+            "help": "Use Google DNS to determine the public IP address of this machine (and add it to --announce_maddrs)"}
     )
     refresh_period: float = field(
         default=30,
@@ -80,14 +80,14 @@ class CheckpointHandler:
 
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
-                {
-                        "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
-                        "weight_decay": 0.01,
-                },
-                {
-                        "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
-                        "weight_decay": 0.0,
-                },
+            {
+                "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                "weight_decay": 0.01,
+            },
+            {
+                "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                "weight_decay": 0.0,
+            },
         ]
 
         opt = Lamb(
@@ -196,11 +196,11 @@ if __name__ == '__main__':
 
                 if monitor_args.wandb_project is not None:
                     wandb.log({
-                            "loss": current_loss,
-                            "alive peers": alive_peers,
-                            "samples": num_samples,
-                            "performance": sum_perf,
-                            "step": latest_step
+                        "loss": current_loss,
+                        "alive peers": alive_peers,
+                        "samples": num_samples,
+                        "performance": sum_perf,
+                        "step": latest_step
                     })
 
                 if monitor_args.store_checkpoins:
