@@ -76,7 +76,7 @@ def test_routing_table_parameters():
         for phony_neighbor_port in random.sample(range(1_000_000), 10_000):
             routing_table.add_or_update_node(DHTID.generate(), f'{LOCALHOST}:{phony_neighbor_port}')
         for bucket in routing_table.buckets:
-            assert len(bucket.replacement_nodes) == 0 or len(bucket.nodes_to_endpoint) <= bucket.size
+            assert len(bucket.replacement_nodes) == 0 or len(bucket.nodes_to_peer_id) <= bucket.size
         assert min_nbuckets <= len(routing_table.buckets) <= max_nbuckets, (
             f"Unexpected number of buckets: {min_nbuckets} <= {len(routing_table.buckets)} <= {max_nbuckets}")
 
@@ -92,34 +92,34 @@ def test_routing_table_search():
 
         for phony_neighbor_port in random.sample(range(1_000_000), table_size):
             routing_table.add_or_update_node(DHTID.generate(), f'{LOCALHOST}:{phony_neighbor_port}')
-            new_total = sum(len(bucket.nodes_to_endpoint) for bucket in routing_table.buckets)
+            new_total = sum(len(bucket.nodes_to_peer_id) for bucket in routing_table.buckets)
             num_added += new_total > total_nodes
             total_nodes = new_total
         num_replacements = sum(len(bucket.replacement_nodes) for bucket in routing_table.buckets)
-    
+
         all_active_neighbors = list(chain(
-            *(bucket.nodes_to_endpoint.keys() for bucket in routing_table.buckets)
+            *(bucket.nodes_to_peer_id.keys() for bucket in routing_table.buckets)
         ))
         assert lower_active <= len(all_active_neighbors) <= upper_active
         assert len(all_active_neighbors) == num_added
         assert num_added + num_replacements == table_size
-    
+
         # random queries
         for i in range(1000):
             k = random.randint(1, 100)
             query_id = DHTID.generate()
             exclude = query_id if random.random() < 0.5 else None
-            our_knn, our_endpoints = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=exclude))
+            our_knn, our_peer_ids = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=exclude))
             reference_knn = heapq.nsmallest(k, all_active_neighbors, key=query_id.xor_distance)
             assert all(our == ref for our, ref in zip_longest(our_knn, reference_knn))
-            assert all(our_endpoint == routing_table[our_node]
-                       for our_node, our_endpoint in zip(our_knn, our_endpoints))
+            assert all(our_peer_id == routing_table[our_node]
+                       for our_node, our_peer_id in zip(our_knn, our_peer_ids))
 
         # queries from table
         for i in range(1000):
             k = random.randint(1, 100)
             query_id = random.choice(all_active_neighbors)
-            our_knn, our_endpoints = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=query_id))
+            our_knn, our_peer_ids = zip(*routing_table.get_nearest_neighbors(query_id, k=k, exclude=query_id))
 
             reference_knn = heapq.nsmallest(k + 1, all_active_neighbors, key=query_id.xor_distance)
             if query_id in reference_knn:
