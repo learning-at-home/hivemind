@@ -109,10 +109,12 @@ class MPFuture(base.Future, Generic[ResultType]):
         async def _event_setter():
             self._aio_event.set()
 
-        if loop == self.get_loop():
+        if self._loop.is_running() and loop == self.get_loop():
             asyncio.create_task(_event_setter())
-        else:
+        elif self._loop.is_running() and loop != self.get_loop():
             asyncio.run_coroutine_threadsafe(_event_setter(), self._loop)
+        else:
+            self._loop.run_until_complete(_event_setter())
 
     @classmethod
     def _initialize_mpfuture_backend(cls):
