@@ -7,7 +7,8 @@ from typing import Dict, List, Tuple
 
 from multiaddr import Multiaddr
 
-from hivemind.dht.node import DHTID, Endpoint, DHTNode
+from hivemind.dht.node import DHTID, DHTNode
+from hivemind.p2p import PeerID
 
 
 def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
@@ -19,7 +20,7 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
     node = loop.run_until_complete(DHTNode.create(initial_peers=initial_peers, ping_n_attempts=10))
     maddrs = loop.run_until_complete(node.get_visible_maddrs())
 
-    info_queue.put((node.node_id, node.endpoint, maddrs))
+    info_queue.put((node.node_id, node.peer_id, maddrs))
 
     async def shutdown():
         await node.shutdown()
@@ -30,7 +31,7 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
 
 
 def launch_swarm_in_separate_processes(n_peers: int, n_sequential_peers: int) -> \
-        Tuple[List[mp.Process], Dict[Endpoint, DHTID], List[List[Multiaddr]]]:
+        Tuple[List[mp.Process], Dict[PeerID, DHTID], List[List[Multiaddr]]]:
     assert n_sequential_peers < n_peers, \
         'Parameters imply that first n_sequential_peers of n_peers will be run sequentially'
 

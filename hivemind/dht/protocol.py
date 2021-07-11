@@ -2,14 +2,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional, List, Tuple, Dict, Any, Sequence, Union, Collection
-
-import grpc
+from typing import Optional, List, Tuple, Dict, Sequence, Union, Collection
 
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
-from hivemind.p2p import P2P, P2PContext, PeerID as Endpoint, Servicer
+from hivemind.p2p import P2P, P2PContext, PeerID, Servicer
 from hivemind.proto import dht_pb2
 from hivemind.utils import get_logger, MSGPackSerializer
 from hivemind.utils.auth import AuthRole, AuthRPCWrapper, AuthorizerBase
@@ -44,7 +42,7 @@ class DHTProtocol(Servicer):
         See DHTNode (node.py) for a more detailed description.
 
         :note: the rpc_* methods defined in this class will be automatically exposed to other DHT nodes,
-         for instance, def rpc_ping can be called as protocol.call_ping(endpoint, dht_id) from a remote machine
+         for instance, def rpc_ping can be called as protocol.call_ping(peer_id, dht_id) from a remote machine
          Only the call_* methods are meant to be called publicly, e.g. from DHTNode
          Read more: https://github.com/bmuller/rpcudp/tree/master/rpcudp
         """
@@ -73,16 +71,16 @@ class DHTProtocol(Servicer):
         assert _initialized_with_create, " Please use DHTProtocol.create coroutine to spawn new protocol instances "
         super().__init__()
 
-    def get_stub(self, peer: Endpoint) -> AuthRPCWrapper:
+    def get_stub(self, peer: PeerID) -> AuthRPCWrapper:
         """ get a stub that sends requests to a given peer """
         stub = super().get_stub(self.p2p, peer)
         return AuthRPCWrapper(stub, AuthRole.CLIENT, self.authorizer, service_public_key=None)
 
-    async def call_ping(self, peer: Endpoint, validate: bool = False, strict: bool = True) -> Optional[DHTID]:
+    async def call_ping(self, peer: PeerID, validate: bool = False, strict: bool = True) -> Optional[DHTID]:
         """
         Get peer's node id and add him to the routing table. If peer doesn't respond, return None
         :param peer: peer ID to ping
-        :param validate: if True, validates that node's endpoint is available
+        :param validate: if True, validates that node's peer_id is available
         :param strict: if strict=True, validation will raise exception on fail, otherwise it will only warn
         :note: if DHTProtocol was created with listen=True, also request peer to add you to his routing table
 
@@ -128,17 +126,17 @@ class DHTProtocol(Servicer):
 
         if request.peer and request.peer.node_id:
             sender_id = DHTID.from_bytes(request.peer.node_id)
-            sender_endpoint = context.remote_id
+            sender_peer_id = context.remote_id
 
             if request.validate:
-                response.available = await self.call_ping(sender_endpoint, validate=False) == sender_id
+                response.available = await self.call_ping(sender_peer_id, validate=False) == sender_id
 
-            asyncio.create_task(self.update_routing_table(sender_id, sender_endpoint,
+            asyncio.create_task(self.update_routing_table(sender_id, sender_peer_id,
                                                           responded=response.available or not request.validate))
 
         return response
 
-    async def call_store(self, peer: Endpoint, keys: Sequence[DHTID],
+    async def call_store(self, peer: PeerID, keys: Sequence[DHTID],
                          values: Sequence[Union[BinaryDHTValue, DictionaryDHTValue]],
                          expiration_time: Union[DHTExpiration, Sequence[DHTExpiration]],
                          subkeys: Optional[Union[Subkey, Sequence[Optional[Subkey]]]] = None,
@@ -190,7 +188,7 @@ class DHTProtocol(Servicer):
             return response.store_ok
         except Exception as e:
             logger.debug(f"DHTProtocol failed to store at {peer}", exc_info=True)
-            asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
+            asyncio.create_task(self.update_routing_table(self.routing_table.get(peer_id=peer), peer, responded=False))
             return None
 
     async def rpc_store(self, request: dht_pb2.StoreRequest, context: P2PContext) -> dht_pb2.StoreResponse:
@@ -226,8 +224,8 @@ class DHTProtocol(Servicer):
                 response.store_ok.append(storage.store_subkey(key_id, subkey, value_bytes, expiration_time))
         return response
 
-    async def call_find(self, peer: Endpoint, keys: Collection[DHTID]) -> Optional[Dict[
-        DHTID, Tuple[Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]], Dict[DHTID, Endpoint]]]]:
+    async def call_find(self, peer: PeerID, keys: Collection[DHTID]) -> Optional[Dict[
+        DHTID, Tuple[Optional[ValueWithExpiration[Union[BinaryDHTValue, DictionaryDHTValue]]], Dict[DHTID, PeerID]]]]:
         """
         Request keys from a peer. For each key, look for its (value, expiration time) locally and
          k additional peers that are most likely to have this key (ranked by XOR distance)
@@ -235,7 +233,7 @@ class DHTProtocol(Servicer):
         :returns: A dict key => Tuple[optional value, optional expiration time, nearest neighbors]
          value: value stored by the recipient with that key, or None if peer doesn't have this value
          expiration time: expiration time of the returned value, None if no value was found
-         neighbors: a dictionary[node_id : endpoint] containing nearest neighbors from peer's routing table
+         neighbors: a dictionary[node_id : peer_id] containing nearest neighbors from peer's routing table
          If peer didn't respond, returns None
         """
         keys = list(keys)
@@ -252,7 +250,7 @@ class DHTProtocol(Servicer):
             for key, result in zip(keys, response.results):
                 key_bytes = DHTID.to_bytes(key)
                 nearest = dict(zip(map(DHTID.from_bytes, result.nearest_node_ids),
-                                   map(Endpoint.from_base58, result.nearest_endpoints)))
+                                   map(PeerID.from_base58, result.nearest_peer_ids)))
 
                 if result.type == dht_pb2.NOT_FOUND:
                     output[key] = None, nearest
@@ -276,7 +274,7 @@ class DHTProtocol(Servicer):
             return output
         except Exception as e:
             logger.debug(f"DHTProtocol failed to find at {peer}", exc_info=True)
-            asyncio.create_task(self.update_routing_table(self.routing_table.get(endpoint=peer), peer, responded=False))
+            asyncio.create_task(self.update_routing_table(self.routing_table.get(peer_id=peer), peer, responded=False))
 
     async def rpc_find(self, request: dht_pb2.FindRequest, context: P2PContext) -> dht_pb2.FindResponse:
         """
@@ -303,23 +301,23 @@ class DHTProtocol(Servicer):
                 item = dht_pb2.FindResult(type=dht_pb2.FOUND_REGULAR, value=maybe_item.value,
                                           expiration_time=maybe_item.expiration_time)
 
-            for node_id, endpoint in self.routing_table.get_nearest_neighbors(
+            for node_id, peer_id in self.routing_table.get_nearest_neighbors(
                     key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id)):
                 item.nearest_node_ids.append(node_id.to_bytes())
-                item.nearest_endpoints.append(endpoint.to_base58())
+                item.nearest_peer_ids.append(peer_id.to_base58())
             response.results.append(item)
         return response
 
-    async def update_routing_table(self, node_id: Optional[DHTID], peer_endpoint: Endpoint, responded=True):
+    async def update_routing_table(self, node_id: Optional[DHTID], peer_id: PeerID, responded=True):
         """
         This method is called on every incoming AND outgoing request to update the routing table
 
-        :param peer_endpoint: sender endpoint for incoming requests, recipient endpoint for outgoing requests
+        :param peer_id: sender peer_id for incoming requests, recipient peer_id for outgoing requests
         :param node_id: sender node id for incoming requests, recipient node id for outgoing requests
         :param responded: for outgoing requests, this indicated whether recipient responded or not.
           For incoming requests, this should always be True
         """
-        node_id = node_id if node_id is not None else self.routing_table.get(endpoint=peer_endpoint)
+        node_id = node_id if node_id is not None else self.routing_table.get(peer_id=peer_id)
         if responded:  # incoming request or outgoing request with response
             if node_id not in self.routing_table:
                 # we just met a new node, maybe we know some values that it *should* store
@@ -334,13 +332,13 @@ class DHTProtocol(Servicer):
                     if not neighbors or (new_node_should_store and this_node_is_responsible):
                         data_to_send.append((key, item.value, item.expiration_time))
                 if data_to_send:
-                    asyncio.create_task(self.call_store(peer_endpoint, *zip(*data_to_send), in_cache=False))
+                    asyncio.create_task(self.call_store(peer_id, *zip(*data_to_send), in_cache=False))
 
-            maybe_node_to_ping = self.routing_table.add_or_update_node(node_id, peer_endpoint)
+            maybe_node_to_ping = self.routing_table.add_or_update_node(node_id, peer_id)
             if maybe_node_to_ping is not None:
                 # we couldn't add new node because the table was full. Check if existing peers are alive (Section 2.2)
                 # ping one least-recently updated peer: if it won't respond, remove it from the table, else update it
-                asyncio.create_task(self.call_ping(maybe_node_to_ping[1]))  # [1]-th element is that node's endpoint
+                asyncio.create_task(self.call_ping(maybe_node_to_ping[1]))  # [1]-th element is that node's peer_id
 
         else:  # we sent outgoing request and peer did not respond
             if node_id is not None and node_id in self.routing_table:
