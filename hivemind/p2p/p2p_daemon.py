@@ -274,25 +274,7 @@ class P2P:
         else:
             raise TypeError('Invalid Protobuf message type')
 
-    @staticmethod
-    def _handle_stream(handle: Callable[[bytes], bytes]):
-        async def do_handle_stream(
-                stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-            try:
-                request = await P2P.receive_raw_data(reader)
-            except asyncio.IncompleteReadError:
-                logger.debug("Incomplete read while receiving request from peer")
-                writer.close()
-                return
-            try:
-                result = handle(request)
-                await P2P.send_raw_data(result, writer)
-            finally:
-                writer.close()
-
-        return do_handle_stream
-
-    def _handle_unary_stream(self, handle: Callable[[Any, P2PContext], Any], handle_name: str,
+    def _handle_unary_stream(self, handler: Callable[[Any, P2PContext], Any], handle_name: str,
                              in_proto_type: type, out_proto_type: type):
         async def watchdog(reader: asyncio.StreamReader) -> None:
             await reader.read(n=1)
@@ -315,7 +297,7 @@ class P2P:
 
                 context = P2PContext(handle_name=handle_name, local_id=self.id,
                                      remote_id=stream_info.peer_id, remote_maddr=stream_info.addr)
-                done, pending = await asyncio.wait([watchdog(reader), handle(request, context)],
+                done, pending = await asyncio.wait([watchdog(reader), handler(request, context)],
                                                    return_when=asyncio.FIRST_COMPLETED)
                 try:
                     result = done.pop().result()
@@ -352,29 +334,26 @@ class P2P:
                 self._listen_task = None
                 self._server_stopped.clear()
 
-    async def add_stream_handler(self, name: str, handle: Callable[[bytes], bytes]) -> None:
+    async def add_stream_handler(self, name: str, handler: p2pclient.StreamHandler) -> None:
         if self._listen_task is None:
             self._start_listening()
-        await self._client.stream_handler(name, self._handle_stream(handle))
+        await self._client.stream_handler(name, handler)
 
-    async def add_unary_handler(self, name: str, handle: Callable[[Any, P2PContext], Any],
+    async def add_unary_handler(self, name: str, handler: Callable[[Any, P2PContext], Any],
                                 in_proto_type: type, out_proto_type: type) -> None:
         if self._listen_task is None:
             self._start_listening()
         await self._client.stream_handler(
-            name, self._handle_unary_stream(handle, name, in_proto_type, out_proto_type))
+            name, self._handle_unary_stream(handler, name, in_proto_type, out_proto_type))
 
-    async def call_peer_handler(self, peer_id: PeerID, handler_name: str, input_data: bytes) -> bytes:
-        stream_info, reader, writer = await self._client.stream_open(peer_id, (handler_name,))
-        try:
-            await P2P.send_raw_data(input_data, writer)
-            return await P2P.receive_raw_data(reader)
-        finally:
-            writer.close()
+    async def call_stream_handler(
+        self, peer_id: PeerID, handler_name: str
+    ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
+        return await self._client.stream_open(peer_id, (handler_name,))
 
     async def call_unary_handler(self, peer_id: PeerID, handler_name: str,
                                  request_protobuf: Any, response_proto_type: type) -> Any:
-        stream_info, reader, writer = await self._client.stream_open(peer_id, (handler_name,))
+        _, reader, writer = await self._client.stream_open(peer_id, (handler_name,))
         try:
             await P2P.send_protobuf(request_protobuf, type(request_protobuf), writer)
             result, err = await P2P.receive_protobuf(response_proto_type, reader)
