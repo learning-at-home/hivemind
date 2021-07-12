@@ -27,48 +27,44 @@ class TrainingMonitorArguments(BaseTrainingArguments):
     new workers still can join the collaboration via alive initial peers' addresses.
     Specify initial_peers argument for that purpose
     """
+
     use_google_dns: bool = field(
         default=False,
         metadata={
-            "help": "Use Google DNS to determine the public IP address of this machine (and add it to --announce_maddrs)"}
+            "help": "Use Google DNS to determine the public IP address of this machine (and add it to --announce_maddrs)"
+        },
     )
-    refresh_period: float = field(
-        default=30,
-        metadata={"help": "Period (in seconds) for fetching the keys from DHT"}
-    )
+    refresh_period: float = field(default=30, metadata={"help": "Period (in seconds) for fetching the keys from DHT"})
     wandb_project: Optional[str] = field(
-        default=None,
-        metadata={"help": "Name of Weights & Biases project to report the training progress to"}
+        default=None, metadata={"help": "Name of Weights & Biases project to report the training progress to"}
     )
     save_checkpoint_step_interval: int = field(
-        default=5,
-        metadata={"help": "Frequency (in steps) of fetching and saving state from peers"}
+        default=5, metadata={"help": "Frequency (in steps) of fetching and saving state from peers"}
     )
     model_config_path: str = field(
-        default='https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-config.json',
-        metadata={"help": "Path to the model config"}
+        default="https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-config.json",
+        metadata={"help": "Path to the model config"},
     )
     repo_path: Optional[str] = field(
-        default=None,
-        metadata={"help": "Path to local repository to store the model and optimizer states"}
+        default=None, metadata={"help": "Path to local repository to store the model and optimizer states"}
     )
     repo_url: Optional[str] = field(
-        default=None,
-        metadata={"help": "URL of Hugging Face Hub repository to upload the model and optimizer states"}
+        default=None, metadata={"help": "URL of Hugging Face Hub repository to upload the model and optimizer states"}
     )
     upload_interval: Optional[float] = field(
-        default=None,
-        metadata={"help": "Frequency (in seconds) of uploading the model to Hub"}
+        default=None, metadata={"help": "Frequency (in seconds) of uploading the model to Hub"}
     )
-    store_checkpoins: bool = field(
-        default=False,
-        metadata={"help": "If True, enables CheckpointHandler"}
-    )
+    store_checkpoins: bool = field(default=False, metadata={"help": "If True, enables CheckpointHandler"})
 
 
 class CheckpointHandler:
-    def __init__(self, monitor_args: TrainingMonitorArguments, collab_optimizer_args: CollaborativeOptimizerArguments,
-                 averager_args: AveragerArguments, dht: hivemind.DHT):
+    def __init__(
+        self,
+        monitor_args: TrainingMonitorArguments,
+        collab_optimizer_args: CollaborativeOptimizerArguments,
+        averager_args: AveragerArguments,
+        dht: hivemind.DHT,
+    ):
         self.save_checkpoint_step_interval = monitor_args.save_checkpoint_step_interval
         self.repo_path = monitor_args.repo_path
         self.repo_url = monitor_args.repo_url
@@ -92,17 +88,25 @@ class CheckpointHandler:
 
         opt = Lamb(
             optimizer_grouped_parameters,
-            lr=0.00176, weight_decay=0.01, clamp_value=10000.0, debias=True,
+            lr=0.00176,
+            weight_decay=0.01,
+            clamp_value=10000.0,
+            debias=True,
         )
 
         adjusted_target_batch_size = collab_optimizer_args.target_batch_size - collab_optimizer_args.batch_size_lead
 
         self.collaborative_optimizer = hivemind.CollaborativeOptimizer(
-            opt=opt, dht=dht, prefix=experiment_prefix,
+            opt=opt,
+            dht=dht,
+            prefix=experiment_prefix,
             compression_type=hivemind.utils.CompressionType.Value(collab_optimizer_args.compression),
             throughput=collab_optimizer_args.bandwidth,
-            target_batch_size=adjusted_target_batch_size, client_mode=collab_optimizer_args.client_mode,
-            verbose=True, start=True, **asdict(averager_args)
+            target_batch_size=adjusted_target_batch_size,
+            client_mode=collab_optimizer_args.client_mode,
+            verbose=True,
+            start=True,
+            **asdict(averager_args),
         )
         self.previous_timestamp = time.time()
 
@@ -131,13 +135,16 @@ class CheckpointHandler:
         logger.info("Saving optimizer")
         torch.save(self.collaborative_optimizer.opt.state_dict(), f"{self.repo_path}/optimizer_state.pt")
         self.previous_timestamp = time.time()
-        logger.info('Started uploading to Model Hub')
-        self.model.push_to_hub(repo_name=self.repo_path, repo_url=self.repo_url,
-                               commit_message=f'Step {current_step}, loss {current_loss:.3f}')
-        logger.info('Finished uploading to Model Hub')
+        logger.info("Started uploading to Model Hub")
+        self.model.push_to_hub(
+            repo_name=self.repo_path,
+            repo_url=self.repo_url,
+            commit_message=f"Step {current_step}, loss {current_loss:.3f}",
+        )
+        logger.info("Finished uploading to Model Hub")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = HfArgumentParser((TrainingMonitorArguments, CollaborativeOptimizerArguments, AveragerArguments))
     monitor_args, collab_optimizer_args, averager_args = parser.parse_args_into_dataclasses()
 
@@ -145,17 +152,19 @@ if __name__ == '__main__':
         address = get_ip(GoogleDnsProvider)
         logger.info(f"Received public IP address of this machine from Google DNS: {address}")
         version = ip_address(address).version
-        monitor_args.announce_maddrs += [f'/ip{version}/{address}/tcp/0', f'/ip{version}/{address}/udp/0/quic']
+        monitor_args.announce_maddrs += [f"/ip{version}/{address}/tcp/0", f"/ip{version}/{address}/udp/0/quic"]
 
     experiment_prefix = monitor_args.experiment_prefix
     validators, local_public_key = utils.make_validators(experiment_prefix)
 
-    dht = hivemind.DHT(start=True,
-                       initial_peers=monitor_args.initial_peers,
-                       record_validators=validators,
-                       use_ipfs=monitor_args.use_ipfs,
-                       host_maddrs=monitor_args.host_maddrs,
-                       announce_maddrs=monitor_args.announce_maddrs)
+    dht = hivemind.DHT(
+        start=True,
+        initial_peers=monitor_args.initial_peers,
+        record_validators=validators,
+        use_ipfs=monitor_args.use_ipfs,
+        host_maddrs=monitor_args.host_maddrs,
+        announce_maddrs=monitor_args.announce_maddrs,
+    )
     utils.log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=monitor_args.use_ipfs)
 
     if monitor_args.wandb_project is not None:
@@ -166,7 +175,7 @@ if __name__ == '__main__':
         checkpoint_handler = CheckpointHandler(monitor_args, collab_optimizer_args, averager_args, dht)
 
     while True:
-        metrics_dict = dht.get(experiment_prefix + '_metrics', latest=True)
+        metrics_dict = dht.get(experiment_prefix + "_metrics", latest=True)
         if metrics_dict is not None:
             metrics_dict = metrics_dict.value
             metrics = [utils.LocalMetrics.parse_obj(metrics_dict[peer].value) for peer in metrics_dict]
@@ -195,13 +204,15 @@ if __name__ == '__main__':
                 logger.info(f"Step #{current_step}\tloss = {current_loss:.5f}")
 
                 if monitor_args.wandb_project is not None:
-                    wandb.log({
-                        "loss": current_loss,
-                        "alive peers": alive_peers,
-                        "samples": num_samples,
-                        "performance": sum_perf,
-                        "step": latest_step
-                    })
+                    wandb.log(
+                        {
+                            "loss": current_loss,
+                            "alive peers": alive_peers,
+                            "samples": num_samples,
+                            "performance": sum_perf,
+                            "step": latest_step,
+                        }
+                    )
 
                 if monitor_args.store_checkpoins:
                     if checkpoint_handler.is_time_to_save_state(current_step):
