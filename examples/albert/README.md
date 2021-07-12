@@ -114,7 +114,7 @@ For small experiments (3-16 peers, <1GB data), you can use a free-tier file host
 to [download with curl/wget](https://superuser.com/questions/470664/how-to-download-dropbox-files-using-wget-command).
 However, these services are not meant for high load and could ban you for generating too much traffic. If you want to
 scale up, you could either use an S3-like storage from [any](https://aws.amazon.com/s3/)
-[cloud](https://cloud.google.com/storage) [provider](https://cloud.google.com/storage) or host the data
+[cloud](https://cloud.google.com/storage) [provider](https://cloud.yandex.com/en-ru/services/storage) or host the data
 [yourself]((https://gist.github.com/willurd/5720255)). Large data files (>5GB) will take long to download; we recommend
 splitting them into chunks and implementing a custom dataloader that can load chunks on the fly. Finally, the most _
 comme il faut_ solution to sharing large datasets is to use [academic torrents](https://academictorrents.com/).
@@ -123,9 +123,9 @@ comme il faut_ solution to sharing large datasets is to use [academic torrents](
 
 This peer exists solely to welcome other peers onto the DHT and track learning progress. It requires neither GPU nor
 high bandwidth, the only prerequisite is high uptime. If no high uptime server is available, one can also run multiple
-monitors on different servers and list all of them as `--initial_peers`. The system will stay intact as long as at
-least one externally accessible participant is available. For short- to mid-term experiments you can host the monitor
-on a [free-tier VM](https://www.quora.com/Are-there-any-free-online-virtual-machines).
+monitors on different servers and list all of them as `--initial_peers`. The system will maintain its integrity as long
+as at least one externally accessible participant is available. For short- to mid-term experiments you can host the
+monitor on a [free-tier VM](https://www.quora.com/Are-there-any-free-online-virtual-machines).
 
 ### Tuning for hardware/network
 
@@ -178,8 +178,8 @@ Here's an example of a full trainer script for Google Colab:
 
 If the initial peers for your experiment are located behind NAT and/or you have any trouble with figuring out their
 public IP addresses and ports, you can set up hivemind to use the [IPFS](https://ipfs.io) network to find the route to
-your peers automatically. To do this, you should specify the `--use_ipfs` option on all peers (both training monitors
-and trainers) you are starting.
+your peers automatically. To do this, you should specify the `--use_ipfs` option on all peers you are starting
+(both trainers and monitors).
 
 After that, it is enough to provide only a [libp2p](https://libp2p.io/) peer ID (e.g. `/p2p/XXXX`) for each initial
 peer. No other information (like IP addresses or TCP/UDP ports) is required.
