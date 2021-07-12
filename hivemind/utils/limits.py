@@ -4,9 +4,10 @@ logger = get_logger(__name__)
 
 
 def increase_file_limit(new_soft=2 ** 15, new_hard=2 ** 15):
-    """ Increase the maximum number of open files. On Linux, this allows spawning more processes/threads. """
+    """Increase the maximum number of open files. On Linux, this allows spawning more processes/threads."""
     try:
         import resource  # local import to avoid ImportError for Windows users
+
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         new_soft = max(soft, new_soft)
         new_hard = max(hard, new_hard)

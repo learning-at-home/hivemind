@@ -38,16 +38,32 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
     :param allow_zero_outputs: whether to return just the input if no experts respond on forward pass
     """
 
-    def __init__(self, *, grid_size: Tuple[int, ...], utilization_alpha: float = 0.9, grid_dropout: float = 1.0,
-                 jitter_eps: float = 1e-2, k_best=1, k_min=0, backward_k_min=0, allow_zero_outputs=True, **kwargs):
-        super().__init__(grid_size=grid_size, k_best=k_best, k_min=k_min, backward_k_min=backward_k_min,
-                         allow_zero_outputs=allow_zero_outputs, **kwargs)
+    def __init__(
+        self,
+        *,
+        grid_size: Tuple[int, ...],
+        utilization_alpha: float = 0.9,
+        grid_dropout: float = 1.0,
+        jitter_eps: float = 1e-2,
+        k_best=1,
+        k_min=0,
+        backward_k_min=0,
+        allow_zero_outputs=True,
+        **kwargs,
+    ):
+        super().__init__(
+            grid_size=grid_size,
+            k_best=k_best,
+            k_min=k_min,
+            backward_k_min=backward_k_min,
+            allow_zero_outputs=allow_zero_outputs,
+            **kwargs,
+        )
 
         initial_utilization = torch.cat(
-            [torch.tensor([1 / dim_size for _ in range(dim_size)], dtype=torch.float)
-             for dim_size in grid_size],
+            [torch.tensor([1 / dim_size for _ in range(dim_size)], dtype=torch.float) for dim_size in grid_size],
         )
-        self.register_buffer('grid_utilization', initial_utilization)
+        self.register_buffer("grid_utilization", initial_utilization)
         self.utilization_alpha = utilization_alpha
         self.grid_dropout = grid_dropout
         self.jitter_eps = jitter_eps
@@ -66,36 +82,56 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
         grid_scores = self.proj(input_for_gating).split_with_sizes(self.beam_search.grid_size, dim=-1)
 
         grid_dropout_masks = (
-            (torch.rand(size=(dim_size,), dtype=input_for_gating.dtype, device=input_for_gating.device)
-             < self.grid_dropout) for dim_size in self.beam_search.grid_size
+            (
+                torch.rand(size=(dim_size,), dtype=input_for_gating.dtype, device=input_for_gating.device)
+                < self.grid_dropout
+            )
+            for dim_size in self.beam_search.grid_size
         )
-        grid_scores_dropout = [torch.where(dropout_mask, grid_score,
-                                           torch.full((1,), float('-inf'), device=grid_score.device,
-                                                      dtype=grid_score.dtype))
-                               for grid_score, dropout_mask in zip(grid_scores, grid_dropout_masks)]
+        grid_scores_dropout = [
+            torch.where(
+                dropout_mask,
+                grid_score,
+                torch.full((1,), float("-inf"), device=grid_score.device, dtype=grid_score.dtype),
+            )
+            for grid_score, dropout_mask in zip(grid_scores, grid_dropout_masks)
+        ]
 
         grid_softmax = [torch.softmax(grid_score, dim=-1) for grid_score in grid_scores_dropout]
         chosen_experts: List[List[RemoteExpert]] = self.beam_search.batch_find_best_experts(
-            [scores.detach().cpu() for scores in grid_scores_dropout], self.k_best)
+            [scores.detach().cpu() for scores in grid_scores_dropout], self.k_best
+        )
 
         if self._expert_info is None:
             try:
                 self._expert_info = next((expert.info for experts_i in chosen_experts for expert in experts_i))
             except StopIteration:
-                raise RuntimeError("No responding experts found during beam search. Check that UID prefixes and "
-                                   "the grid size are consistent with running Server instances.")
+                raise RuntimeError(
+                    "No responding experts found during beam search. Check that UID prefixes and "
+                    "the grid size are consistent with running Server instances."
+                )
             except grpc.RpcError as e:
                 logger.warning(f"Failed to get RemoteSwitchMixtureOfExperts.output_shape: {e}")
 
         expert_mask, *expert_outputs = _RemoteCallMany.apply(
-            DUMMY, chosen_experts, self.k_min, self.backward_k_min, self.timeout_after_k_min, self.forward_timeout,
-            self.backward_timeout, self.detect_anomalies, self.allow_zero_outputs, self.info,
-            *nested_flatten(((input, *args), kwargs)))
+            DUMMY,
+            chosen_experts,
+            self.k_min,
+            self.backward_k_min,
+            self.timeout_after_k_min,
+            self.forward_timeout,
+            self.backward_timeout,
+            self.detect_anomalies,
+            self.allow_zero_outputs,
+            self.info,
+            *nested_flatten(((input, *args), kwargs)),
+        )
         # ^-- multiple tensors of shape [batch_size, max_experts, ...output_shape]
 
         batch_utilization = self._compute_batch_utilization(chosen_experts, expert_mask)
-        self.grid_utilization = \
+        self.grid_utilization = (
             self.utilization_alpha * self.grid_utilization + (1 - self.utilization_alpha) * batch_utilization
+        )
 
         # compute expert probabilities as product across grid dimensions
         expert_probs = self.compute_expert_scores(grid_softmax, chosen_experts)
@@ -105,15 +141,21 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
         # multiply outputs by expert probabilities
         averaged_outputs_flat = [
             (expert_probs[..., None] * tensor.flatten(start_dim=2)).view(tensor.shape).sum(dim=1)
-            for tensor in expert_outputs]  # ^-- multiply by softmax weights along first 2 axes
+            for tensor in expert_outputs
+        ]  # ^-- multiply by softmax weights along first 2 axes
 
-        packed_outputs = nested_pack(averaged_outputs_flat, self.info['outputs_schema'])
+        packed_outputs = nested_pack(averaged_outputs_flat, self.info["outputs_schema"])
 
         # Load balancing loss: multiply fractions of probability mass and fractions of routed examples
         # for each grid dimension, sum across all indices for a dimension. Optimizing this leads to uniform allocation
-        balancing_loss = torch.stack([torch.mean(dim_softmax.mean(0) * dim_utilization) * (dim_size ** 2)
-                                      for dim_softmax, dim_utilization, dim_size in
-                                      zip(grid_softmax, self.grid_utilization, self.beam_search.grid_size)]).sum()
+        balancing_loss = torch.stack(
+            [
+                torch.mean(dim_softmax.mean(0) * dim_utilization) * (dim_size ** 2)
+                for dim_softmax, dim_utilization, dim_size in zip(
+                    grid_softmax, self.grid_utilization, self.beam_search.grid_size
+                )
+            ]
+        ).sum()
 
         # residual connection
         if isinstance(packed_outputs, torch.Tensor):
@@ -125,26 +167,27 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
     @torch.no_grad()
     def _compute_batch_utilization(self, batch_experts, expert_mask):
-        batch_utilization = [torch.zeros((dim_size,), dtype=self.grid_utilization.dtype,
-                                         device=self.grid_utilization.device)
-                             for dim_size in self.beam_search.grid_size]
+        batch_utilization = [
+            torch.zeros((dim_size,), dtype=self.grid_utilization.dtype, device=self.grid_utilization.device)
+            for dim_size in self.beam_search.grid_size
+        ]
 
         # out of chosen_experts, select those for which expert_mask is True
         for (sample_idx, expert_idx) in expert_mask.nonzero().cpu().numpy():
             expert = batch_experts[sample_idx][expert_idx]
-            expert_indices = expert.uid[len(self.beam_search.uid_prefix):]
+            expert_indices = expert.uid[len(self.beam_search.uid_prefix) :]
             expert_indices = list(map(int, expert_indices.split(UID_DELIMITER)))
 
             for dim_index, dim_utilization in zip(expert_indices, batch_utilization):
                 dim_utilization[dim_index] += 1
 
-        return torch.cat([
-            torch.nn.functional.normalize(dim_utilization, p=1, dim=0)
-            for dim_utilization in batch_utilization
-        ])
+        return torch.cat(
+            [torch.nn.functional.normalize(dim_utilization, p=1, dim=0) for dim_utilization in batch_utilization]
+        )
 
     def compute_expert_scores(
-            self, grid_probs: List[torch.Tensor], batch_experts: List[List[RemoteExpert]]) -> torch.Tensor:
+        self, grid_probs: List[torch.Tensor], batch_experts: List[List[RemoteExpert]]
+    ) -> torch.Tensor:
         """
         Compute scores for each expert by multiplying grid probabilities, autograd-friendly
         :param grid_probs: list of torch tensors, i-th tensor contains scores for i-th grid dimension
@@ -167,15 +210,16 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         grid_indices = torch.zeros([len(flat_experts), len(grid_probs)], dtype=torch.int64)
         for i, expert in enumerate(flat_experts):
-            expert_indices = expert.uid[len(self.beam_search.uid_prefix):]
+            expert_indices = expert.uid[len(self.beam_search.uid_prefix) :]
             expert_indices = list(map(int, expert_indices.split(UID_DELIMITER)))
             grid_indices[i] = torch.as_tensor(expert_indices, dtype=grid_indices.dtype)
 
         scores_per_dim = [
             dim_scores[flat_batch_indices, dim_indices] if len(flat_batch_indices) else torch.zeros(0, device=device)
-            for dim_scores, dim_indices in zip(grid_probs, grid_indices.T)]
+            for dim_scores, dim_indices in zip(grid_probs, grid_indices.T)
+        ]
         flat_scores = torch.prod(torch.stack(scores_per_dim, dim=0), dim=0)
 
-        scores = torch.full((batch_size, max_num_experts), fill_value=-float('inf'), device=device)
+        scores = torch.full((batch_size, max_num_experts), fill_value=-float("inf"), device=device)
         scores[flat_batch_indices, flat_local_indices] = flat_scores  # backprop-able w.r.t. flat_scores
         return scores

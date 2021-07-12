@@ -30,10 +30,12 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
     loop.run_forever()
 
 
-def launch_swarm_in_separate_processes(n_peers: int, n_sequential_peers: int) -> \
-        Tuple[List[mp.Process], Dict[PeerID, DHTID], List[List[Multiaddr]]]:
-    assert n_sequential_peers < n_peers, \
-        'Parameters imply that first n_sequential_peers of n_peers will be run sequentially'
+def launch_swarm_in_separate_processes(
+    n_peers: int, n_sequential_peers: int
+) -> Tuple[List[mp.Process], Dict[PeerID, DHTID], List[List[Multiaddr]]]:
+    assert (
+        n_sequential_peers < n_peers
+    ), "Parameters imply that first n_sequential_peers of n_peers will be run sequentially"
 
     processes = []
     dht = {}
@@ -82,6 +84,5 @@ def launch_swarm_in_separate_processes(n_peers: int, n_sequential_peers: int) ->
 async def launch_star_shaped_swarm(n_peers: int, **kwargs) -> List[DHTNode]:
     nodes = [await DHTNode.create(**kwargs)]
     initial_peers = await nodes[0].get_visible_maddrs()
-    nodes += await asyncio.gather(*[DHTNode.create(initial_peers=initial_peers, **kwargs)
-                                    for _ in range(n_peers - 1)])
+    nodes += await asyncio.gather(*[DHTNode.create(initial_peers=initial_peers, **kwargs) for _ in range(n_peers - 1)])
     return nodes

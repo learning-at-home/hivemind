@@ -56,7 +56,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          pip install . --global-option=build_py --global-option="--buildgo"
+          pip install . --global-option=build_py --global-option="--buildgo" --no-use-pep517
       - name: Test
         run: |
           cd tests

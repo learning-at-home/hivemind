@@ -9,15 +9,16 @@ from hivemind.utils.timed_storage import KeyType, ValueType, TimedStorage, DHTEx
 
 @MSGPackSerializer.ext_serializable(0x50)
 class DictionaryDHTValue(TimedStorage[Subkey, BinaryDHTValue]):
-    """ a dictionary-like DHT value type that maps sub-keys to values with individual expirations """
-    latest_expiration_time = float('-inf')
+    """a dictionary-like DHT value type that maps sub-keys to values with individual expirations"""
+
+    latest_expiration_time = float("-inf")
 
     def store(self, key: KeyType, value: ValueType, expiration_time: DHTExpiration) -> bool:
         self.latest_expiration_time = max(self.latest_expiration_time, expiration_time)
         return super().store(key, value, expiration_time)
 
     def packb(self) -> bytes:
-        """ custom behavior for MSGPackSerializer.dumps """
+        """custom behavior for MSGPackSerializer.dumps"""
         packed_items = [[key, value, expiration_time] for key, (value, expiration_time) in self.items()]
         return MSGPackSerializer.dumps([self.maxsize, self.latest_expiration_time, packed_items])
 
@@ -32,10 +33,11 @@ class DictionaryDHTValue(TimedStorage[Subkey, BinaryDHTValue]):
 
 
 class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTValue]]):
-    """ A dictionary-like storage that can store binary values and/or nested dictionaries until expiration """
+    """A dictionary-like storage that can store binary values and/or nested dictionaries until expiration"""
 
-    def store(self, key: DHTID, value: BinaryDHTValue, expiration_time: DHTExpiration,
-              subkey: Optional[Subkey] = None) -> bool:
+    def store(
+        self, key: DHTID, value: BinaryDHTValue, expiration_time: DHTExpiration, subkey: Optional[Subkey] = None
+    ) -> bool:
         """
         Store a (key, value) pair locally at least until expiration_time. See class docstring for details.
         If subkey is not None, adds a subkey-value pair to a dictionary associated with :key: (see store_subkey below)
@@ -54,7 +56,7 @@ class DHTLocalStorage(TimedStorage[DHTID, Union[BinaryDHTValue, DictionaryDHTVal
          3) if self[key] is a normal value with smaller expiration time, overwrite it with a dictionary and add sub-key
         :returns: True if new entry was stored, False it was rejected (current value is newer)
         """
-        previous_value, previous_expiration_time = self.get(key) or (b'', -float('inf'))
+        previous_value, previous_expiration_time = self.get(key) or (b"", -float("inf"))
         if isinstance(previous_value, BinaryDHTValue) and expiration_time > previous_expiration_time:
             new_storage = DictionaryDHTValue()
             new_storage.store(subkey, value, expiration_time)

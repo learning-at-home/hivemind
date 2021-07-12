@@ -31,8 +31,9 @@ class MSGPackSerializer(SerializerBase):
         assert isinstance(type_code, int), "Please specify a (unique) int type code"
 
         def wrap(wrapped_type: type):
-            assert callable(getattr(wrapped_type, 'packb', None)) and callable(getattr(wrapped_type, 'unpackb', None)), \
-                f"Every ext_type must have 2 methods: packb(self) -> bytes and classmethod unpackb(cls, bytes)"
+            assert callable(getattr(wrapped_type, "packb", None)) and callable(
+                getattr(wrapped_type, "unpackb", None)
+            ), f"Every ext_type must have 2 methods: packb(self) -> bytes and classmethod unpackb(cls, bytes)"
             if type_code in cls._ext_type_codes:
                 logger.warning(f"{cls.__name__}: type {type_code} is already registered, overwriting.")
             cls._ext_type_codes[type_code], cls._ext_types[wrapped_type] = wrapped_type, type_code

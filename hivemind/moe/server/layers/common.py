@@ -15,9 +15,8 @@ def gelu_fast(x):
 ffn_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
 
 
-@register_expert_class('ffn', ffn_sample_input)
+@register_expert_class("ffn", ffn_sample_input)
 class FeedforwardBlock(nn.Module):
-
     def __init__(self, hid_dim):
         super().__init__()
         self.ffn = nn.Linear(hid_dim, 4 * hid_dim)
@@ -67,14 +66,14 @@ class TransformerEncoderLayer(nn.Module):
         return src
 
 
-transformer_sample_input = lambda batch_size, hid_dim: \
-    (torch.empty((batch_size, 128, hid_dim)), \
-     torch.empty((batch_size, 128), dtype=torch.bool))
+transformer_sample_input = lambda batch_size, hid_dim: (
+    torch.empty((batch_size, 128, hid_dim)),
+    torch.empty((batch_size, 128), dtype=torch.bool),
+)
 
 
-@register_expert_class('transformer', transformer_sample_input)
+@register_expert_class("transformer", transformer_sample_input)
 class TunedTransformer(TransformerEncoderLayer):
-
     def __init__(self, hid_dim):
         super().__init__(hid_dim, dim_feedforward=4 * hid_dim, nhead=16)
 
@@ -82,9 +81,8 @@ class TunedTransformer(TransformerEncoderLayer):
 nop_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
 
 
-@register_expert_class('nop', nop_sample_input)
+@register_expert_class("nop", nop_sample_input)
 class NopExpert(nn.Sequential):
-
     def __init__(self, hid_dim):
         super().__init__()
         self.w = nn.Parameter(torch.zeros(0), requires_grad=True)
@@ -93,9 +91,8 @@ class NopExpert(nn.Sequential):
         return x.clone()
 
 
-@register_expert_class('nop_delay', nop_sample_input)
+@register_expert_class("nop_delay", nop_sample_input)
 class DelayedNopExpert(nn.Sequential):
-
     def __init__(self, hid_dim, delay=0.5):
         super().__init__()
         self.w = nn.Parameter(torch.zeros(0), requires_grad=True)

@@ -10,7 +10,7 @@ from hivemind.utils import get_logger
 logger = get_logger(__name__)
 
 
-@pytest.fixture(autouse=True, scope='session')
+@pytest.fixture(autouse=True, scope="session")
 def cleanup_children():
     yield
 
@@ -18,7 +18,7 @@ def cleanup_children():
 
     children = psutil.Process().children(recursive=True)
     if children:
-        logger.info(f'Cleaning up {len(children)} leftover child processes')
+        logger.info(f"Cleaning up {len(children)} leftover child processes")
         for child in children:
             with suppress(psutil.NoSuchProcess):
                 child.terminate()

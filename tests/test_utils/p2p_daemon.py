@@ -41,9 +41,7 @@ class Daemon:
     f_log = None
     closed = None
 
-    def __init__(
-            self, control_maddr, enable_control, enable_connmgr, enable_dht, enable_pubsub
-    ):
+    def __init__(self, control_maddr, enable_control, enable_connmgr, enable_dht, enable_pubsub):
         self.control_maddr = control_maddr
         self.enable_control = enable_control
         self.enable_connmgr = enable_connmgr
@@ -67,9 +65,7 @@ class Daemon:
             cmd_list += ["-dht=true"]
         if self.enable_pubsub:
             cmd_list += ["-pubsub=true", "-pubsubRouter=gossipsub"]
-        self.proc_daemon = subprocess.Popen(
-            cmd_list, stdout=self.f_log, stderr=self.f_log, bufsize=0
-        )
+        self.proc_daemon = subprocess.Popen(cmd_list, stdout=self.f_log, stderr=self.f_log, bufsize=0)
 
     async def wait_until_ready(self):
         lines_head_pattern = (b"Control socket:", b"Peer ID:", b"Peer Addrs:")
@@ -108,9 +104,7 @@ class ConnectionFailure(Exception):
 
 
 @asynccontextmanager
-async def make_p2pd_pair_unix(
-        enable_control, enable_connmgr, enable_dht, enable_pubsub
-):
+async def make_p2pd_pair_unix(enable_control, enable_connmgr, enable_dht, enable_pubsub):
     name = str(uuid.uuid4())[:8]
     control_maddr = Multiaddr(f"/unix/tmp/test_p2pd_control_{name}.sock")
     listen_maddr = Multiaddr(f"/unix/tmp/test_p2pd_listen_{name}.sock")
@@ -124,12 +118,12 @@ async def make_p2pd_pair_unix(
     except FileNotFoundError:
         pass
     async with _make_p2pd_pair(
-            control_maddr=control_maddr,
-            listen_maddr=listen_maddr,
-            enable_control=enable_control,
-            enable_connmgr=enable_connmgr,
-            enable_dht=enable_dht,
-            enable_pubsub=enable_pubsub,
+        control_maddr=control_maddr,
+        listen_maddr=listen_maddr,
+        enable_control=enable_control,
+        enable_connmgr=enable_connmgr,
+        enable_dht=enable_dht,
+        enable_pubsub=enable_pubsub,
     ) as pair:
         yield pair
 
@@ -139,24 +133,24 @@ async def make_p2pd_pair_ip4(enable_control, enable_connmgr, enable_dht, enable_
     control_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{find_open_port()}")
     listen_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{find_open_port()}")
     async with _make_p2pd_pair(
-            control_maddr=control_maddr,
-            listen_maddr=listen_maddr,
-            enable_control=enable_control,
-            enable_connmgr=enable_connmgr,
-            enable_dht=enable_dht,
-            enable_pubsub=enable_pubsub,
+        control_maddr=control_maddr,
+        listen_maddr=listen_maddr,
+        enable_control=enable_control,
+        enable_connmgr=enable_connmgr,
+        enable_dht=enable_dht,
+        enable_pubsub=enable_pubsub,
     ) as pair:
         yield pair
 
 
 @asynccontextmanager
 async def _make_p2pd_pair(
-        control_maddr,
-        listen_maddr,
-        enable_control,
-        enable_connmgr,
-        enable_dht,
-        enable_pubsub,
+    control_maddr,
+    listen_maddr,
+    enable_control,
+    enable_connmgr,
+    enable_dht,
+    enable_pubsub,
 ):
     p2pd = Daemon(
         control_maddr=control_maddr,
@@ -187,8 +181,4 @@ async def _check_connection(p2pd_tuple_0, p2pd_tuple_1):
 async def connect_safe(p2pd_tuple_0, p2pd_tuple_1):
     peer_id_1, maddrs_1 = await p2pd_tuple_1.identify()
     await p2pd_tuple_0.connect(peer_id_1, maddrs_1)
-    await try_until_success(
-        functools.partial(
-            _check_connection, p2pd_tuple_0=p2pd_tuple_0, p2pd_tuple_1=p2pd_tuple_1
-        )
-    )
+    await try_until_success(functools.partial(_check_connection, p2pd_tuple_0=p2pd_tuple_0, p2pd_tuple_1=p2pd_tuple_1))

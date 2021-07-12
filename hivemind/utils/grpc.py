@@ -20,12 +20,12 @@ logger = get_logger(__name__)
 Stub = TypeVar("Stub")
 
 GRPC_KEEPALIVE_OPTIONS = (
-    ('grpc.keepalive_time_ms', 60 * 1000),
-    ('grpc.keepalive_timeout_ms', 60 * 1000),
-    ('grpc.keepalive_permit_without_calls', True),
-    ('grpc.http2.max_pings_without_data', 0),
-    ('grpc.http2.min_time_between_pings_ms', 30 * 1000),
-    ('grpc.http2.min_ping_interval_without_data_ms', 10 * 1000),
+    ("grpc.keepalive_time_ms", 60 * 1000),
+    ("grpc.keepalive_timeout_ms", 60 * 1000),
+    ("grpc.keepalive_permit_without_calls", True),
+    ("grpc.http2.max_pings_without_data", 0),
+    ("grpc.http2.min_time_between_pings_ms", 30 * 1000),
+    ("grpc.http2.min_ping_interval_without_data_ms", 10 * 1000),
 )
 
 
@@ -44,6 +44,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     Unlike TimedStorage, ChannelCache actively evicts stale channels even if the cache is not accessed
     Unlike grpc._simple_stubs.ChannelCache, this implementation supports aio and does not forcibly close active channels
     """
+
     MAXIMUM_CHANNELS = int(os.environ.get("GRPC_PYTHON_MANAGED_CHANNEL_MAXIMUM", 4096))
     EVICTION_PERIOD_SECONDS = float(os.environ.get("GRPC_PYTHON_MANAGED_CHANNEL_EVICTION_SECONDS", 10 * 60))
     logger.debug(f"Eviction period = {EVICTION_PERIOD_SECONDS}s, max channels = {MAXIMUM_CHANNELS}")
@@ -57,13 +58,13 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
         assert _created_as_singleton, f"Please use {self.__class__.__name__}.get_singleton()"
         super().__init__(maxsize=self.MAXIMUM_CHANNELS)
         self._is_active = True
-        self._nearest_expiration_time = float('inf')
+        self._nearest_expiration_time = float("inf")
         self._eviction_thread = threading.Thread(target=self._evict_stale_channels_in_background, daemon=True)
         self._eviction_thread.start()
 
     @classmethod
     def get_singleton(cls):
-        """ Get or create the channel cache for the current process """
+        """Get or create the channel cache for the current process"""
         with cls._lock:
             if cls._singleton is None or cls._singleton_pid != os.getpid():
                 if cls._singleton is not None:
@@ -72,9 +73,16 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
             return cls._singleton
 
     @classmethod
-    def get_stub(cls, target: Endpoint, stub_type: Type[Stub], *, aio: bool, options: Tuple[Tuple[str, Any]] = (),
-                 channel_credentials: Optional[grpc.ChannelCredentials] = None,
-                 compression: Optional[grpc.Compression] = None) -> Stub:
+    def get_stub(
+        cls,
+        target: Endpoint,
+        stub_type: Type[Stub],
+        *,
+        aio: bool,
+        options: Tuple[Tuple[str, Any]] = (),
+        channel_credentials: Optional[grpc.ChannelCredentials] = None,
+        compression: Optional[grpc.Compression] = None,
+    ) -> Stub:
         """
         Create a grpc channel with given options or reuse pre-existing one
 
@@ -112,28 +120,37 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
             return stubs[stub_type]
 
     @classmethod
-    def _create_channel(cls, target: Endpoint, aio: bool, extra_options: Tuple[Tuple[str, Any], ...],
-                        channel_credentials: Optional[grpc.ChannelCredentials],
-                        compression: Optional[grpc.Compression]) -> Union[grpc.Channel, grpc.aio.Channel]:
+    def _create_channel(
+        cls,
+        target: Endpoint,
+        aio: bool,
+        extra_options: Tuple[Tuple[str, Any], ...],
+        channel_credentials: Optional[grpc.ChannelCredentials],
+        compression: Optional[grpc.Compression],
+    ) -> Union[grpc.Channel, grpc.aio.Channel]:
         namespace = grpc.aio if aio else grpc
 
         options = extra_options + GRPC_KEEPALIVE_OPTIONS
 
         if channel_credentials is None:
-            logger.debug(f"Creating insecure {namespace} channel with options '{options}' "
-                         f"and compression '{compression}'")
+            logger.debug(
+                f"Creating insecure {namespace} channel with options '{options}' " f"and compression '{compression}'"
+            )
             return namespace.insecure_channel(target, options=options, compression=compression)
         else:
-            logger.debug(f"Creating secure {namespace} channel with credentials '{channel_credentials}', "
-                         f"options '{options}' and compression '{compression}'")
-            return namespace.secure_channel(target, credentials=channel_credentials,
-                                            options=options, compression=compression)
+            logger.debug(
+                f"Creating secure {namespace} channel with credentials '{channel_credentials}', "
+                f"options '{options}' and compression '{compression}'"
+            )
+            return namespace.secure_channel(
+                target, credentials=channel_credentials, options=options, compression=compression
+            )
 
     def _evict_stale_channels_in_background(self):
         while self._is_active:
             now = get_dht_time()
             time_to_wait = max(0.0, self._nearest_expiration_time - now)
-            interrupted_early = self._update_eviction_evt.wait(time_to_wait if time_to_wait != float('inf') else None)
+            interrupted_early = self._update_eviction_evt.wait(time_to_wait if time_to_wait != float("inf") else None)
             if interrupted_early:
                 self._update_eviction_evt.clear()
                 continue
@@ -141,7 +158,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
             with self._lock:
                 self._remove_outdated()
                 _, entry = super().top()
-                self._nearest_expiration_time = entry.expiration_time if entry is not None else float('inf')
+                self._nearest_expiration_time = entry.expiration_time if entry is not None else float("inf")
 
     def _stop_background_thread(self):
         with self._lock:
@@ -161,20 +178,27 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
 STREAMING_CHUNK_SIZE_BYTES = 2 ** 16
 
 
-def split_for_streaming(serialized_tensor: runtime_pb2.Tensor, chunk_size_bytes: int = STREAMING_CHUNK_SIZE_BYTES,
-                        ) -> Iterator[runtime_pb2.Tensor]:
-    """ Split serialized_tensor into multiple chunks for gRPC streaming """
+def split_for_streaming(
+    serialized_tensor: runtime_pb2.Tensor,
+    chunk_size_bytes: int = STREAMING_CHUNK_SIZE_BYTES,
+) -> Iterator[runtime_pb2.Tensor]:
+    """Split serialized_tensor into multiple chunks for gRPC streaming"""
     buffer = memoryview(serialized_tensor.buffer)
     num_chunks = len(range(0, len(buffer), chunk_size_bytes))
     yield runtime_pb2.Tensor(
-        compression=serialized_tensor.compression, buffer=buffer[:chunk_size_bytes].tobytes(), chunks=num_chunks,
-        size=serialized_tensor.size, dtype=serialized_tensor.dtype, requires_grad=serialized_tensor.requires_grad)
+        compression=serialized_tensor.compression,
+        buffer=buffer[:chunk_size_bytes].tobytes(),
+        chunks=num_chunks,
+        size=serialized_tensor.size,
+        dtype=serialized_tensor.dtype,
+        requires_grad=serialized_tensor.requires_grad,
+    )
     for chunk_start in range(chunk_size_bytes, len(buffer), chunk_size_bytes):
-        yield runtime_pb2.Tensor(buffer=buffer[chunk_start: chunk_start + chunk_size_bytes].tobytes())
+        yield runtime_pb2.Tensor(buffer=buffer[chunk_start : chunk_start + chunk_size_bytes].tobytes())
 
 
 def combine_from_streaming(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.Tensor:
-    """ Restore a result of split_into_chunks into a single serialized tensor """
+    """Restore a result of split_into_chunks into a single serialized tensor"""
     stream = iter(stream)
     first_chunk = next(stream)
     serialized_tensor = runtime_pb2.Tensor()
@@ -182,5 +206,5 @@ def combine_from_streaming(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.
     buffer_chunks = [first_chunk.buffer]
     for tensor_part in stream:
         buffer_chunks.append(tensor_part.buffer)
-    serialized_tensor.buffer = b''.join(buffer_chunks)
+    serialized_tensor.buffer = b"".join(buffer_chunks)
     return serialized_tensor
