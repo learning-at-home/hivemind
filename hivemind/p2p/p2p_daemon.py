@@ -1,7 +1,7 @@
 import asyncio
 import os
 import secrets
-from contextlib import suppress
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
@@ -282,7 +282,7 @@ class P2P:
 
         async def do_handle_unary_stream(stream_info: StreamInfo,
                                          reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-            try:
+            with closing(writer):
                 try:
                     request, err = await P2P.receive_protobuf(in_proto_type, reader)
                 except asyncio.IncompleteReadError:
@@ -312,8 +312,6 @@ class P2P:
                         for task in pending:
                             task.cancel()
                         await asyncio.wait(pending)
-            finally:
-                writer.close()
 
         return do_handle_unary_stream
 
@@ -354,15 +352,12 @@ class P2P:
     async def call_unary_handler(self, peer_id: PeerID, handler_name: str,
                                  request_protobuf: Any, response_proto_type: type) -> Any:
         _, reader, writer = await self._client.stream_open(peer_id, (handler_name,))
-        try:
+        with closing(writer):
             await P2P.send_protobuf(request_protobuf, type(request_protobuf), writer)
             result, err = await P2P.receive_protobuf(response_proto_type, reader)
             if err is not None:
                 raise P2PHandlerError(f'Failed to call unary handler {handler_name} at {peer_id}: {err.message}')
-
             return result
-        finally:
-            writer.close()
 
     def __del__(self):
         self._terminate()
