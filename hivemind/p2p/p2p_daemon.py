@@ -5,7 +5,7 @@ from contextlib import closing, suppress
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import google.protobuf
 from multiaddr import Multiaddr
@@ -14,7 +14,6 @@ import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto import p2pd_pb2
-from hivemind.utils import MSGPackSerializer
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -233,11 +232,6 @@ class P2P:
         await writer.drain()
 
     @staticmethod
-    async def send_msgpack(data: Any, writer: asyncio.StreamWriter) -> None:
-        raw_data = MSGPackSerializer.dumps(data)
-        await P2P.send_raw_data(raw_data, writer)
-
-    @staticmethod
     async def send_protobuf(protobuf, out_proto_type: type, writer: asyncio.StreamWriter) -> None:
         if type(protobuf) != out_proto_type:
             raise TypeError('Unary handler returned protobuf of wrong type.')
@@ -254,10 +248,6 @@ class P2P:
         content_length = int.from_bytes(header, P2P.BYTEORDER)
         data = await reader.readexactly(content_length)
         return data
-
-    @staticmethod
-    async def receive_msgpack(reader: asyncio.StreamReader) -> Any:
-        return MSGPackSerializer.loads(await P2P.receive_raw_data(reader))
 
     @staticmethod
     async def receive_protobuf(in_proto_type: type, reader: asyncio.StreamReader) -> \
