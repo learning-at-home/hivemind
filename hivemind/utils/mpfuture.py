@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures._base as base
-from contextlib import nullcontext
+from contextlib import nullcontext, suppress
 import multiprocessing as mp
 import multiprocessing.connection
 import os
@@ -211,18 +211,20 @@ class MPFuture(base.Future, Generic[ResultType]):
             if not status_updated.is_set():
                 logger.warning(f"Status update took over {MPFuture.SOFT_UPDATE_TIMEOUT}, expect performance issues")
                 status_updated.wait(MPFuture.HARD_UPDATE_TIMEOUT - MPFuture.SOFT_UPDATE_TIMEOUT)
-                if not status_updated.is_set():
-                    self.set_exception(
-                        TimeoutError(
-                            f"Status update took over {MPFuture.HARD_UPDATE_TIMEOUT} seconds, "
-                            f"MPFuture is cancelled"
+                if not status_updated.is_set() and not self.cancel():
+                    with suppress(InvalidStateError, RuntimeError):
+                        self.set_exception(
+                            TimeoutError(
+                                f"Status update took over {MPFuture.HARD_UPDATE_TIMEOUT} seconds, "
+                                f"MPFuture is cancelled"
+                            )
                         )
-                    )
                     status_updated.set()  # this triggers any concurrent _synchronize_if_necessary calls to finish
         except (ConnectionError, BrokenPipeError, EOFError) as e:
             logger.error(f"MPFuture was cancelled because sender pipe is broken. Origin process is probably down.")
             if not self.cancel():
-                self.set_exception(e)
+                with suppress(InvalidStateError, RuntimeError):
+                    self.set_exception(e)
         finally:
             self._status_requests.pop(self._uid, None)
 
