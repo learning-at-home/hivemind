@@ -164,7 +164,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     try:
                         future.set_running_or_notify_cancel()
                     except (InvalidStateError, RuntimeError) as e:
-                        logger.debug(f"could set MPFuture (uid={uid}) to running due to {e}")
+                        logger.debug(f"Could not set MPFuture (uid={uid}) to running due to {e}", exc_info=True)
                 elif msg_type == MessageType.CANCEL:
                     future.cancel()
                 else:
