@@ -76,7 +76,6 @@ class MPFuture(base.Future, Generic[ResultType]):
     def __init__(self, *, synchronize: bool = True, use_lock: bool = True):
         super().__init__()
         self.synchronize = synchronize
-        self._synchronization_lock = threading.Lock()
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._state, self._result, self._exception = base.PENDING, None, None
         self._use_lock = use_lock
