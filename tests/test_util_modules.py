@@ -12,7 +12,7 @@ import hivemind
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
-from hivemind.utils import MSGPackSerializer
+from hivemind.utils import MSGPackSerializer, ValueWithExpiration, HeapEntry, DHTExpiration
 from hivemind.utils.asyncio import amap_in_executor, aiter, aenumerate, achain, anext, azip
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.mpfuture import InvalidStateError
@@ -458,8 +458,6 @@ def test_split_parts():
 
 
 def test_generic_data_classes():
-    from hivemind.utils import ValueWithExpiration, HeapEntry, DHTExpiration
-
     value_with_exp = ValueWithExpiration(value="string_value", expiration_time=DHTExpiration(10))
     assert value_with_exp.value == "string_value" and value_with_exp.expiration_time == DHTExpiration(10)
 
