@@ -148,7 +148,10 @@ if __name__ == "__main__":
     monitor_args, collab_optimizer_args, averager_args = parser.parse_args_into_dataclasses()
 
     if monitor_args.use_google_dns:
-        address = requests.get("https://api.ipify.org").text
+        request = requests.get("https://api.ipify.org")
+        request.raise_for_status()
+
+        address = request.text
         logger.info(f"Received public IP address of this machine: {address}")
         version = ip_address(address).version
         monitor_args.announce_maddrs += [f"/ip{version}/{address}/tcp/0", f"/ip{version}/{address}/udp/0/quic"]
