@@ -1,0 +1,3 @@
+[tool.black]
+line-length = 119
+required-version = "21.6b0"

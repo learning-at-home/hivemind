@@ -33,9 +33,7 @@ if ENABLE_INLINING:
         def digest(self) -> bytes:
             return self._digest
 
-    multihash.FuncReg.register(
-        IDENTITY_MULTIHASH_CODE, "identity", hash_new=IdentityHash
-    )
+    multihash.FuncReg.register(IDENTITY_MULTIHASH_CODE, "identity", hash_new=IdentityHash)
 
 
 class PeerID:
@@ -98,21 +96,15 @@ class StreamInfo:
         self.proto = proto
 
     def __repr__(self) -> str:
-        return (
-            f"<StreamInfo peer_id={self.peer_id} addr={self.addr} proto={self.proto}>"
-        )
+        return f"<StreamInfo peer_id={self.peer_id} addr={self.addr} proto={self.proto}>"
 
     def to_protobuf(self) -> p2pd_pb2.StreamInfo:
-        pb_msg = p2pd_pb2.StreamInfo(
-            peer=self.peer_id.to_bytes(), addr=self.addr.to_bytes(), proto=self.proto
-        )
+        pb_msg = p2pd_pb2.StreamInfo(peer=self.peer_id.to_bytes(), addr=self.addr.to_bytes(), proto=self.proto)
         return pb_msg
 
     @classmethod
     def from_protobuf(cls, pb_msg: p2pd_pb2.StreamInfo) -> "StreamInfo":
-        stream_info = cls(
-            peer_id=PeerID(pb_msg.peer), addr=Multiaddr(pb_msg.addr), proto=pb_msg.proto
-        )
+        stream_info = cls(peer_id=PeerID(pb_msg.peer), addr=Multiaddr(pb_msg.addr), proto=pb_msg.proto)
         return stream_info
 
 
@@ -122,11 +114,7 @@ class PeerInfo:
         self.addrs = list(addrs)
 
     def __eq__(self, other: Any) -> bool:
-        return (
-            isinstance(other, PeerInfo)
-            and self.peer_id == other.peer_id
-            and self.addrs == other.addrs
-        )
+        return isinstance(other, PeerInfo) and self.peer_id == other.peer_id and self.addrs == other.addrs
 
     @classmethod
     def from_protobuf(cls, peer_info_pb: p2pd_pb2.PeerInfo) -> "PeerInfo":
@@ -148,16 +136,12 @@ def info_from_p2p_addr(addr: Multiaddr) -> PeerInfo:
 
     parts = addr.split()
     if not parts:
-        raise InvalidAddrError(
-            f"`parts`={parts} should at least have a protocol `P_P2P`"
-        )
+        raise InvalidAddrError(f"`parts`={parts} should at least have a protocol `P_P2P`")
 
     p2p_part = parts[-1]
     last_protocol_code = p2p_part.protocols()[0].code
     if last_protocol_code != protocols.P_P2P:
-        raise InvalidAddrError(
-            f"The last protocol should be `P_P2P` instead of `{last_protocol_code}`"
-        )
+        raise InvalidAddrError(f"The last protocol should be `P_P2P` instead of `{last_protocol_code}`")
 
     # make sure the /p2p value parses as a peer.ID
     peer_id_str: str = p2p_part.value_for_protocol(protocols.P_P2P)

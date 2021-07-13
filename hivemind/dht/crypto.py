@@ -19,22 +19,22 @@ class RSASignatureValidator(RecordValidatorBase):
     the corresponding private key (so only the owner can change them).
     """
 
-    PUBLIC_KEY_FORMAT = b'[owner:_key_]'
-    SIGNATURE_FORMAT = b'[signature:_value_]'
+    PUBLIC_KEY_FORMAT = b"[owner:_key_]"
+    SIGNATURE_FORMAT = b"[signature:_value_]"
 
-    PUBLIC_KEY_REGEX = re.escape(PUBLIC_KEY_FORMAT).replace(b'_key_', rb'(.+?)')
+    PUBLIC_KEY_REGEX = re.escape(PUBLIC_KEY_FORMAT).replace(b"_key_", rb"(.+?)")
     _PUBLIC_KEY_RE = re.compile(PUBLIC_KEY_REGEX)
-    _SIGNATURE_RE = re.compile(re.escape(SIGNATURE_FORMAT).replace(b'_value_', rb'(.+?)'))
+    _SIGNATURE_RE = re.compile(re.escape(SIGNATURE_FORMAT).replace(b"_value_", rb"(.+?)"))
 
     _cached_private_key = None
 
-    def __init__(self, private_key: Optional[RSAPrivateKey]=None):
+    def __init__(self, private_key: Optional[RSAPrivateKey] = None):
         if private_key is None:
             private_key = RSAPrivateKey.process_wide()
         self._private_key = private_key
 
         serialized_public_key = private_key.get_public_key().to_bytes()
-        self._local_public_key = self.PUBLIC_KEY_FORMAT.replace(b'_key_', serialized_public_key)
+        self._local_public_key = self.PUBLIC_KEY_FORMAT.replace(b"_key_", serialized_public_key)
 
     @property
     def local_public_key(self) -> bytes:
@@ -60,7 +60,7 @@ class RSASignatureValidator(RecordValidatorBase):
 
         stripped_record = dataclasses.replace(record, value=self.strip_value(record))
         if not public_key.verify(self._serialize_record(stripped_record), signature):
-            logger.debug(f'Signature is invalid in {record}')
+            logger.debug(f"Signature is invalid in {record}")
             return False
         return True
 
@@ -69,10 +69,10 @@ class RSASignatureValidator(RecordValidatorBase):
             return record.value
 
         signature = self._private_key.sign(self._serialize_record(record))
-        return record.value + self.SIGNATURE_FORMAT.replace(b'_value_', signature)
+        return record.value + self.SIGNATURE_FORMAT.replace(b"_value_", signature)
 
     def strip_value(self, record: DHTRecord) -> bytes:
-        return self._SIGNATURE_RE.sub(b'', record.value)
+        return self._SIGNATURE_RE.sub(b"", record.value)
 
     def _serialize_record(self, record: DHTRecord) -> bytes:
         return MSGPackSerializer.dumps(dataclasses.astuple(record))

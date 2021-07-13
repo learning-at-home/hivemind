@@ -4,8 +4,16 @@ from typing import Sequence, Dict, List, Tuple, Optional
 
 from hivemind.dht import DHT, DHTNode, DHTExpiration, DHTValue
 from hivemind.moe.client.expert import RemoteExpert
-from hivemind.moe.server.expert_uid import (ExpertUID, ExpertPrefix, FLAT_EXPERT, Coordinate,
-                                            UID_DELIMITER, UID_PATTERN, is_valid_uid, split_uid)
+from hivemind.moe.server.expert_uid import (
+    ExpertUID,
+    ExpertPrefix,
+    FLAT_EXPERT,
+    Coordinate,
+    UID_DELIMITER,
+    UID_PATTERN,
+    is_valid_uid,
+    split_uid,
+)
 from hivemind.utils import Endpoint, get_dht_time, get_port
 
 
@@ -25,8 +33,9 @@ class DHTHandlerThread(threading.Thread):
             declare_experts(self.dht, self.experts.keys(), self.endpoint)
 
 
-def declare_experts(dht: DHT, uids: Sequence[ExpertUID], endpoint: Endpoint, expiration: DHTExpiration = 300,
-                    wait: bool = True) -> Dict[ExpertUID, bool]:
+def declare_experts(
+    dht: DHT, uids: Sequence[ExpertUID], endpoint: Endpoint, expiration: DHTExpiration = 300, wait: bool = True
+) -> Dict[ExpertUID, bool]:
     """
     Make experts visible to all DHT peers; update timestamps if declared previously.
 
@@ -39,18 +48,20 @@ def declare_experts(dht: DHT, uids: Sequence[ExpertUID], endpoint: Endpoint, exp
     assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
     for uid in uids:
         assert is_valid_uid(uid), f"{uid} is not a valid expert uid. All uids must follow {UID_PATTERN.pattern}"
-    return dht.run_coroutine(partial(_declare_experts, uids=list(uids), endpoint=endpoint, expiration=expiration),
-                             return_future=not wait)
+    return dht.run_coroutine(
+        partial(_declare_experts, uids=list(uids), endpoint=endpoint, expiration=expiration), return_future=not wait
+    )
 
 
-async def _declare_experts(dht: DHT, node: DHTNode, uids: List[ExpertUID], endpoint: Endpoint,
-                           expiration: DHTExpiration) -> Dict[ExpertUID, bool]:
+async def _declare_experts(
+    dht: DHT, node: DHTNode, uids: List[ExpertUID], endpoint: Endpoint, expiration: DHTExpiration
+) -> Dict[ExpertUID, bool]:
     num_workers = len(uids) if dht.max_workers is None else min(len(uids), dht.max_workers)
     expiration_time = get_dht_time() + expiration
     data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
     for uid in uids:
         data_to_store[uid, None] = endpoint
-        prefix = uid if uid.count(UID_DELIMITER) > 1 else f'{uid}{UID_DELIMITER}{FLAT_EXPERT}'
+        prefix = uid if uid.count(UID_DELIMITER) > 1 else f"{uid}{UID_DELIMITER}{FLAT_EXPERT}"
         for i in range(prefix.count(UID_DELIMITER) - 1):
             prefix, last_coord = split_uid(prefix)
             data_to_store[prefix, last_coord] = [uid, endpoint]
@@ -60,8 +71,9 @@ async def _declare_experts(dht: DHT, node: DHTNode, uids: List[ExpertUID], endpo
     return store_ok
 
 
-def get_experts(dht: DHT, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration] = None,
-                return_future: bool = False) -> List[Optional[RemoteExpert]]:
+def get_experts(
+    dht: DHT, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration] = None, return_future: bool = False
+) -> List[Optional[RemoteExpert]]:
     """
     :param uids: find experts with these ids from across the DHT
     :param expiration_time: if specified, return experts that expire no sooner than this (based on get_dht_time)
@@ -72,8 +84,9 @@ def get_experts(dht: DHT, uids: List[ExpertUID], expiration_time: Optional[DHTEx
     return dht.run_coroutine(partial(_get_experts, uids=list(uids), expiration_time=expiration_time), return_future)
 
 
-async def _get_experts(dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration]
-                       ) -> List[Optional[RemoteExpert]]:
+async def _get_experts(
+    dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration]
+) -> List[Optional[RemoteExpert]]:
     if expiration_time is None:
         expiration_time = get_dht_time()
     num_workers = len(uids) if dht.max_workers is None else min(len(uids), dht.max_workers)

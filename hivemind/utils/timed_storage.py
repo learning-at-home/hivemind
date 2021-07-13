@@ -6,8 +6,8 @@ from contextlib import contextmanager
 from typing import TypeVar, Generic, Optional, Dict, List, Iterator, Tuple
 from dataclasses import dataclass
 
-KeyType = TypeVar('KeyType')
-ValueType = TypeVar('ValueType')
+KeyType = TypeVar("KeyType")
+ValueType = TypeVar("ValueType")
 get_dht_time = time.time  # a global (weakly synchronized) time
 MAX_DHT_TIME_DISCREPANCY_SECONDS = 3  # max allowed difference between get_dht_time for two DHT nodes
 DHTExpiration = float
@@ -46,7 +46,8 @@ class HeapEntry(Generic[KeyType]):
 
 
 class TimedStorage(Generic[KeyType, ValueType]):
-    """ A dictionary that maintains up to :maxsize: key-value-expiration tuples until their expiration_time """
+    """A dictionary that maintains up to :maxsize: key-value-expiration tuples until their expiration_time"""
+
     frozen = False  # can be set to True. If true, do not remove outdated elements
 
     def __init__(self, maxsize: Optional[int] = None):
@@ -56,8 +57,11 @@ class TimedStorage(Generic[KeyType, ValueType]):
         self.key_to_heap: Dict[KeyType, HeapEntry[KeyType]] = dict()
 
     def _remove_outdated(self):
-        while not self.frozen and self.expiration_heap and (self.expiration_heap[ROOT].expiration_time < get_dht_time()
-                                                            or len(self.data) > self.maxsize):
+        while (
+            not self.frozen
+            and self.expiration_heap
+            and (self.expiration_heap[ROOT].expiration_time < get_dht_time() or len(self.data) > self.maxsize)
+        ):
             heap_entry = heapq.heappop(self.expiration_heap)
             if self.key_to_heap.get(heap_entry.key) == heap_entry:
                 del self.data[heap_entry.key], self.key_to_heap[heap_entry.key]
@@ -81,19 +85,19 @@ class TimedStorage(Generic[KeyType, ValueType]):
         return True
 
     def get(self, key: KeyType) -> Optional[ValueWithExpiration[ValueType]]:
-        """ Get a value corresponding to a key if that (key, value) pair was previously stored under this key. """
+        """Get a value corresponding to a key if that (key, value) pair was previously stored under this key."""
         self._remove_outdated()
         if key in self.data:
             return self.data[key]
         return None
 
     def items(self) -> Iterator[Tuple[KeyType, ValueWithExpiration[ValueType]]]:
-        """ Iterate over (key, value, expiration_time) tuples stored in this storage """
+        """Iterate over (key, value, expiration_time) tuples stored in this storage"""
         self._remove_outdated()
         return ((key, value_and_expiration) for key, value_and_expiration in self.data.items())
 
     def top(self) -> Tuple[Optional[KeyType], Optional[ValueWithExpiration[ValueType]]]:
-        """ Return the entry with earliest expiration or None if there isn't any """
+        """Return the entry with earliest expiration or None if there isn't any"""
         self._remove_outdated()
         if self.data:
             # skip leftover "ghost" entries until first real entry
@@ -129,7 +133,7 @@ class TimedStorage(Generic[KeyType, ValueType]):
 
     @contextmanager
     def freeze(self):
-        """ Temporarily cease to ._remove_outdated() elements inside this context to ensure consistency """
+        """Temporarily cease to ._remove_outdated() elements inside this context to ensure consistency"""
         prev_frozen, self.frozen = self.frozen, True
         try:
             yield self

@@ -12,7 +12,7 @@ from hivemind.moe.server.layers.lr_schedule import get_linear_schedule_with_warm
 EXPERT_WEIGHT_UPDATES = 3
 BACKWARD_PASSES_BEFORE_SAVE = 2
 BACKWARD_PASSES_AFTER_SAVE = 2
-EXPERT_NAME = 'test_expert'
+EXPERT_NAME = "test_expert"
 PEAK_LR = 1.0
 
 
@@ -22,12 +22,17 @@ def example_experts():
     opt = torch.optim.SGD(expert.parameters(), PEAK_LR)
 
     args_schema = (BatchTensorDescriptor(1),)
-    expert_backend = ExpertBackend(name=EXPERT_NAME, expert=expert, optimizer=opt,
-                                   scheduler=get_linear_schedule_with_warmup,
-                                   num_warmup_steps=BACKWARD_PASSES_BEFORE_SAVE,
-                                   num_total_steps=BACKWARD_PASSES_BEFORE_SAVE + BACKWARD_PASSES_AFTER_SAVE,
-                                   args_schema=args_schema, outputs_schema=BatchTensorDescriptor(1), max_batch_size=1,
-                                   )
+    expert_backend = ExpertBackend(
+        name=EXPERT_NAME,
+        expert=expert,
+        optimizer=opt,
+        scheduler=get_linear_schedule_with_warmup,
+        num_warmup_steps=BACKWARD_PASSES_BEFORE_SAVE,
+        num_total_steps=BACKWARD_PASSES_BEFORE_SAVE + BACKWARD_PASSES_AFTER_SAVE,
+        args_schema=args_schema,
+        outputs_schema=BatchTensorDescriptor(1),
+        max_batch_size=1,
+    )
     experts = {EXPERT_NAME: expert_backend}
     yield experts
 
@@ -88,19 +93,19 @@ def test_lr_schedule(example_experts):
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
 
-        assert optimizer.param_groups[0]['lr'] == 0.0
+        assert optimizer.param_groups[0]["lr"] == 0.0
 
         for i in range(BACKWARD_PASSES_BEFORE_SAVE):
-            assert optimizer.param_groups[0]['lr'] == PEAK_LR * i / BACKWARD_PASSES_BEFORE_SAVE
+            assert optimizer.param_groups[0]["lr"] == PEAK_LR * i / BACKWARD_PASSES_BEFORE_SAVE
             expert_backend.backward(batch, loss_grad)
 
-        assert optimizer.param_groups[0]['lr'] == PEAK_LR
+        assert optimizer.param_groups[0]["lr"] == PEAK_LR
         store_experts(example_experts, tmp_path)
 
         for i in range(BACKWARD_PASSES_AFTER_SAVE):
-            assert optimizer.param_groups[0]['lr'] == PEAK_LR * (1 - (i / BACKWARD_PASSES_AFTER_SAVE))
+            assert optimizer.param_groups[0]["lr"] == PEAK_LR * (1 - (i / BACKWARD_PASSES_AFTER_SAVE))
             expert_backend.backward(batch, loss_grad)
 
-        assert optimizer.param_groups[0]['lr'] == 0.0
+        assert optimizer.param_groups[0]["lr"] == 0.0
         load_experts(example_experts, tmp_path)
-        assert optimizer.param_groups[0]['lr'] == PEAK_LR
+        assert optimizer.param_groups[0]["lr"] == PEAK_LR

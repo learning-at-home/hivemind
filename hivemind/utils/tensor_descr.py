@@ -34,19 +34,20 @@ class TensorDescriptor(DescriptorBase):
 
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor):
-        return cls(tensor.shape, tensor.dtype, tensor.layout, tensor.device, tensor.requires_grad,
-                   safe_check_pinned(tensor))
+        return cls(
+            tensor.shape, tensor.dtype, tensor.layout, tensor.device, tensor.requires_grad, _safe_check_pinned(tensor)
+        )
 
     def make_empty(self, **kwargs):
         properties = asdict(self)
         properties.update(kwargs)
-        properties.pop('compression')
+        properties.pop("compression")
         return torch.empty(**properties)
 
 
 @dataclass(repr=True, frozen=True)
 class BatchTensorDescriptor(TensorDescriptor):
-    """ torch.Tensor with a variable 0-th dimension, used to describe batched data """
+    """torch.Tensor with a variable 0-th dimension, used to describe batched data"""
 
     def __init__(self, *instance_size, **kwargs):  # compatibility: allow initializing with *size
         if len(instance_size) == 1 and isinstance(instance_size[0], (list, tuple, torch.Size)):
@@ -55,18 +56,23 @@ class BatchTensorDescriptor(TensorDescriptor):
 
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor, compression=CompressionType.NONE):
-        return cls(*tensor.shape[1:], dtype=tensor.dtype, layout=tensor.layout,
-                   device=tensor.device, requires_grad=tensor.requires_grad,
-                   pin_memory=safe_check_pinned(tensor),
-                   compression=compression if tensor.is_floating_point() else CompressionType.NONE)
+        return cls(
+            *tensor.shape[1:],
+            dtype=tensor.dtype,
+            layout=tensor.layout,
+            device=tensor.device,
+            requires_grad=tensor.requires_grad,
+            pin_memory=_safe_check_pinned(tensor),
+            compression=compression if tensor.is_floating_point() else CompressionType.NONE
+        )
 
     def make_empty(self, *batch_size, **kwargs):
         assert self.shape[0] is None, "Make sure 0-th dimension is not specified (set to None)"
         return super().make_empty(size=(*batch_size, *self.shape[1:]), **kwargs)
 
 
-def safe_check_pinned(tensor: torch.Tensor) -> bool:
-    """ Check whether or not a tensor is pinned. If torch cannot initialize cuda, returns False instead of error. """
+def _safe_check_pinned(tensor: torch.Tensor) -> bool:
+    """Check whether or not a tensor is pinned. If torch cannot initialize cuda, returns False instead of error."""
     try:
         return torch.cuda.is_available() and tensor.is_pinned()
     except RuntimeError:

@@ -6,8 +6,17 @@ from typing import Sequence, Optional, List, Tuple, Dict, Deque, Union, Set, Ite
 
 from hivemind.dht import DHT, DHTNode, DHTExpiration
 from hivemind.moe.client.expert import RemoteExpert
-from hivemind.moe.server.expert_uid import (ExpertUID, ExpertPrefix, FLAT_EXPERT, UidEndpoint, Score, Coordinate,
-                                            PREFIX_PATTERN, UID_DELIMITER, is_valid_prefix)
+from hivemind.moe.server.expert_uid import (
+    ExpertUID,
+    ExpertPrefix,
+    FLAT_EXPERT,
+    UidEndpoint,
+    Score,
+    Coordinate,
+    PREFIX_PATTERN,
+    UID_DELIMITER,
+    is_valid_prefix,
+)
 from hivemind.utils import get_logger, get_dht_time, MPFuture
 
 logger = get_logger(__name__)
@@ -63,8 +72,16 @@ class MoEBeamSearcher:
          Though, this is a pathological case (e.g. only 90 experts in an oversized 100x100 grid) that should be avoided.
     """
 
-    def __init__(self, dht: DHT, uid_prefix: ExpertPrefix, grid_size: Sequence[int], num_workers: Optional[int] = None,
-                 negative_caching: bool = True, cache_expiration: DHTExpiration = 300, **kwargs):
+    def __init__(
+        self,
+        dht: DHT,
+        uid_prefix: ExpertPrefix,
+        grid_size: Sequence[int],
+        num_workers: Optional[int] = None,
+        negative_caching: bool = True,
+        cache_expiration: DHTExpiration = 300,
+        **kwargs,
+    ):
         if not uid_prefix.endswith(UID_DELIMITER):
             uid_prefix += UID_DELIMITER
             logger.info(f"Prefix must end with '{UID_DELIMITER}'. Changing to {uid_prefix}{UID_DELIMITER}")
@@ -75,27 +92,44 @@ class MoEBeamSearcher:
         self.negative_caching, self.cache_expiration = negative_caching, cache_expiration
         self.num_workers, self.dht_kwargs = num_workers, kwargs
 
-    def get_initial_beam(self, scores: Sequence[float], beam_size: int, return_future: bool = False
-                         ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
+    def get_initial_beam(
+        self, scores: Sequence[float], beam_size: int, return_future: bool = False
+    ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
         """
         :param scores: prefer suffix coordinates that have highest scores
         :param beam_size: select this many active suffixes with highest scores
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         :returns: a list of up to beam_size tuples of (prefix score, prefix itself, dict{suffix: example expert})
         """
-        return self.dht.run_coroutine(partial(self._get_initial_beam, prefix=self.uid_prefix, beam_size=beam_size,
-                                              scores=tuple(scores), negative_caching=self.negative_caching,
-                                              cache_expiration=self.cache_expiration, num_workers=self.num_workers),
-                                      return_future)
+        return self.dht.run_coroutine(
+            partial(
+                self._get_initial_beam,
+                prefix=self.uid_prefix,
+                beam_size=beam_size,
+                scores=tuple(scores),
+                negative_caching=self.negative_caching,
+                cache_expiration=self.cache_expiration,
+                num_workers=self.num_workers,
+            ),
+            return_future,
+        )
 
     @staticmethod
     async def _get_initial_beam(
-            dht: DHT, node: DHTNode, prefix: ExpertPrefix, beam_size: int, scores: Tuple[float, ...],
-            negative_caching: bool, cache_expiration: DHTExpiration, num_workers: Optional[int] = None,
+        dht: DHT,
+        node: DHTNode,
+        prefix: ExpertPrefix,
+        beam_size: int,
+        scores: Tuple[float, ...],
+        negative_caching: bool,
+        cache_expiration: DHTExpiration,
+        num_workers: Optional[int] = None,
     ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
         num_workers = num_workers or dht.max_workers or beam_size
         beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = []
-        unattempted_indices: List[Coordinate] = sorted(range(len(scores)), key=scores.__getitem__)  # from worst to best
+        unattempted_indices: List[Coordinate] = sorted(
+            range(len(scores)), key=scores.__getitem__
+        )  # from worst to best
         pending_tasks: Deque[Tuple[Coordinate, ExpertPrefix, asyncio.Task]] = deque()
 
         while len(beam) < beam_size and (unattempted_indices or pending_tasks):
@@ -110,15 +144,25 @@ class MoEBeamSearcher:
             try:
                 maybe_prefix_data = await pending_task
                 if maybe_prefix_data is not None and isinstance(maybe_prefix_data.value, dict):
-                    successors = {coord: UidEndpoint(*match.value) for coord, match in maybe_prefix_data.value.items()
-                                  if isinstance(coord, Coordinate) and isinstance(getattr(match, 'value', None), list)
-                                  and len(match.value) == 2}
+                    successors = {
+                        coord: UidEndpoint(*match.value)
+                        for coord, match in maybe_prefix_data.value.items()
+                        if isinstance(coord, Coordinate)
+                        and isinstance(getattr(match, "value", None), list)
+                        and len(match.value) == 2
+                    }
                     if successors:
                         beam.append((scores[pending_best_index], pending_best_prefix, successors))
                 elif maybe_prefix_data is None and negative_caching:
                     logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {pending_best_prefix}")
-                    asyncio.create_task(node.store(pending_best_prefix, subkey=-1, value=None,
-                                                   expiration_time=get_dht_time() + cache_expiration))
+                    asyncio.create_task(
+                        node.store(
+                            pending_best_prefix,
+                            subkey=-1,
+                            value=None,
+                            expiration_time=get_dht_time() + cache_expiration,
+                        )
+                    )
 
             except asyncio.CancelledError:
                 for _, pending_task in pending_tasks:
@@ -126,8 +170,9 @@ class MoEBeamSearcher:
                 raise
         return beam
 
-    def get_active_successors(self, prefixes: List[ExpertPrefix], grid_size: Optional[int] = None,
-                              return_future: bool = False) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
+    def get_active_successors(
+        self, prefixes: List[ExpertPrefix], grid_size: Optional[int] = None, return_future: bool = False
+    ) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
         """
         :param prefixes: a list of prefix for which to find active successor uids
         :param grid_size: if specified, only return successors if ther are in range [0, grid_size)
@@ -138,35 +183,54 @@ class MoEBeamSearcher:
         assert not isinstance(prefixes, str), "Please send a list / tuple of expert prefixes."
         for prefix in prefixes:
             assert is_valid_prefix(prefix), f"prefix '{prefix}' is invalid, it must follow {PREFIX_PATTERN.pattern}"
-        return self.dht.run_coroutine(partial(
-            self._get_active_successors, prefixes=list(prefixes), grid_size=grid_size,
-            negative_caching=self.negative_caching, cache_expiration=self.cache_expiration,
-            num_workers=self.num_workers), return_future=return_future)
+        return self.dht.run_coroutine(
+            partial(
+                self._get_active_successors,
+                prefixes=list(prefixes),
+                grid_size=grid_size,
+                negative_caching=self.negative_caching,
+                cache_expiration=self.cache_expiration,
+                num_workers=self.num_workers,
+            ),
+            return_future=return_future,
+        )
 
     @staticmethod
     async def _get_active_successors(
-            dht: DHT, node: DHTNode, prefixes: List[ExpertPrefix], grid_size: Optional[int],
-            negative_caching: bool, cache_expiration: DHTExpiration, num_workers: Optional[int] = None
+        dht: DHT,
+        node: DHTNode,
+        prefixes: List[ExpertPrefix],
+        grid_size: Optional[int],
+        negative_caching: bool,
+        cache_expiration: DHTExpiration,
+        num_workers: Optional[int] = None,
     ) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
-        grid_size = grid_size or float('inf')
+        grid_size = grid_size or float("inf")
         num_workers = num_workers or min(len(prefixes), dht.max_workers or len(prefixes))
         dht_responses = await node.get_many(keys=prefixes, num_workers=num_workers)
         successors: Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]] = {}
         for prefix, found in dht_responses.items():
             if found and isinstance(found.value, dict):
-                successors[prefix] = {coord: UidEndpoint(*match.value) for coord, match in found.value.items()
-                                      if isinstance(coord, Coordinate) and 0 <= coord < grid_size
-                                      and isinstance(getattr(match, 'value', None), list) and len(match.value) == 2}
+                successors[prefix] = {
+                    coord: UidEndpoint(*match.value)
+                    for coord, match in found.value.items()
+                    if isinstance(coord, Coordinate)
+                    and 0 <= coord < grid_size
+                    and isinstance(getattr(match, "value", None), list)
+                    and len(match.value) == 2
+                }
             else:
                 successors[prefix] = {}
                 if found is None and negative_caching:
                     logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {prefix}")
-                    asyncio.create_task(node.store(prefix, subkey=-1, value=None,
-                                                   expiration_time=get_dht_time() + cache_expiration))
+                    asyncio.create_task(
+                        node.store(prefix, subkey=-1, value=None, expiration_time=get_dht_time() + cache_expiration)
+                    )
         return successors
 
-    def find_best_experts(self, grid_scores: Sequence[Sequence[float]], beam_size: int, return_future: bool = False
-                          ) -> Union[List[RemoteExpert], MPFuture[RemoteExpert]]:
+    def find_best_experts(
+        self, grid_scores: Sequence[Sequence[float]], beam_size: int, return_future: bool = False
+    ) -> Union[List[RemoteExpert], MPFuture[RemoteExpert]]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
 
@@ -181,21 +245,37 @@ class MoEBeamSearcher:
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
         assert len(grid_scores) == len(self.grid_size) and beam_size > 0
-        return self.dht.run_coroutine(partial(
-            self._find_best_experts, prefix=self.uid_prefix, beam_size=beam_size, grid_scores=list(grid_scores),
-            negative_caching=self.negative_caching, cache_expiration=self.cache_expiration,
-            num_workers=self.num_workers), return_future)
+        return self.dht.run_coroutine(
+            partial(
+                self._find_best_experts,
+                prefix=self.uid_prefix,
+                beam_size=beam_size,
+                grid_scores=list(grid_scores),
+                negative_caching=self.negative_caching,
+                cache_expiration=self.cache_expiration,
+                num_workers=self.num_workers,
+            ),
+            return_future,
+        )
 
     @classmethod
     async def _find_best_experts(
-            cls, dht: DHT, node: DHTNode, prefix: str, grid_scores: List[Tuple[float]], beam_size: int,
-            negative_caching: bool, cache_expiration: DHTExpiration, num_workers: Optional[int] = None
+        cls,
+        dht: DHT,
+        node: DHTNode,
+        prefix: str,
+        grid_scores: List[Tuple[float]],
+        beam_size: int,
+        negative_caching: bool,
+        cache_expiration: DHTExpiration,
+        num_workers: Optional[int] = None,
     ) -> List[RemoteExpert]:
         num_workers = num_workers or min(beam_size, dht.max_workers or beam_size)
 
         # form initial beam from top-k active L1 prefixes, each row is (score, uid prefix, possible suffixes)
         beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = await cls._get_initial_beam(
-            dht, node, prefix, beam_size, grid_scores[0], negative_caching, min(beam_size, num_workers))
+            dht, node, prefix, beam_size, grid_scores[0], negative_caching, min(beam_size, num_workers)
+        )
 
         best_experts_heap: List[Tuple[Score, UidEndpoint]] = []  # max-heap of expert uids/endpoints ordered by scores
         unique_experts: Set[ExpertUID] = set()
@@ -209,16 +289,27 @@ class MoEBeamSearcher:
 
             # form new beam using successors from the current beam
             dim_scores = grid_scores[dim_index]
-            best_active_pairs: List[Tuple[Score, ExpertPrefix]] = heapq.nlargest(beam_size, (
-                (prefix_score + dim_scores[next_coord], f"{prefix}{next_coord}{UID_DELIMITER}")
-                for prefix_score, prefix, suffixes in beam for next_coord in suffixes.keys()
-                if isinstance(next_coord, int) and 0 <= next_coord < len(dim_scores)))
+            best_active_pairs: List[Tuple[Score, ExpertPrefix]] = heapq.nlargest(
+                beam_size,
+                (
+                    (prefix_score + dim_scores[next_coord], f"{prefix}{next_coord}{UID_DELIMITER}")
+                    for prefix_score, prefix, suffixes in beam
+                    for next_coord in suffixes.keys()
+                    if isinstance(next_coord, int) and 0 <= next_coord < len(dim_scores)
+                ),
+            )
             _, best_uid_prefixes = zip(*best_active_pairs)
 
             # search DHT for next step suffixes
             successors = await cls._get_active_successors(
-                dht, node, best_uid_prefixes, grid_size=None, negative_caching=negative_caching,
-                cache_expiration=cache_expiration, num_workers=num_workers)
+                dht,
+                node,
+                best_uid_prefixes,
+                grid_size=None,
+                negative_caching=negative_caching,
+                cache_expiration=cache_expiration,
+                num_workers=num_workers,
+            )
             beam = [(score, prefix, successors[prefix]) for score, prefix in best_active_pairs if successors[prefix]]
             if not beam:
                 logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim 0)")
@@ -235,26 +326,32 @@ class MoEBeamSearcher:
         return best_experts
 
     @staticmethod
-    def _iterate_matching_experts(beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]],
-                                  grid_scores: Sequence[Sequence[float]]) -> Iterator[Tuple[Score, UidEndpoint]]:
-        """ iterate over all exemplar experts attached to current beam """
+    def _iterate_matching_experts(
+        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]], grid_scores: Sequence[Sequence[float]]
+    ) -> Iterator[Tuple[Score, UidEndpoint]]:
+        """iterate over all exemplar experts attached to current beam"""
         for score, prefix, suffixes in beam:
             for next_coord, match in suffixes.items():
                 if len(grid_scores) == 1 and next_coord == FLAT_EXPERT:
                     yield score, match
                 elif isinstance(match.uid, ExpertUID) and match.uid.count(UID_DELIMITER) == len(grid_scores):
                     expert_coords = match.uid.split(UID_DELIMITER)[1:]
-                    if all(coord.isdigit() and 0 <= int(coord) < len(grid_scores[i])
-                           for i, coord in enumerate(expert_coords)):
-                        expert_score = sum(scores[coord] for scores, coord in zip(grid_scores, map(int, expert_coords)))
+                    if all(
+                        coord.isdigit() and 0 <= int(coord) < len(grid_scores[i])
+                        for i, coord in enumerate(expert_coords)
+                    ):
+                        expert_score = sum(
+                            scores[coord] for scores, coord in zip(grid_scores, map(int, expert_coords))
+                        )
                         yield expert_score, match
                     else:
                         logger.warning(f"Found incompatible expert coordinates: {expert_coords}")
                 else:
                     logger.warning(f"Found incompatible expert UID: {match.uid}")
 
-    def batch_find_best_experts(self, batch_grid_scores: Sequence[Sequence[Sequence[float]]], beam_size: int,
-                                return_future: bool = False) -> Union[List[List[RemoteExpert]], MPFuture]:
+    def batch_find_best_experts(
+        self, batch_grid_scores: Sequence[Sequence[Sequence[float]]], beam_size: int, return_future: bool = False
+    ) -> Union[List[List[RemoteExpert]], MPFuture]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
 
@@ -267,16 +364,34 @@ class MoEBeamSearcher:
         :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
-        return self.dht.run_coroutine(partial(
-            self._batch_find_best_experts, prefix=self.uid_prefix, batch_grid_scores=batch_grid_scores,
-            beam_size=beam_size, negative_caching=self.negative_caching, num_workers=self.num_workers), return_future)
+        return self.dht.run_coroutine(
+            partial(
+                self._batch_find_best_experts,
+                prefix=self.uid_prefix,
+                batch_grid_scores=batch_grid_scores,
+                beam_size=beam_size,
+                negative_caching=self.negative_caching,
+                num_workers=self.num_workers,
+            ),
+            return_future,
+        )
 
     @classmethod
     async def _batch_find_best_experts(
-            cls, dht: DHT, node: DHTNode, prefix: str, batch_grid_scores: Sequence[Sequence[Tuple[float]]],
-            beam_size: int, negative_caching: bool, num_workers: Optional[int]) -> Sequence[Sequence[RemoteExpert]]:
-        batch_grid_scores = [[tuple(grid_score[i]) for grid_score in batch_grid_scores]
-                             for i in range(len(batch_grid_scores[0]))]
-        coros = [cls._find_best_experts(dht, node, prefix, grid_scores, beam_size, negative_caching, num_workers)
-                 for grid_scores in batch_grid_scores]
+        cls,
+        dht: DHT,
+        node: DHTNode,
+        prefix: str,
+        batch_grid_scores: Sequence[Sequence[Tuple[float]]],
+        beam_size: int,
+        negative_caching: bool,
+        num_workers: Optional[int],
+    ) -> Sequence[Sequence[RemoteExpert]]:
+        batch_grid_scores = [
+            [tuple(grid_score[i]) for grid_score in batch_grid_scores] for i in range(len(batch_grid_scores[0]))
+        ]
+        coros = [
+            cls._find_best_experts(dht, node, prefix, grid_scores, beam_size, negative_caching, num_workers)
+            for grid_scores in batch_grid_scores
+        ]
         return await asyncio.gather(*coros)

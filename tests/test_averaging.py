@@ -15,39 +15,46 @@ from hivemind.proto.runtime_pb2 import CompressionType
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_key_manager():
-    key_manager = GroupKeyManager(hivemind.DHT(start=True), endpoint='localhvost',
-                                  prefix='test_averaging', initial_group_bits='10110',
-                                  target_group_size=2)
+    key_manager = GroupKeyManager(
+        hivemind.DHT(start=True),
+        endpoint="localhvost",
+        prefix="test_averaging",
+        initial_group_bits="10110",
+        target_group_size=2,
+    )
 
     t = hivemind.get_dht_time()
     key = key_manager.current_key
-    await key_manager.declare_averager(key, 'localhvost', expiration_time=t + 60)
-    await key_manager.declare_averager(key, 'localhvost2', expiration_time=t + 61)
+    await key_manager.declare_averager(key, "localhvost", expiration_time=t + 60)
+    await key_manager.declare_averager(key, "localhvost2", expiration_time=t + 61)
 
     q1 = await key_manager.get_averagers(key, only_active=True)
 
-    await key_manager.declare_averager(key, 'localhvost', expiration_time=t + 66)
+    await key_manager.declare_averager(key, "localhvost", expiration_time=t + 66)
     q2 = await key_manager.get_averagers(key, only_active=True)
 
-    await key_manager.declare_averager(key, 'localhvost2', expiration_time=t + 61, looking_for_group=False)
+    await key_manager.declare_averager(key, "localhvost2", expiration_time=t + 61, looking_for_group=False)
     q3 = await key_manager.get_averagers(key, only_active=True)
     q4 = await key_manager.get_averagers(key, only_active=False)
 
-    q5 = await key_manager.get_averagers('nonexistent_key.0b0101', only_active=False)
+    q5 = await key_manager.get_averagers("nonexistent_key.0b0101", only_active=False)
 
-    assert len(q1) == 2 and ('localhvost', t + 60) in q1 and ('localhvost2', t + 61) in q1
-    assert len(q2) == 2 and ('localhvost', t + 66) in q2 and ('localhvost2', t + 61) in q2
-    assert len(q3) == 1 and ('localhvost', t + 66) in q3
-    assert len(q4) == 2 and ('localhvost', t + 66) in q4 and ('localhvost2', t + 61) in q2
+    assert len(q1) == 2 and ("localhvost", t + 60) in q1 and ("localhvost2", t + 61) in q1
+    assert len(q2) == 2 and ("localhvost", t + 66) in q2 and ("localhvost2", t + 61) in q2
+    assert len(q3) == 1 and ("localhvost", t + 66) in q3
+    assert len(q4) == 2 and ("localhvost", t + 66) in q4 and ("localhvost2", t + 61) in q2
     assert len(q5) == 0
 
 
 def _test_allreduce_once(n_clients, n_aux):
-    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+    dht = hivemind.DHT(start=True)
 
     n_peers = 4
-    modes = [AveragingMode.CLIENT] * n_clients + [AveragingMode.AUX] * n_aux + [AveragingMode.NODE] * (
-            n_peers - n_clients - n_aux)
+    modes = (
+        [AveragingMode.CLIENT] * n_clients
+        + [AveragingMode.AUX] * n_aux
+        + [AveragingMode.NODE] * (n_peers - n_clients - n_aux)
+    )
     random.shuffle(modes)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
@@ -56,15 +63,26 @@ def _test_allreduce_once(n_clients, n_aux):
     tensors4 = [torch.randn(123) ** 3, torch.arange(3).to(torch.float32) / 2]
     peer_tensors = [tensors1, tensors2, tensors3, tensors4]
 
-    reference = [sum(tensors[i] for tensors, mode in zip(peer_tensors, modes)
-                     if mode != AveragingMode.AUX) / max(1, n_peers - n_aux) for i in range(len(tensors1))]
+    reference = [
+        sum(tensors[i] for tensors, mode in zip(peer_tensors, modes) if mode != AveragingMode.AUX)
+        / max(1, n_peers - n_aux)
+        for i in range(len(tensors1))
+    ]
 
     averagers = [
-        hivemind.averaging.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
-                                                 prefix='mygroup', listen=mode != AveragingMode.CLIENT,
-                                                 listen_on='127.0.0.1:*',
-                                                 auxiliary=mode == AveragingMode.AUX, start=True)
-        for tensors, mode in zip(peer_tensors, modes)]
+        hivemind.averaging.DecentralizedAverager(
+            tensors,
+            dht=dht,
+            target_group_size=4,
+            averaging_expiration=15,
+            prefix="mygroup",
+            listen=mode != AveragingMode.CLIENT,
+            listen_on="127.0.0.1:*",
+            auxiliary=mode == AveragingMode.AUX,
+            start=True,
+        )
+        for tensors, mode in zip(peer_tensors, modes)
+    ]
 
     futures = []
     for averager in averagers:
@@ -100,7 +118,7 @@ def test_allreduce_once_edge_cases(n_clients, n_aux):
 
 @pytest.mark.forked
 def test_allreduce_weighted(n_client_mode_peers: int = 2):
-    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+    dht = hivemind.DHT(start=True)
 
     n_peers = 4
     should_listen = [False] * n_client_mode_peers + [True] * (n_peers - n_client_mode_peers)
@@ -111,12 +129,24 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
     tensors3 = [-torch.rand(123), torch.arange(3).to(torch.float32)]
     tensors4 = [torch.randn(123) ** 3, torch.arange(3).to(torch.float32) / 2]
     averagers = [
-        hivemind.averaging.DecentralizedAverager(tensors, dht=dht, target_group_size=4, averaging_expiration=15,
-                                                 prefix='mygroup', listen=listen, listen_on='127.0.0.1:*', start=True)
-        for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)]
+        hivemind.averaging.DecentralizedAverager(
+            tensors,
+            dht=dht,
+            target_group_size=4,
+            averaging_expiration=15,
+            prefix="mygroup",
+            listen=listen,
+            listen_on="127.0.0.1:*",
+            start=True,
+        )
+        for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)
+    ]
     weights = list(map(float, np.random.rand(len(averagers)) * 10 + 0.01))
-    reference = [(tensors1[i] * weights[0] + tensors2[i] * weights[1] + tensors3[i] * weights[2]
-                  + tensors4[i] * weights[3]) / sum(weights) for i in range(len(tensors1))]
+    reference = [
+        (tensors1[i] * weights[0] + tensors2[i] * weights[1] + tensors3[i] * weights[2] + tensors4[i] * weights[3])
+        / sum(weights)
+        for i in range(len(tensors1))
+    ]
 
     futures = []
     for averager, weight in zip(averagers, weights):
@@ -136,8 +166,8 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
 
 @pytest.mark.forked
 def test_allreduce_compression():
-    """ this test ensures that compression works correctly when multiple tensors have different compression types """
-    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
+    """this test ensures that compression works correctly when multiple tensors have different compression types"""
+    dht = hivemind.DHT(start=True)
 
     tensors1 = [torch.linspace(0, 500, 1000) ** 0.5, torch.randn(1000)]
     tensors2 = [torch.linspace(300, 800, 1000) ** 0.5, torch.randn(1000)]
@@ -146,13 +176,24 @@ def test_allreduce_compression():
     FLOAT16, UINT8 = CompressionType.FLOAT16, CompressionType.UNIFORM_8BIT
 
     for compression_type_pair in [(FLOAT16, FLOAT16), (FLOAT16, UINT8), (UINT8, FLOAT16), (UINT8, UINT8)]:
-        averager1 = hivemind.averaging.DecentralizedAverager([x.clone() for x in tensors1], dht=dht,
-                                                             compression_type=compression_type_pair,
-                                                             listen=False, target_group_size=2, prefix='mygroup',
-                                                             start=True)
-        averager2 = hivemind.averaging.DecentralizedAverager([x.clone() for x in tensors2], dht=dht,
-                                                             compression_type=compression_type_pair,
-                                                             target_group_size=2, prefix='mygroup', start=True)
+        averager1 = hivemind.averaging.DecentralizedAverager(
+            [x.clone() for x in tensors1],
+            dht=dht,
+            compression_type=compression_type_pair,
+            listen=False,
+            target_group_size=2,
+            prefix="mygroup",
+            start=True,
+        )
+        averager2 = hivemind.averaging.DecentralizedAverager(
+            [x.clone() for x in tensors2],
+            dht=dht,
+            compression_type=compression_type_pair,
+            target_group_size=2,
+            prefix="mygroup",
+            listen_on="127.0.0.1:*",
+            start=True,
+        )
 
         for future in averager1.step(wait=False), averager2.step(wait=False):
             future.result()
@@ -190,11 +231,19 @@ def compute_mean_std(averagers, unbiased=True):
 
 @pytest.mark.forked
 def test_allreduce_grid():
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
-    averagers = [hivemind.averaging.DecentralizedAverager(
-        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
-        prefix='mygroup', initial_group_bits=bin(i // 2)[2:].rjust(2, '0'), start=True)
-        for i in range(8)]
+    dht = hivemind.DHT(start=True)
+    averagers = [
+        hivemind.averaging.DecentralizedAverager(
+            averaged_tensors=[torch.randn(3)],
+            dht=dht,
+            target_group_size=2,
+            prefix="mygroup",
+            initial_group_bits=bin(i // 2)[2:].rjust(2, "0"),
+            listen_on="127.0.0.1:*",
+            start=True,
+        )
+        for i in range(8)
+    ]
 
     [means0], [stds0] = compute_mean_std(averagers)
     assert not torch.allclose(stds0, torch.zeros_like(stds0))
@@ -220,20 +269,30 @@ def test_allreduce_grid():
 
 @pytest.mark.forked
 def test_allgather():
-    dht = hivemind.DHT(start=True, endpoint=f'{hivemind.LOCALHOST}:*')
-    averagers = [hivemind.averaging.DecentralizedAverager([torch.ones(1)], dht=dht, target_group_size=4,
-                                                          averaging_expiration=15, prefix='mygroup',
-                                                          initial_group_bits='000', listen_on='127.0.0.1:*', start=True)
-                 for _ in range(8)]
+    dht = hivemind.DHT(start=True)
+    averagers = [
+        hivemind.averaging.DecentralizedAverager(
+            [torch.ones(1)],
+            dht=dht,
+            target_group_size=4,
+            averaging_expiration=15,
+            prefix="mygroup",
+            initial_group_bits="000",
+            listen_on="127.0.0.1:*",
+            start=True,
+        )
+        for _ in range(8)
+    ]
 
     futures = []
     for i, averager in enumerate(averagers):
-        futures.append(averager.step(wait=False, gather=dict(batch_size=123 + i, foo='bar')))
+        futures.append(averager.step(wait=False, gather=dict(batch_size=123 + i, foo="bar")))
 
     assert len(set(repr(sorted(future.result())) for future in futures)) == 2
 
-    reference_metadata = {averager.endpoint: dict(batch_size=123 + i, foo='bar')
-                          for i, averager in enumerate(averagers)}
+    reference_metadata = {
+        averager.endpoint: dict(batch_size=123 + i, foo="bar") for i, averager in enumerate(averagers)
+    }
     for future in futures:
         gathered = future.result()
 
@@ -248,8 +307,10 @@ def test_allgather():
 
 
 def get_cost(vector_size, partitions, throughputs):
-    return max((vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(throughputs[i], 1e-9)
-               for i in range(len(partitions)))
+    return max(
+        (vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(throughputs[i], 1e-9)
+        for i in range(len(partitions))
+    )
 
 
 def check_optimality(vector_size, throughputs, ref_partitions):
@@ -290,12 +351,21 @@ def test_load_balancing():
 
 @pytest.mark.forked
 def test_too_few_peers():
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
-    averagers = [hivemind.averaging.DecentralizedAverager(
-        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
-        averaging_expiration=1, request_timeout=0.5,
-        prefix='mygroup', initial_group_bits=bin(i)[2:].rjust(3, '0'), start=True)
-        for i in range(4)]
+    dht = hivemind.DHT(start=True)
+    averagers = [
+        hivemind.averaging.DecentralizedAverager(
+            averaged_tensors=[torch.randn(3)],
+            dht=dht,
+            target_group_size=2,
+            averaging_expiration=1,
+            request_timeout=0.5,
+            prefix="mygroup",
+            initial_group_bits=bin(i)[2:].rjust(3, "0"),
+            listen_on="127.0.0.1:*",
+            start=True,
+        )
+        for i in range(4)
+    ]
     step_futures = [averager.step(wait=False) for averager in averagers]
     for future in step_futures:
         assert len(future.result()) == 2
@@ -307,12 +377,21 @@ def test_too_few_peers():
 
 @pytest.mark.forked
 def test_overcrowded(num_peers=16):
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
-    averagers = [hivemind.averaging.DecentralizedAverager(
-        averaged_tensors=[torch.randn(3)], dht=dht, target_group_size=2,
-        averaging_expiration=1, request_timeout=0.5,
-        prefix='mygroup', initial_group_bits='', start=True)
-        for _ in range(num_peers)]
+    dht = hivemind.DHT(start=True)
+    averagers = [
+        hivemind.averaging.DecentralizedAverager(
+            averaged_tensors=[torch.randn(3)],
+            dht=dht,
+            target_group_size=2,
+            averaging_expiration=1,
+            request_timeout=0.5,
+            prefix="mygroup",
+            initial_group_bits="",
+            listen_on="127.0.0.1:*",
+            start=True,
+        )
+        for _ in range(num_peers)
+    ]
     for t in range(5):
         step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
         assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
@@ -339,17 +418,27 @@ def test_load_state_from_peers():
             return super_metadata, super_tensors
 
     dht_root = hivemind.DHT(start=True)
-    initial_peers = [f'{hivemind.LOCALHOST}:{dht_root.port}']
+    initial_peers = dht_root.get_visible_maddrs()
     dht1 = hivemind.DHT(initial_peers=initial_peers, start=True)
-    averager1 = TestAverager([torch.randn(3), torch.rand(5)],
-                             dht=dht1, start=True,
-                             prefix='demo-run', target_group_size=2)
+    averager1 = TestAverager(
+        [torch.randn(3), torch.rand(5)],
+        dht=dht1,
+        start=True,
+        prefix="demo-run",
+        target_group_size=2,
+        listen_on="127.0.0.1:*",
+    )
 
     dht2 = hivemind.DHT(initial_peers=initial_peers, start=True)
-    dht2.get('demo-run.all_averagers')
-    averager2 = TestAverager([torch.randn(3), torch.rand(5)],
-                             dht=dht2, start=True,
-                             prefix='demo-run', target_group_size=2)
+    dht2.get("demo-run.all_averagers")
+    averager2 = TestAverager(
+        [torch.randn(3), torch.rand(5)],
+        dht=dht2,
+        start=True,
+        prefix="demo-run",
+        target_group_size=2,
+        listen_on="127.0.0.1:*",
+    )
 
     assert num_calls == 0
     got_metadata, got_tensors = averager2.load_state_from_peers()
@@ -357,7 +446,7 @@ def test_load_state_from_peers():
     assert got_metadata == super_metadata
     assert all(map(torch.allclose, got_tensors, super_tensors))
 
-    super_metadata['y'] = 123
+    super_metadata["y"] = 123
     super_tensors[1][2] = 9
     assert num_calls == 1
     assert got_metadata != super_metadata
@@ -377,30 +466,38 @@ def test_load_state_from_peers():
 
 @pytest.mark.forked
 def test_getset_bits():
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
-    averager = hivemind.averaging.DecentralizedAverager([torch.randn(3)], dht=dht, start=True,
-                                                        prefix='test_prefix', target_group_size=2)
-    averager.set_group_bits('00101011101010')
-    assert averager.get_group_bits() == '00101011101010'
+    dht = hivemind.DHT(start=True)
+    averager = hivemind.averaging.DecentralizedAverager(
+        [torch.randn(3)], dht=dht, start=True, prefix="test_prefix", target_group_size=2, listen_on="127.0.0.1:*"
+    )
+    averager.set_group_bits("00101011101010")
+    assert averager.get_group_bits() == "00101011101010"
 
 
 @pytest.mark.forked
 def test_training_averager(n_steps: int = 10, n_dims: int = 16):
     torch.manual_seed(42)
 
-    dht = hivemind.DHT(start=True, endpoint='127.0.0.1:*')
-    common_kwargs = {'dht': dht, 'start': True, 'listen_on': '127.0.0.1:*',
-                     'prefix': 'demo-run', 'target_group_size': 2}
+    dht = hivemind.DHT(start=True)
+    common_kwargs = {
+        "dht": dht,
+        "start": True,
+        "listen_on": "127.0.0.1:*",
+        "prefix": "demo-run",
+        "target_group_size": 2,
+    }
 
     x1 = torch.randn(n_dims, requires_grad=True)
     opt1 = torch.optim.Adam([x1], lr=0.05)
-    averager1 = hivemind.averaging.TrainingAverager(opt1, average_gradients=True, average_parameters=True,
-                                                    average_opt_statistics=["exp_avg_sq"], **common_kwargs)
+    averager1 = hivemind.averaging.TrainingAverager(
+        opt1, average_gradients=True, average_parameters=True, average_opt_statistics=["exp_avg_sq"], **common_kwargs
+    )
 
     x2 = torch.randn(n_dims, requires_grad=True)
     opt2 = torch.optim.Adam([x2], lr=0.05)
-    averager2 = hivemind.averaging.TrainingAverager(opt2, average_gradients=True, average_parameters=True,
-                                                    average_opt_statistics=["exp_avg_sq"], **common_kwargs)
+    averager2 = hivemind.averaging.TrainingAverager(
+        opt2, average_gradients=True, average_parameters=True, average_opt_statistics=["exp_avg_sq"], **common_kwargs
+    )
     a = torch.ones(n_dims)
 
     for i in range(n_steps):
