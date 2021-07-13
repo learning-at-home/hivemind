@@ -6,12 +6,11 @@ from dataclasses import asdict, dataclass, field
 from ipaddress import ip_address
 from typing import Optional
 
+import requests
 import torch
 import wandb
 from torch_optimizer import Lamb
 from transformers import AlbertForPreTraining, AlbertConfig, HfArgumentParser
-from whatsmyip.ip import get_ip
-from whatsmyip.providers import GoogleDnsProvider
 
 import hivemind
 import utils
@@ -149,8 +148,8 @@ if __name__ == "__main__":
     monitor_args, collab_optimizer_args, averager_args = parser.parse_args_into_dataclasses()
 
     if monitor_args.use_google_dns:
-        address = get_ip(GoogleDnsProvider)
-        logger.info(f"Received public IP address of this machine from Google DNS: {address}")
+        address = requests.get("https://api.ipify.org").text
+        logger.info(f"Received public IP address of this machine: {address}")
         version = ip_address(address).version
         monitor_args.announce_maddrs += [f"/ip{version}/{address}/tcp/0", f"/ip{version}/{address}/udp/0/quic"]
 

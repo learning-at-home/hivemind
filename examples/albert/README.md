@@ -10,7 +10,7 @@ using `hivemind.CollaborativeOptimizer` to exchange information between peers.
 * Install hivemind: `pip install git+https://github.com/learning-at-home/hivemind.git`
 * Dependencies: `pip install -r requirements.txt`
 * Preprocess data: `python tokenize_wikitext103.py`
-* Upload an archive with preprocessed data to someplace volunteers can reach
+* Upload the data to a publicly available location or ask volunteers to preprocess it locally
 
 ## Running an experiment
 
@@ -48,7 +48,7 @@ wandb: Run `wandb offline` to turn off syncing.
 
 To join the collaboration with a GPU trainer,
 
-- Install the same dependencies (without `wandb` and `whatsmyip`), download the data and unpack it to the experiment
+- Install the same dependencies (without `wandb` and `requests`), download the data and unpack it to the experiment
   folder;
 - If necessary, specify paths: `--dataset_path ./path/to/unpacked/data --tokenizer ./path/to/tokenizer/config`
   (see [default paths](./arguments.py#L117-L134) for reference)
