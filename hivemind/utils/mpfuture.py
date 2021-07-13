@@ -18,7 +18,7 @@ from hivemind.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # flavour types
-ResultType = TypeVar('ResultType')
+ResultType = TypeVar("ResultType")
 PID, UID, State, PipeEnd = int, int, str, mp.connection.Connection
 ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED
 TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
@@ -60,6 +60,7 @@ class MPFuture(base.Future, Generic[ResultType]):
        - MPFuture is deterministic if only one process can call set_result/set_exception/set_running_or_notify_cancel
          and only the origin process can call result/exception/cancel.
     """
+
     _initialization_lock = mp.Lock()  # global lock that prevents simultaneous initialization of two processes
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
     _process_wide_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
@@ -69,7 +70,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
     SOFT_UPDATE_TIMEOUT = 0.1  # seconds spent awaiting status update before warning is printed
-    HARD_UPDATE_TIMEOUT = 10.  # seconds spent awaiting status update before future is automatically cancelled
+    HARD_UPDATE_TIMEOUT = 10.0  # seconds spent awaiting status update before future is automatically cancelled
 
     def __init__(self, synchronize: bool = True, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
         base.Future.__init__(self)
@@ -120,8 +121,9 @@ class MPFuture(base.Future, Generic[ResultType]):
                     cls._pipe_waiter_thread = threading.Thread(
                         target=cls._process_updates_in_background,
                         args=[receiver_pipe],
-                        name=f'{__name__}.BACKEND',
-                        daemon=True)
+                        name=f"{__name__}.BACKEND",
+                        daemon=True,
+                    )
                     cls._pipe_waiter_thread.start()
 
     @classmethod
@@ -151,7 +153,9 @@ class MPFuture(base.Future, Generic[ResultType]):
                         state_updated_event.set()
 
                 elif future is None:
-                    logger.debug(f"Received {msg_type} for MPFuture uid={uid}, but future is already done or destroyed")
+                    logger.debug(
+                        f"Received {msg_type} for MPFuture uid={uid}, but future is already done or destroyed"
+                    )
                 elif msg_type == MessageType.RESULT:
                     future.set_result(payload)
                 elif msg_type == MessageType.EXCEPTION:
@@ -175,7 +179,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                 logger.exception(f"Could not retrieve update: caught {repr(e)} (pid={pid})")
 
     def _send_update(self, update_type: MessageType, payload: Any = None):
-        """ This method sends result, exception or cancel to the MPFuture origin. """
+        """This method sends result, exception or cancel to the MPFuture origin."""
         try:
             with MPFuture._update_lock if self._use_lock else nullcontext():
                 self._sender_pipe.send((self._uid, update_type, payload))
@@ -206,8 +210,12 @@ class MPFuture(base.Future, Generic[ResultType]):
                 logger.warning(f"Status update took over {MPFuture.SOFT_UPDATE_TIMEOUT}, expect performance issues")
                 status_updated.wait(MPFuture.HARD_UPDATE_TIMEOUT - MPFuture.SOFT_UPDATE_TIMEOUT)
                 if not status_updated.is_set():
-                    self.set_exception(TimeoutError(f"Status update took over {MPFuture.HARD_UPDATE_TIMEOUT} seconds, "
-                                                    f"mpfuture is cancelled"))
+                    self.set_exception(
+                        TimeoutError(
+                            f"Status update took over {MPFuture.HARD_UPDATE_TIMEOUT} seconds, "
+                            f"mpfuture is cancelled"
+                        )
+                    )
                     status_updated.set()  # this triggers any concurrent _synchronize_if_necessary calls to finish
         except (ConnectionError, BrokenPipeError, EOFError) as e:
             logger.error(f"MPFuture was cancelled because sender pipe is broken. Origin process is probably down.")
@@ -247,7 +255,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         return super().cancel()
 
     def set_running_or_notify_cancel(self):
-        """ if synchronize is set to False, this future will ignore any state changes from origin """
+        """if synchronize is set to False, this future will ignore any state changes from origin"""
         self._synchronize_if_necessary()
         try:
             is_running = super().set_running_or_notify_cancel()
@@ -308,22 +316,29 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise asyncio.CancelledError()
 
     def __del__(self):
-        if getattr(self, '_origin_pid', None) == os.getpid():
+        if getattr(self, "_origin_pid", None) == os.getpid():
             MPFuture._active_futures.pop(self._uid, None)
-        if getattr(self, '_aio_event', None):
+        if getattr(self, "_aio_event", None):
             self._aio_event.set()
 
     def __getstate__(self):
-        return dict(synchronize=self.synchronize, _sender_pipe=self._sender_pipe, _state=self._state,
-                    _origin_pid=self._origin_pid, _uid=self._uid, _use_lock=self._use_lock,
-                    _result=self._result, _exception=self._exception)
+        return dict(
+            synchronize=self.synchronize,
+            _sender_pipe=self._sender_pipe,
+            _state=self._state,
+            _origin_pid=self._origin_pid,
+            _uid=self._uid,
+            _use_lock=self._use_lock,
+            _result=self._result,
+            _exception=self._exception,
+        )
 
     def __setstate__(self, state):
-        self.synchronize = state['synchronize']
-        self._sender_pipe = state['_sender_pipe']
-        self._state, self._origin_pid, self._uid = state['_state'], state['_origin_pid'], state['_uid']
-        self._result, self._exception = state['_result'], state['_exception']
-        self._use_lock = state['_use_lock']
+        self.synchronize = state["synchronize"]
+        self._sender_pipe = state["_sender_pipe"]
+        self._state, self._origin_pid, self._uid = state["_state"], state["_origin_pid"], state["_uid"]
+        self._result, self._exception = state["_result"], state["_exception"]
+        self._use_lock = state["_use_lock"]
 
         self._waiters, self._done_callbacks = [], []
         self._condition = threading.Condition()
