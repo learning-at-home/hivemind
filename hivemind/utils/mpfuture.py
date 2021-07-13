@@ -142,7 +142,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     payload.send((uid, MessageType.STATE_RESPONSE, future_state))
 
                 elif msg_type == MessageType.STATE_RESPONSE:
-                    future, state_updated_event = cls._status_requests.get(uid) or (None, None)
+                    future, state_updated_event = cls._status_requests.get(uid, (None, None))
                     if future is None:
                         logger.debug("Received a state update for a future that does not await status update.")
                     else:
