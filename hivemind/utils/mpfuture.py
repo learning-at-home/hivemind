@@ -140,7 +140,9 @@ class MPFuture(base.Future, Generic[ResultType]):
 
                 if msg_type == MessageType.STATE_REQUEST:
                     future_state = None if future is None else future.__getstate__()
-                    payload.send((uid, MessageType.STATE_RESPONSE, future_state))
+                    use_lock, return_pipe = payload
+                    with MPFuture._update_lock if use_lock else nullcontext():
+                        return_pipe.send((uid, MessageType.STATE_RESPONSE, future_state))
 
                 elif msg_type == MessageType.STATE_RESPONSE:
                     future, state_updated_event = cls._status_requests.get(uid, (None, None))
@@ -205,7 +207,8 @@ class MPFuture(base.Future, Generic[ResultType]):
 
         try:
             with MPFuture._update_lock if self._use_lock else nullcontext():
-                self._sender_pipe.send((self._uid, MessageType.STATE_REQUEST, self._process_wide_pipe))
+                payload = (self._use_lock, self._process_wide_pipe)
+                self._sender_pipe.send((self._uid, MessageType.STATE_REQUEST, payload))
             status_updated.wait(MPFuture.SOFT_UPDATE_TIMEOUT)
             if not status_updated.is_set():
                 logger.warning(f"Status update took over {MPFuture.SOFT_UPDATE_TIMEOUT}, expect performance issues")
@@ -272,22 +275,13 @@ class MPFuture(base.Future, Generic[ResultType]):
         if self._state not in TERMINAL_STATES:
             if os.getpid() != self._origin_pid:
                 raise RuntimeError("Only the process that created MPFuture can await result")
-            return super().result(timeout)
-        elif self._state == base.CANCELLED:
-            raise base.CancelledError()
-        elif self._exception:
-            raise self._exception
-        else:
-            return self._result
+        return super().result(timeout)
 
     def exception(self, timeout: Optional[float] = None) -> Optional[BaseException]:
         if self._state not in TERMINAL_STATES:
             if os.getpid() != self._origin_pid:
                 raise RuntimeError("Only the process that created MPFuture can await exception")
-            return super().exception(timeout)
-        elif self._state == base.CANCELLED:
-            raise base.CancelledError()
-        return self._exception
+        return super().exception(timeout)
 
     def done(self) -> bool:
         self._synchronize_if_necessary()
