@@ -73,7 +73,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     SOFT_UPDATE_TIMEOUT = 0.1  # seconds spent awaiting status update before warning is printed
     HARD_UPDATE_TIMEOUT = 10.0  # seconds spent awaiting status update before future is automatically cancelled
 
-    def __init__(self, synchronize: bool = True, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
+    def __init__(self, *, synchronize: bool = True, use_lock: bool = True):
         super().__init__()
         self.synchronize = synchronize
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
@@ -86,7 +86,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._sender_pipe = MPFuture._process_wide_pipe
 
         try:
-            self._loop = loop or asyncio.get_event_loop()
+            self._loop = asyncio.get_event_loop()
             self._aio_event = asyncio.Event()
         except RuntimeError:
             self._loop, self._aio_event = None, None
