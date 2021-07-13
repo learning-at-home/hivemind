@@ -104,7 +104,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         if self._loop.is_running() and loop == self.get_loop():
             asyncio.create_task(_event_setter())
         elif self._loop.is_running() and loop != self.get_loop():
-            asyncio.run_coroutine_threadsafe(_event_setter(), self._loop)
+            asyncio.run_coroutine_threadsafe(_event_setter(), self._loop).result()
         else:
             self._loop.run_until_complete(_event_setter())
 
@@ -311,7 +311,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise RuntimeError("Can't await: MPFuture was created with no event loop")
         yield from self._aio_event.wait().__await__()
         try:
-            return super().result(timeout=0)
+            return super().result()
         except base.CancelledError:
             raise asyncio.CancelledError()
 
