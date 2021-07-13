@@ -76,6 +76,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     def __init__(self, *, synchronize: bool = True, use_lock: bool = True):
         super().__init__()
         self.synchronize = synchronize
+        self._synchronization_lock = threading.Lock()
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._state, self._result, self._exception = base.PENDING, None, None
         self._use_lock = use_lock
@@ -193,17 +194,17 @@ class MPFuture(base.Future, Generic[ResultType]):
 
         self._initialize_backend_if_necessary()
 
-        maybe_existing_request = self._status_requests.get(self._uid)
-        if maybe_existing_request is not None:
-            _, status_updated = maybe_existing_request
-            status_updated.wait(MPFuture.HARD_UPDATE_TIMEOUT)
+        status_updated = threading.Event()
+        _, existing_status_event = self._status_requests.setdefault(self._uid, (self, status_updated))
+        # this line checks if another thread is synchronizing concurrently, assuming that setdefault to be atomic
+
+        if existing_status_event != status_updated:
+            existing_status_event.wait(MPFuture.HARD_UPDATE_TIMEOUT)
             return
 
         # otherwise create a new request for synchronization
 
         try:
-            status_updated = threading.Event()
-            self._status_requests[self._uid] = (self, status_updated)
             with MPFuture._update_lock if self._use_lock else nullcontext():
                 self._sender_pipe.send((self._uid, MessageType.STATE_REQUEST, self._process_wide_pipe))
             status_updated.wait(MPFuture.SOFT_UPDATE_TIMEOUT)

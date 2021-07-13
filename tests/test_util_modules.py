@@ -270,11 +270,11 @@ def test_mpfuture_done_callback():
 def test_many_futures(synchronize: bool):
     evt = mp.Event()
     receiver, sender = mp.Pipe()
-    main_futures = [hivemind.MPFuture(synchronize) for _ in range(1000)]
+    main_futures = [hivemind.MPFuture(synchronize=synchronize) for _ in range(1000)]
     assert len(hivemind.MPFuture._active_futures) == 1000
 
     def _run_peer():
-        fork_futures = [hivemind.MPFuture(synchronize) for _ in range(500)]
+        fork_futures = [hivemind.MPFuture(synchronize=synchronize) for _ in range(500)]
         assert len(hivemind.MPFuture._active_futures) == 500
 
         for i, future in enumerate(random.sample(main_futures, 300)):
