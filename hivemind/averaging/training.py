@@ -98,14 +98,17 @@ class TrainingAverager(DecentralizedAverager):
                         for averaged_tensor, local_tensor, old_local_tensor in zip(
                             averaged_tensors, local_tensors, old_local_tensors
                         ):
-                            local_tensor[...] += averaged_tensor.to(
-                                dtype=local_tensor.dtype, device=local_tensor.device
-                            ) - old_local_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
+                            averaged_tensor = averaged_tensor.to(
+                                dtype=local_tensor.dtype, device=local_tensor.device, non_blocking=True
+                            )
+                            old_local_tensor = old_local_tensor.to(
+                                dtype=local_tensor.dtype, device=local_tensor.device, non_blocking=True
+                            )
+
+                            local_tensor.add_(averaged_tensor - old_local_tensor)
                     else:
                         for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                            local_tensor[...] = averaged_tensor.to(
-                                dtype=local_tensor.dtype, device=local_tensor.device
-                            )
+                            local_tensor.copy_(averaged_tensor, non_blocking=True)
 
             self.local_step += 1
             return gathered

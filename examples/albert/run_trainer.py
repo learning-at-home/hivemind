@@ -10,24 +10,16 @@ import torch
 import transformers
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
-from transformers import (
-    set_seed,
-    HfArgumentParser,
-    TrainingArguments,
-    DataCollatorForLanguageModeling,
-    AlbertTokenizerFast,
-    AlbertConfig,
-    AlbertForPreTraining,
-)
-from transformers.optimization import get_linear_schedule_with_warmup
-from transformers.trainer_utils import is_main_process
-from transformers.trainer import Trainer
 from torch_optimizer import Lamb
+from transformers import set_seed, HfArgumentParser, TrainingArguments, DataCollatorForLanguageModeling
+from transformers.models.albert import AlbertTokenizerFast, AlbertConfig, AlbertForPreTraining
+from transformers.optimization import get_linear_schedule_with_warmup
+from transformers.trainer import Trainer
+from transformers.trainer_utils import is_main_process
 
 import hivemind
 import utils
-from arguments import CollaborationArguments, DatasetArguments, AlbertTrainingArguments
-
+from arguments import CollaborationArguments, DatasetArguments, AlbertTrainingArguments, AveragerArguments
 
 logger = logging.getLogger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
@@ -209,14 +201,13 @@ class NoOpScheduler(LRSchedulerBase):
 
 
 def main():
-    parser = HfArgumentParser((AlbertTrainingArguments, DatasetArguments, CollaborationArguments))
-    training_args, dataset_args, collaboration_args = parser.parse_args_into_dataclasses()
+    parser = HfArgumentParser((AlbertTrainingArguments, DatasetArguments, CollaborationArguments, AveragerArguments))
+    training_args, dataset_args, collaboration_args, averager_args = parser.parse_args_into_dataclasses()
 
     logger.info(f"Found {len(collaboration_args.initial_peers)} initial peers: {collaboration_args.initial_peers}")
     if len(collaboration_args.initial_peers) == 0:
         raise ValueError("Please specify at least one network endpoint in initial peers.")
 
-    collaboration_args_dict = asdict(collaboration_args)
     setup_logging(training_args)
 
     # Set seed before initializing model.
@@ -233,40 +224,38 @@ def main():
 
     opt, scheduler = get_optimizer_and_scheduler(training_args, model)
 
-    validators, local_public_key = utils.make_validators(collaboration_args_dict["experiment_prefix"])
+    validators, local_public_key = utils.make_validators(collaboration_args.experiment_prefix)
+
     dht = hivemind.DHT(
         start=True,
-        initial_peers=collaboration_args_dict.pop("initial_peers"),
-        listen=not collaboration_args_dict["client_mode"],
+        initial_peers=collaboration_args.initial_peers,
+        listen=not collaboration_args.client_mode,
         record_validators=validators,
-        use_ipfs=collaboration_args_dict["use_ipfs"],
-        host_maddrs=collaboration_args_dict.pop("host_maddrs"),
-        announce_maddrs=collaboration_args_dict.pop("announce_maddrs"),
+        use_ipfs=collaboration_args.use_ipfs,
+        host_maddrs=collaboration_args.host_maddrs,
+        announce_maddrs=collaboration_args.announce_maddrs,
     )
-    utils.log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=collaboration_args_dict.pop("use_ipfs"))
+    utils.log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=collaboration_args.use_ipfs)
 
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     if torch.cuda.device_count() != 0:
         total_batch_size_per_step *= torch.cuda.device_count()
 
-    statistics_expiration = collaboration_args_dict.pop("statistics_expiration")
-    adjusted_target_batch_size = collaboration_args_dict.pop("target_batch_size") - collaboration_args_dict.pop(
-        "batch_size_lead"
-    )
+    adjusted_target_batch_size = collaboration_args.target_batch_size - collaboration_args.batch_size_lead
 
     collaborative_optimizer = hivemind.CollaborativeOptimizer(
         opt=opt,
         dht=dht,
         scheduler=scheduler,
-        prefix=collaboration_args_dict.pop("experiment_prefix"),
-        compression_type=hivemind.utils.CompressionType.Value(collaboration_args_dict.pop("compression")),
+        prefix=collaboration_args.experiment_prefix,
+        compression_type=hivemind.utils.CompressionType.Value(collaboration_args.compression),
         batch_size_per_step=total_batch_size_per_step,
-        throughput=collaboration_args_dict.pop("bandwidth"),
+        throughput=collaboration_args.bandwidth,
         target_batch_size=adjusted_target_batch_size,
-        client_mode=collaboration_args_dict.pop("client_mode"),
+        client_mode=collaboration_args.client_mode,
         verbose=True,
         start=True,
-        **collaboration_args_dict,
+        **asdict(averager_args),
     )
 
     class TrainerWithIndependentShuffling(Trainer):
@@ -284,7 +273,9 @@ def main():
         eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
         optimizers=(collaborative_optimizer, NoOpScheduler(collaborative_optimizer)),
         callbacks=[
-            CollaborativeCallback(dht, collaborative_optimizer, model, local_public_key, statistics_expiration)
+            CollaborativeCallback(
+                dht, collaborative_optimizer, model, local_public_key, collaboration_args.statistics_expiration
+            )
         ],
     )
     trainer.remove_callback(transformers.trainer_callback.PrinterCallback)

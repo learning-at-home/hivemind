@@ -1,19 +1,21 @@
 #!/usr/bin/env python
-""" This script builds a pre-tokenized compressed representation of wikitext103 using huggingface/datasets """
+""" This script builds a pre-tokenized compressed representation of WikiText-103 using huggingface/datasets """
 import random
 from functools import partial
-from multiprocessing import cpu_count
 
 import nltk
 from datasets import load_dataset
 from transformers import AlbertTokenizerFast
 
-
 COLUMN_NAMES = ("attention_mask", "input_ids", "sentence_order_label", "special_tokens_mask", "token_type_ids")
 
 
 def create_instances_from_document(tokenizer, document, max_seq_length):
-    """Creates `TrainingInstance`s for a single document."""
+    """
+    Creates training instances from a single document.
+    Reuses code from the original ALBERT implementation (Google AI, 2018)
+    https://github.com/google-research/albert/blob/master/create_pretraining_data.py#L267
+    """
     # We DON'T just concatenate all of the tokens from a document into a long
     # sequence and choose an arbitrary split point because this would make the
     # next sentence prediction task too easy. Instead, we split the input into

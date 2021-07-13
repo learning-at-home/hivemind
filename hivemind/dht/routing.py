@@ -11,13 +11,8 @@ from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
 from hivemind.p2p import PeerID
 from hivemind.utils import MSGPackSerializer, get_dht_time
 
-DHTKey, Subkey, DHTValue, BinaryDHTID, BinaryDHTValue, = (
-    Any,
-    Any,
-    Any,
-    bytes,
-    bytes,
-)
+DHTKey = Subkey = DHTValue = Any
+BinaryDHTID = BinaryDHTValue = bytes
 
 
 class RoutingTable:
@@ -143,9 +138,8 @@ class RoutingTable:
                 while right_index < len(self.buckets) and self.buckets[right_index].upper <= current_upper:
                     for node_id, peer_id in self.buckets[right_index].nodes_to_peer_id.items():
                         heapq.heappush(candidates, (query_id.xor_distance(node_id), node_id, peer_id))
-                    right_index += (
-                        1  # note: we may need to add more than one bucket if they are on a lower depth level
-                    )
+                    right_index += 1
+                    # note: we may need to add more than one bucket if they are on a lower depth level
                 assert self.buckets[right_index - 1].upper == current_upper
 
             else:  # split_direction == 1, leaf was split on the right, merge its left peer(s)

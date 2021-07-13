@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from hivemind.moe.server.task_pool import TaskPool
-from hivemind.utils import BatchTensorDescriptor, DUMMY_BATCH_SIZE
+from hivemind.utils.tensor_descr import BatchTensorDescriptor, DUMMY_BATCH_SIZE
 from hivemind.utils.logging import get_logger
 from hivemind.utils.nested import nested_flatten, nested_pack, nested_compare, nested_map
 

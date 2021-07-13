@@ -1,10 +1,9 @@
 import asyncio
 import importlib
 from dataclasses import dataclass
-from functools import partial
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
 
-from hivemind.p2p.p2p_daemon import P2P, P2PContext
+from hivemind.p2p.p2p_daemon import P2P
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
 
 
@@ -86,7 +85,9 @@ class Servicer:
         servicer = self if wrapper is None else wrapper
         for handler in self._rpc_handlers:
             await p2p.add_unary_handler(
-                handler.handle_name, getattr(servicer, handler.method_name), handler.request_type
+                handler.handle_name,
+                getattr(servicer, handler.method_name),
+                handler.request_type,
             )
 
     def get_stub(self, p2p: P2P, peer: PeerID) -> StubBase:
