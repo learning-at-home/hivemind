@@ -221,7 +221,7 @@ def test_mpfuture_bidirectional():
 @pytest.mark.forked
 def test_mpfuture_done_callback():
     receiver, sender = mp.Pipe(duplex=False)
-    events = [mp.Event() for _ in range(5)]
+    events = [mp.Event() for _ in range(6)]
 
     def _future_creator():
         future1, future2, future3 = hivemind.MPFuture(), hivemind.MPFuture(), hivemind.MPFuture()
@@ -241,6 +241,7 @@ def test_mpfuture_done_callback():
 
         events[0].wait()
         future1.add_done_callback(lambda future: events[4].set())  # schedule callback after future1 is already finished
+        events[5].wait()
 
     p = mp.Process(target=_future_creator)
     p.start()
@@ -251,24 +252,27 @@ def test_mpfuture_done_callback():
     with pytest.raises(RuntimeError):
         future1.add_done_callback(lambda future: (1, 2, 3))
 
-    p.join()
-    events[0].wait(1)
-    events[1].wait(1)
     assert future1.done() and not future1.cancelled()
     assert future2.done() and future2.cancelled()
+    events[0].wait(1)
+    events[1].wait(1)
     assert events[0].is_set() and events[1].is_set() and events[2].is_set() and events[4].is_set()
     assert not events[3].is_set()
 
+    events[5].set()
+    p.join()
+
 
 @pytest.mark.forked
-def test_many_futures():
+@pytest.mark.parametrize('synchronize', [True, False])
+def test_many_futures(synchronize: bool):
     evt = mp.Event()
     receiver, sender = mp.Pipe()
-    main_futures = [hivemind.MPFuture() for _ in range(1000)]
+    main_futures = [hivemind.MPFuture(synchronize) for _ in range(1000)]
     assert len(hivemind.MPFuture._active_futures) == 1000
 
     def _run_peer():
-        fork_futures = [hivemind.MPFuture() for _ in range(500)]
+        fork_futures = [hivemind.MPFuture(synchronize) for _ in range(500)]
         assert len(hivemind.MPFuture._active_futures) == 500
 
         for i, future in enumerate(random.sample(main_futures, 300)):
@@ -285,13 +289,16 @@ def test_many_futures():
 
         assert len(hivemind.MPFuture._active_futures) == 200
         for future in fork_futures:
-            future.cancel()
+            if not future.done():
+                future.set_result(123)
         assert len(hivemind.MPFuture._active_futures) == 0
 
     p = mp.Process(target=_run_peer)
     p.start()
 
     some_fork_futures = receiver.recv()
+
+    time.sleep(0.5)  # wait for active futures to synchronize
     assert len(hivemind.MPFuture._active_futures) == 700
 
     for future in some_fork_futures:
@@ -299,7 +306,6 @@ def test_many_futures():
     for future in random.sample(some_fork_futures, 200):
         future.set_result(321)
 
-    time.sleep(0.5)
     evt.set()
     for future in main_futures:
         future.cancel()
