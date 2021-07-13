@@ -213,7 +213,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     self.set_exception(
                         TimeoutError(
                             f"Status update took over {MPFuture.HARD_UPDATE_TIMEOUT} seconds, "
-                            f"mpfuture is cancelled"
+                            f"MPFuture is cancelled"
                         )
                     )
                     status_updated.set()  # this triggers any concurrent _synchronize_if_necessary calls to finish
