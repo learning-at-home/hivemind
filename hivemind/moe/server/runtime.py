@@ -41,10 +41,17 @@ class Runtime(threading.Thread):
 
     :param stats_report_interval: interval to collect and log statistics about runtime performance
     """
+
     SHUTDOWN_TRIGGER = "RUNTIME SHUTDOWN TRIGGERED"
 
-    def __init__(self, expert_backends: Dict[str, ExpertBackend], prefetch_batches=64, sender_threads: int = 1,
-                 device: torch.device = None, stats_report_interval: Optional[int] = None):
+    def __init__(
+        self,
+        expert_backends: Dict[str, ExpertBackend],
+        prefetch_batches=64,
+        sender_threads: int = 1,
+        device: torch.device = None,
+        stats_report_interval: Optional[int] = None,
+    ):
         super().__init__()
         self.expert_backends = expert_backends
         self.pools = tuple(chain(*(expert.get_pools() for expert in expert_backends.values())))
@@ -73,7 +80,8 @@ class Runtime(threading.Thread):
                 logger.info("Started")
 
                 for pool, batch_index, batch in BackgroundGenerator(
-                        self.iterate_minibatches_from_pools(), self.prefetch_batches):
+                    self.iterate_minibatches_from_pools(), self.prefetch_batches
+                ):
                     logger.debug(f"Processing batch {batch_index} from pool {pool.name}")
 
                     start = time()
@@ -92,7 +100,7 @@ class Runtime(threading.Thread):
                     self.shutdown()
 
     def shutdown(self):
-        """ Gracefully terminate a running runtime. """
+        """Gracefully terminate a running runtime."""
         logger.info("Shutting down")
         self.ready.clear()
 
@@ -137,7 +145,7 @@ class Runtime(threading.Thread):
                 yield pool, batch_index, batch_tensors
 
 
-BatchStats = NamedTuple('BatchStats', (('batch_size', int), ('processing_time', float)))
+BatchStats = NamedTuple("BatchStats", (("batch_size", int), ("processing_time", float)))
 
 
 class StatsReporter(threading.Thread):
@@ -155,23 +163,26 @@ class StatsReporter(threading.Thread):
                 pool_batch_stats[pool_uid].append(batch_stats)
 
             total_processed_batches = sum(len(pool_stats) for pool_stats in pool_batch_stats.values())
-            logger.info(f'Processed {total_processed_batches} batches in last {self.report_interval} seconds:')
+            logger.info(f"Processed {total_processed_batches} batches in last {self.report_interval} seconds:")
             for pool_uid, pool_stats in pool_batch_stats.items():
                 total_batches = len(pool_stats)
                 total_examples = sum(batch_stats.batch_size for batch_stats in pool_stats)
                 avg_batch_size = mean(batch_stats.batch_size for batch_stats in pool_stats)
                 total_time = sum(batch_stats.processing_time for batch_stats in pool_stats)
                 batches_to_time = total_batches / total_time
-                batch_performance = f'{batches_to_time:.2f} ' + ('batches/s' if batches_to_time > 1 else 's/batch')
+                batch_performance = f"{batches_to_time:.2f} " + ("batches/s" if batches_to_time > 1 else "s/batch")
 
                 examples_to_time = total_examples / total_time
-                example_performance = f'{examples_to_time:.2f} ' + (
-                    'examples/s' if examples_to_time > 1 else 's/example')
+                example_performance = f"{examples_to_time:.2f} " + (
+                    "examples/s" if examples_to_time > 1 else "s/example"
+                )
 
-                logger.info(f'{pool_uid}: '
-                            f'{total_batches} batches ({batch_performance}), '
-                            f'{total_examples} examples ({example_performance}), '
-                            f'avg batch size {avg_batch_size:.2f}')
+                logger.info(
+                    f"{pool_uid}: "
+                    f"{total_batches} batches ({batch_performance}), "
+                    f"{total_examples} examples ({example_performance}), "
+                    f"avg batch size {avg_batch_size:.2f}"
+                )
 
     def report_stats(self, pool_uid, batch_size, processing_time):
         batch_stats = BatchStats(batch_size, processing_time)

@@ -28,7 +28,7 @@ def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_
         assert not all(throughput == 0 for throughput in throughputs), "Must have at least one nonzero throughput"
         scores = np.asarray([1.0 if throughput is None else 0.0 for throughput in throughputs])
 
-    #TODO(jheuristic) we no longer need hagenbach-bishoff with new AllReduceRunner
+    # TODO(jheuristic) we no longer need hagenbach-bishoff with new AllReduceRunner
     return tuple(hagenbach_bishoff(vector_size, scores))
 
 
@@ -71,7 +71,7 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
 
     A, b = list(map(np.concatenate, zip(nonnegative_weights, weights_sum_to_one, xi_is_maximum, force_max_weights)))
 
-    solution = scipy.optimize.linprog(c, A_ub=A, b_ub=b, method='interior-point')
+    solution = scipy.optimize.linprog(c, A_ub=A, b_ub=b, method="interior-point")
     if solution.success:
         peer_scores = solution.x[:group_size]
         # if some peers have less than min_size elements, transfer their share to other peers (if any)

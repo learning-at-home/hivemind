@@ -34,11 +34,12 @@ async def test_daemon_killed_on_del():
 
 
 @pytest.mark.parametrize(
-    'host_maddrs', [
-        [Multiaddr('/ip4/127.0.0.1/tcp/0')],
-        [Multiaddr('/ip4/127.0.0.1/udp/0/quic')],
-        [Multiaddr('/ip4/127.0.0.1/tcp/0'), Multiaddr('/ip4/127.0.0.1/udp/0/quic')],
-    ]
+    "host_maddrs",
+    [
+        [Multiaddr("/ip4/127.0.0.1/tcp/0")],
+        [Multiaddr("/ip4/127.0.0.1/udp/0/quic")],
+        [Multiaddr("/ip4/127.0.0.1/tcp/0"), Multiaddr("/ip4/127.0.0.1/udp/0/quic")],
+    ],
 )
 @pytest.mark.asyncio
 async def test_transports(host_maddrs: List[Multiaddr]):
@@ -71,12 +72,13 @@ async def test_daemon_replica_does_not_affect_primary():
 
 
 @pytest.mark.parametrize(
-    'should_cancel,replicate', [
+    "should_cancel,replicate",
+    [
         (True, False),
         (True, True),
         (False, False),
         (False, True),
-    ]
+    ],
 )
 @pytest.mark.asyncio
 async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"):
@@ -90,9 +92,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
         except asyncio.CancelledError:
             nonlocal handler_cancelled
             handler_cancelled = True
-        return dht_pb2.PingResponse(
-            peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()),
-            available=True)
+        return dht_pb2.PingResponse(peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()), available=True)
 
     server_pid = server_primary._child.pid
     await server.add_unary_handler(handle_name, ping_handler, dht_pb2.PingRequest)
@@ -104,12 +104,8 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
     assert is_process_running(client_pid)
     await client.wait_for_at_least_n_peers(1)
 
-    ping_request = dht_pb2.PingRequest(
-        peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()),
-        validate=True)
-    expected_response = dht_pb2.PingResponse(
-        peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()),
-        available=True)
+    ping_request = dht_pb2.PingRequest(peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()), validate=True)
+    expected_response = dht_pb2.PingResponse(peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()), available=True)
 
     if should_cancel:
         *_, writer = await client.call_stream_handler(server.id, handle_name)
@@ -134,7 +130,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
 @pytest.mark.asyncio
 async def test_call_unary_handler_error(handle_name="handle"):
     async def error_handler(request, context):
-        raise ValueError('boom')
+        raise ValueError("boom")
 
     server = await P2P.create()
     server_pid = server._child.pid
@@ -146,13 +142,11 @@ async def test_call_unary_handler_error(handle_name="handle"):
     assert is_process_running(client_pid)
     await client.wait_for_at_least_n_peers(1)
 
-    ping_request = dht_pb2.PingRequest(
-        peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()),
-        validate=True)
+    ping_request = dht_pb2.PingRequest(peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()), validate=True)
 
     with pytest.raises(P2PHandlerError) as excinfo:
         await client.call_unary_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)
-    assert 'boom' in str(excinfo.value)
+    assert "boom" in str(excinfo.value)
 
     await server.shutdown()
     await client.shutdown()
@@ -265,7 +259,7 @@ async def test_error_closes_connection():
         with closing(writer):
             command = await P2P.receive_raw_data(reader)
             if command == b"raise_error":
-                raise Exception('The handler has failed')
+                raise Exception("The handler has failed")
             else:
                 await P2P.send_raw_data(b"okay", writer)
 
@@ -311,20 +305,18 @@ async def test_handlers_on_different_replicas():
 
     server_primary = await P2P.create()
     server_id = server_primary.id
-    await server_primary.add_stream_handler('handle_primary', partial(handler, key=b'primary'))
+    await server_primary.add_stream_handler("handle_primary", partial(handler, key=b"primary"))
 
     server_replica1 = await replicate_if_needed(server_primary, True)
-    await server_replica1.add_stream_handler('handle1', partial(handler, key=b'replica1'))
+    await server_replica1.add_stream_handler("handle1", partial(handler, key=b"replica1"))
 
     server_replica2 = await replicate_if_needed(server_primary, True)
-    await server_replica2.add_stream_handler('handle2', partial(handler, key=b'replica2'))
+    await server_replica2.add_stream_handler("handle2", partial(handler, key=b"replica2"))
 
     client = await P2P.create(initial_peers=await server_primary.get_visible_maddrs())
     await client.wait_for_at_least_n_peers(1)
 
-    for name, expected_key in [('handle_primary', b"primary"),
-                               ('handle1', b"replica1"),
-                               ('handle2', b"replica2")]:
+    for name, expected_key in [("handle_primary", b"primary"), ("handle1", b"replica1"), ("handle2", b"replica2")]:
         _, reader, writer = await client.call_stream_handler(server_id, name)
         with closing(writer):
             assert await P2P.receive_raw_data(reader) == expected_key
@@ -334,7 +326,7 @@ async def test_handlers_on_different_replicas():
 
     # Primary does not handle replicas protocols after their shutdown
 
-    for name in ['handle1', 'handle2']:
+    for name in ["handle1", "handle2"]:
         _, reader, writer = await client.call_stream_handler(server_id, name)
         with pytest.raises(asyncio.IncompleteReadError), closing(writer):
             await P2P.receive_raw_data(reader)

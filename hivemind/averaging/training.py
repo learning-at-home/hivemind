@@ -33,9 +33,17 @@ class TrainingAverager(DecentralizedAverager):
     :param kwargs: any additional parameters will be forwarded to DecentralizedAverager
     """
 
-    def __init__(self, opt: torch.optim.Optimizer, *, average_parameters: bool, average_gradients: bool,
-                 average_opt_statistics: Sequence[str] = (), extra_tensors: Sequence[torch.Tensor] = (),
-                 initialize_optimizer: bool = True, **kwargs):
+    def __init__(
+        self,
+        opt: torch.optim.Optimizer,
+        *,
+        average_parameters: bool,
+        average_gradients: bool,
+        average_opt_statistics: Sequence[str] = (),
+        extra_tensors: Sequence[torch.Tensor] = (),
+        initialize_optimizer: bool = True,
+        **kwargs
+    ):
 
         self.opt, self.extra_tensors, self.local_step = opt, tuple(extra_tensors), 0
         self.opt_statistics = tuple(average_opt_statistics)
@@ -71,7 +79,8 @@ class TrainingAverager(DecentralizedAverager):
                 if use_old_local_tensors:
                     old_local_tensors = tuple(x.cpu().float().clone() for x in local_tensors)
                 assert len(local_tensors) == len(
-                    averaged_tensors), "The number of optimized parameters should not change."
+                    averaged_tensors
+                ), "The number of optimized parameters should not change."
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                     averaged_tensor[...] = local_tensor.cpu().float()
 
@@ -86,15 +95,17 @@ class TrainingAverager(DecentralizedAverager):
                     if use_old_local_tensors:
                         # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents
                         # losing local updates that might have occurred during averaging
-                        for averaged_tensor, local_tensor, old_local_tensor in zip(averaged_tensors, local_tensors,
-                                                                                   old_local_tensors):
-                            local_tensor[...] += averaged_tensor.to(dtype=local_tensor.dtype,
-                                                                    device=local_tensor.device) - \
-                                                 old_local_tensor.to(dtype=local_tensor.dtype,
-                                                                     device=local_tensor.device)
+                        for averaged_tensor, local_tensor, old_local_tensor in zip(
+                            averaged_tensors, local_tensors, old_local_tensors
+                        ):
+                            local_tensor[...] += averaged_tensor.to(
+                                dtype=local_tensor.dtype, device=local_tensor.device
+                            ) - old_local_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
                     else:
                         for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                            local_tensor[...] = averaged_tensor.to(dtype=local_tensor.dtype, device=local_tensor.device)
+                            local_tensor[...] = averaged_tensor.to(
+                                dtype=local_tensor.dtype, device=local_tensor.device
+                            )
 
             self.local_step += 1
             return gathered
@@ -108,17 +119,17 @@ class TrainingAverager(DecentralizedAverager):
         """
         if self.average_parameters:
             for param_group in self.opt.param_groups:
-                yield from param_group['params']
+                yield from param_group["params"]
         if self.average_gradients:
             for param_group in self.opt.param_groups:
-                for param in param_group['params']:
+                for param in param_group["params"]:
                     if param.grad is not None:
                         yield param.grad
                     elif replace_none:
                         yield torch.zeros_like(param)
         for stats in self.opt_statistics:
             for param_group in self.opt.param_groups:
-                for param in param_group['params']:
+                for param in param_group["params"]:
                     yield self.opt.state[param][stats]
         yield from iter(self.extra_tensors)
 
@@ -128,8 +139,9 @@ class TrainingAverager(DecentralizedAverager):
         :returns: a tuple of (serializable_small_metadata, sequence of torch tensors)
         """
         with torch.no_grad():
-            optimized_parameters = tuple(param.detach().cpu() for param_group in self.opt.param_groups
-                                         for param in param_group['params'])
+            optimized_parameters = tuple(
+                param.detach().cpu() for param_group in self.opt.param_groups for param in param_group["params"]
+            )
             extra_tensors = tuple(tensor.detach().cpu() for tensor in self.extra_tensors)
             optimizer_metadata, optimizer_tensors = dump_optimizer_state(self.opt)
 
@@ -141,7 +153,7 @@ class TrainingAverager(DecentralizedAverager):
         Attempt to download the latest optimizer state from peers and update trainer parameters/statistics.
         :returns: whether or the averager succeeded in loading parameters
         """
-        parameters_and_extras = [param for param_group in self.opt.param_groups for param in param_group['params']]
+        parameters_and_extras = [param for param_group in self.opt.param_groups for param in param_group["params"]]
         parameters_and_extras.extend(self.extra_tensors)
         num_local_tensors = len(parameters_and_extras)
 
@@ -155,39 +167,39 @@ class TrainingAverager(DecentralizedAverager):
         with torch.no_grad():
             for local_param, loaded_param in zip(parameters_and_extras, loaded_parameters_and_extras):
                 local_param[...] = loaded_param
-            load_optimizer_state(self.opt, metadata['optimizer_metadata'], loaded_opt_tensors)
+            load_optimizer_state(self.opt, metadata["optimizer_metadata"], loaded_opt_tensors)
 
-        self.local_step = max(self.local_step, metadata['step'])
+        self.local_step = max(self.local_step, metadata["step"])
 
 
 def initialize_optimizer_state(opt: torch.optim.Optimizer):
     for param_group in opt.param_groups:
-        for param in param_group['params']:
+        for param in param_group["params"]:
             if param.grad is None:
                 (0 * param.sum()).backward()
     opt.step()
 
 
 def dump_optimizer_state(opt: torch.optim.Optimizer):
-    """ Convert optimizer state into a format of DecentralizedAverager's get_current_state/load_state_from_peers """
+    """Convert optimizer state into a format of DecentralizedAverager's get_current_state/load_state_from_peers"""
     with torch.no_grad():
         flat_metadata, flat_tensors = [], []
         for elem in nested_flatten(opt.state_dict()):
             if isinstance(elem, torch.Tensor):
-                flat_metadata.append(dict(type='tensor', index=len(flat_tensors)))
+                flat_metadata.append(dict(type="tensor", index=len(flat_tensors)))
                 flat_tensors.append(elem.cpu())
             else:
-                flat_metadata.append(dict(type='value', value=elem))
+                flat_metadata.append(dict(type="value", value=elem))
         return flat_metadata, flat_tensors
 
 
 def load_optimizer_state(optimizer: torch.optim.Optimizer, flat_metadata: Dict, flat_tensors: Sequence[torch.Tensor]):
     flat_optimizer_state = []
     for elem in flat_metadata:
-        if elem.get('type') == 'tensor' and isinstance(elem.get('index'), int):
-            flat_optimizer_state.append(flat_tensors[elem['index']])
-        elif elem.get('type') == 'value' and 'value' in elem:
-            flat_optimizer_state.append(elem['value'])
+        if elem.get("type") == "tensor" and isinstance(elem.get("index"), int):
+            flat_optimizer_state.append(flat_tensors[elem["index"]])
+        elif elem.get("type") == "value" and "value" in elem:
+            flat_optimizer_state.append(elem["value"])
     with torch.no_grad():
         try:
             return optimizer.load_state_dict(nested_pack(flat_optimizer_state, structure=optimizer.state_dict()))

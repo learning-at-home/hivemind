@@ -7,7 +7,7 @@ from hivemind.moe import register_expert_class
 sample_input = lambda batch_size, hidden_dim: torch.empty((batch_size, hidden_dim))
 
 
-@register_expert_class('perceptron', sample_input)
+@register_expert_class("perceptron", sample_input)
 class MultilayerPerceptron(nn.Module):
     def __init__(self, hidden_dim, num_classes=10):
         super().__init__()
@@ -22,13 +22,14 @@ class MultilayerPerceptron(nn.Module):
         return x
 
 
-multihead_sample_input = lambda batch_size, hidden_dim: \
-    (torch.empty((batch_size, hidden_dim)),
-     torch.empty((batch_size, 2 * hidden_dim)),
-     torch.empty((batch_size, 3 * hidden_dim)),)
+multihead_sample_input = lambda batch_size, hidden_dim: (
+    torch.empty((batch_size, hidden_dim)),
+    torch.empty((batch_size, 2 * hidden_dim)),
+    torch.empty((batch_size, 3 * hidden_dim)),
+)
 
 
-@register_expert_class('multihead', multihead_sample_input)
+@register_expert_class("multihead", multihead_sample_input)
 class MultiheadNetwork(nn.Module):
     def __init__(self, hidden_dim, num_classes=10):
         super().__init__()

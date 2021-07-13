@@ -18,8 +18,7 @@ class SchemaValidator(RecordValidatorBase):
     This allows to enforce types, min/max values, require a subkey to contain a public key, etc.
     """
 
-    def __init__(self, schema: pydantic.BaseModel, *,
-                 allow_extra_keys: bool=True, prefix: Optional[str]=None):
+    def __init__(self, schema: pydantic.BaseModel, *, allow_extra_keys: bool = True, prefix: Optional[str] = None):
         """
         :param schema: The Pydantic model (a subclass of pydantic.BaseModel).
 
@@ -43,7 +42,7 @@ class SchemaValidator(RecordValidatorBase):
 
         self._key_id_to_field_name = {}
         for field in schema.__fields__.values():
-            raw_key = f'{prefix}_{field.name}' if prefix is not None else field.name
+            raw_key = f"{prefix}_{field.name}" if prefix is not None else field.name
             self._key_id_to_field_name[DHTID.generate(source=raw_key).to_bytes()] = field.name
         self._allow_extra_keys = allow_extra_keys
 
@@ -79,8 +78,10 @@ class SchemaValidator(RecordValidatorBase):
 
         if record.key not in self._key_id_to_field_name:
             if not self._allow_extra_keys:
-                logger.debug(f"Record {record} has a key ID that is not defined in any of the "
-                             f"schemas (therefore, the raw key is unknown)")
+                logger.debug(
+                    f"Record {record} has a key ID that is not defined in any of the "
+                    f"schemas (therefore, the raw key is unknown)"
+                )
             return self._allow_extra_keys
 
         try:
@@ -102,9 +103,12 @@ class SchemaValidator(RecordValidatorBase):
 
             parsed_value = parsed_record.dict(by_alias=True)[field_name]
             if parsed_value != record[field_name]:
-                validation_errors.append(ValueError(
-                    f"The record {record} needed type conversions to match "
-                    f"the schema: {parsed_value}. Type conversions are not allowed"))
+                validation_errors.append(
+                    ValueError(
+                        f"The record {record} needed type conversions to match "
+                        f"the schema: {parsed_value}. Type conversions are not allowed"
+                    )
+                )
             else:
                 return True
 
@@ -120,17 +124,18 @@ class SchemaValidator(RecordValidatorBase):
         else:
             if isinstance(deserialized_value, dict):
                 raise ValueError(
-                    f'Record {record} contains an improperly serialized dictionary (you must use '
-                    f'a DictionaryDHTValue of serialized values instead of a `dict` subclass)')
+                    f"Record {record} contains an improperly serialized dictionary (you must use "
+                    f"a DictionaryDHTValue of serialized values instead of a `dict` subclass)"
+                )
             return {field_name: deserialized_value}
 
     @staticmethod
     def _is_failed_due_to_extra_field(exc: pydantic.ValidationError):
         inner_errors = exc.errors()
         return (
-            len(inner_errors) == 1 and
-            inner_errors[0]['type'] == 'value_error.extra' and
-            len(inner_errors[0]['loc']) == 1  # Require the extra field to be on the top level
+            len(inner_errors) == 1
+            and inner_errors[0]["type"] == "value_error.extra"
+            and len(inner_errors[0]["loc"]) == 1  # Require the extra field to be on the top level
         )
 
     def merge_with(self, other: RecordValidatorBase) -> bool:
@@ -150,7 +155,7 @@ class SchemaValidator(RecordValidatorBase):
             self._patch_schema(schema)
 
 
-def conbytes(*, regex: bytes=None, **kwargs) -> Type[pydantic.BaseModel]:
+def conbytes(*, regex: bytes = None, **kwargs) -> Type[pydantic.BaseModel]:
     """
     Extend pydantic.conbytes() to support ``regex`` constraints (like pydantic.constr() does).
     """
@@ -172,4 +177,4 @@ def conbytes(*, regex: bytes=None, **kwargs) -> Type[pydantic.BaseModel]:
     return ConstrainedBytesWithRegex
 
 
-BytesWithPublicKey = conbytes(regex=b'.*' + RSASignatureValidator.PUBLIC_KEY_REGEX + b'.*')
+BytesWithPublicKey = conbytes(regex=b".*" + RSASignatureValidator.PUBLIC_KEY_REGEX + b".*")

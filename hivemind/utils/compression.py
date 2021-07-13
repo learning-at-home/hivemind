@@ -40,11 +40,11 @@ def average_buckets(tensor: torch.Tensor, quant_weight: torch.Tensor, n_bins: in
 
 
 def _quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size: int = 10 ** 5) -> np.ndarray:
-    """ Estimate uniform quantiles of data using quantile-of-quantiles. Runs in parallel. """
+    """Estimate uniform quantiles of data using quantile-of-quantiles. Runs in parallel."""
     if not array.data.c_contiguous and array.data.f_contiguous:
         array = array.T
     array = np.ascontiguousarray(array.reshape(-1))
-    quantiles = np.linspace(0., 1., num=n_quantiles, dtype=array.dtype)
+    quantiles = np.linspace(0.0, 1.0, num=n_quantiles, dtype=array.dtype)
     chunk_size = _get_chunk_size(len(array), min_chunk_size)
     num_chunks = (len(array) - 1) // chunk_size + 1
     partition_quantiles = np.empty((num_chunks, len(quantiles)), dtype=array.dtype)
@@ -60,7 +60,7 @@ def _quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size
 
 
 def _get_chunk_size(num_elements: int, min_chunk_size: int) -> int:
-    """ Adjust chunk_size to minimize imbalance between chunk sizes """
+    """Adjust chunk_size to minimize imbalance between chunk sizes"""
     if min_chunk_size >= num_elements:
         return min_chunk_size
     leftover_elements = num_elements % min_chunk_size
@@ -78,9 +78,10 @@ def _uint8_uniform_buckets_encode(tensor: torch.Tensor, range_in_sigmas: float):
     return quant_weight, lookup
 
 
-def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionType.NONE,
-                           allow_inplace=False) -> runtime_pb2.Tensor:
-    assert tensor.device == torch.device('cpu')
+def serialize_torch_tensor(
+    tensor: torch.Tensor, compression_type=CompressionType.NONE, allow_inplace=False
+) -> runtime_pb2.Tensor:
+    assert tensor.device == torch.device("cpu")
     if compression_type == CompressionType.MEANSTD_16BIT:
         assert tensor.dtype == torch.float32
 
@@ -93,14 +94,15 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
         tensor.div_(stds)
         tensor = tensor.clamp_(-FP16_MAX, FP16_MAX).to(torch.float16)
 
-        data = b''.join((tensor.numpy().tobytes(), means.numpy().tobytes(), stds.numpy().tobytes()))
+        data = b"".join((tensor.numpy().tobytes(), means.numpy().tobytes(), stds.numpy().tobytes()))
 
         proto = runtime_pb2.Tensor(
             compression=compression_type,
             buffer=data,
             size=tensor.shape,
-            dtype='compressed_float32',
-            requires_grad=tensor.requires_grad)
+            dtype="compressed_float32",
+            requires_grad=tensor.requires_grad,
+        )
     elif compression_type == CompressionType.FLOAT16:
         assert tensor.dtype == torch.float32
 
@@ -113,8 +115,9 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
             compression=compression_type,
             buffer=data,
             size=tensor.shape,
-            dtype='clamped_float32',
-            requires_grad=tensor.requires_grad)
+            dtype="clamped_float32",
+            requires_grad=tensor.requires_grad,
+        )
     elif compression_type == CompressionType.NONE:
         array = tensor.numpy()
         proto = runtime_pb2.Tensor(
@@ -122,7 +125,8 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
             buffer=array.tobytes(),
             size=array.shape,
             dtype=array.dtype.name,
-            requires_grad=tensor.requires_grad)
+            requires_grad=tensor.requires_grad,
+        )
     elif compression_type in (CompressionType.QUANTILE_8BIT, CompressionType.UNIFORM_8BIT):
         assert tensor.dtype == torch.float32
 
@@ -130,14 +134,15 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
             quantized, lookup = _quantile_encode_approx(tensor.detach(), NUM_BITS_QUANTILE_COMPRESSION)
         elif compression_type == CompressionType.UNIFORM_8BIT:
             quantized, lookup = _uint8_uniform_buckets_encode(tensor.detach(), UNIFORM_BUCKETS_STD_RANGE)
-        data = b''.join((lookup.numpy().tobytes(), quantized.numpy().astype(np.uint8).tobytes()))
+        data = b"".join((lookup.numpy().tobytes(), quantized.numpy().astype(np.uint8).tobytes()))
 
         proto = runtime_pb2.Tensor(
             compression=compression_type,
             buffer=data,
             size=tensor.shape,
-            dtype='compressed_float32',
-            requires_grad=tensor.requires_grad)
+            dtype="compressed_float32",
+            requires_grad=tensor.requires_grad,
+        )
     else:
         raise ValueError(f"Unknown compression type: {compression_type}")
 
@@ -145,7 +150,7 @@ def serialize_torch_tensor(tensor: torch.Tensor, compression_type=CompressionTyp
 
 
 def construct_torch_tensor(array: np.ndarray, size: Sequence, dtype: Optional[torch.dtype] = None):
-    """ Helper conversion function that handles edge case with scalar deserialization """
+    """Helper conversion function that handles edge case with scalar deserialization"""
     if size:
         return torch.as_tensor(array, dtype=dtype).view(*size)
     else:
@@ -162,12 +167,12 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
         stats_size[-1] = 1
         stats_count = np.prod(stats_size)
 
-        means = serialized_tensor.buffer[-2 * NUM_BYTES_FLOAT32 * stats_count: -NUM_BYTES_FLOAT32 * stats_count]
-        stds = serialized_tensor.buffer[-NUM_BYTES_FLOAT32 * stats_count:]
+        means = serialized_tensor.buffer[-2 * NUM_BYTES_FLOAT32 * stats_count : -NUM_BYTES_FLOAT32 * stats_count]
+        stds = serialized_tensor.buffer[-NUM_BYTES_FLOAT32 * stats_count :]
         means = construct_torch_tensor(np.frombuffer(means, dtype=np.float32), stats_size)
         stds = construct_torch_tensor(np.frombuffer(stds, dtype=np.float32), stats_size)
 
-        array = np.frombuffer(serialized_tensor.buffer[:-8 * stats_count], dtype=np.float16)
+        array = np.frombuffer(serialized_tensor.buffer[: -8 * stats_count], dtype=np.float16)
         tensor = construct_torch_tensor(array, serialized_tensor.size, torch.float32).mul_(stds).add_(means)
 
     elif serialized_tensor.compression == CompressionType.FLOAT16:
@@ -194,7 +199,7 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
 
 
 def get_nbytes_per_value(dtype: torch.dtype, compression: CompressionType) -> int:
-    """ returns the number of bytes per value for a given tensor (excluding metadata) """
+    """returns the number of bytes per value for a given tensor (excluding metadata)"""
     if compression in (CompressionType.QUANTILE_8BIT, CompressionType.UNIFORM_8BIT):
         return 1
     elif compression in (CompressionType.FLOAT16, CompressionType.MEANSTD_16BIT):

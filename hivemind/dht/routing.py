@@ -11,7 +11,13 @@ from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
 from hivemind.p2p import PeerID
 from hivemind.utils import MSGPackSerializer, get_dht_time
 
-DHTKey, Subkey, DHTValue, BinaryDHTID, BinaryDHTValue, = Any, Any, Any, bytes, bytes
+DHTKey, Subkey, DHTValue, BinaryDHTID, BinaryDHTValue, = (
+    Any,
+    Any,
+    Any,
+    bytes,
+    bytes,
+)
 
 
 class RoutingTable:
@@ -32,7 +38,7 @@ class RoutingTable:
         self.uid_to_peer_id: Dict[DHTID, PeerID] = dict()  # all nodes currently in buckets, including replacements
 
     def get_bucket_index(self, node_id: DHTID) -> int:
-        """ Get the index of the bucket that the given node would fall into. """
+        """Get the index of the bucket that the given node would fall into."""
         lower_index, upper_index = 0, len(self.buckets)
         while upper_index - lower_index > 1:
             pivot_index = (lower_index + upper_index + 1) // 2
@@ -72,13 +78,13 @@ class RoutingTable:
             return bucket.request_ping_node()
 
     def split_bucket(self, index: int) -> None:
-        """ Split bucket range in two equal parts and reassign nodes to the appropriate half """
+        """Split bucket range in two equal parts and reassign nodes to the appropriate half"""
         first, second = self.buckets[index].split()
         self.buckets[index] = first
         self.buckets.insert(index + 1, second)
 
     def get(self, *, node_id: Optional[DHTID] = None, peer_id: Optional[PeerID] = None, default=None):
-        """ Find peer_id for a given DHTID or vice versa """
+        """Find peer_id for a given DHTID or vice versa"""
         assert (node_id is None) != (peer_id is None), "Please specify either node_id or peer_id, but not both"
         if node_id is not None:
             return self.uid_to_peer_id.get(node_id, default)
@@ -86,11 +92,13 @@ class RoutingTable:
             return self.peer_id_to_uid.get(peer_id, default)
 
     def __getitem__(self, item: Union[DHTID, PeerID]) -> Union[PeerID, DHTID]:
-        """ Find peer_id for a given DHTID or vice versa """
+        """Find peer_id for a given DHTID or vice versa"""
         return self.uid_to_peer_id[item] if isinstance(item, DHTID) else self.peer_id_to_uid[item]
 
     def __setitem__(self, node_id: DHTID, peer_id: PeerID) -> NotImplementedError:
-        raise NotImplementedError("RoutingTable doesn't support direct item assignment. Use table.try_add_node instead")
+        raise NotImplementedError(
+            "RoutingTable doesn't support direct item assignment. Use table.try_add_node instead"
+        )
 
     def __contains__(self, item: Union[DHTID, PeerID]) -> bool:
         return (item in self.uid_to_peer_id) if isinstance(item, DHTID) else (item in self.peer_id_to_uid)
@@ -102,7 +110,8 @@ class RoutingTable:
             del self.peer_id_to_uid[node_peer_id]
 
     def get_nearest_neighbors(
-            self, query_id: DHTID, k: int, exclude: Optional[DHTID] = None) -> List[Tuple[DHTID, PeerID]]:
+        self, query_id: DHTID, k: int, exclude: Optional[DHTID] = None
+    ) -> List[Tuple[DHTID, PeerID]]:
         """
         Find k nearest neighbors from routing table according to XOR distance, does NOT include self.node_id
 
@@ -134,7 +143,9 @@ class RoutingTable:
                 while right_index < len(self.buckets) and self.buckets[right_index].upper <= current_upper:
                     for node_id, peer_id in self.buckets[right_index].nodes_to_peer_id.items():
                         heapq.heappush(candidates, (query_id.xor_distance(node_id), node_id, peer_id))
-                    right_index += 1  # note: we may need to add more than one bucket if they are on a lower depth level
+                    right_index += (
+                        1  # note: we may need to add more than one bucket if they are on a lower depth level
+                    )
                 assert self.buckets[right_index - 1].upper == current_upper
 
             else:  # split_direction == 1, leaf was split on the right, merge its left peer(s)
@@ -151,8 +162,10 @@ class RoutingTable:
 
     def __repr__(self):
         bucket_info = "\n".join(repr(bucket) for bucket in self.buckets)
-        return f"{self.__class__.__name__}(node_id={self.node_id}, bucket_size={self.bucket_size}," \
-               f" modulo={self.depth_modulo},\nbuckets=[\n{bucket_info})"
+        return (
+            f"{self.__class__.__name__}(node_id={self.node_id}, bucket_size={self.bucket_size},"
+            f" modulo={self.depth_modulo},\nbuckets=[\n{bucket_info})"
+        )
 
 
 class KBucket:
@@ -170,7 +183,7 @@ class KBucket:
         self.last_updated = get_dht_time()
 
     def has_in_range(self, node_id: DHTID):
-        """ Check if node_id is between this bucket's lower and upper bounds """
+        """Check if node_id is between this bucket's lower and upper bounds"""
         return self.lower <= node_id < self.upper
 
     def add_or_update_node(self, node_id: DHTID, peer_id: PeerID) -> bool:
@@ -198,7 +211,7 @@ class KBucket:
         return True
 
     def request_ping_node(self) -> Optional[Tuple[DHTID, PeerID]]:
-        """ :returns: least-recently updated node that isn't already being pinged right now -- if such node exists """
+        """:returns: least-recently updated node that isn't already being pinged right now -- if such node exists"""
         for uid, peer_id in self.nodes_to_peer_id.items():
             if uid not in self.nodes_requested_for_ping:
                 self.nodes_requested_for_ping.add(uid)
@@ -222,7 +235,7 @@ class KBucket:
                 self.nodes_to_peer_id[newnode_id] = newnode
 
     def split(self) -> Tuple[KBucket, KBucket]:
-        """ Split bucket over midpoint, rounded down, assign nodes to according to their id """
+        """Split bucket over midpoint, rounded down, assign nodes to according to their id"""
         midpoint = (self.lower + self.upper) // 2
         assert self.lower < midpoint < self.upper, f"Bucket to small to be split: [{self.lower}: {self.upper})"
         left = KBucket(self.lower, midpoint, self.size, depth=self.depth + 1)
@@ -233,9 +246,11 @@ class KBucket:
         return left, right
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({len(self.nodes_to_peer_id)} nodes" \
-               f" with {len(self.replacement_nodes)} replacements, depth={self.depth}, max size={self.size}" \
-               f" lower={hex(self.lower)}, upper={hex(self.upper)})"
+        return (
+            f"{self.__class__.__name__}({len(self.nodes_to_peer_id)} nodes"
+            f" with {len(self.replacement_nodes)} replacements, depth={self.depth}, max size={self.size}"
+            f" lower={hex(self.lower)}, upper={hex(self.upper)})"
+        )
 
 
 class DHTID(int):
@@ -255,7 +270,7 @@ class DHTID(int):
         :param source: if provided, converts this value to bytes and uses it as input for hashing function;
             by default, generates a random dhtid from :nbits: random bits
         """
-        source = random.getrandbits(nbits).to_bytes(nbits, byteorder='big') if source is None else source
+        source = random.getrandbits(nbits).to_bytes(nbits, byteorder="big") if source is None else source
         source = MSGPackSerializer.dumps(source) if not isinstance(source, bytes) else source
         raw_uid = cls.HASH_FUNC(source).digest()
         return cls(int(raw_uid.hex(), 16))
@@ -272,16 +287,16 @@ class DHTID(int):
 
     @classmethod
     def longest_common_prefix_length(cls, *ids: DHTID) -> int:
-        ids_bits = [bin(uid)[2:].rjust(8 * cls.HASH_NBYTES, '0') for uid in ids]
+        ids_bits = [bin(uid)[2:].rjust(8 * cls.HASH_NBYTES, "0") for uid in ids]
         return len(os.path.commonprefix(ids_bits))
 
-    def to_bytes(self, length=HASH_NBYTES, byteorder='big', *, signed=False) -> bytes:
-        """ A standard way to serialize DHTID into bytes """
+    def to_bytes(self, length=HASH_NBYTES, byteorder="big", *, signed=False) -> bytes:
+        """A standard way to serialize DHTID into bytes"""
         return super().to_bytes(length, byteorder, signed=signed)
 
     @classmethod
-    def from_bytes(cls, raw: bytes, byteorder='big', *, signed=False) -> DHTID:
-        """ reverse of to_bytes """
+    def from_bytes(cls, raw: bytes, byteorder="big", *, signed=False) -> DHTID:
+        """reverse of to_bytes"""
         return DHTID(super().from_bytes(raw, byteorder=byteorder, signed=signed))
 
     def __repr__(self):

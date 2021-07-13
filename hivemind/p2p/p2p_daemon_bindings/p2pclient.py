@@ -10,23 +10,16 @@ from typing import AsyncIterator, Iterable, Sequence, Tuple
 
 from multiaddr import Multiaddr
 
-from hivemind.p2p.p2p_daemon_bindings.control import (ControlClient,
-                                                      DaemonConnector,
-                                                      StreamHandler)
-from hivemind.p2p.p2p_daemon_bindings.datastructures import (PeerID, PeerInfo,
-                                                             StreamInfo)
+from hivemind.p2p.p2p_daemon_bindings.control import ControlClient, DaemonConnector, StreamHandler
+from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 
 
 class Client:
     control: ControlClient
 
-    def __init__(
-        self, control_maddr: Multiaddr = None, listen_maddr: Multiaddr = None
-    ) -> None:
+    def __init__(self, control_maddr: Multiaddr = None, listen_maddr: Multiaddr = None) -> None:
         daemon_connector = DaemonConnector(control_maddr=control_maddr)
-        self.control = ControlClient(
-            daemon_connector=daemon_connector, listen_maddr=listen_maddr
-        )
+        self.control = ControlClient(daemon_connector=daemon_connector, listen_maddr=listen_maddr)
 
     @asynccontextmanager
     async def listen(self) -> AsyncIterator["Client"]:

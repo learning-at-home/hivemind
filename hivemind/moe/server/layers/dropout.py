@@ -5,7 +5,6 @@ from hivemind.moe.server.layers.custom_experts import register_expert_class
 
 
 class DeterministicDropoutFunction(torch.autograd.Function):
-
     @staticmethod
     def forward(ctx, x, keep_prob, mask):
         ctx.keep_prob = keep_prob
@@ -33,11 +32,15 @@ class DeterministicDropout(nn.Module):
         else:
             return x
 
-dropout_sample_input = lambda batch_size, hid_dim: \
-    (torch.empty((batch_size, hid_dim)), torch.randint(0, 1, (batch_size, hid_dim)))
-@register_expert_class('det_dropout', dropout_sample_input)
-class DeterministicDropoutNetwork(nn.Module):
 
+dropout_sample_input = lambda batch_size, hid_dim: (
+    torch.empty((batch_size, hid_dim)),
+    torch.randint(0, 1, (batch_size, hid_dim)),
+)
+
+
+@register_expert_class("det_dropout", dropout_sample_input)
+class DeterministicDropoutNetwork(nn.Module):
     def __init__(self, hid_dim, dropout_prob=0.2):
         super().__init__()
         self.linear_in = nn.Linear(hid_dim, 2 * hid_dim)

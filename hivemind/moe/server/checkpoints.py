@@ -51,16 +51,16 @@ class CheckpointSaver(threading.Thread):
 
 
 def store_experts(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
-    logger.debug(f'Storing experts at {checkpoint_dir.absolute()}')
+    logger.debug(f"Storing experts at {checkpoint_dir.absolute()}")
     assert is_directory(checkpoint_dir)
-    timestamp = datetime.now().isoformat(sep='_')
+    timestamp = datetime.now().isoformat(sep="_")
     with TemporaryDirectory() as tmpdirname:
         for expert_name, expert_backend in experts.items():
             expert_dir = Path(tmpdirname) / expert_name
             expert_dir.mkdir()
-            checkpoint_name = expert_dir / f'checkpoint_{timestamp}.pt'
+            checkpoint_name = expert_dir / f"checkpoint_{timestamp}.pt"
             torch.save(expert_backend.get_full_state(), checkpoint_name)
-            os.symlink(checkpoint_name, expert_dir / 'checkpoint_last.pt')
+            os.symlink(checkpoint_name, expert_dir / "checkpoint_last.pt")
         copy_tree(tmpdirname, str(checkpoint_dir))
 
 
@@ -68,8 +68,8 @@ def load_experts(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
     assert is_directory(checkpoint_dir)
     for expert_name, expert in experts.items():
         checkpoints_folder = checkpoint_dir / expert_name
-        latest_checkpoint = checkpoints_folder / 'checkpoint_last.pt'
+        latest_checkpoint = checkpoints_folder / "checkpoint_last.pt"
         if latest_checkpoint.exists():
             expert.load_full_state(torch.load(latest_checkpoint))
         else:
-            logger.warning(f'Failed to load checkpoint for expert {expert_name}')
+            logger.warning(f"Failed to load checkpoint for expert {expert_name}")

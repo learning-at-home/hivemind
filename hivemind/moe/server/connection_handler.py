@@ -36,12 +36,15 @@ class ConnectionHandler(mp.context.ForkProcess):
 
         async def _run():
             grpc.aio.init_grpc_aio()
-            logger.debug(f'Starting, pid {os.getpid()}')
-            server = grpc.aio.server(options=GRPC_KEEPALIVE_OPTIONS + (
-                ('grpc.so_reuseport', 1),
-                ('grpc.max_send_message_length', -1),
-                ('grpc.max_receive_message_length', -1)
-            ))
+            logger.debug(f"Starting, pid {os.getpid()}")
+            server = grpc.aio.server(
+                options=GRPC_KEEPALIVE_OPTIONS
+                + (
+                    ("grpc.so_reuseport", 1),
+                    ("grpc.max_send_message_length", -1),
+                    ("grpc.max_receive_message_length", -1),
+                )
+            )
             runtime_grpc.add_ConnectionHandlerServicer_to_server(self, server)
 
             found_port = server.add_insecure_port(self.listen_on)
@@ -55,7 +58,7 @@ class ConnectionHandler(mp.context.ForkProcess):
         try:
             loop.run_until_complete(_run())
         except KeyboardInterrupt:
-            logger.debug('Caught KeyboardInterrupt, shutting down')
+            logger.debug("Caught KeyboardInterrupt, shutting down")
 
     async def info(self, request: runtime_pb2.ExpertUID, context: grpc.ServicerContext):
         return runtime_pb2.ExpertInfo(serialized_info=pickle.dumps(self.experts[request.uid].get_info()))
@@ -63,14 +66,18 @@ class ConnectionHandler(mp.context.ForkProcess):
     async def forward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].forward_pool.submit_task(*inputs)
-        serialized_response = [serialize_torch_tensor(tensor, proto.compression, allow_inplace=True) for tensor, proto
-                               in zip(await future, nested_flatten(self.experts[request.uid].outputs_schema))]
+        serialized_response = [
+            serialize_torch_tensor(tensor, proto.compression, allow_inplace=True)
+            for tensor, proto in zip(await future, nested_flatten(self.experts[request.uid].outputs_schema))
+        ]
 
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
 
     async def backward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
         inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
-        serialized_response = [serialize_torch_tensor(tensor, proto.compression, allow_inplace=True) for tensor, proto
-                               in zip(await future, nested_flatten(self.experts[request.uid].grad_inputs_schema))]
+        serialized_response = [
+            serialize_torch_tensor(tensor, proto.compression, allow_inplace=True)
+            for tensor, proto in zip(await future, nested_flatten(self.experts[request.uid].grad_inputs_schema))
+        ]
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
