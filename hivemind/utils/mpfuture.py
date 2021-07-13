@@ -142,7 +142,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     payload.send((uid, MessageType.STATE_RESPONSE, future_state))
 
                 elif msg_type == MessageType.STATE_RESPONSE:
-                    future, state_updated_event = cls._status_requests.get(uid) or (None, None)
+                    future, state_updated_event = cls._status_requests.get(uid, (None, None))
                     if future is None:
                         logger.debug("Received a state update for a future that does not await status update.")
                     else:
@@ -164,7 +164,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     try:
                         future.set_running_or_notify_cancel()
                     except (InvalidStateError, RuntimeError) as e:
-                        logger.debug(f"could set MPFuture (uid={uid}) to running due to {e}")
+                        logger.debug(f"Could not set MPFuture (uid={uid}) to running due to {e}", exc_info=True)
                 elif msg_type == MessageType.CANCEL:
                     future.cancel()
                 else:
@@ -184,7 +184,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             with MPFuture._update_lock if self._use_lock else nullcontext():
                 self._sender_pipe.send((self._uid, update_type, payload))
         except (ConnectionError, BrokenPipeError, EOFError) as e:
-            logger.debug(f"No updates were sent: pipe to origin process is no longer operational ({e}).")
+            logger.debug(f"No updates were sent: pipe to origin process is no longer operational ({e}).", exc_info=True)
 
     def _synchronize_if_necessary(self):
         if not self.synchronize or os.getpid() == self._origin_pid or self._state in TERMINAL_STATES:
@@ -213,7 +213,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     self.set_exception(
                         TimeoutError(
                             f"Status update took over {MPFuture.HARD_UPDATE_TIMEOUT} seconds, "
-                            f"mpfuture is cancelled"
+                            f"MPFuture is cancelled"
                         )
                     )
                     status_updated.set()  # this triggers any concurrent _synchronize_if_necessary calls to finish
