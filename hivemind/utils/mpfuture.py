@@ -49,6 +49,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     However, only the original process (i.e. the process that created the future) can await the result or exception.
 
     :param synchronize: if True (default), future will request state from origin, otherwise it will only use local state
+      Setting synchronize=False results in slightly better performance of done or set_running_or_notify_cancel
     :param use_lock: if True, operations with MPFuture use a global lock to prevent concurrent writes to the same pipe;
       If set to False, writing to this future ignores global lock, slightly improving performance, but making user
       responsible for avoiding concurrent set_result / set_exception calls to futures with the same process of origin.
@@ -73,7 +74,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     HARD_UPDATE_TIMEOUT = 10.0  # seconds spent awaiting status update before future is automatically cancelled
 
     def __init__(self, synchronize: bool = True, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
-        base.Future.__init__(self)
+        super().__init__()
         self.synchronize = synchronize
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._state, self._result, self._exception = base.PENDING, None, None
