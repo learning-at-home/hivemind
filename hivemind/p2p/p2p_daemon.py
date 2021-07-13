@@ -1,11 +1,11 @@
 import asyncio
 import os
 import secrets
-from contextlib import suppress
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import google.protobuf
 from multiaddr import Multiaddr
@@ -14,7 +14,6 @@ import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto import p2pd_pb2
-from hivemind.utils import MSGPackSerializer
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -247,20 +246,16 @@ class P2P:
         return self._daemon_listen_maddr
 
     @staticmethod
-    async def send_raw_data(data: bytes, writer: asyncio.StreamWriter) -> None:
-        request = len(data).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER) + data
-        writer.write(request)
+    async def send_raw_data(data: bytes, writer: asyncio.StreamWriter, *, chunk_size: int = 2 ** 16) -> None:
+        writer.write(len(data).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER))
+        data = memoryview(data)
+        for offset in range(0, len(data), chunk_size):
+            writer.write(data[offset : offset + chunk_size])
+        await writer.drain()
 
     @staticmethod
-    async def send_msgpack(data: Any, writer: asyncio.StreamWriter) -> None:
-        raw_data = MSGPackSerializer.dumps(data)
-        await P2P.send_raw_data(raw_data, writer)
-
-    @staticmethod
-    async def send_protobuf(protobuf, out_proto_type: type, writer: asyncio.StreamWriter) -> None:
-        if type(protobuf) != out_proto_type:
-            raise TypeError("Unary handler returned protobuf of wrong type.")
-        if out_proto_type == p2pd_pb2.RPCError:
+    async def send_protobuf(protobuf, writer: asyncio.StreamWriter) -> None:
+        if isinstance(protobuf, p2pd_pb2.RPCError):
             await P2P.send_raw_data(P2P.ERROR_MESSAGE, writer)
         else:
             await P2P.send_raw_data(P2P.RESULT_MESSAGE, writer)
@@ -273,10 +268,6 @@ class P2P:
         content_length = int.from_bytes(header, P2P.BYTEORDER)
         data = await reader.readexactly(content_length)
         return data
-
-    @staticmethod
-    async def receive_msgpack(reader: asyncio.StreamReader) -> Any:
-        return MSGPackSerializer.loads(await P2P.receive_raw_data(reader))
 
     @staticmethod
     async def receive_protobuf(
@@ -294,28 +285,7 @@ class P2P:
         else:
             raise TypeError("Invalid Protobuf message type")
 
-    @staticmethod
-    def _handle_stream(handle: Callable[[bytes], bytes]):
-        async def do_handle_stream(
-            stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-        ):
-            try:
-                request = await P2P.receive_raw_data(reader)
-            except asyncio.IncompleteReadError:
-                logger.debug("Incomplete read while receiving request from peer")
-                writer.close()
-                return
-            try:
-                result = handle(request)
-                await P2P.send_raw_data(result, writer)
-            finally:
-                writer.close()
-
-        return do_handle_stream
-
-    def _handle_unary_stream(
-        self, handle: Callable[[Any, P2PContext], Any], handle_name: str, in_proto_type: type, out_proto_type: type
-    ):
+    def _handle_unary_stream(self, handler: Callable[[Any, P2PContext], Any], handle_name: str, in_proto_type: type):
         async def watchdog(reader: asyncio.StreamReader) -> None:
             await reader.read(n=1)
             raise P2PInterruptedError()
@@ -323,7 +293,7 @@ class P2P:
         async def do_handle_unary_stream(
             stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         ) -> None:
-            try:
+            with closing(writer):
                 try:
                     request, err = await P2P.receive_protobuf(in_proto_type, reader)
                 except asyncio.IncompleteReadError:
@@ -344,23 +314,21 @@ class P2P:
                     remote_maddr=stream_info.addr,
                 )
                 done, pending = await asyncio.wait(
-                    [watchdog(reader), handle(request, context)], return_when=asyncio.FIRST_COMPLETED
+                    [watchdog(reader), handler(request, context)], return_when=asyncio.FIRST_COMPLETED
                 )
                 try:
                     result = done.pop().result()
-                    await P2P.send_protobuf(result, out_proto_type, writer)
+                    await P2P.send_protobuf(result, writer)
                 except P2PInterruptedError:
                     pass
                 except Exception as exc:
                     error = p2pd_pb2.RPCError(message=str(exc))
-                    await P2P.send_protobuf(error, p2pd_pb2.RPCError, writer)
+                    await P2P.send_protobuf(error, writer)
                 finally:
                     if pending:
                         for task in pending:
                             task.cancel()
                         await asyncio.wait(pending)
-            finally:
-                writer.close()
 
         return do_handle_unary_stream
 
@@ -381,39 +349,33 @@ class P2P:
                 self._listen_task = None
                 self._server_stopped.clear()
 
-    async def add_stream_handler(self, name: str, handle: Callable[[bytes], bytes]) -> None:
+    async def add_stream_handler(self, name: str, handler: p2pclient.StreamHandler) -> None:
         if self._listen_task is None:
             self._start_listening()
-        await self._client.stream_handler(name, self._handle_stream(handle))
+        await self._client.stream_handler(name, handler)
 
     async def add_unary_handler(
-        self, name: str, handle: Callable[[Any, P2PContext], Any], in_proto_type: type, out_proto_type: type
+        self, name: str, handler: Callable[[Any, P2PContext], Any], in_proto_type: type
     ) -> None:
         if self._listen_task is None:
             self._start_listening()
-        await self._client.stream_handler(name, self._handle_unary_stream(handle, name, in_proto_type, out_proto_type))
+        await self._client.stream_handler(name, self._handle_unary_stream(handler, name, in_proto_type))
 
-    async def call_peer_handler(self, peer_id: PeerID, handler_name: str, input_data: bytes) -> bytes:
-        stream_info, reader, writer = await self._client.stream_open(peer_id, (handler_name,))
-        try:
-            await P2P.send_raw_data(input_data, writer)
-            return await P2P.receive_raw_data(reader)
-        finally:
-            writer.close()
+    async def call_stream_handler(
+        self, peer_id: PeerID, handler_name: str
+    ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
+        return await self._client.stream_open(peer_id, (handler_name,))
 
     async def call_unary_handler(
         self, peer_id: PeerID, handler_name: str, request_protobuf: Any, response_proto_type: type
     ) -> Any:
-        stream_info, reader, writer = await self._client.stream_open(peer_id, (handler_name,))
-        try:
-            await P2P.send_protobuf(request_protobuf, type(request_protobuf), writer)
+        _, reader, writer = await self._client.stream_open(peer_id, (handler_name,))
+        with closing(writer):
+            await P2P.send_protobuf(request_protobuf, writer)
             result, err = await P2P.receive_protobuf(response_proto_type, reader)
             if err is not None:
                 raise P2PHandlerError(f"Failed to call unary handler {handler_name} at {peer_id}: {err.message}")
-
             return result
-        finally:
-            writer.close()
 
     def __del__(self):
         self._terminate()
