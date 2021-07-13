@@ -80,7 +80,7 @@ class Servicer:
         servicer = self if wrapper is None else wrapper
         for handler in self._rpc_handlers:
             await p2p.add_unary_handler(handler.handle_name, getattr(servicer, handler.method_name),
-                                        handler.request_type, handler.response_type)
+                                        handler.request_type)
 
     def get_stub(self, p2p: P2P, peer: PeerID) -> StubBase:
         return self._stub_type(p2p, peer)

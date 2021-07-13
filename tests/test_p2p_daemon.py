@@ -95,8 +95,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
             available=True)
 
     server_pid = server_primary._child.pid
-    await server.add_unary_handler(handle_name, ping_handler, dht_pb2.PingRequest,
-                                   dht_pb2.PingResponse)
+    await server.add_unary_handler(handle_name, ping_handler, dht_pb2.PingRequest)
     assert is_process_running(server_pid)
 
     client_primary = await P2P.create(initial_peers=await server.get_visible_maddrs())
@@ -115,7 +114,7 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
     if should_cancel:
         *_, writer = await client.call_stream_handler(server.id, handle_name)
         with closing(writer):
-            await P2P.send_protobuf(ping_request, dht_pb2.PingRequest, writer)
+            await P2P.send_protobuf(ping_request, writer)
 
         await asyncio.sleep(1)
         assert handler_cancelled
@@ -139,7 +138,7 @@ async def test_call_unary_handler_error(handle_name="handle"):
 
     server = await P2P.create()
     server_pid = server._child.pid
-    await server.add_unary_handler(handle_name, error_handler, dht_pb2.PingRequest, dht_pb2.PingResponse)
+    await server.add_unary_handler(handle_name, error_handler, dht_pb2.PingRequest)
     assert is_process_running(server_pid)
 
     client = await P2P.create(initial_peers=await server.get_visible_maddrs())
