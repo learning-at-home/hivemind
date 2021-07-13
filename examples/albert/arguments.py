@@ -97,7 +97,7 @@ class CollaborativeOptimizerArguments:
 
 
 @dataclass
-class CollaborationArguments(AveragerArguments, CollaborativeOptimizerArguments, BaseTrainingArguments):
+class CollaborationArguments(CollaborativeOptimizerArguments, BaseTrainingArguments):
     statistics_expiration: float = field(
         default=600, metadata={"help": "Statistics will be removed if not updated in this many seconds"}
     )

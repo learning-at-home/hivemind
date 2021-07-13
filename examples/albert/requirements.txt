@@ -3,5 +3,5 @@ datasets>=1.5.0
 torch_optimizer>=0.1.0
 wandb>=0.10.26
 sentencepiece
-whatsmyip
+requests
 nltk>=3.6.2
