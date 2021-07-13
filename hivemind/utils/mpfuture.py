@@ -104,7 +104,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         if self._loop.is_running() and loop == self.get_loop():
             asyncio.create_task(_event_setter())
         elif self._loop.is_running() and loop != self.get_loop():
-            asyncio.run_coroutine_threadsafe(_event_setter(), self._loop).result()
+            asyncio.run_coroutine_threadsafe(_event_setter(), self._loop)
         else:
             self._loop.run_until_complete(_event_setter())
 
