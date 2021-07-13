@@ -14,8 +14,8 @@ DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autogra
 
 
 def _get_expert_stub(endpoint: Endpoint, *extra_options: Tuple[str, Any]):
-    """ Create a gRPC stub to access remote expert or use previously created stub from a process-wide cache """
-    channel_options = (('grpc.max_send_message_length', -1), ('grpc.max_receive_message_length', -1)) + extra_options
+    """Create a gRPC stub to access remote expert or use previously created stub from a process-wide cache"""
+    channel_options = (("grpc.max_send_message_length", -1), ("grpc.max_receive_message_length", -1)) + extra_options
     return ChannelCache.get_stub(endpoint, runtime_grpc.ConnectionHandlerStub, aio=False, options=channel_options)
 
 
@@ -41,20 +41,20 @@ class RemoteExpert(nn.Module):
         return _get_expert_stub(self.endpoint)
 
     def forward(self, *args, **kwargs):
-        """ Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd. """
-        assert len(kwargs) == len(self.info['keyword_names']), f"Keyword args should be {self.info['keyword_names']}"
-        kwargs = {key: kwargs[key] for key in self.info['keyword_names']}
+        """Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd."""
+        assert len(kwargs) == len(self.info["keyword_names"]), f"Keyword args should be {self.info['keyword_names']}"
+        kwargs = {key: kwargs[key] for key in self.info["keyword_names"]}
 
         # Note: we put keyword arguments in the same order as on a server to prevent f(a=1, b=2) != f(b=2, a=1) errors
 
         forward_inputs = (args, kwargs)
 
-        if not nested_compare(forward_inputs, self.info['forward_schema']):
+        if not nested_compare(forward_inputs, self.info["forward_schema"]):
             raise TypeError(f"Inputs do not match expert input schema. Did you pass the right number of parameters?")
 
         flat_outputs = _RemoteModuleCall.apply(DUMMY, self.uid, self.stub, self.info, *nested_flatten(forward_inputs))
         # Note: we send DUMMY to prevent torch from excluding expert from backward if no other inputs require grad
-        return nested_pack(flat_outputs, structure=self.info['outputs_schema'])
+        return nested_pack(flat_outputs, structure=self.info["outputs_schema"])
 
     @property
     def info(self):
@@ -68,22 +68,29 @@ class RemoteExpert(nn.Module):
 
 
 class _RemoteModuleCall(torch.autograd.Function):
-    """ Internal autograd-friendly call of a remote module. For applications, use RemoteExpert instead. """
+    """Internal autograd-friendly call of a remote module. For applications, use RemoteExpert instead."""
 
     @staticmethod
-    def forward(ctx, dummy: torch.Tensor, uid: str, stub: runtime_grpc.ConnectionHandlerStub,
-                info: Dict[str, Any], *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+    def forward(
+        ctx,
+        dummy: torch.Tensor,
+        uid: str,
+        stub: runtime_grpc.ConnectionHandlerStub,
+        info: Dict[str, Any],
+        *inputs: torch.Tensor,
+    ) -> Tuple[torch.Tensor, ...]:
         # Note: *inputs are flattened input tensors that follow the expert's info['input_schema']
         # detach to avoid pickling the computation graph
         inputs = tuple(tensor.cpu().detach() for tensor in inputs)
         ctx.uid, ctx.stub, ctx.info = uid, stub, info
         ctx.save_for_backward(*inputs)
 
-        serialized_tensors = [serialize_torch_tensor(inp, proto.compression)
-                              for inp, proto in zip(inputs, nested_flatten(info["forward_schema"]))]
+        serialized_tensors = [
+            serialize_torch_tensor(inp, proto.compression)
+            for inp, proto in zip(inputs, nested_flatten(info["forward_schema"]))
+        ]
 
-        outputs = stub.forward(
-            runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
+        outputs = stub.forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
 
         deserialized_outputs = [deserialize_torch_tensor(tensor) for tensor in outputs.tensors]
 
@@ -95,8 +102,10 @@ class _RemoteModuleCall(torch.autograd.Function):
         grad_outputs_cpu = tuple(tensor.cpu() for tensor in grad_outputs)
         inputs_and_grad_outputs = tuple(nested_flatten((ctx.saved_tensors, grad_outputs_cpu)))
         backward_schema = tuple(nested_flatten((ctx.info["forward_schema"], ctx.info["outputs_schema"])))
-        serialized_tensors = [serialize_torch_tensor(tensor, proto.compression)
-                              for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)]
+        serialized_tensors = [
+            serialize_torch_tensor(tensor, proto.compression)
+            for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)
+        ]
 
         grad_inputs = ctx.stub.backward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
 

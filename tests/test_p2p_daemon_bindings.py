@@ -8,10 +8,16 @@ from multiaddr import Multiaddr, protocols
 
 from hivemind.p2p.p2p_daemon_bindings.control import ControlClient, DaemonConnector, parse_conn_protocol
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
-from hivemind.p2p.p2p_daemon_bindings.utils import (ControlFailure, raise_if_failed, read_pbmsg_safe,
-                                                    read_unsigned_varint, write_pbmsg, write_unsigned_varint)
+from hivemind.p2p.p2p_daemon_bindings.utils import (
+    ControlFailure,
+    raise_if_failed,
+    read_pbmsg_safe,
+    read_unsigned_varint,
+    write_pbmsg,
+    write_unsigned_varint,
+)
 from hivemind.proto import p2pd_pb2 as p2pd_pb
-from test_utils import make_p2pd_pair_ip4, connect_safe
+from test_utils.p2p_daemon import make_p2pd_pair_ip4, connect_safe
 
 
 def test_raise_if_failed_raises():
@@ -198,9 +204,7 @@ def test_client_ctor_default_control_maddr():
 
 @pytest.mark.parametrize("listen_maddr_str", ("/unix/123", "/ip4/127.0.0.1/tcp/6666"))
 def test_control_client_ctor_listen_maddr(listen_maddr_str):
-    c = ControlClient(
-        daemon_connector=DaemonConnector(), listen_maddr=Multiaddr(listen_maddr_str)
-    )
+    c = ControlClient(daemon_connector=DaemonConnector(), listen_maddr=Multiaddr(listen_maddr_str))
     assert c.listen_maddr == Multiaddr(listen_maddr_str)
 
 
@@ -215,27 +219,39 @@ def test_control_client_ctor_default_listen_maddr():
         p2pd_pb.Response(
             type=p2pd_pb.Response.Type.OK,
             identify=p2pd_pb.IdentifyResponse(
-                id=PeerID.from_base58('QmT7WhTne9zBLfAgAJt9aiZ8jZ5BxJGowRubxsHYmnyzUd').to_bytes(),
-                addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/51126').to_bytes(),
-                       Multiaddr('/ip4/192.168.10.135/tcp/51126').to_bytes(),
-                       Multiaddr('/ip6/::1/tcp/51127').to_bytes()]
-            )).SerializeToString(),
+                id=PeerID.from_base58("QmT7WhTne9zBLfAgAJt9aiZ8jZ5BxJGowRubxsHYmnyzUd").to_bytes(),
+                addrs=[
+                    Multiaddr("/p2p-circuit").to_bytes(),
+                    Multiaddr("/ip4/127.0.0.1/tcp/51126").to_bytes(),
+                    Multiaddr("/ip4/192.168.10.135/tcp/51126").to_bytes(),
+                    Multiaddr("/ip6/::1/tcp/51127").to_bytes(),
+                ],
+            ),
+        ).SerializeToString(),
         p2pd_pb.Response(
             type=p2pd_pb.Response.Type.OK,
             identify=p2pd_pb.IdentifyResponse(
-                id=PeerID.from_base58('QmcQFt2MFfCZ9AxzUCNrk4k7TtMdZZvAAteaA6tHpBKdrk').to_bytes(),
-                addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/51493').to_bytes(),
-                       Multiaddr('/ip4/192.168.10.135/tcp/51493').to_bytes(),
-                       Multiaddr('/ip6/::1/tcp/51494').to_bytes()]
-            )).SerializeToString(),
+                id=PeerID.from_base58("QmcQFt2MFfCZ9AxzUCNrk4k7TtMdZZvAAteaA6tHpBKdrk").to_bytes(),
+                addrs=[
+                    Multiaddr("/p2p-circuit").to_bytes(),
+                    Multiaddr("/ip4/127.0.0.1/tcp/51493").to_bytes(),
+                    Multiaddr("/ip4/192.168.10.135/tcp/51493").to_bytes(),
+                    Multiaddr("/ip6/::1/tcp/51494").to_bytes(),
+                ],
+            ),
+        ).SerializeToString(),
         p2pd_pb.Response(
             type=p2pd_pb.Response.Type.OK,
             identify=p2pd_pb.IdentifyResponse(
-                id=PeerID.from_base58('QmbWqVVoz7v9LS9ZUQAhyyfdFJY3iU8ZrUY3XQozoTA5cc').to_bytes(),
-                addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/51552').to_bytes(),
-                       Multiaddr('/ip4/192.168.10.135/tcp/51552').to_bytes(),
-                       Multiaddr('/ip6/::1/tcp/51553').to_bytes()]
-            )).SerializeToString(),
+                id=PeerID.from_base58("QmbWqVVoz7v9LS9ZUQAhyyfdFJY3iU8ZrUY3XQozoTA5cc").to_bytes(),
+                addrs=[
+                    Multiaddr("/p2p-circuit").to_bytes(),
+                    Multiaddr("/ip4/127.0.0.1/tcp/51552").to_bytes(),
+                    Multiaddr("/ip4/192.168.10.135/tcp/51552").to_bytes(),
+                    Multiaddr("/ip6/::1/tcp/51553").to_bytes(),
+                ],
+            ),
+        ).SerializeToString(),
     ),
     # give test cases ids to prevent bytes from ruining the terminal
     ids=("pb example Response 0", "pb example Response 1", "pb example Response 2"),
@@ -262,37 +278,47 @@ async def test_read_pbmsg_safe_valid(msg_bytes):
                 dht=p2pd_pb.DHTResponse(
                     type=p2pd_pb.DHTResponse.Type.VALUE,
                     peer=p2pd_pb.PeerInfo(
-                        id=PeerID.from_base58('QmNaXUy78W9moQ9APCoKaTtPjLcEJPN9hRBCqErY7o2fQs').to_bytes(),
-                        addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/56929').to_bytes(),
-                               Multiaddr('/ip4/192.168.10.135/tcp/56929').to_bytes(),
-                               Multiaddr('/ip6/::1/tcp/56930').to_bytes()]
-                    )
-                )
+                        id=PeerID.from_base58("QmNaXUy78W9moQ9APCoKaTtPjLcEJPN9hRBCqErY7o2fQs").to_bytes(),
+                        addrs=[
+                            Multiaddr("/p2p-circuit").to_bytes(),
+                            Multiaddr("/ip4/127.0.0.1/tcp/56929").to_bytes(),
+                            Multiaddr("/ip4/192.168.10.135/tcp/56929").to_bytes(),
+                            Multiaddr("/ip6/::1/tcp/56930").to_bytes(),
+                        ],
+                    ),
+                ),
             ),
         ),
         (p2pd_pb.Request, p2pd_pb.Request(type=p2pd_pb.Request.Type.LIST_PEERS)),
         (
             p2pd_pb.DHTRequest,
-            p2pd_pb.DHTRequest(type=p2pd_pb.DHTRequest.Type.FIND_PEER,
-                               peer=PeerID.from_base58('QmcgHMuEhqdLHDVeNjiCGU7Ds6E7xK3f4amgiwHNPKKn7R').to_bytes()),
+            p2pd_pb.DHTRequest(
+                type=p2pd_pb.DHTRequest.Type.FIND_PEER,
+                peer=PeerID.from_base58("QmcgHMuEhqdLHDVeNjiCGU7Ds6E7xK3f4amgiwHNPKKn7R").to_bytes(),
+            ),
         ),
         (
             p2pd_pb.DHTResponse,
             p2pd_pb.DHTResponse(
                 type=p2pd_pb.DHTResponse.Type.VALUE,
                 peer=p2pd_pb.PeerInfo(
-                    id=PeerID.from_base58('QmWP32GhEyXVQsLXFvV81eadDC8zQRZxZvJK359rXxLquk').to_bytes(),
-                    addrs=[Multiaddr('/p2p-circuit').to_bytes(), Multiaddr('/ip4/127.0.0.1/tcp/56897').to_bytes(),
-                           Multiaddr('/ip4/192.168.10.135/tcp/56897').to_bytes(),
-                           Multiaddr('/ip6/::1/tcp/56898').to_bytes()]
-                )
+                    id=PeerID.from_base58("QmWP32GhEyXVQsLXFvV81eadDC8zQRZxZvJK359rXxLquk").to_bytes(),
+                    addrs=[
+                        Multiaddr("/p2p-circuit").to_bytes(),
+                        Multiaddr("/ip4/127.0.0.1/tcp/56897").to_bytes(),
+                        Multiaddr("/ip4/192.168.10.135/tcp/56897").to_bytes(),
+                        Multiaddr("/ip6/::1/tcp/56898").to_bytes(),
+                    ],
+                ),
             ),
         ),
         (
             p2pd_pb.StreamInfo,
-            p2pd_pb.StreamInfo(peer=PeerID.from_base58('QmewLxB46MftfxQiunRgJo2W8nW4Lh5NLEkRohkHhJ4wW6').to_bytes(),
-                               addr=Multiaddr('/ip4/127.0.0.1/tcp/57029').to_bytes(),
-                               proto=b'protocol123'),
+            p2pd_pb.StreamInfo(
+                peer=PeerID.from_base58("QmewLxB46MftfxQiunRgJo2W8nW4Lh5NLEkRohkHhJ4wW6").to_bytes(),
+                addr=Multiaddr("/ip4/127.0.0.1/tcp/57029").to_bytes(),
+                proto=b"protocol123",
+            ),
         ),
     ),
     ids=(
@@ -305,7 +331,7 @@ async def test_read_pbmsg_safe_valid(msg_bytes):
 )
 @pytest.mark.asyncio
 async def test_write_pbmsg(pb_type, pb_msg):
-    msg_bytes = bytes(chr(pb_msg.ByteSize()), 'utf-8') + pb_msg.SerializeToString()
+    msg_bytes = bytes(chr(pb_msg.ByteSize()), "utf-8") + pb_msg.SerializeToString()
     pb_obj = pb_type()
 
     s_read = MockReaderWriter(msg_bytes)
@@ -441,9 +467,7 @@ async def test_client_stream_open_success(p2pcs):
     writer.close()
 
     # test case: open with multiple protocols
-    stream_info, reader, writer = await p2pcs[0].stream_open(
-        peer_id_1, (proto, "another_protocol")
-    )
+    stream_info, reader, writer = await p2pcs[0].stream_open(peer_id_1, (proto, "another_protocol"))
     assert stream_info.peer_id == peer_id_1
     assert stream_info.addr in maddrs_1
     assert stream_info.proto == "123"

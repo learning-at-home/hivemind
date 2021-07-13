@@ -48,8 +48,7 @@ def main():
 
     parser.add_argument('--no_dht', action='store_true', help='if specified, the server will not be attached to a dht')
     parser.add_argument('--initial_peers', type=str, nargs='*', required=False, default=[],
-                        help='one or more peers that can welcome you to the dht, e.g. 1.2.3.4:1337 192.132.231.4:4321')
-    parser.add_argument('--dht_port', type=int, default=None, required=False, help='DHT node will listen on this port')
+                        help='multiaddrs of one or more active DHT peers (if you want to join an existing DHT)')
     parser.add_argument('--increase_file_limit', action='store_true',
                         help='On *nix, this will increase the max number of processes '
                              'a server can spawn before hitting "Too many open files"; Use at your own risk.')
@@ -63,18 +62,18 @@ def main():
 
     # fmt:on
     args = vars(parser.parse_args())
-    args.pop('config', None)
-    optimizer = args.pop('optimizer')
-    if optimizer == 'adam':
+    args.pop("config", None)
+    optimizer = args.pop("optimizer")
+    if optimizer == "adam":
         optim_cls = torch.optim.Adam
-    elif optimizer == 'sgd':
+    elif optimizer == "sgd":
         optim_cls = partial(torch.optim.SGD, lr=0.01)
-    elif optimizer == 'none':
+    elif optimizer == "none":
         optim_cls = None
     else:
         raise ValueError("optim_cls must be adam, sgd or none")
 
-    if args.pop('increase_file_limit'):
+    if args.pop("increase_file_limit"):
         increase_file_limit()
 
     compression_type = args.pop("compression")
@@ -90,5 +89,5 @@ def main():
         server.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

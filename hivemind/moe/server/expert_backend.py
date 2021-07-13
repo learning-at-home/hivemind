@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from hivemind.moe.server.task_pool import TaskPool
-from hivemind.utils import BatchTensorDescriptor, DUMMY_BATCH_SIZE
+from hivemind.utils.tensor_descr import BatchTensorDescriptor, DUMMY_BATCH_SIZE
 from hivemind.utils.logging import get_logger
 from hivemind.utils.nested import nested_flatten, nested_pack, nested_compare, nested_map
 
@@ -40,13 +40,21 @@ class ExpertBackend:
     :param kwargs: extra parameters to be forwarded into TaskPool.__init__
     """
 
-    def __init__(self, name: str, expert: nn.Module, optimizer: torch.optim.Optimizer, *,
-                 scheduler: Callable = None,
-                 args_schema: Tuple[BatchTensorDescriptor, ...] = None,
-                 kwargs_schema: Dict[str, BatchTensorDescriptor] = None,
-                 outputs_schema: Union[BatchTensorDescriptor, Tuple[BatchTensorDescriptor, ...]] = None,
-                 num_warmup_steps: int = None, num_total_steps: int = None, clip_grad_norm: float = None,
-                 **kwargs):
+    def __init__(
+        self,
+        name: str,
+        expert: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        *,
+        scheduler: Callable = None,
+        args_schema: Tuple[BatchTensorDescriptor, ...] = None,
+        kwargs_schema: Dict[str, BatchTensorDescriptor] = None,
+        outputs_schema: Union[BatchTensorDescriptor, Tuple[BatchTensorDescriptor, ...]] = None,
+        num_warmup_steps: int = None,
+        num_total_steps: int = None,
+        clip_grad_norm: float = None,
+        **kwargs,
+    ):
         super().__init__()
         self.expert, self.optimizer, self.name = expert, optimizer, name
 
@@ -59,8 +67,10 @@ class ExpertBackend:
 
         self.args_schema = args_schema = tuple(args_schema or ())
         self.kwargs_schema = kwargs_schema = dict(kwargs_schema or {})
-        assert args_schema or kwargs_schema, "expert must receive at least one positional or keyword input." \
-                                             " Did you forget to provide args_schema/kwargs_schema?"
+        assert args_schema or kwargs_schema, (
+            "expert must receive at least one positional or keyword input."
+            " Did you forget to provide args_schema/kwargs_schema?"
+        )
 
         if outputs_schema is None:
             # run expert once to get outputs schema
@@ -74,8 +84,8 @@ class ExpertBackend:
 
         self.backward_schema = (self.forward_schema, self.outputs_schema)  # inputs to backward
         self.grad_inputs_schema = self.forward_schema  # outputs from backward
-        self.forward_pool = TaskPool(self.forward, name=f'{self.name}_forward', **kwargs)
-        self.backward_pool = TaskPool(self.backward, name=f'{self.name}_backward', **kwargs)
+        self.forward_pool = TaskPool(self.forward, name=f"{self.name}_forward", **kwargs)
+        self.backward_pool = TaskPool(self.backward, name=f"{self.name}_backward", **kwargs)
 
         self.update_count = 0
         self.examples_processed = 0
@@ -125,11 +135,16 @@ class ExpertBackend:
         (args, kwargs), grad_outputs = nested_pack(inputs, structure=self.backward_schema)
 
         with torch.enable_grad():
-            args = [tensor.detach().requires_grad_(True) if tensor.dtype in (torch.half, torch.float, torch.double)
-                    else tensor.detach() for tensor in args]
-            kwargs = {input_key: (tensor.detach().requires_grad_(True)
-                                  if tensor.is_floating_point() else tensor.detach())
-                      for input_key, tensor in kwargs.items()}
+            args = [
+                tensor.detach().requires_grad_(True)
+                if tensor.dtype in (torch.half, torch.float, torch.double)
+                else tensor.detach()
+                for tensor in args
+            ]
+            kwargs = {
+                input_key: (tensor.detach().requires_grad_(True) if tensor.is_floating_point() else tensor.detach())
+                for input_key, tensor in kwargs.items()
+            }
 
             batch_size = args[0].size(0)
 
@@ -138,15 +153,21 @@ class ExpertBackend:
 
             outputs_flat = tuple(nested_flatten(outputs))
 
-            grad_outputs_flat = tuple(map(
-                lambda grad, out: grad.to(device=out.device, dtype=out.dtype, non_blocking=True),
-                nested_flatten(grad_outputs), outputs_flat))
-            torch.autograd.backward(outputs_flat, grad_tensors=grad_outputs_flat,
-                                    create_graph=False, retain_graph=False)
+            grad_outputs_flat = tuple(
+                map(
+                    lambda grad, out: grad.to(device=out.device, dtype=out.dtype, non_blocking=True),
+                    nested_flatten(grad_outputs),
+                    outputs_flat,
+                )
+            )
+            torch.autograd.backward(
+                outputs_flat, grad_tensors=grad_outputs_flat, create_graph=False, retain_graph=False
+            )
             self.apply_gradients(batch_size)
 
-        return tuple(x.grad if isinstance(x.grad, torch.Tensor) else torch.zeros_like(x)
-                     for x in nested_flatten((args, kwargs)))
+        return tuple(
+            x.grad if isinstance(x.grad, torch.Tensor) else torch.zeros_like(x) for x in nested_flatten((args, kwargs))
+        )
 
     def apply_gradients(self, batch_size) -> None:
         """
@@ -168,47 +189,47 @@ class ExpertBackend:
         """
         Return current expert training statistics (number of updates, number of processed examples after last optimizer step)
         """
-        return {
-            'updates': self.update_count,
-            'examples_processed': self.examples_processed
-        }
+        return {"updates": self.update_count, "examples_processed": self.examples_processed}
 
     def get_full_state(self) -> Dict:
         """
         Return the current state of the expert (including batch processing statistics)
         """
         full_state = {
-            'stats': self.get_stats(),
-            'model': self.expert.state_dict(),
-            'optimizer': self.optimizer.state_dict(),
-            'scheduler': {} if self.scheduler is None else self.scheduler.state_dict()
+            "stats": self.get_stats(),
+            "model": self.expert.state_dict(),
+            "optimizer": self.optimizer.state_dict(),
+            "scheduler": {} if self.scheduler is None else self.scheduler.state_dict(),
         }
         return full_state
 
     def load_full_state(self, state_dict: Dict):
-        if 'stats' in state_dict:
-            self.update_count = state_dict['stats']['updates']
-            self.examples_processed = state_dict['stats']['examples_processed']
+        if "stats" in state_dict:
+            self.update_count = state_dict["stats"]["updates"]
+            self.examples_processed = state_dict["stats"]["examples_processed"]
         else:
-            logger.warning(f'Batch processing stats missing for expert {self.name}')
+            logger.warning(f"Batch processing stats missing for expert {self.name}")
 
-        self.expert.load_state_dict(state_dict['model'])
+        self.expert.load_state_dict(state_dict["model"])
 
-        if 'optimizer' in state_dict:
-            self.optimizer.load_state_dict(state_dict['optimizer'])
+        if "optimizer" in state_dict:
+            self.optimizer.load_state_dict(state_dict["optimizer"])
         else:
-            logger.warning(f'Optimizer state missing for expert {self.name}')
+            logger.warning(f"Optimizer state missing for expert {self.name}")
 
-        if self.scheduler is not None and 'scheduler' in state_dict:
-            self.scheduler.load_state_dict(state_dict['scheduler'])
+        if self.scheduler is not None and "scheduler" in state_dict:
+            self.scheduler.load_state_dict(state_dict["scheduler"])
         else:
-            logger.warning(f'Learning rate scheduler state missing for expert {self.name}')
+            logger.warning(f"Learning rate scheduler state missing for expert {self.name}")
 
     def get_info(self) -> Dict[str, Any]:
-        """ Get expert parameters and stats. Used by RemoteExpert to check shapes and for DMoE orchestration. """
-        return dict(forward_schema=self.forward_schema, outputs_schema=self.outputs_schema,
-                    keyword_names=tuple(self.kwargs_schema.keys()))
+        """Get expert parameters and stats. Used by RemoteExpert to check shapes and for DMoE orchestration."""
+        return dict(
+            forward_schema=self.forward_schema,
+            outputs_schema=self.outputs_schema,
+            keyword_names=tuple(self.kwargs_schema.keys()),
+        )
 
     def get_pools(self) -> Sequence[TaskPool]:
-        """ return all pools that should be processed by ``Runtime`` """
+        """return all pools that should be processed by ``Runtime``"""
         return self.forward_pool, self.backward_pool

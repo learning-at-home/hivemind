@@ -12,7 +12,7 @@ import hivemind
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
-from hivemind.utils import MSGPackSerializer
+from hivemind.utils import MSGPackSerializer, ValueWithExpiration, HeapEntry, DHTExpiration
 from hivemind.utils.asyncio import amap_in_executor, aiter, aenumerate, achain, anext, azip
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.mpfuture import InvalidStateError
@@ -41,8 +41,8 @@ def test_mpfuture_result():
     with pytest.raises(concurrent.futures.TimeoutError):
         future.result(timeout=1e-3)
 
-    future.set_result(['abacaba', 123])
-    assert future.result() == ['abacaba', 123]
+    future.set_result(["abacaba", 123])
+    assert future.result() == ["abacaba", 123]
 
 
 @pytest.mark.forked
@@ -135,12 +135,12 @@ async def test_await_mpfuture():
     async def wait_and_assign_async():
         assert f2.set_running_or_notify_cancel() is True
         await asyncio.sleep(0.1)
-        f1.set_result((123, 'ololo'))
-        f2.set_result((456, 'pyshpysh'))
+        f1.set_result((123, "ololo"))
+        f2.set_result((456, "pyshpysh"))
 
     asyncio.create_task(wait_and_assign_async())
 
-    assert (await asyncio.gather(f1, f2)) == [(123, 'ololo'), (456, 'pyshpysh')]
+    assert (await asyncio.gather(f1, f2)) == [(123, "ololo"), (456, "pyshpysh")]
 
     # await result from separate processes
     f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
@@ -149,12 +149,12 @@ async def test_await_mpfuture():
         time.sleep(0.1 * random.random())
         future.set_result(value)
 
-    p1 = mp.Process(target=wait_and_assign, args=(f1, 'abc'))
-    p2 = mp.Process(target=wait_and_assign, args=(f2, 'def'))
+    p1 = mp.Process(target=wait_and_assign, args=(f1, "abc"))
+    p2 = mp.Process(target=wait_and_assign, args=(f2, "def"))
     for p in p1, p2:
         p.start()
 
-    assert (await asyncio.gather(f1, f2)) == ['abc', 'def']
+    assert (await asyncio.gather(f1, f2)) == ["abc", "def"]
     for p in p1, p2:
         p.join()
 
@@ -183,7 +183,7 @@ async def test_await_mpfuture():
         time.sleep(0.01)
         f2.set_result(123456)
         time.sleep(0.1)
-        f1.set_exception(ValueError('we messed up'))
+        f1.set_exception(ValueError("we messed up"))
 
     p = mp.Process(target=wait_and_raise)
     p.start()
@@ -202,9 +202,9 @@ def test_mpfuture_bidirectional():
 
     def _future_creator():
         future_from_fork = hivemind.MPFuture()
-        future_from_main.set_result(('abc', future_from_fork))
+        future_from_main.set_result(("abc", future_from_fork))
 
-        if future_from_fork.result() == ['we', 'need', 'to', 'go', 'deeper']:
+        if future_from_fork.result() == ["we", "need", "to", "go", "deeper"]:
             evt.set()
 
     p = mp.Process(target=_future_creator)
@@ -212,7 +212,7 @@ def test_mpfuture_bidirectional():
 
     out = future_from_main.result()
     assert isinstance(out[1], hivemind.MPFuture)
-    out[1].set_result(['we', 'need', 'to', 'go', 'deeper'])
+    out[1].set_result(["we", "need", "to", "go", "deeper"])
 
     p.join()
     assert evt.is_set()
@@ -240,7 +240,9 @@ def test_mpfuture_done_callback():
         future2.cancel()  # trigger future2 callback from the same process
 
         events[0].wait()
-        future1.add_done_callback(lambda future: events[4].set())  # schedule callback after future1 is already finished
+        future1.add_done_callback(
+            lambda future: events[4].set()
+        )  # schedule callback after future1 is already finished
 
     p = mp.Process(target=_future_creator)
     p.start()
@@ -331,31 +333,38 @@ async def test_channel_cache():
     hivemind.ChannelCache.MAXIMUM_CHANNELS = 3
     hivemind.ChannelCache.EVICTION_PERIOD_SECONDS = 0.1
 
-    c1 = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=False)
-    c2 = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=True)
-    c3 = hivemind.ChannelCache.get_stub('localhost:1338', DHTStub, aio=False)
-    c3_again = hivemind.ChannelCache.get_stub('localhost:1338', DHTStub, aio=False)
-    c1_again = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=False)
-    c4 = hivemind.ChannelCache.get_stub('localhost:1339', DHTStub, aio=True)
-    c2_anew = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=True)
-    c1_yetagain = hivemind.ChannelCache.get_stub('localhost:1337', DHTStub, aio=False)
+    c1 = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=False)
+    c2 = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=True)
+    c3 = hivemind.ChannelCache.get_stub("localhost:1338", DHTStub, aio=False)
+    c3_again = hivemind.ChannelCache.get_stub("localhost:1338", DHTStub, aio=False)
+    c1_again = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=False)
+    c4 = hivemind.ChannelCache.get_stub("localhost:1339", DHTStub, aio=True)
+    c2_anew = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=True)
+    c1_yetagain = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=False)
 
     await asyncio.sleep(0.2)
-    c1_anew = hivemind.ChannelCache.get_stub(target='localhost:1337', aio=False, stub_type=DHTStub)
-    c1_anew_again = hivemind.ChannelCache.get_stub(target='localhost:1337', aio=False, stub_type=DHTStub)
-    c1_otherstub = hivemind.ChannelCache.get_stub(target='localhost:1337', aio=False, stub_type=ConnectionHandlerStub)
+    c1_anew = hivemind.ChannelCache.get_stub(target="localhost:1337", aio=False, stub_type=DHTStub)
+    c1_anew_again = hivemind.ChannelCache.get_stub(target="localhost:1337", aio=False, stub_type=DHTStub)
+    c1_otherstub = hivemind.ChannelCache.get_stub(target="localhost:1337", aio=False, stub_type=ConnectionHandlerStub)
     await asyncio.sleep(0.05)
-    c1_otherstub_again = hivemind.ChannelCache.get_stub(target='localhost:1337', aio=False,
-                                                        stub_type=ConnectionHandlerStub)
+    c1_otherstub_again = hivemind.ChannelCache.get_stub(
+        target="localhost:1337", aio=False, stub_type=ConnectionHandlerStub
+    )
     all_channels = [c1, c2, c3, c4, c3_again, c1_again, c2_anew, c1_yetagain, c1_anew, c1_anew_again, c1_otherstub]
 
     assert all(isinstance(c, DHTStub) for c in all_channels[:-1])
     assert isinstance(all_channels[-1], ConnectionHandlerStub)
-    assert 'aio' in repr(c2.rpc_find)
-    assert 'aio' not in repr(c1.rpc_find)
+    assert "aio" in repr(c2.rpc_find)
+    assert "aio" not in repr(c1.rpc_find)
 
-    duplicates = {(c1, c1_again), (c1, c1_yetagain), (c1_again, c1_yetagain), (c3, c3_again),
-                  (c1_anew, c1_anew_again), (c1_otherstub, c1_otherstub_again)}
+    duplicates = {
+        (c1, c1_again),
+        (c1, c1_yetagain),
+        (c1_again, c1_yetagain),
+        (c3, c3_again),
+        (c1_anew, c1_anew_again),
+        (c1_otherstub, c1_otherstub_again),
+    }
     for i in range(len(all_channels)):
         for j in range(i + 1, len(all_channels)):
             ci, cj = all_channels[i], all_channels[j]
@@ -386,7 +395,7 @@ def test_serialize_tensor():
     restored = hivemind.combine_from_streaming(chunks)
     assert torch.allclose(deserialize_torch_tensor(restored), tensor)
 
-    scalar = torch.tensor(1.)
+    scalar = torch.tensor(1.0)
     serialized_scalar = serialize_torch_tensor(scalar, CompressionType.NONE)
     assert torch.allclose(deserialize_torch_tensor(serialized_scalar), scalar)
 
@@ -397,9 +406,9 @@ def test_serialize_tensor():
 def test_serialize_tuple():
     test_pairs = (
         ((1, 2, 3), [1, 2, 3]),
-        (('1', False, 0), ['1', False, 0]),
-        (('1', False, 0), ('1', 0, 0)),
-        (('1', b'qq', (2, 5, '0')), ['1', b'qq', (2, 5, '0')]),
+        (("1", False, 0), ["1", False, 0]),
+        (("1", False, 0), ("1", 0, 0)),
+        (("1", b"qq", (2, 5, "0")), ["1", b"qq", (2, 5, "0")]),
     )
 
     for first, second in test_pairs:
@@ -443,8 +452,6 @@ def test_split_parts():
 
 
 def test_generic_data_classes():
-    from hivemind.utils import ValueWithExpiration, HeapEntry, DHTExpiration
-
     value_with_exp = ValueWithExpiration(value="string_value", expiration_time=DHTExpiration(10))
     assert value_with_exp.value == "string_value" and value_with_exp.expiration_time == DHTExpiration(10)
 
@@ -458,7 +465,7 @@ def test_generic_data_classes():
 
 @pytest.mark.asyncio
 async def test_asyncio_utils():
-    res = [i async for i, item in aenumerate(aiter('a', 'b', 'c'))]
+    res = [i async for i, item in aenumerate(aiter("a", "b", "c"))]
     assert res == list(range(len(res)))
 
     num_steps = 0
@@ -471,20 +478,20 @@ async def test_asyncio_utils():
     ref = list(map(max, range(7), range(-50, 50, 10)))
     assert ours == ref
 
-    ours = [row async for row in azip(aiter('a', 'b', 'c'), aiter(1, 2, 3))]
-    ref = list(zip(['a', 'b', 'c'], [1, 2, 3]))
+    ours = [row async for row in azip(aiter("a", "b", "c"), aiter(1, 2, 3))]
+    ref = list(zip(["a", "b", "c"], [1, 2, 3]))
     assert ours == ref
 
     async def _aiterate():
-        yield 'foo'
-        yield 'bar'
-        yield 'baz'
+        yield "foo"
+        yield "bar"
+        yield "baz"
 
     iterator = _aiterate()
-    assert (await anext(iterator)) == 'foo'
+    assert (await anext(iterator)) == "foo"
     tail = [item async for item in iterator]
-    assert tail == ['bar', 'baz']
+    assert tail == ["bar", "baz"]
     with pytest.raises(StopAsyncIteration):
         await anext(iterator)
 
-    assert [item async for item in achain(_aiterate(), aiter(*range(5)))] == ['foo', 'bar', 'baz'] + list(range(5))
+    assert [item async for item in achain(_aiterate(), aiter(*range(5)))] == ["foo", "bar", "baz"] + list(range(5))
