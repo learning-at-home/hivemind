@@ -186,7 +186,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             with MPFuture._update_lock if self._use_lock else nullcontext():
                 self._sender_pipe.send((self._uid, update_type, payload))
         except (ConnectionError, BrokenPipeError, EOFError) as e:
-            logger.debug(f"No updates were sent: pipe to origin process is no longer operational ({e}).", exc_info=True)
+            logger.debug(f"No updates were sent: pipe to origin process was broken ({e}).", exc_info=True)
 
     def _synchronize_if_necessary(self):
         if not self.synchronize or os.getpid() == self._origin_pid or self._state in TERMINAL_STATES:
