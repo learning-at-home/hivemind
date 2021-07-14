@@ -324,6 +324,7 @@ class P2P:
                         # TODO: Does cancellation in `await P2P.send_protobuf()` cancels `handler()` here?
                         # If not, cancel it explicitly.
                 except Exception as e:
+                    logger.debug('Exception while processing stream and sending responses:', exc_info=True)
                     await P2P.send_protobuf(p2pd_pb2.RPCError(message=str(e)), writer)
 
             with closing(writer):
@@ -333,14 +334,19 @@ class P2P:
                         try:
                             request, err = await P2P.receive_protobuf(in_proto_type, reader)
                         except asyncio.IncompleteReadError:  # Connection is closed
+                            await requests.put(None)
                             break
 
                         if err is not None:  # Cancelled by caller
+                            processing_task.cancel()
                             break
                         await requests.put(request)
-                    await requests.put(None)
-                finally:
+                except (Exception, asyncio.CancelledError) as e:
+                    if isinstance(e, Exception):
+                        logger.debug('Exception while receiving requests:', exc_info=True)
                     processing_task.cancel()
+                    raise
+                finally:
                     with suppress(asyncio.CancelledError):
                         await processing_task
 
@@ -357,6 +363,7 @@ class P2P:
 
         with closing(writer):
             writing_task = asyncio.create_task(_write_to_stream())
+            notify_cancel = False
             try:
                 while True:
                     try:
@@ -367,13 +374,16 @@ class P2P:
                     if err is not None:
                         raise P2PHandlerError(f"Failed to call handler `{name}` at {peer_id}: {err.message}")
                     yield response
-            except asyncio.CancelledError:
-                await P2P.send_protobuf(p2pd_pb2.RPCError(message='Cancelled by caller'), writer)
+            except (Exception, asyncio.CancelledError) as e:
+                if isinstance(e, asyncio.CancelledError):
+                    notify_cancel = True
+                writing_task.cancel()
                 raise
             finally:
-                writing_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await writing_task
+                if notify_cancel:
+                    await P2P.send_protobuf(p2pd_pb2.RPCError(message='Cancelled by caller'), writer)
 
     async def add_unary_handler(
         self, name: str, handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterable[Any]]],

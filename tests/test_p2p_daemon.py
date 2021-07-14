@@ -108,11 +108,13 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
     expected_response = dht_pb2.PingResponse(peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()), available=True)
 
     if should_cancel:
-        *_, writer = await client.call_stream_handler(server.id, handle_name)
-        with closing(writer):
-            await P2P.send_protobuf(ping_request, writer)
+        call_task = asyncio.create_task(
+            client.call_unary_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse))
+        await asyncio.sleep(0.25)
 
-        await asyncio.sleep(1)
+        call_task.cancel()
+
+        await asyncio.sleep(0.25)
         assert handler_cancelled
     else:
         actual_response = await client.call_unary_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)

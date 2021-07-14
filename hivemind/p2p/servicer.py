@@ -1,7 +1,6 @@
 import asyncio
-import importlib
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union, get_type_hints
+from typing import Any, AsyncIterable, Optional, Tuple, get_type_hints
 
 from hivemind.p2p.p2p_daemon import P2P
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
@@ -30,7 +29,7 @@ class StubBase:
         self._peer = peer
 
 
-class Servicer:
+class ServicerBase:
     """
     Base class for P2P RPC servicers (e.g. DHT, averager, MoE server). The interface mimicks gRPC servicers.
 
@@ -74,15 +73,25 @@ class Servicer:
 
     @staticmethod
     def _make_rpc_caller(handler: RPCHandler):
+        in_type = AsyncIterable[handler.request_type] if handler.stream_input else handler.request_type
+
         # This method will be added to a new Stub type (a subclass of StubBase)
-        async def caller(
-            self: StubBase, request: handler.request_type, timeout: Optional[float] = None
-        ) -> handler.response_type:
-            return await asyncio.wait_for(
-                self._p2p.call_unary_handler(self._peer, handler.handle_name, request, handler.response_type,
-                                             stream_input=handler.stream_input, stream_output=handler.stream_output),
-                timeout=timeout,
-            )
+        if handler.stream_output:
+            def caller(self: StubBase, in_value: in_type, timeout: None = None) -> AsyncIterable[handler.response_type]:
+                if timeout is not None:
+                    raise ValueError('Timeouts for handlers returning streams are not supported')
+
+                return self._p2p.call_unary_handler(self._peer, handler.handle_name, in_value, handler.response_type,
+                                                    stream_input=handler.stream_input, stream_output=True)
+        else:
+            async def caller(
+                self: StubBase, in_value: in_type, timeout: Optional[float] = None
+            ) -> handler.response_type:
+                return await asyncio.wait_for(
+                    self._p2p.call_unary_handler(self._peer, handler.handle_name, in_value, handler.response_type,
+                                                 stream_input=handler.stream_input),
+                    timeout=timeout,
+                )
 
         caller.__name__ = handler.method_name
         return caller
