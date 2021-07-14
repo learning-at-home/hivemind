@@ -64,9 +64,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param request_timeout: when looking for group, wait for a response from leader for at most this many seconds.
     :note: request_timeout must be smaller than averaging_expiration to avoid potential deadlocks.
     :param part_size_bytes: tensors for AllReduce are processed in parts of up to this size (after compression)
-    :param throughput: if specified, this value represents the network bandwidth available to averager.
+    :param bandwidth: if specified, this value represents the network bandwidth available to averager.
           By default, the averager is assumed to have the average bandwidth of his group.
-          If throughput == 0, averager will rely on its groupmates to do all the averaging.
+          If bandwidth == 0, averager will rely on its groupmates to do all the averaging.
     :param client_mode: if False (default), this averager will accept incoming requests from other peers
             if True, the averager will only join existing groups where at least one peer has client_mode=False
     :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
@@ -115,7 +115,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         part_size_bytes: int = DEFAULT_PART_SIZE_BYTES,
         allreduce_timeout: Optional[float] = None,
         compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
-        throughput: Optional[float] = None,
+        bandwidth: Optional[float] = None,
         min_vector_size: int = 0,
         auxiliary: bool = False,
         allow_state_sharing: Optional[bool] = None,
@@ -128,9 +128,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         **kwargs,
     ):
         assert "." not in prefix, "group prefix must be a string without trailing '.'"
-        assert throughput is None or (
-            throughput >= 0 and np.isfinite(np.float32(throughput))
-        ), "throughput must be a non-negative float32"
+        assert bandwidth is None or (
+                bandwidth >= 0 and np.isfinite(np.float32(bandwidth))
+        ), "bandwidth must be a non-negative float32"
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert initial_group_bits is None or all(bit in "01" for bit in initial_group_bits)
@@ -161,7 +161,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.total_size = sum(map(torch.Tensor.numel, self._averaged_tensors))
         self.schema_hash = compute_schema_hash(self._averaged_tensors)
         self.shutdown_timeout = shutdown_timeout
-        self.throughput = throughput
+        self.bandwidth = bandwidth
 
         self.matchmaking_kwargs = dict(
             prefix=prefix,
@@ -374,7 +374,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             while not future.done():
                 try:
                     self._pending_group_assembled.clear()
-                    data_for_gather = self.serializer.dumps([weight, self.throughput, self.mode.value, gather_binary])
+                    data_for_gather = self.serializer.dumps([weight, self.bandwidth, self.mode.value, gather_binary])
                     group_info = await self._matchmaking.look_for_group(
                         timeout=timeout, data_for_gather=data_for_gather
                     )
@@ -422,16 +422,16 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     async def _run_allreduce(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
         """Run All-Reduce in a given group and update tensors in place, return gathered metadata"""
         try:
-            weights, throughputs, mode_ids, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
+            weights, bandwidths, mode_ids, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
             user_gathered = dict(zip(group_info.endpoints, map(self.serializer.loads, user_gathered)))
             modes = tuple(map(AveragingMode, mode_ids))
 
-            # compute optimal part sizes from peer throughputs; TODO: replace with proper load balancing
-            incoming_throughputs = [
-                thr if mode != AveragingMode.CLIENT else 0.0 for thr, mode in zip(throughputs, modes)
+            # compute optimal part sizes from peer bandwidths; TODO: replace with proper load balancing
+            download_bandwidths = [
+                thr if mode != AveragingMode.CLIENT else 0.0 for thr, mode in zip(bandwidths, modes)
             ]
             peer_fractions = await asyncio.get_event_loop().run_in_executor(
-                None, load_balance_peers, self.total_size, incoming_throughputs, min_vector_size
+                None, load_balance_peers, self.total_size, download_bandwidths, min_vector_size
             )
 
             async with self.get_tensors_async() as local_tensors:

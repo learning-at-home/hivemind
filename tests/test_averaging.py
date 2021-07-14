@@ -306,16 +306,16 @@ def test_allgather():
     dht.shutdown()
 
 
-def get_cost(vector_size, partitions, throughputs):
+def get_cost(vector_size, partitions, bandwidths):
     return max(
-        (vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(throughputs[i], 1e-9)
+        (vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(bandwidths[i], 1e-9)
         for i in range(len(partitions))
     )
 
 
-def check_optimality(vector_size, throughputs, ref_partitions):
-    partitions = list(load_balance_peers(vector_size, throughputs))
-    assert get_cost(vector_size, partitions, throughputs) <= get_cost(vector_size, ref_partitions, throughputs)
+def check_optimality(vector_size, bandwidths, ref_partitions):
+    partitions = list(load_balance_peers(vector_size, bandwidths))
+    assert get_cost(vector_size, partitions, bandwidths) <= get_cost(vector_size, ref_partitions, bandwidths)
 
 
 @pytest.mark.forked
@@ -342,9 +342,9 @@ def test_load_balancing():
         vector_size = np.random.randint(1, 1024 ** 3)
         num_peers = np.random.randint(1, 256)
         scale = 1e-9 + np.random.rand() * 1e5
-        throughputs = np.random.rand(num_peers) * scale + 1e-6
+        bandwidths = np.random.rand(num_peers) * scale + 1e-6
         min_size = np.random.choice([0, np.random.randint(0, vector_size // 10)])
-        assignment = load_balance_peers(vector_size, throughputs, min_size)
+        assignment = load_balance_peers(vector_size, bandwidths, min_size)
         assert np.sum(assignment) == vector_size
         assert np.min(assignment) >= 0
 

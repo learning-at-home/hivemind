@@ -259,7 +259,7 @@ def main():
         prefix=collaboration_args.experiment_prefix,
         compression_type=hivemind.utils.CompressionType.Value(collaboration_args.compression),
         batch_size_per_step=total_batch_size_per_step,
-        throughput=collaboration_args.bandwidth,
+        bandwidth=collaboration_args.bandwidth,
         target_batch_size=adjusted_target_batch_size,
         client_mode=collaboration_args.client_mode,
         verbose=True,
