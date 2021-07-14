@@ -13,7 +13,7 @@ import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto import p2pd_pb2
-from hivemind.utils.asyncio import aiter, anext
+from hivemind.utils.asyncio import aiter
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -285,7 +285,7 @@ class P2P:
         else:
             raise TypeError("Invalid Protobuf message type")
 
-    async def add_generator_handler(self,
+    async def _add_generator_handler(self,
         name: str, handler: Callable[[AsyncIterable[Any], P2PContext], AsyncIterable[Any]], in_proto_type: type,
         max_prefetch: int = 0
     ) -> None:
@@ -346,7 +346,7 @@ class P2P:
 
         await self._client.stream_handler(name, _handle_generator_stream)
 
-    async def call_generator_handler(
+    async def _call_generator_handler(
         self, peer_id: PeerID, name: str, requests: AsyncIterable[Any], out_proto_type: type
     ) -> AsyncIterable[Any]:
         _, reader, writer = await self._client.stream_open(peer_id, (name,))
@@ -403,7 +403,7 @@ class P2P:
             else:
                 yield await out_value
 
-        await self.add_generator_handler(name, _generator_handler, in_proto_type)
+        await self._add_generator_handler(name, _generator_handler, in_proto_type)
 
     def call_unary_handler(
         self, peer_id: PeerID, name: str, in_value: Any, out_proto_type: type,
@@ -421,7 +421,7 @@ class P2P:
         else:
             requests = aiter(in_value)
 
-        responses = self.call_generator_handler(peer_id, name, requests, out_proto_type)
+        responses = self._call_generator_handler(peer_id, name, requests, out_proto_type)
 
         if stream_output:
             return responses
