@@ -4,7 +4,7 @@ from typing import AsyncIterable
 import pytest
 
 from hivemind.p2p import P2P, P2PContext, ServicerBase
-from hivemind.proto import test_pb2
+from hivemind.proto import p2pd_pb2, test_pb2
 
 
 @pytest.fixture
@@ -95,3 +95,48 @@ async def test_stream_stream(server_client):
         else:
             assert item == test_pb2.TestResponse(number=(i // 2) ** 3)
         i += 1
+
+
+@pytest.mark.parametrize(
+    "cancel_reason", ['close_connection', 'close_generator'],
+)
+@pytest.mark.asyncio
+async def test_unary_stream_cancel(server_client, cancel_reason):
+    handler_cancelled = False
+
+    class ExampleServicer(ServicerBase):
+        async def rpc_wait(self, request: test_pb2.TestRequest, _: P2PContext) -> AsyncIterable[test_pb2.TestResponse]:
+            try:
+                yield test_pb2.TestResponse(number=request.number + 1)
+                await asyncio.sleep(2)
+                yield test_pb2.TestResponse(number=request.number + 2)
+            except asyncio.CancelledError:
+                nonlocal handler_cancelled
+                handler_cancelled = True
+                raise
+
+    server, client = server_client
+    servicer = ExampleServicer()
+    await servicer.add_p2p_handlers(server)
+
+    if cancel_reason == 'close_connection':
+        _, reader, writer = await client.call_stream_handler(server.id, 'ExampleServicer.rpc_wait')
+        await P2P.send_protobuf(test_pb2.TestRequest(number=10), writer)
+        await P2P.send_protobuf(p2pd_pb2.RPCError(message=P2P.CONTROL_END_OF_STREAM), writer)
+        response, _ = await P2P.receive_protobuf(test_pb2.TestResponse, reader)
+        assert response == test_pb2.TestResponse(number=11)
+        await asyncio.sleep(0.25)
+
+        writer.close()
+    elif cancel_reason == 'close_generator':
+        stub = servicer.get_stub(client, server.id)
+        iter = stub.rpc_wait(test_pb2.TestRequest(number=10)).__aiter__()
+        assert await iter.__anext__() == test_pb2.TestResponse(number=11)
+        await asyncio.sleep(0.25)
+
+        await iter.aclose()
+    else:
+        assert False, f'Unknown cancel_reason = `{cancel_reason}`'
+
+    await asyncio.sleep(0.25)
+    assert handler_cancelled

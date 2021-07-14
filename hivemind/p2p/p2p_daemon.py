@@ -52,8 +52,8 @@ class P2P:
     RESULT_MESSAGE = b"\x00"
     ERROR_MESSAGE = b"\x01"
 
-    _CONTROL_END_OF_STREAM = "EOS"
-    _CONTROL_CANCEL = "Cancel"
+    CONTROL_END_OF_STREAM = "EOS"
+    CONTROL_CANCEL = "Cancel"
 
     DHT_MODE_MAPPING = {
         "dht": {"dht": 1},
@@ -349,13 +349,13 @@ class P2P:
                             try:
                                 request, control = await receive_task
                             except asyncio.IncompleteReadError:  # Connection is closed
-                                await requests.put(None)
+                                processing_task.cancel()
                                 break
 
                             if control is not None:
-                                if control.message == P2P._CONTROL_END_OF_STREAM:
+                                if control.message == P2P.CONTROL_END_OF_STREAM:
                                     await requests.put(None)
-                                elif control.message == P2P._CONTROL_CANCEL:
+                                elif control.message == P2P.CONTROL_CANCEL:
                                     processing_task.cancel()
                                     break
                                 else:
@@ -383,7 +383,7 @@ class P2P:
         async def _write_to_stream() -> None:
             async for request in requests:
                 await asyncio.shield(P2P.send_protobuf(request, writer))
-            await P2P.send_protobuf(p2pd_pb2.RPCError(message=P2P._CONTROL_END_OF_STREAM), writer)
+            await P2P.send_protobuf(p2pd_pb2.RPCError(message=P2P.CONTROL_END_OF_STREAM), writer)
 
         with closing(writer):
             writing_task = asyncio.create_task(_write_to_stream())
@@ -399,13 +399,13 @@ class P2P:
                     yield response
 
                 await writing_task
-            except (Exception, asyncio.CancelledError) as e:
+            except (Exception, asyncio.CancelledError, GeneratorExit) as e:
                 writing_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await writing_task
 
-                if isinstance(e, asyncio.CancelledError):
-                    await P2P.send_protobuf(p2pd_pb2.RPCError(message=P2P._CONTROL_CANCEL), writer)
+                if isinstance(e, (asyncio.CancelledError, GeneratorExit)):
+                    await P2P.send_protobuf(p2pd_pb2.RPCError(message=P2P.CONTROL_CANCEL), writer)
                 raise
 
     async def add_unary_handler(
