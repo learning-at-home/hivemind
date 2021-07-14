@@ -109,7 +109,8 @@ async def test_call_unary_handler(should_cancel, replicate, handle_name="handle"
 
     if should_cancel:
         call_task = asyncio.create_task(
-            client.call_unary_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse))
+            client.call_unary_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)
+        )
         await asyncio.sleep(0.25)
 
         call_task.cancel()

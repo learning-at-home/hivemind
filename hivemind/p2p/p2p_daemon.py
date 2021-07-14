@@ -287,9 +287,12 @@ class P2P:
         else:
             raise TypeError("Invalid Protobuf message type")
 
-    async def _add_generator_handler(self,
-        name: str, handler: Callable[[AsyncIterator[Any], P2PContext], AsyncIterator[Any]], in_proto_type: type,
-        max_prefetch: int = 0
+    async def _add_generator_handler(
+        self,
+        name: str,
+        handler: Callable[[AsyncIterator[Any], P2PContext], AsyncIterator[Any]],
+        in_proto_type: type,
+        max_prefetch: int = 0,
     ) -> None:
         """
         :param max_prefetch: Maximum number of items to prefetch from the request stream.
@@ -303,7 +306,8 @@ class P2P:
             self._start_listening()
 
         async def _handle_generator_stream(
-                stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
             context = P2PContext(
                 handle_name=name,
                 local_id=self.id,
@@ -324,7 +328,7 @@ class P2P:
                     async for response in handler(_read_stream(), context):
                         await P2P.send_protobuf(response, writer)
                 except Exception as e:
-                    logger.debug('Exception while processing stream and sending responses:', exc_info=True)
+                    logger.debug("Exception while processing stream and sending responses:", exc_info=True)
                     await P2P.send_protobuf(p2pd_pb2.RPCError(message=str(e)), writer)
 
             with closing(writer):
@@ -332,8 +336,9 @@ class P2P:
                 try:
                     while True:
                         receive_task = asyncio.create_task(P2P.receive_protobuf(in_proto_type, reader))
-                        done, _ = await asyncio.wait({processing_task, receive_task},
-                                                     return_when=asyncio.FIRST_COMPLETED)
+                        done, _ = await asyncio.wait(
+                            {processing_task, receive_task}, return_when=asyncio.FIRST_COMPLETED
+                        )
 
                         if processing_task in done:
                             receive_task.cancel()
@@ -346,7 +351,7 @@ class P2P:
                                 return
                             await requests.put(request)  # `request` is None for the end-of-stream message
                 except Exception:
-                    logger.debug('Exception while receiving requests:', exc_info=True)
+                    logger.debug("Exception while receiving requests:", exc_info=True)
                 finally:
                     processing_task.cancel()
 
@@ -380,8 +385,13 @@ class P2P:
                 writing_task.cancel()
 
     async def add_unary_handler(
-        self, name: str, handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterator[Any]]],
-        in_proto_type: type, *, stream_input: bool = False, stream_output: bool = False
+        self,
+        name: str,
+        handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterator[Any]]],
+        in_proto_type: type,
+        *,
+        stream_input: bool = False,
+        stream_output: bool = False,
     ) -> None:
         """
         :param stream_input: If True, expect ``handler`` to take an ``AsyncIterator[in_proto_type]`` as the input.
@@ -390,7 +400,9 @@ class P2P:
                               If False, expect it to return an ``Awaitable[out_proto_type]``.
         """
 
-        async def _generator_handler(requests: AsyncIterator[in_proto_type], context: P2PContext) -> AsyncIterator[Any]:
+        async def _generator_handler(
+            requests: AsyncIterator[in_proto_type], context: P2PContext
+        ) -> AsyncIterator[Any]:
             if stream_input:
                 in_value = requests
             else:
@@ -399,7 +411,7 @@ class P2P:
                     async for in_value in requests:
                         pass
                 except StopAsyncIteration:
-                    raise ValueError('No requests provided for the unary handler')
+                    raise ValueError("No requests provided for the unary handler")
 
             out_value = handler(in_value, context)
 
@@ -412,8 +424,14 @@ class P2P:
         await self._add_generator_handler(name, _generator_handler, in_proto_type)
 
     def call_unary_handler(
-        self, peer_id: PeerID, name: str, in_value: Any, out_proto_type: type,
-        *, stream_input: bool = False, stream_output: bool = False
+        self,
+        peer_id: PeerID,
+        name: str,
+        in_value: Any,
+        out_proto_type: type,
+        *,
+        stream_input: bool = False,
+        stream_output: bool = False,
     ) -> Union[Awaitable[Any], AsyncIterator[Any]]:
         """
         :param stream_input: If True, take an ``AsyncIterator[in_proto_type]`` as the input.
@@ -439,7 +457,7 @@ class P2P:
                     pass
                 return out_value
             except StopAsyncIteration:
-                raise ValueError('No responses received from the unary handler')
+                raise ValueError("No responses received from the unary handler")
 
         return _take_one_response()
 

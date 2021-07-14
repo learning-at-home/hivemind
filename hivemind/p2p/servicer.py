@@ -62,8 +62,9 @@ class ServicerBase:
                 request_type, stream_input = self._strip_iterator_hint(request_type)
                 response_type, stream_output = self._strip_iterator_hint(response_type)
 
-                self._rpc_handlers.append(RPCHandler(
-                    method_name, handle_name, request_type, response_type, stream_input, stream_output))
+                self._rpc_handlers.append(
+                    RPCHandler(method_name, handle_name, request_type, response_type, stream_input, stream_output)
+                )
 
         self._stub_type = type(
             f"{class_name}Stub",
@@ -77,19 +78,35 @@ class ServicerBase:
 
         # This method will be added to a new Stub type (a subclass of StubBase)
         if handler.stream_output:
-            def caller(self: StubBase, in_value: in_type, timeout: None = None) -> AsyncIterator[handler.response_type]:
-                if timeout is not None:
-                    raise ValueError('Timeouts for handlers returning streams are not supported')
 
-                return self._p2p.call_unary_handler(self._peer, handler.handle_name, in_value, handler.response_type,
-                                                    stream_input=handler.stream_input, stream_output=True)
+            def caller(
+                self: StubBase, in_value: in_type, timeout: None = None
+            ) -> AsyncIterator[handler.response_type]:
+                if timeout is not None:
+                    raise ValueError("Timeouts for handlers returning streams are not supported")
+
+                return self._p2p.call_unary_handler(
+                    self._peer,
+                    handler.handle_name,
+                    in_value,
+                    handler.response_type,
+                    stream_input=handler.stream_input,
+                    stream_output=True,
+                )
+
         else:
+
             async def caller(
                 self: StubBase, in_value: in_type, timeout: Optional[float] = None
             ) -> handler.response_type:
                 return await asyncio.wait_for(
-                    self._p2p.call_unary_handler(self._peer, handler.handle_name, in_value, handler.response_type,
-                                                 stream_input=handler.stream_input),
+                    self._p2p.call_unary_handler(
+                        self._peer,
+                        handler.handle_name,
+                        in_value,
+                        handler.response_type,
+                        stream_input=handler.stream_input,
+                    ),
                     timeout=timeout,
                 )
 
@@ -112,7 +129,7 @@ class ServicerBase:
 
     @staticmethod
     def _strip_iterator_hint(hint: type) -> Tuple[type, bool]:
-        if hasattr(hint, '_name') and hint._name == 'AsyncIterator':
+        if hasattr(hint, "_name") and hint._name == "AsyncIterator":
             return hint.__args__[0], True
 
         return hint, False
