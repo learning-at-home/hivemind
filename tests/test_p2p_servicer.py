@@ -4,7 +4,7 @@ from typing import AsyncIterable
 import pytest
 
 from hivemind.p2p import P2P, P2PContext, ServicerBase
-from hivemind.proto import p2pd_pb2, test_pb2
+from hivemind.proto import test_pb2
 
 
 @pytest.fixture
@@ -122,7 +122,8 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
     if cancel_reason == 'close_connection':
         _, reader, writer = await client.call_stream_handler(server.id, 'ExampleServicer.rpc_wait')
         await P2P.send_protobuf(test_pb2.TestRequest(number=10), writer)
-        await P2P.send_protobuf(p2pd_pb2.RPCError(message=P2P.CONTROL_END_OF_STREAM), writer)
+        await P2P.send_protobuf(P2P.END_OF_STREAM, writer)
+
         response, _ = await P2P.receive_protobuf(test_pb2.TestResponse, reader)
         assert response == test_pb2.TestResponse(number=11)
         await asyncio.sleep(0.25)
@@ -131,6 +132,7 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
     elif cancel_reason == 'close_generator':
         stub = servicer.get_stub(client, server.id)
         iter = stub.rpc_wait(test_pb2.TestRequest(number=10)).__aiter__()
+
         assert await iter.__anext__() == test_pb2.TestResponse(number=11)
         await asyncio.sleep(0.25)
 
