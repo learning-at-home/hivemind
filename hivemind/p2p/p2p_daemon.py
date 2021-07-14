@@ -5,7 +5,7 @@ from contextlib import closing, suppress
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
-from typing import Any, AsyncIterable, Awaitable, Callable, List, Optional, Sequence, Tuple, Union
+from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional, Sequence, Tuple, Union
 
 from multiaddr import Multiaddr
 
@@ -288,7 +288,7 @@ class P2P:
             raise TypeError("Invalid Protobuf message type")
 
     async def _add_generator_handler(self,
-        name: str, handler: Callable[[AsyncIterable[Any], P2PContext], AsyncIterable[Any]], in_proto_type: type,
+        name: str, handler: Callable[[AsyncIterator[Any], P2PContext], AsyncIterator[Any]], in_proto_type: type,
         max_prefetch: int = 0
     ) -> None:
         """
@@ -312,7 +312,7 @@ class P2P:
             )
             requests = asyncio.Queue(max_prefetch)
 
-            async def _read_stream() -> AsyncIterable[in_proto_type]:
+            async def _read_stream() -> AsyncIterator[in_proto_type]:
                 while True:
                     request = await requests.get()
                     if request is None:
@@ -353,8 +353,8 @@ class P2P:
         await self._client.stream_handler(name, _handle_generator_stream)
 
     async def _call_generator_handler(
-        self, peer_id: PeerID, name: str, requests: AsyncIterable[Any], out_proto_type: type
-    ) -> AsyncIterable[Any]:
+        self, peer_id: PeerID, name: str, requests: AsyncIterator[Any], out_proto_type: type
+    ) -> AsyncIterator[Any]:
         _, reader, writer = await self._client.stream_open(peer_id, (name,))
 
         async def _write_to_stream() -> None:
@@ -380,17 +380,17 @@ class P2P:
                 writing_task.cancel()
 
     async def add_unary_handler(
-        self, name: str, handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterable[Any]]],
+        self, name: str, handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterator[Any]]],
         in_proto_type: type, *, stream_input: bool = False, stream_output: bool = False
     ) -> None:
         """
-        :param stream_input: If True, expect ``handler`` to take an ``AsyncIterable[in_proto_type]`` as the input.
+        :param stream_input: If True, expect ``handler`` to take an ``AsyncIterator[in_proto_type]`` as the input.
                              If False, expect it to take one ``in_proto_type`` instance as the input.
-        :param stream_output: If True, expect ``handler`` to return an ``AsyncIterable[out_proto_type]``.
+        :param stream_output: If True, expect ``handler`` to return an ``AsyncIterator[out_proto_type]``.
                               If False, expect it to return an ``Awaitable[out_proto_type]``.
         """
 
-        async def _generator_handler(requests: AsyncIterable[in_proto_type], context: P2PContext) -> AsyncIterable[Any]:
+        async def _generator_handler(requests: AsyncIterator[in_proto_type], context: P2PContext) -> AsyncIterator[Any]:
             if stream_input:
                 in_value = requests
             else:
@@ -414,11 +414,11 @@ class P2P:
     def call_unary_handler(
         self, peer_id: PeerID, name: str, in_value: Any, out_proto_type: type,
         *, stream_input: bool = False, stream_output: bool = False
-    ) -> Union[Awaitable[Any], AsyncIterable[Any]]:
+    ) -> Union[Awaitable[Any], AsyncIterator[Any]]:
         """
-        :param stream_input: If True, take an ``AsyncIterable[in_proto_type]`` as the input.
+        :param stream_input: If True, take an ``AsyncIterator[in_proto_type]`` as the input.
                              If False, take one ``in_proto_type`` instance as the input.
-        :param stream_output: If True, return an ``AsyncIterable[out_proto_type]``.
+        :param stream_output: If True, return an ``AsyncIterator[out_proto_type]``.
                               If False, return an ``Awaitable[out_proto_type]``.
         """
 

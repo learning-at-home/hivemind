@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Any, AsyncIterable, Optional, Tuple, get_type_hints
+from typing import Any, AsyncIterator, Optional, Tuple, get_type_hints
 
 from hivemind.p2p.p2p_daemon import P2P
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
@@ -56,7 +56,7 @@ class ServicerBase:
                 except KeyError:
                     raise ValueError(
                         f"{handle_name} is expected to have type annotations "
-                        f"like `dht_pb2.FindRequest` or `AsyncIterable[dht_pb2.FindRequest]` "
+                        f"like `dht_pb2.FindRequest` or `AsyncIterator[dht_pb2.FindRequest]` "
                         f"for the `request` parameter and the return value"
                     )
                 request_type, stream_input = self._strip_iterator_hint(request_type)
@@ -73,11 +73,11 @@ class ServicerBase:
 
     @staticmethod
     def _make_rpc_caller(handler: RPCHandler):
-        in_type = AsyncIterable[handler.request_type] if handler.stream_input else handler.request_type
+        in_type = AsyncIterator[handler.request_type] if handler.stream_input else handler.request_type
 
         # This method will be added to a new Stub type (a subclass of StubBase)
         if handler.stream_output:
-            def caller(self: StubBase, in_value: in_type, timeout: None = None) -> AsyncIterable[handler.response_type]:
+            def caller(self: StubBase, in_value: in_type, timeout: None = None) -> AsyncIterator[handler.response_type]:
                 if timeout is not None:
                     raise ValueError('Timeouts for handlers returning streams are not supported')
 
@@ -112,7 +112,7 @@ class ServicerBase:
 
     @staticmethod
     def _strip_iterator_hint(hint: type) -> Tuple[type, bool]:
-        if hasattr(hint, '_name') and hint._name == 'AsyncIterable':
+        if hasattr(hint, '_name') and hint._name == 'AsyncIterator':
             return hint.__args__[0], True
 
         return hint, False

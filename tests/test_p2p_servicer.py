@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncIterable
+from typing import AsyncIterator
 
 import pytest
 
@@ -33,7 +33,7 @@ async def test_unary_unary(server_client):
 @pytest.mark.asyncio
 async def test_stream_unary(server_client):
     class ExampleServicer(ServicerBase):
-        async def rpc_sum(self, request: AsyncIterable[test_pb2.TestRequest], _: P2PContext) -> test_pb2.TestResponse:
+        async def rpc_sum(self, request: AsyncIterator[test_pb2.TestRequest], _: P2PContext) -> test_pb2.TestResponse:
             result = 0
             async for item in request:
                 result += item.number
@@ -44,7 +44,7 @@ async def test_stream_unary(server_client):
     await servicer.add_p2p_handlers(server)
     stub = servicer.get_stub(client, server.id)
 
-    async def generate_requests() -> AsyncIterable[test_pb2.TestRequest]:
+    async def generate_requests() -> AsyncIterator[test_pb2.TestRequest]:
         for i in range(10):
             yield test_pb2.TestRequest(number=i)
 
@@ -54,7 +54,7 @@ async def test_stream_unary(server_client):
 @pytest.mark.asyncio
 async def test_unary_stream(server_client):
     class ExampleServicer(ServicerBase):
-        async def rpc_count(self, request: test_pb2.TestRequest, _: P2PContext) -> AsyncIterable[test_pb2.TestResponse]:
+        async def rpc_count(self, request: test_pb2.TestRequest, _: P2PContext) -> AsyncIterator[test_pb2.TestResponse]:
             for i in range(request.number):
                 yield test_pb2.TestResponse(number=i)
 
@@ -73,8 +73,8 @@ async def test_unary_stream(server_client):
 @pytest.mark.asyncio
 async def test_stream_stream(server_client):
     class ExampleServicer(ServicerBase):
-        async def rpc_powers(self, request: AsyncIterable[test_pb2.TestRequest],
-                             _: P2PContext) -> AsyncIterable[test_pb2.TestResponse]:
+        async def rpc_powers(self, request: AsyncIterator[test_pb2.TestRequest],
+                             _: P2PContext) -> AsyncIterator[test_pb2.TestResponse]:
             async for item in request:
                 yield test_pb2.TestResponse(number=item.number ** 2)
                 yield test_pb2.TestResponse(number=item.number ** 3)
@@ -84,7 +84,7 @@ async def test_stream_stream(server_client):
     await servicer.add_p2p_handlers(server)
     stub = servicer.get_stub(client, server.id)
 
-    async def generate_requests() -> AsyncIterable[test_pb2.TestRequest]:
+    async def generate_requests() -> AsyncIterator[test_pb2.TestRequest]:
         for i in range(10):
             yield test_pb2.TestRequest(number=i)
 
@@ -105,7 +105,7 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
     handler_cancelled = False
 
     class ExampleServicer(ServicerBase):
-        async def rpc_wait(self, request: test_pb2.TestRequest, _: P2PContext) -> AsyncIterable[test_pb2.TestResponse]:
+        async def rpc_wait(self, request: test_pb2.TestRequest, _: P2PContext) -> AsyncIterator[test_pb2.TestResponse]:
             try:
                 yield test_pb2.TestResponse(number=request.number + 1)
                 await asyncio.sleep(2)
