@@ -47,6 +47,8 @@ def test_training(max_steps: int = 100, threshold: float = 0.9):
 def test_moe_training(max_steps: int = 100, threshold: float = 0.9, num_experts=2):
     dataset = load_digits(n_class=2)
     X_train, y_train = torch.tensor(dataset["data"], dtype=torch.float), torch.tensor(dataset["target"])
+    subsample_ix = torch.randint(0, len(X_train), (32,))
+    X_train, y_train = X_train[subsample_ix], y_train[subsample_ix]
     SGD = partial(torch.optim.SGD, lr=0.05)
 
     all_expert_uids = [f"expert.{i}" for i in range(num_experts)]
@@ -97,6 +99,9 @@ class SwitchNetwork(nn.Module):
 def test_switch_training(max_steps: int = 10, threshold: float = 0.9, num_experts=5):
     dataset = load_digits(n_class=2)
     X_train, y_train = torch.tensor(dataset["data"], dtype=torch.float), torch.tensor(dataset["target"])
+    subsample_ix = torch.randint(0, len(X_train), (32,))
+    X_train, y_train = X_train[subsample_ix], y_train[subsample_ix]
+
     SGD = partial(torch.optim.SGD, lr=0.05)
 
     all_expert_uids = [f"expert.{i}" for i in range(num_experts)]
