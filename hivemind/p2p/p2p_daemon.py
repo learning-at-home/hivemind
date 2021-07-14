@@ -361,14 +361,17 @@ class P2P:
                                 else:
                                     raise ValueError(f'Unknown control message: {control.message}')
                             await requests.put(request)
+
+                    with suppress(asyncio.CancelledError):
+                        await processing_task
                 except (Exception, asyncio.CancelledError) as e:
                     if isinstance(e, Exception):
                         logger.debug('Exception while receiving requests:', exc_info=True)
+
                     processing_task.cancel()
-                    raise
-                finally:
                     with suppress(asyncio.CancelledError):
                         await processing_task
+                    raise
 
         await self._client.stream_handler(name, _handle_generator_stream)
 
@@ -384,7 +387,6 @@ class P2P:
 
         with closing(writer):
             writing_task = asyncio.create_task(_write_to_stream())
-            notify_cancel = False
             try:
                 while True:
                     try:
@@ -395,16 +397,16 @@ class P2P:
                     if err is not None:
                         raise P2PHandlerError(f"Failed to call handler `{name}` at {peer_id}: {err.message}")
                     yield response
+
+                await writing_task
             except (Exception, asyncio.CancelledError) as e:
-                if isinstance(e, asyncio.CancelledError):
-                    notify_cancel = True
                 writing_task.cancel()
-                raise
-            finally:
                 with suppress(asyncio.CancelledError):
                     await writing_task
-                if notify_cancel:
+
+                if isinstance(e, asyncio.CancelledError):
                     await P2P.send_protobuf(p2pd_pb2.RPCError(message=P2P._CONTROL_CANCEL), writer)
+                raise
 
     async def add_unary_handler(
         self, name: str, handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterable[Any]]],
@@ -422,7 +424,9 @@ class P2P:
                 in_value = requests
             else:
                 try:
-                    in_value = await requests.__aiter__().__anext__()
+                    # `requests` is expected to contain a single value
+                    async for in_value in requests:
+                        pass
                 except StopAsyncIteration:
                     raise ValueError('No requests provided for the unary handler')
 
@@ -459,7 +463,10 @@ class P2P:
 
         async def _take_one_response() -> Awaitable[out_proto_type]:
             try:
-                return await responses.__aiter__().__anext__()
+                # `responses` is expected to contain a single value
+                async for out_value in responses:
+                    pass
+                return out_value
             except StopAsyncIteration:
                 raise ValueError('No responses received from the unary handler')
 
