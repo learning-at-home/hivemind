@@ -5,7 +5,7 @@ from contextlib import closing, suppress
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
-from typing import Any, AsyncIterable, Callable, List, Optional, Sequence, Tuple, Union
+from typing import Any, AsyncIterable, Awaitable, Callable, List, Optional, Sequence, Tuple, Union
 
 from multiaddr import Multiaddr
 
@@ -13,7 +13,7 @@ import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto import p2pd_pb2
-from hivemind.utils.asyncio import aiter
+from hivemind.utils.asyncio import aiter, anext
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -300,7 +300,7 @@ class P2P:
         if self._listen_task is None:
             self._start_listening()
 
-        async def handle_generator_stream(
+        async def _handle_generator_stream(
                 stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
             context = P2PContext(
                 handle_name=name,
@@ -310,16 +310,16 @@ class P2P:
             )
             requests = asyncio.Queue(max_prefetch)
 
-            async def read_stream() -> AsyncIterable[in_proto_type]:
+            async def _read_stream() -> AsyncIterable[in_proto_type]:
                 while True:
                     request = await requests.get()
                     if request is None:
                         break
                     yield request
 
-            async def process_stream() -> None:
+            async def _process_stream() -> None:
                 try:
-                    async for response in handler(read_stream(), context):
+                    async for response in handler(_read_stream(), context):
                         await P2P.send_protobuf(response, writer)
                         # TODO: Does cancellation in `await P2P.send_protobuf()` cancels `handler()` here?
                         # If not, cancel it explicitly.
@@ -327,7 +327,7 @@ class P2P:
                     await P2P.send_protobuf(p2pd_pb2.RPCError(message=str(e)), writer)
 
             with closing(writer):
-                processing_task = asyncio.create_task(process_stream())
+                processing_task = asyncio.create_task(_process_stream())
                 try:
                     while True:
                         try:
@@ -344,19 +344,19 @@ class P2P:
                     with suppress(asyncio.CancelledError):
                         await processing_task
 
-        await self._client.stream_handler(name, handle_generator_stream)
+        await self._client.stream_handler(name, _handle_generator_stream)
 
     async def call_generator_handler(
         self, peer_id: PeerID, name: str, requests: AsyncIterable[Any], out_proto_type: type
     ) -> AsyncIterable[Any]:
         _, reader, writer = await self._client.stream_open(peer_id, (name,))
 
-        async def write_to_stream() -> None:
+        async def _write_to_stream() -> None:
             async for request in requests:
                 await asyncio.shield(P2P.send_protobuf(request, writer))
 
         with closing(writer):
-            writing_task = asyncio.create_task(write_to_stream())
+            writing_task = asyncio.create_task(_write_to_stream())
             try:
                 while True:
                     try:
@@ -376,19 +376,63 @@ class P2P:
                     await writing_task
 
     async def add_unary_handler(
-        self, name: str, handler: Callable[[Any, P2PContext], Any], in_proto_type: type
+        self, name: str, handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterable[Any]]],
+        in_proto_type: type, *, stream_input: bool = False, stream_output: bool = False
     ) -> None:
-        async def generator_handler(requests: AsyncIterable[in_proto_type], context: P2PContext) -> AsyncIterable[Any]:
-            async for request in requests:
-                yield await handler(request, context)
+        """
+        :param stream_input: If True, expect ``handler`` to take an ``AsyncIterable[in_proto_type]`` as the input.
+                             If False, expect it to take one ``in_proto_type`` instance as the input.
+        :param stream_output: If True, expect ``handler`` to return an ``AsyncIterable[out_proto_type]``.
+                              If False, expect it to return an ``Awaitable[out_proto_type]``.
+        """
 
-        await self.add_generator_handler(name, generator_handler, in_proto_type)
+        async def _generator_handler(requests: AsyncIterable[in_proto_type], context: P2PContext) -> AsyncIterable[Any]:
+            if stream_input:
+                in_value = requests
+            else:
+                try:
+                    in_value = await requests.__aiter__().__anext__()
+                except StopAsyncIteration:
+                    raise ValueError('No requests provided for the unary handler')
 
-    async def call_unary_handler(
-        self, peer_id: PeerID, name: str, request_protobuf: Any, out_proto_type: type
-    ) -> Any:
-        async for response in self.call_generator_handler(peer_id, name, aiter(request_protobuf), out_proto_type):
-            return response
+            out_value = handler(in_value, context)
+
+            if stream_output:
+                async for item in out_value:
+                    yield item
+            else:
+                yield await out_value
+
+        await self.add_generator_handler(name, _generator_handler, in_proto_type)
+
+    def call_unary_handler(
+        self, peer_id: PeerID, name: str, in_value: Any, out_proto_type: type,
+        *, stream_input: bool = False, stream_output: bool = False
+    ) -> Union[Awaitable[Any], AsyncIterable[Any]]:
+        """
+        :param stream_input: If True, take an ``AsyncIterable[in_proto_type]`` as the input.
+                             If False, take one ``in_proto_type`` instance as the input.
+        :param stream_output: If True, return an ``AsyncIterable[out_proto_type]``.
+                              If False, return an ``Awaitable[out_proto_type]``.
+        """
+
+        if stream_input:
+            requests = in_value
+        else:
+            requests = aiter(in_value)
+
+        responses = self.call_generator_handler(peer_id, name, requests, out_proto_type)
+
+        if stream_output:
+            return responses
+
+        async def _take_one_response() -> Awaitable[out_proto_type]:
+            try:
+                return await responses.__aiter__().__anext__()
+            except StopAsyncIteration:
+                raise ValueError('No responses received from the unary handler')
+
+        return _take_one_response()
 
     def _start_listening(self) -> None:
         async def listen() -> None:
