@@ -331,16 +331,27 @@ class P2P:
                 processing_task = asyncio.create_task(_process_stream())
                 try:
                     while True:
-                        try:
-                            request, err = await P2P.receive_protobuf(in_proto_type, reader)
-                        except asyncio.IncompleteReadError:  # Connection is closed
-                            await requests.put(None)
+                        receive_task = asyncio.create_task(P2P.receive_protobuf(in_proto_type, reader))
+                        done, _ = await asyncio.wait({processing_task, receive_task},
+                                                     return_when=asyncio.FIRST_COMPLETED)
+
+                        if processing_task in done:
+                            receive_task.cancel()
+                            with suppress(asyncio.CancelledError):
+                                await receive_task
                             break
 
-                        if err is not None:  # Cancelled by caller
-                            processing_task.cancel()
-                            break
-                        await requests.put(request)
+                        if receive_task in done:
+                            try:
+                                request, err = await receive_task
+                            except asyncio.IncompleteReadError:  # Connection is closed
+                                await requests.put(None)
+                                break
+
+                            if err is not None:  # Cancelled by caller
+                                processing_task.cancel()
+                                break
+                            await requests.put(request)
                 except (Exception, asyncio.CancelledError) as e:
                     if isinstance(e, Exception):
                         logger.debug('Exception while receiving requests:', exc_info=True)
