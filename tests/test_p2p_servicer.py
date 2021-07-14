@@ -36,9 +36,6 @@ async def test_stream_unary(server_client):
         async def rpc_sum(self, request: AsyncIterable[test_pb2.TestRequest], _: P2PContext) -> test_pb2.TestResponse:
             result = 0
             async for item in request:
-                if item.number == -1:
-                    break
-
                 result += item.number
             return test_pb2.TestResponse(number=result)
 
@@ -50,7 +47,6 @@ async def test_stream_unary(server_client):
     async def generate_requests() -> AsyncIterable[test_pb2.TestRequest]:
         for i in range(10):
             yield test_pb2.TestRequest(number=i)
-        yield test_pb2.TestRequest(number=-1)
 
     assert await stub.rpc_sum(generate_requests()) == test_pb2.TestResponse(number=45)
 

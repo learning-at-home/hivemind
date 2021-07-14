@@ -51,6 +51,10 @@ class P2P:
     PB_HEADER_LEN = 1
     RESULT_MESSAGE = b"\x00"
     ERROR_MESSAGE = b"\x01"
+
+    _CONTROL_END_OF_STREAM = "EOS"
+    _CONTROL_CANCEL = "Cancel"
+
     DHT_MODE_MAPPING = {
         "dht": {"dht": 1},
         "dht_server": {"dhtServer": 1},
@@ -343,14 +347,19 @@ class P2P:
 
                         if receive_task in done:
                             try:
-                                request, err = await receive_task
+                                request, control = await receive_task
                             except asyncio.IncompleteReadError:  # Connection is closed
                                 await requests.put(None)
                                 break
 
-                            if err is not None:  # Cancelled by caller
-                                processing_task.cancel()
-                                break
+                            if control is not None:
+                                if control.message == P2P._CONTROL_END_OF_STREAM:
+                                    await requests.put(None)
+                                elif control.message == P2P._CONTROL_CANCEL:
+                                    processing_task.cancel()
+                                    break
+                                else:
+                                    raise ValueError(f'Unknown control message: {control.message}')
                             await requests.put(request)
                 except (Exception, asyncio.CancelledError) as e:
                     if isinstance(e, Exception):
@@ -371,6 +380,7 @@ class P2P:
         async def _write_to_stream() -> None:
             async for request in requests:
                 await asyncio.shield(P2P.send_protobuf(request, writer))
+            await P2P.send_protobuf(p2pd_pb2.RPCError(message=P2P._CONTROL_END_OF_STREAM), writer)
 
         with closing(writer):
             writing_task = asyncio.create_task(_write_to_stream())
@@ -394,7 +404,7 @@ class P2P:
                 with suppress(asyncio.CancelledError):
                     await writing_task
                 if notify_cancel:
-                    await P2P.send_protobuf(p2pd_pb2.RPCError(message='Cancelled by caller'), writer)
+                    await P2P.send_protobuf(p2pd_pb2.RPCError(message=P2P._CONTROL_CANCEL), writer)
 
     async def add_unary_handler(
         self, name: str, handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterable[Any]]],
