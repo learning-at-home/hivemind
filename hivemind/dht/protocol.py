@@ -43,7 +43,7 @@ class DHTProtocol(Servicer):
         wait_timeout: float,
         parallel_rpc: Optional[int] = None,
         cache_size: Optional[int] = None,
-        listen=True,
+        client_mode: bool = False,
         record_validator: Optional[RecordValidatorBase] = None,
         authorizer: Optional[AuthorizerBase] = None,
     ) -> DHTProtocol:
@@ -66,15 +66,15 @@ class DHTProtocol(Servicer):
         self.storage, self.cache = DHTLocalStorage(), DHTLocalStorage(maxsize=cache_size)
         self.routing_table = RoutingTable(node_id, bucket_size, depth_modulo)
         self.rpc_semaphore = asyncio.Semaphore(parallel_rpc if parallel_rpc is not None else float("inf"))
-        self.listen = listen
+        self.client_mode = client_mode
         self.record_validator = record_validator
         self.authorizer = authorizer
 
-        if listen:
+        if not client_mode:
             await self.add_p2p_handlers(self.p2p, AuthRPCWrapper(self, AuthRole.SERVICER, self.authorizer))
 
             self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes())
-        else:  # client-only mode
+        else:
             # note: use empty node_info so peers won't add you to their routing tables
             self.node_info = dht_pb2.NodeInfo()
         return self
@@ -95,7 +95,7 @@ class DHTProtocol(Servicer):
         :param peer: peer ID to ping
         :param validate: if True, validates that node's peer_id is available
         :param strict: if strict=True, validation will raise exception on fail, otherwise it will only warn
-        :note: if DHTProtocol was created with listen=True, also request peer to add you to his routing table
+        :note: if DHTProtocol was created with client_mode=False, also request peer to add you to his routing table
 
         :return: node's DHTID, if peer responded and decided to send his node_id
         """
@@ -112,7 +112,7 @@ class DHTProtocol(Servicer):
 
         if responded and validate:
             try:
-                if self.listen and not response.available:
+                if not self.client_mode and not response.available:
                     raise ValidationError(
                         f"Peer {peer} can't access this node. " f"Probably, libp2p has failed to bypass the firewall"
                     )

@@ -67,8 +67,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param throughput: if specified, this value represents the network bandwidth available to averager.
           By default, the averager is assumed to have the average bandwidth of his group.
           If throughput == 0, averager will rely on its groupmates to do all the averaging.
-    :param listen: if True (default), this averager will accept incoming requests from other peers and perform allreduce
-            if False, the averager will register as a freeloader and attempt to fetch vectors from other averagers
+    :param client_mode: if False (default), this averager will accept incoming requests from other peers
+            if True, the averager will only join existing groups where at least one peer has client_mode=False
     :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
     :param announced_host: visible IP address the averager will announce for external connections from other peers.
           If None, the address will be chosen from p2p.get_visible_maddrs() (global IPv4 addresses are preferred)
@@ -119,7 +119,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         min_vector_size: int = 0,
         auxiliary: bool = False,
         allow_state_sharing: Optional[bool] = None,
-        listen: bool = True,
+        client_mode: bool = False,
         listen_on: Endpoint = "0.0.0.0:*",
         daemon: bool = True,
         announced_host: Optional[str] = None,
@@ -134,12 +134,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         if not is_power_of_two(target_group_size):
             logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert initial_group_bits is None or all(bit in "01" for bit in initial_group_bits)
-        assert listen or not auxiliary, "auxiliary peers must accept incoming connections"
+        assert not client_mode or not auxiliary, "auxiliary peers must accept incoming connections"
 
         super().__init__()
         self.dht = dht
-        self.listen, self.listen_on, self.kwargs = listen, listen_on, kwargs
-        if not self.listen:
+        self.client_mode, self.listen_on, self.kwargs = client_mode, listen_on, kwargs
+        if not self.client_mode:
             self.mode = AveragingMode.CLIENT
         elif auxiliary:
             self.mode = AveragingMode.AUX
@@ -181,10 +181,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
 
         self._allow_state_sharing = mp.Value(ctypes.c_bool, 0)
-        self.allow_state_sharing = (listen and not auxiliary) if allow_state_sharing is None else allow_state_sharing
+        if allow_state_sharing is None:
+            allow_state_sharing = not client_mode and not auxiliary
+        self.allow_state_sharing = allow_state_sharing
 
         self._averager_endpoint: Optional[Endpoint] = None
-        if not self.listen:
+        if self.client_mode:
             self._averager_endpoint = f"client::{uuid.uuid4()}"
 
         self.ready = mp.Event()  # whether the averager process has started (and ready for incoming requests)
@@ -221,16 +223,14 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     @allow_state_sharing.setter
     def allow_state_sharing(self, value: bool):
-        if value is True and not self.listen:
-            logger.warning(
-                "Cannot allow state sharing: averager in client mode (listen=False) cannot share its state."
-            )
+        if value is True and self.client_mode:
+            logger.warning("Cannot allow state sharing: averager in client mode cannot share its state.")
         else:
             self._allow_state_sharing.value = value
 
     @property
     def endpoint(self) -> Optional[Endpoint]:
-        if self.listen and self._averager_endpoint is None:
+        if self._averager_endpoint is None and not self.client_mode:
             assert self.port is not None, "Averager is not running yet"
             self._averager_endpoint = f"{self.announced_host}:{self.port}"
             logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
@@ -258,7 +258,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             async def _run():
                 grpc.aio.init_grpc_aio()
 
-                if self.listen:
+                if not self.client_mode:
                     self._server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
                     averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, self._server)
                     found_port = self._server.add_insecure_port(self.listen_on)
@@ -269,9 +269,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     logger.debug(f"The averager is running in client mode.")
 
                 self._matchmaking = Matchmaking(
-                    self.endpoint, self.schema_hash, self.dht, **self.matchmaking_kwargs, client_mode=not self.listen
+                    self.endpoint, self.schema_hash, self.dht, **self.matchmaking_kwargs, client_mode=self.client_mode
                 )
-                if self.listen:
+                if not self.client_mode:
                     asyncio.create_task(self._declare_for_download_periodically())
 
                 self._pending_group_assembled = asyncio.Event()
@@ -312,7 +312,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         remaining_tasks = set()
         for group in self._running_groups.values():
             remaining_tasks.update(group.finalize(cancel=True))
-        if self.listen:
+        if not self.client_mode:
             remaining_tasks.add(self._server.stop(timeout))
         await asyncio.gather(*remaining_tasks)
 

@@ -41,8 +41,18 @@ def log_visible_maddrs(visible_maddrs: List[Multiaddr], only_p2p: bool) -> None:
         unique_addrs = {addr["p2p"] for addr in visible_maddrs}
         initial_peers_str = " ".join(f"/p2p/{addr}" for addr in unique_addrs)
     else:
-        initial_peers_str = " ".join(str(addr) for addr in visible_maddrs)
+        available_ips = [addr['ip4'] for addr in visible_maddrs if 'ip4' in addr]
+        available_ips += [addr['ip6'] for addr in visible_maddrs if 'ip6' in addr]
+        if available_ips:
+            preferred_ip = choose_ip_address(available_ips)
+            selected_maddrs = [addr for addr in visible_maddrs
+                               if addr.get('ip4') == preferred_ip or addr.get('ip6') == preferred_ip]
+        else:
+            selected_maddrs = visible_maddrs
+        initial_peers_str = " ".join(str(addr) for addr in selected_maddrs)
+
     logger.info(
-        f"Running a DHT peer. To connect other peers to this one, use "
+        f"Running a DHT peer. To connect other peers to this one over the Internet, use "
         f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers_str}{TextStyle.RESET}"
     )
+    logger.info(f"Full list of visible multiaddresses: {' '.join(str(addr) for addr in visible_maddrs)}")

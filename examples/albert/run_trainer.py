@@ -93,6 +93,10 @@ def get_optimizer_and_scheduler(training_args, model):
 
 
 class CollaborativeCallback(transformers.TrainerCallback):
+    """
+    This callback monitors and reports collaborative training progress,
+    In case of a catastrophic failure, it can also revert training to a backup
+    """
     def __init__(
         self,
         dht: hivemind.DHT,
@@ -100,6 +104,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
         model: torch.nn.Module,
         local_public_key: bytes,
         statistics_expiration: float,
+        backup_every_steps: int
     ):
         super().__init__()
         self.model = model
@@ -107,11 +112,13 @@ class CollaborativeCallback(transformers.TrainerCallback):
         self.local_public_key = local_public_key
         self.statistics_expiration = statistics_expiration
         self.last_reported_collaboration_step = -1
-        self.previous_state = self.get_current_state()
         self.samples = 0
         self.steps = 0
         self.loss = 0
         self.total_samples_processed = 0
+        self.backup_every_steps = backup_every_steps
+        self.latest_backup = self.backup_state()
+
 
     def on_train_begin(
         self, args: TrainingArguments, state: transformers.TrainerState, control: transformers.TrainerControl, **kwargs
@@ -163,20 +170,22 @@ class CollaborativeCallback(transformers.TrainerCallback):
         return control
 
     @torch.no_grad()
-    def get_current_state(self) -> Dict[str, Any]:
-        return {"model": self.model.state_dict(), "opt": self.collaborative_optimizer.opt.state_dict()}
-
-    @torch.no_grad()
-    def load_from_state(self, state):
-        self.model.load_state_dict(state["model"])
-        self.collaborative_optimizer.opt.load_state_dict(state["opt"])
-
-    @torch.no_grad()
     def params_are_finite(self):
         for param in self.model.parameters():
             if not torch.all(torch.isfinite(param)):
                 return False
         return True
+
+    @torch.no_grad()
+    def backup_state(self) -> Any:
+        return pickle.dumps({'model': self.model.state_dict(),
+                             'training': self.collaborative_optimizer.opt.state_dict()})
+
+    @torch.no_grad()
+    def restore_from_backup(self, backup):
+        state = pickle.loads(backup)
+        self.model.load_state_dict(state['model'])
+        self.collaborative_optimizer.opt.load_state_dict(state['training'])
 
 
 class NoOpScheduler(LRSchedulerBase):
@@ -229,7 +238,7 @@ def main():
     dht = hivemind.DHT(
         start=True,
         initial_peers=collaboration_args.initial_peers,
-        listen=not collaboration_args.client_mode,
+        client_mode=collaboration_args.client_mode,
         record_validators=validators,
         use_ipfs=collaboration_args.use_ipfs,
         host_maddrs=collaboration_args.host_maddrs,
