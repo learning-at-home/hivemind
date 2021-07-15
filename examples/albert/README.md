@@ -28,7 +28,8 @@ Run the first DHT peer to welcome trainers and record training statistics (e.g.,
 
 ```
 $ python run_training_monitor.py --experiment_prefix my-albert-v1 --wandb_project Demo-run
-[2021/06/17 16:26:36.083][INFO][root.log_visible_maddrs:42] Running a DHT peer. To connect other peers to this one, use --initial_peers /ip4/8.8.8.8/tcp/1337/p2p/XXXX /ip4/8.8.8.8/udp/31337/quic/p2p/XXXX
+[2021/06/17 16:26:36.083][INFO][root.log_visible_maddrs:54] Running a DHT peer. To connect other peers to this one over the Internet, 
+use --initial_peers /ip4/193.106.95.184/tcp/43383/p2p/Qmc1D7KcWFgYBdrmpy5LcSbvs3RjmTLfAXxJ5ZrbJ9BX1c /ip4/193.106.95.184/udp/59380/quic/p2p/Qmc1D7KcWFgYBdrmpy5LcSbvs3RjmTLfAXxJ5ZrbJ9BX1c
 wandb: Currently logged in as: XXX (use `wandb login --relogin` to force relogin)
 wandb: Tracking run with wandb version 0.10.32
 wandb: Syncing run dry-mountain-2
