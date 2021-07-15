@@ -74,39 +74,31 @@ class ServicerBase:
 
     @staticmethod
     def _make_rpc_caller(handler: RPCHandler):
-        in_type = AsyncIterator[handler.request_type] if handler.stream_input else handler.request_type
+        input_type = AsyncIterator[handler.request_type] if handler.stream_input else handler.request_type
 
         # This method will be added to a new Stub type (a subclass of StubBase)
         if handler.stream_output:
 
             def caller(
-                self: StubBase, in_value: in_type, timeout: None = None
+                self: StubBase, input: input_type, timeout: None = None
             ) -> AsyncIterator[handler.response_type]:
                 if timeout is not None:
                     raise ValueError("Timeouts for handlers returning streams are not supported")
 
-                return self._p2p.call_protobuf_handler(
+                return self._p2p.iterate_protobuf_handler(
                     self._peer,
                     handler.handle_name,
-                    in_value,
+                    input,
                     handler.response_type,
-                    stream_input=handler.stream_input,
-                    stream_output=True,
                 )
 
         else:
 
             async def caller(
-                self: StubBase, in_value: in_type, timeout: Optional[float] = None
+                self: StubBase, input: input_type, timeout: Optional[float] = None
             ) -> handler.response_type:
                 return await asyncio.wait_for(
-                    self._p2p.call_protobuf_handler(
-                        self._peer,
-                        handler.handle_name,
-                        in_value,
-                        handler.response_type,
-                        stream_input=handler.stream_input,
-                    ),
+                    self._p2p.call_protobuf_handler(self._peer, handler.handle_name, input, handler.response_type),
                     timeout=timeout,
                 )
 
@@ -121,7 +113,6 @@ class ServicerBase:
                 getattr(servicer, handler.method_name),
                 handler.request_type,
                 stream_input=handler.stream_input,
-                stream_output=handler.stream_output,
             )
 
     def get_stub(self, p2p: P2P, peer: PeerID) -> StubBase:

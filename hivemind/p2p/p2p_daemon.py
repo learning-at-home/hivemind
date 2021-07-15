@@ -1,6 +1,7 @@
 import asyncio
 import os
 import secrets
+from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
 from importlib.resources import path
@@ -359,7 +360,7 @@ class P2P:
 
         await self._client.stream_handler(name, _handle_stream)
 
-    async def _call_protobuf_stream_handler(
+    async def _iterate_protobuf_stream_handler(
         self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: type
     ) -> TOutputStream:
         _, reader, writer = await self._client.stream_open(peer_id, (name,))
@@ -395,12 +396,10 @@ class P2P:
         input_protobuf_type: type,
         *,
         stream_input: bool = False,
-        stream_output: bool = False,
     ) -> None:
         """
         :param stream_input: If True, assume ``handler`` to take ``TInputStream``
                              (not just ``TInputProtobuf``) as input.
-        :param stream_output: If True, assume ``handler`` to return ``TOutputStream`` (not just ``TOutputProtobuf``).
         """
 
         async def _stream_handler(requests: P2P.TInputStream, context: P2PContext) -> P2P.TOutputStream:
@@ -415,7 +414,7 @@ class P2P:
 
             output = handler(input, context)
 
-            if stream_output:
+            if isinstance(output, AsyncIterableABC):
                 async for item in output:
                     yield item
             else:
@@ -423,40 +422,32 @@ class P2P:
 
         await self._add_protobuf_stream_handler(name, _stream_handler, input_protobuf_type)
 
-    def call_protobuf_handler(
+    async def call_protobuf_handler(
         self,
         peer_id: PeerID,
         name: str,
         input: Union[TInputProtobuf, TInputStream],
         output_protobuf_type: type,
-        *,
-        stream_input: bool = False,
-        stream_output: bool = False,
-    ) -> Union[Awaitable[TOutputProtobuf], TOutputStream]:
-        """
-        :param stream_input: If True, assume ``input`` to be ``TInputStream`` (not just ``TInputProtobuf``).
-        :param stream_output: If True, return ``TOutputStream`` (not just ``TOutputProtobuf``).
-        """
+    ) -> Awaitable[TOutputProtobuf]:
+        requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
+        responses = self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
 
-        if stream_input:
-            requests = input
-        else:
-            requests = aiter(input)
+        count = 0
+        async for response in responses:
+            count += 1
+        if count != 1:
+            raise ValueError(f"Got {count} responses from handler {name} instead of one")
+        return response
 
-        responses = self._call_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
-
-        if stream_output:
-            return responses
-
-        async def _take_one_response() -> Awaitable[P2P.TOutputProtobuf]:
-            count = 0
-            async for response in responses:
-                count += 1
-            if count != 1:
-                raise ValueError(f"Got {count} responses from handler {name} instead of one")
-            return response
-
-        return _take_one_response()
+    def iterate_protobuf_handler(
+        self,
+        peer_id: PeerID,
+        name: str,
+        input: Union[TInputProtobuf, TInputStream],
+        output_protobuf_type: type,
+    ) -> TOutputStream:
+        requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
+        return self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
 
     def _start_listening(self) -> None:
         async def listen() -> None:
