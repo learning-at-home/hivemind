@@ -1,12 +1,14 @@
 ## Hivemind: decentralized deep learning in PyTorch
 
-[![CI status](https://github.com/learning-at-home/hivemind/actions/workflows/run-tests.yml/badge.svg?branch=master)](https://github.com/learning-at-home/hivemind/actions)
 [![Documentation Status](https://readthedocs.org/projects/learning-at-home/badge/?version=latest)](https://learning-at-home.readthedocs.io/en/latest/?badge=latest)
+[![PyPI version](https://img.shields.io/pypi/v/hivemind.svg)](https://pypi.org/project/hivemind/)
 [![Gitter](https://badges.gitter.im/learning-at-home/hivemind.svg)](https://gitter.im/learning-at-home/hivemind?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![CI status](https://github.com/learning-at-home/hivemind/actions/workflows/run-tests.yml/badge.svg?branch=master)](https://github.com/learning-at-home/hivemind/actions)
+![Codecov](https://img.shields.io/codecov/c/github/learning-at-home/hivemind)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-Hivemind is a PyTorch library to train large neural networks across the Internet. Its intended usage is training a
-single Transformer model on hundreds of computers from different universities, companies, and volunteers.
+Hivemind is a PyTorch library for decentralized deep learning across the Internet. Its intended usage is training one
+large model on hundreds of computers from different universities, companies, and volunteers.
 
 ![img](https://i.imgur.com/GPxolxb.gif)
 
@@ -16,8 +18,10 @@ single Transformer model on hundreds of computers from different universities, c
   network.
 * Fault-tolerant backpropagation: forward and backward passes succeed even if some nodes are unresponsive or take too
   long to respond.
-* Decentralized parameter averaging: iteratively aggregate updates from multiple workers without the need to
-  synchronize across the entire network.
+* [Decentralized parameter averaging](https://arxiv.org/abs/2103.03239): iteratively aggregate updates from multiple
+  workers without the need to synchronize across the entire network.
+* Train neural networks of arbitrary size: parts of their layers are distributed across the participants with
+  [Decentralized Mixture-of-Experts](https://arxiv.org/abs/2002.04013).
 
 To learn more about the ideas behind this library, see https://learning-at-home.github.io or read
 the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).
@@ -27,11 +31,12 @@ the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).
 Before installing hivemind, make sure that your environment has Python 3.7+
 and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) with a version at least as new as 1.6.0.
 
-To start using this library, you can either use the pip package manager or build it from source. Since currently the
-release cycle is not established yet, we recommend installing hivemind from source to keep up with the latest bugfixes
-and improvements.
+To start using this library, you can either install [the latest release](https://pypi.org/project/hivemind/) with pip
+or build it from source.
 
-Note: for now, hivemind can be run on Windows only using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10). If you want to configure WSL to work with the GPU, use the [official guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by Nvidia.
+Note: for now, hivemind can be run on Windows only using
+[WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10). If you want to configure WSL to work with the GPU,
+use the [official guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA.
 
 ### With pip
 
@@ -43,7 +48,7 @@ pip install hivemind
 
 ### From source
 
-To install hivemind from source, simply clone the repository and install
+To install hivemind from source, simply run the following:
 
 ```
 git clone https://github.com/learning-at-home/hivemind.git
@@ -54,8 +59,11 @@ pip install .
 If you would like to verify that your installation is working properly, you can install with `pip install -e .[dev]`
 instead. Then, you can run the tests with `pytest tests/`.
 
-By default, hivemind uses the precompiled binary file of the [go-libp2p-daemon](https://github.com/learning-at-home/go-libp2p-daemon) library.
-If this is unacceptable for you for any reason, or your system is not supported by it, you can run `pip install  . --global-option="--buildgo"` to build it from  source during installation. Ensure that your machine has a recent version of [Golang](https://golang.org/doc/install) (1.15 or higher).
+By default, hivemind uses the precompiled binary of
+the [go-libp2p-daemon](https://github.com/learning-at-home/go-libp2p-daemon) library. If you face compatibility issues
+or want to build the binary yourself, you can recompile it by running `pip install . --global-option="--buildgo"`.
+Before running the compilation, please ensure that your machine has a recent version
+of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 
 ## Documentation
 
@@ -92,7 +100,8 @@ If you found hivemind or its underlying algorithms useful for your experiments, 
 }
 ```
 
-Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired the creation of this library:
+Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired the creation of this library
+(prototype implementation of hivemind available at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```
 @inproceedings{ryabinin2020crowdsourced,
@@ -108,8 +117,49 @@ Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired t
 }
 ```
 
-The initial implementation of hivemind used for the paper is available
-at [mryab/learning-at-home](https://github.com/mryab/learning-at-home).
+<details>
+ <summary>Additional publications</summary>
+
+["Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices"](https://arxiv.org/abs/2103.03239)
+
+```
+@misc{ryabinin2021moshpit,
+      title={Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices}, 
+      author={Max Ryabinin and Eduard Gorbunov and Vsevolod Plokhotnyuk and Gennady Pekhimenko},
+      year={2021},
+      eprint={2103.03239},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
+
+["Distributed Deep Learning in Open Collaborations"](https://arxiv.org/abs/2106.10207)
+
+```
+@misc{diskin2021distributed,
+      title={Distributed Deep Learning in Open Collaborations}, 
+      author={Michael Diskin and Alexey Bukhtiyarov and Max Ryabinin and Lucile Saulnier and Quentin Lhoest and Anton Sinitsin and Dmitry Popov and Dmitry Pyrkin and Maxim Kashirin and Alexander Borzunov and Albert Villanova del Moral and Denis Mazur and Ilia Kobelev and Yacine Jernite and Thomas Wolf and Gennady Pekhimenko},
+      year={2021},
+      eprint={2106.10207},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
+
+["Secure Distributed Training at Scale"](https://arxiv.org/abs/2106.11257)
+
+```
+@misc{gorbunov2021secure,
+      title={Secure Distributed Training at Scale}, 
+      author={Eduard Gorbunov and Alexander Borzunov and Michael Diskin and Max Ryabinin},
+      year={2021},
+      eprint={2106.11257},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
+
+</details>
 
 In the documentation, we list
 several [related](https://learning-at-home.readthedocs.io/en/latest/user/acknowledgements.html) projects and
