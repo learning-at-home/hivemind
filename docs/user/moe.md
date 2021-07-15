@@ -128,7 +128,7 @@ expert1, expert4 = hivemind.moe.get_experts(dht, ["expert.1", "expert.4"])
 assert expert1 is not None and expert4 is not None, "experts not found. Please double-check initial peers"
 ```
 
-The experts (e.g. `expert1`) can be used as a pytorch module with autograd support:
+Each expert (e.g. `expert1`) can be used as a pytorch module with autograd support:
 
 ```python
 dummy = torch.randn(3, 512)
