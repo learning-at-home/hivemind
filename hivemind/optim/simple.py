@@ -85,6 +85,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
             self.local_step += 1
             if self.local_step % self.averaging_step_period == 0:
                 self.update_event.set()
+            self.averager.pending_updates_done.wait()
             return loss
         finally:
             if not self.lock_parameters.locked():
