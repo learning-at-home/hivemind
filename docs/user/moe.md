@@ -106,7 +106,7 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_patt
 
 By default, the server will only accept connections from your local machine. To access it globally, you should replace
 `127.0.0.1` part from initial peers with server's IP address. Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
-as [gRPC](https://grpc.io/docs/languages/python/basics/#starting-the-server).
+as [libp2p](https://docs.libp2p.io/concepts/addressing/).
 
 ## Train the experts
 
@@ -165,10 +165,9 @@ for i in range(100):
 Finally, you can create a Mixture-of-Experts layer over these experts:
 
 ```python
-import nest_asyncio
+import nest_asyncio; nest_asyncio.apply()  # asyncio patch for jupyter. for now, we recommend using MoE from console
 
-nest_asyncio.apply()  # asyncio patch for jupyter. for now, we recommend using MoE from console
-dmoe = hivemind.RemoteMixtureOfExperts(in_features=512, uid_prefix="expert", grid_size=(5,),
+dmoe = hivemind.RemoteMixtureOfExperts(in_features=512, uid_prefix="expert.", grid_size=(5,),
                                        dht=dht, k_best=2)
 
 out = dmoe(torch.randn(3, 512))
