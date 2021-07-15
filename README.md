@@ -20,7 +20,7 @@ large model on hundreds of computers from different universities, companies, and
   long to respond.
 * [Decentralized parameter averaging](https://arxiv.org/abs/2103.03239): iteratively aggregate updates from multiple
   workers without the need to synchronize across the entire network.
-* Train neural networks of arbitrary size: parts of their layers are distributed across the participants with
+* Train neural networks of arbitrary size: parts of their layers are distributed across the participants with the
   [Decentralized Mixture-of-Experts](https://arxiv.org/abs/2002.04013).
 
 To learn more about the ideas behind this library, see https://learning-at-home.github.io or read
@@ -176,4 +176,3 @@ Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired t
 
 We also maintain a list of [related projects and
 acknowledgements](https://learning-at-home.readthedocs.io/en/latest/user/acknowledgements.html).
-
