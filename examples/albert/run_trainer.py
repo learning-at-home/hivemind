@@ -19,6 +19,8 @@ from transformers.trainer import Trainer
 from transformers.trainer_utils import is_main_process
 
 import hivemind
+from hivemind.utils.compression import CompressionType
+
 import utils
 from arguments import CollaborationArguments, DatasetArguments, AlbertTrainingArguments, AveragerArguments
 
@@ -260,7 +262,7 @@ def main():
         dht=dht,
         scheduler=scheduler,
         prefix=collaboration_args.experiment_prefix,
-        compression_type=hivemind.utils.CompressionType.Value(collaboration_args.compression),
+        compression_type=CompressionType.Value(collaboration_args.compression),
         batch_size_per_step=total_batch_size_per_step,
         bandwidth=collaboration_args.bandwidth,
         target_batch_size=adjusted_target_batch_size,
