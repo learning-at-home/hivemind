@@ -29,7 +29,7 @@ the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).
 ## Installation
 
 Before installing hivemind, make sure that your environment has Python 3.7+
-and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) with a version at least as new as 1.6.0.
+and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.6.0 or newer.
 
 To start using this library, you can either install [the latest release](https://pypi.org/project/hivemind/) with pip
 or build it from source.
