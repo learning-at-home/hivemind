@@ -46,7 +46,7 @@ DHT nodes always prefer values with higher expiration time and may delete any va
 Hivemind DHT also supports a special value type that is itself a dictionary. When nodes store such a value,
 they add sub-keys to the dictionary instead of overwriting it.
 
-Consider an example where three DHT nodes want to find out who going to attend the party:
+Consider an example where three DHT nodes want to find out who is going to attend the party:
 
 ```python
 alice_dht = DHT(initial_peers=dht.get_visible_maddrs(), start=True)
