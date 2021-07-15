@@ -89,6 +89,7 @@ As you can see, this code is regular pytorch with one notable exception: it wrap
 the code (please do so), you will see the following print:
 
 ```shell
+To join training, use initial_peers = ['/ip4/127.0.0.1/tcp/XXX/p2p/YYY']
 [...] Starting a new averaging round with current parameters.
 ```
 
@@ -102,7 +103,7 @@ Copy the entire script (or notebook) and modify this line:
 dht = hivemind.DHT(start=True)
 
 # new version: added initial_peers
-dht = hivemind.DHT(initial_peers=[SEE_FIRST_PEER_OUTPUTS], start=True)
+dht = hivemind.DHT(initial_peers=['/ip4/127.0.0.1/tcp/COPY_THIS_FROM_PEER1_OUTPUTS'], start=True)
 ```
 <details style="margin-top:-16px; margin-bottom: 16px;">
   <summary>Here's the full code of the second peer</summary>
