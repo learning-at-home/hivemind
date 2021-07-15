@@ -65,7 +65,6 @@ print(attendees)
 # {'alice': ValueWithExpiration(value='yes', expiration_time=1625504352.2668974),
 #  'bob': ValueWithExpiration(value='yes', expiration_time=1625504352.2884178),
 #  'carol': ValueWithExpiration(value='no', expiration_time=1625504352.3046832)}
-
 ```
 
 When training over the internet, some `dht.get/store` requests may run for hundreds of milliseconds and even seconds.
@@ -75,4 +74,64 @@ To minimize wait time, you can call these requests asynchronously via
 Please also note that the returned future is compatible with asyncio (i.e. can be awaited inside event loop).
 
 For a more details on DHT store/get and expiration time, please refer to the [documentation for DHT and DHTNode](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#dht-and-dhtnode)
+
+
+### Running across the Internet
+
+By default, DHT nodes are only accessible from your localhost. In order to run with multiple geographically
+distributed computers, one must connect DHT to a global network. Currently, there are two ways achieve this.
+
+The recommended approach is to grow the network from one or several initial peers. These can be any computers with a
+public IP address that are always online. Each of these peers should simply create `hivemind.DHT` and set it to
+accept incoming connections from the internet:
+
+```python
+import hivemind
+dht = hivemind.DHT(
+    host_maddrs=["/ip4/0.0.0.0/tcp/0", "/ip4/0.0.0.0/udp/0/quic"],
+    start=True)
+
+print('\n'.join(str(addr) for addr in dht.get_visible_maddrs()))
+print("Global IP:", hivemind.utils.networking.choose_ip_address(dht.get_visible_maddrs()))
+```
+
+Running this code will print several, typically, 4 or 6 strings of the following form (example):
+```shell
+/ip4/185.185.123.124/tcp/40615/p2p/QmaVTB2LwayToK2rzMkaCbkCaH7nF2rTHIS0IS0AN0EXAMPLE
+/ip4/127.0.0.1/tcp/40615/p2p/QmaVTB2LwayToK2rzMkaCbkCaH7nF2rTHIS0IS0AN0EXAMPLE
+/ip4/185.185.123.124/udp/40346/quic/p2p/QmaVTB2LwayToK2rzMkaCbkCaH7nF2rTHIS0IS0AN0EXAMPLE
+/ip4/127.0.0.1/udp/40346/quic/p2p/QmaVTB2LwayToK2rzMkaCbkCaH7nF2rTHIS0IS0AN0EXAMPLE
+Global IP: 185.185.123.124
+```
+The lines that contain addresses that other nodes can use to connect to the network:
+- `127.0.0.1` or `192.168.X.Y` are only accessible from your computer or local network, respectively.
+- The remaining address is __global__ (`185.185.123.124` in the example, yours will be different).
+
+To connect a new peer to the network, you should specify `initial_peers` as the addresses that 
+correspond to the public IP:
+
+```python
+import hivemind
+dht = hivemind.DHT(
+    host_maddrs=["/ip4/0.0.0.0/tcp/0", "/ip4/0.0.0.0/udp/0/quic"],
+    initial_peers=[
+        "/ip4/185.185.123.124/tcp/40615/p2p/QmaVTB2LwayToK2rzMkaCbkCaH7nF2rTHIS0IS0AN0EXAMPLE",
+        "/ip4/185.185.123.124/udp/40346/quic/p2p/QmaVTB2LwayToK2rzMkaCbkCaH7nF2rTHIS0IS0AN0EXAMPLE",
+    ], start=True)
+```
+
+Thats it, now the two DHT nodes are connected. If you connect additional peers to the network, you only need to specify
+one (or a subset) of peers as `initial_peers`.
+In case your peer operates behind a restrictive firewall, you may find it beneficial to set `client_mode=True`. In this
+ case, the DHT instance will access others, but it will not announce that other peers can connect to it.
+
+Another (experimental) way is to use [IPFS](https://ipfs.io/): a global decentralized network for file storage.
+We are not storing any files here: instead, we can use IPFS nodes to help hivemind peers find each other.
+To use this strategy, set `use_ipfs=True` in each DHT node you create. This allows you to connect DHT multiple even if
+all of them are behind NAT. However, this strategy may be unreliable and depend heavily on the availability of public
+IPFS nodes.
+
+To learn more about the network address format, read [libp2p addressing](https://docs.libp2p.io/concepts/addressing/)
+For an example of how to set up DHT in a distributed training experiment, see
+ [examples/albert](https://github.com/learning-at-home/hivemind/tree/master/examples/albert)
 
