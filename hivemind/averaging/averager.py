@@ -119,8 +119,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         assert initial_group_bits is None or all(bit in "01" for bit in initial_group_bits)
         assert not client_mode or not auxiliary, "auxiliary peers must accept incoming connections"
 
-        mp.Process.__init__(self)
-        ServicerBase.__init__(self)
+        super().__init__()
         self.dht = dht
         self.client_mode = client_mode
         self._parent_pid = os.getpid()
