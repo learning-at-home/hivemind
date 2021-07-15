@@ -39,10 +39,10 @@ class P2P:
     use the public IPFS network (https://ipfs.io).
 
     For incoming connections, P2P instances add RPC handlers that may be accessed by other peers:
-      - `P2P.add_unary_handler` accepts a protobuf message and returns another protobuf
-      - `P2P.add_stream_handler` transfers raw data using bi-directional streaming interface
+      - `P2P.add_protobuf_handler` accepts a protobuf message and returns another protobuf
+      - `P2P.add_binary_stream_handler` transfers raw data using bi-directional streaming interface
 
-    To access these handlers, a P2P instance can `P2P.call_unary_handler`/`P2P.call_stream_handler`,
+    To access these handlers, a P2P instance can `P2P.call_protobuf_handler`/`P2P.call_binary_stream_handler`,
     using the recipient's unique `P2P.id` and the name of the corresponding handler.
     """
 
@@ -285,7 +285,7 @@ class P2P:
         else:
             raise TypeError("Invalid Protobuf message type")
 
-    async def _add_generator_handler(
+    async def _add_protobuf_stream_handler(
         self,
         name: str,
         handler: Callable[[AsyncIterator[Any], P2PContext], AsyncIterator[Any]],
@@ -303,7 +303,7 @@ class P2P:
         if self._listen_task is None:
             self._start_listening()
 
-        async def _handle_generator_stream(
+        async def _handle_stream(
             stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         ) -> None:
             context = P2PContext(
@@ -351,9 +351,9 @@ class P2P:
                 finally:
                     processing_task.cancel()
 
-        await self._client.stream_handler(name, _handle_generator_stream)
+        await self._client.stream_handler(name, _handle_stream)
 
-    async def _call_generator_handler(
+    async def _call_protobuf_stream_handler(
         self, peer_id: PeerID, name: str, requests: AsyncIterator[Any], out_proto_type: type
     ) -> AsyncIterator[Any]:
         _, reader, writer = await self._client.stream_open(peer_id, (name,))
@@ -380,7 +380,7 @@ class P2P:
             finally:
                 writing_task.cancel()
 
-    async def add_unary_handler(
+    async def add_protobuf_handler(
         self,
         name: str,
         handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterator[Any]]],
@@ -396,9 +396,7 @@ class P2P:
                               If False, expect it to return an ``Awaitable[out_proto_type]``.
         """
 
-        async def _generator_handler(
-            requests: AsyncIterator[in_proto_type], context: P2PContext
-        ) -> AsyncIterator[Any]:
+        async def _stream_handler(requests: AsyncIterator[in_proto_type], context: P2PContext) -> AsyncIterator[Any]:
             if stream_input:
                 input = requests
             else:
@@ -416,9 +414,9 @@ class P2P:
             else:
                 yield await output
 
-        await self._add_generator_handler(name, _generator_handler, in_proto_type)
+        await self._add_protobuf_stream_handler(name, _stream_handler, in_proto_type)
 
-    def call_unary_handler(
+    def call_protobuf_handler(
         self,
         peer_id: PeerID,
         name: str,
@@ -440,7 +438,7 @@ class P2P:
         else:
             requests = aiter(input)
 
-        responses = self._call_generator_handler(peer_id, name, requests, out_proto_type)
+        responses = self._call_protobuf_stream_handler(peer_id, name, requests, out_proto_type)
 
         if stream_output:
             return responses
@@ -472,12 +470,12 @@ class P2P:
                 self._listen_task = None
                 self._server_stopped.clear()
 
-    async def add_stream_handler(self, name: str, handler: p2pclient.StreamHandler) -> None:
+    async def add_binary_stream_handler(self, name: str, handler: p2pclient.StreamHandler) -> None:
         if self._listen_task is None:
             self._start_listening()
         await self._client.stream_handler(name, handler)
 
-    async def call_stream_handler(
+    async def call_binary_stream_handler(
         self, peer_id: PeerID, handler_name: str
     ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
         return await self._client.stream_open(peer_id, (handler_name,))

@@ -85,7 +85,7 @@ class ServicerBase:
                 if timeout is not None:
                     raise ValueError("Timeouts for handlers returning streams are not supported")
 
-                return self._p2p.call_unary_handler(
+                return self._p2p.call_protobuf_handler(
                     self._peer,
                     handler.handle_name,
                     in_value,
@@ -100,7 +100,7 @@ class ServicerBase:
                 self: StubBase, in_value: in_type, timeout: Optional[float] = None
             ) -> handler.response_type:
                 return await asyncio.wait_for(
-                    self._p2p.call_unary_handler(
+                    self._p2p.call_protobuf_handler(
                         self._peer,
                         handler.handle_name,
                         in_value,
@@ -116,7 +116,7 @@ class ServicerBase:
     async def add_p2p_handlers(self, p2p: P2P, wrapper: Any = None) -> None:
         servicer = self if wrapper is None else wrapper
         for handler in self._rpc_handlers:
-            await p2p.add_unary_handler(
+            await p2p.add_protobuf_handler(
                 handler.handle_name,
                 getattr(servicer, handler.method_name),
                 handler.request_type,
