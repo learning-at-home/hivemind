@@ -225,7 +225,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     @allow_state_sharing.setter
     def allow_state_sharing(self, value: bool):
         if value is True and self.client_mode:
-            logger.warning("Cannot allow state sharing: averager in client mode cannot share its state.")
+            raise ValueError("Cannot allow state sharing: averager in client mode cannot share its state.")
         else:
             self._allow_state_sharing.value = value
 
