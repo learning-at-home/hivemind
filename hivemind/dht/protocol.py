@@ -7,7 +7,7 @@ from typing import Optional, List, Tuple, Dict, Sequence, Union, Collection
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
 from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
-from hivemind.p2p import P2P, P2PContext, PeerID, Servicer
+from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase
 from hivemind.proto import dht_pb2
 from hivemind.utils import get_logger, MSGPackSerializer
 from hivemind.utils.auth import AuthRole, AuthRPCWrapper, AuthorizerBase
@@ -21,7 +21,7 @@ from hivemind.utils.timed_storage import (
 logger = get_logger(__name__)
 
 
-class DHTProtocol(Servicer):
+class DHTProtocol(ServicerBase):
     # fmt:off
     p2p: P2P
     node_id: DHTID; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
