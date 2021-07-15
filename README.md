@@ -68,7 +68,7 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
   To ensure full compatibility, we recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
 - __Windows 10+ (experimental)__ hivemind can be run using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10).
   You can configure WSL to use GPU following [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA.
-  After CUDA toolkit is you should install hivemind with pip or build it from source using the instructions above.
+  After CUDA toolkit is installed you should simply follow the instructions above to install with pip or from source.
 
 ## Documentation
 
