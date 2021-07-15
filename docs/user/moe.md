@@ -54,7 +54,7 @@ architecture [here](https://github.com/learning-at-home/hivemind/blob/master/hiv
 ```
 
 
-You can create additional servers in the same decentralized network using `--initial_peers` argument:
+You can create additional servers in the same decentralized network using the `--initial_peers` argument:
 
 ```sh
 hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_pattern "expert.[5:250]" \
@@ -107,7 +107,7 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_patt
 By default, the server will only accept connections from your local machine. To access it globally, you should replace
 `127.0.0.1` part from initial peers with server's IP address. Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
 as [libp2p](https://docs.libp2p.io/concepts/addressing/). You can find more details on multiaddresses in the 
-[DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html)ю 
+[DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html).
 
 ## Train the experts
 
@@ -121,14 +121,14 @@ dht = hivemind.DHT(
     initial_peers=["/ip4/127.0.0.1/tcp/TODO/COPYFULL_ADDRESS/FROM_ONE_OF_THE_SERVERS"],
     client_mode=True, start=True)
 
-# note: listen=False means that your peer will operate in "client only" mode: 
+# note: client_mode=True means that your peer will operate in a "client-only" mode: 
 # this means that it can request other peers, but will not accept requests in return 
 
 expert1, expert4 = hivemind.moe.get_experts(dht, ["expert.1", "expert.4"])
 assert expert1 is not None and expert4 is not None, "experts not found. Please double-check initial peers"
 ```
 
-The experts (e.g. `expert1`) can be used as a pytorch module with autograd support:
+Each expert (e.g. `expert1`) can be used as a pytorch module with autograd support:
 
 ```python
 dummy = torch.randn(3, 512)
@@ -136,7 +136,7 @@ out = expert1(dummy)  # forward pass
 out.sum().backward()  # backward pass
 ```
 
-When called, expert1 will submit a request to the corresponding server (which you created above) and return the output
+When called, `expert1` will submit a request to the corresponding server (which you created above) and return the output
 tensor(s) or raise an exception. During backward, pytorch will submit the backward requests for the experts as they
 appear in the computation graph.
 
@@ -182,4 +182,3 @@ implements `hivemind.RemoteSwitchMixtureOfExperts` using the simplified routing 
 
 For more code examples related to DMoE, such as defining custom experts or using switch-based routing, please refer to
 [`hivemind/tests/test_training.py`](https://github.com/learning-at-home/hivemind/blob/master/tests/test_training.py).
-

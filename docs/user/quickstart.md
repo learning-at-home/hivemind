@@ -24,13 +24,13 @@ You can also install it in the editable mode with `pip install -e .`.
 ## Decentralized Training
 
 Hivemind is a set of building blocks for decentralized training.
-In this tutorial, we use two of these blocks to train a simple neural network to classify CIFAR10 images.
-We assume that you are already familiar with the official [CIFAR10 example](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html)
-from pytorch website.
+In this tutorial, we'll use two of these blocks to train a simple neural network to classify CIFAR-10 images.
+We assume that you are already familiar with the official [CIFAR-10 example](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html)
+from the PyTorch website.
 
 We build on top of the official example to spin up distributed training of a two-layer neural network by averaging weights.
-For simplicity, this tutorial will use two non-GPU peers running on the same machine. If you survive get to end of this
-tutorial, we'll give you an example of actual distributed training of transformers ;)
+For simplicity, this tutorial will use two non-GPU peers running on the same machine. If you get to the end of this
+tutorial, we'll give you an example of actual distributed training of Transformers ;)
 
 For now, let's run our first training peer:
 ```python
@@ -84,9 +84,9 @@ with tqdm() as progressbar:
 ```
 
 
-As you can see, this code is regular pytorch with one notable exception: it wraps your normal pytorch optimizer with a
+As you can see, this code is regular PyTorch with one notable exception: it wraps your regular optimizer with a
 `DecentralizedOptimizer`. This optimizer uses `DHT` to find other peers and tries to exchange weights them. When you run
-the code (please do so), you will see the following print:
+the code (please do so), you will see the following output:
 
 ```shell
 To join the training, use initial_peers = ['/ip4/127.0.0.1/tcp/XXX/p2p/YYY']
@@ -192,4 +192,3 @@ If you want to learn more about each individual component,
   [(Li et al. 2020)](https://arxiv.org/abs/2005.00124) and [(Ryabinin et al. 2021)](https://arxiv.org/abs/2103.03239).
 - Read about setting up Mixture-of-Experts training in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
  
-
