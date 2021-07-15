@@ -188,7 +188,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     @property
     def endpoint(self) -> Endpoint:
-        return self.p2p.id
+        return self._p2p.id
 
     def run(self):
         """
@@ -207,14 +207,14 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
 
             async def _run():
-                self.p2p = await self.dht.replicate_p2p()
+                self._p2p = await self.dht.replicate_p2p()
                 if not self.client_mode:
-                    await self.add_p2p_handlers(self.p2p)
+                    await self.add_p2p_handlers(self._p2p)
                 else:
                     logger.debug(f"The averager is running in client mode.")
 
                 self._matchmaking = Matchmaking(
-                    self.endpoint, self.schema_hash, self.dht, **self.matchmaking_kwargs, client_mode=self.client_mode
+                    self._p2p, self.schema_hash, self.dht, **self.matchmaking_kwargs, client_mode=self.client_mode
                 )
                 if not self.client_mode:
                     asyncio.create_task(self._declare_for_download_periodically())
@@ -379,9 +379,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
             async with self.get_tensors_async() as local_tensors:
                 allreduce = AllReduceRunner(
+                    p2p=self._p2p,
                     group_id=group_info.group_id,
                     tensors=local_tensors,
-                    endpoint=self.endpoint,
                     ordered_group_endpoints=group_info.endpoints,
                     peer_fractions=peer_fractions,
                     weights=weights,
@@ -551,7 +551,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 if peer != self.endpoint:
                     logger.info(f"Downloading parameters from peer {peer}")
                     try:
-                        stub = self.get_stub(self.p2p, peer)
+                        stub = self.get_stub(self._p2p, peer)
                         stream = stub.rpc_download_state(averaging_pb2.DownloadRequest())
                         current_tensor_parts, tensors = [], []
                         async for message in stream:

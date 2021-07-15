@@ -75,8 +75,10 @@ class ServicerBase:
 
                 spec = inspect.getfullargspec(method)
                 if len(spec.args) < 3:
-                    raise ValueError(f"{handle_name} is expected to at least three positional arguments "
-                                     f"(self: TServicer, request: TInputProtobuf, context: hivemind.p2p.P2PContext)")
+                    raise ValueError(
+                        f"{handle_name} is expected to at least three positional arguments "
+                        f"(self: TServicer, request: TInputProtobuf, context: hivemind.p2p.P2PContext)"
+                    )
                 request_arg = spec.args[1]
                 hints = get_type_hints(method)
                 try:

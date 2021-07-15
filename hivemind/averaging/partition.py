@@ -32,7 +32,7 @@ class TensorPartContainer:
         self,
         tensors: Sequence[torch.Tensor],
         peer_fractions: Sequence[float],
-        compression_type: Union[type(CompressionType), Sequence[type(CompressionType)]] = CompressionType.NONE,
+        compression_type: Union['CompressionType', Sequence['CompressionType']] = CompressionType.NONE,
         part_size_bytes: int = 2 ** 20,
         prefetch: int = 1,
     ):

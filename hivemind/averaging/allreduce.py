@@ -2,14 +2,14 @@ import asyncio
 from typing import Sequence, Dict, Tuple, AsyncIterator, Any, Optional
 from enum import Enum
 
-import grpc
 import torch
 
 from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer, AllreduceException
-from hivemind.utils import Endpoint, get_logger, ChannelCache
+from hivemind.p2p import P2P, P2PContext, PeerID as Endpoint, ServicerBase, StubBase
+from hivemind.utils import get_logger
 from hivemind.utils.asyncio import anext, achain, aiter, aenumerate, amap_in_executor
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
-from hivemind.proto import averaging_pb2_grpc, averaging_pb2
+from hivemind.proto import averaging_pb2
 
 # flavour types
 GroupID = bytes
@@ -22,7 +22,7 @@ class AveragingMode(Enum):
     AUX = 2
 
 
-class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
+class AllReduceRunner(ServicerBase):
     """
     An internal class that runs butterfly AllReduce in a predefined group of averagers
 
@@ -43,9 +43,9 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
     def __init__(
         self,
         *,
+        p2p: P2P,
         group_id: GroupID,
         tensors: Sequence[torch.Tensor],
-        endpoint: Endpoint,
         ordered_group_endpoints: Sequence[Endpoint],
         peer_fractions: Tuple[float, ...],
         weights: Optional[Sequence[float]] = None,
@@ -53,7 +53,10 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
         gathered: Optional[Dict[Endpoint, Any]] = None,
         **kwargs,
     ):
-        assert endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
+        self._p2p = p2p
+        self.endpoint = p2p.id
+        assert self.endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
+
         modes = modes or tuple(AveragingMode.CLIENT if frac == 0 else AveragingMode.NODE for frac in peer_fractions)
         weights = weights or tuple(int(mode != AveragingMode.AUX) for mode in modes)
         assert len(weights) == len(modes) == len(ordered_group_endpoints), "lists have inconsistent length"
@@ -62,7 +65,7 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
             assert mode != AveragingMode.CLIENT or frac == 0, "client-mode peer should have zero all-reduce fraction"
             assert mode != AveragingMode.AUX or weight == 0, "auxiliary peer should have zero averaging weight"
 
-        self.group_id, self.endpoint, self.ordered_group_endpoints = group_id, endpoint, ordered_group_endpoints
+        self.group_id, self.ordered_group_endpoints = group_id, ordered_group_endpoints
         self.modes, self.peer_fractions, self.gathered = modes, peer_fractions, gathered
 
         self._future = asyncio.Future()
@@ -95,8 +98,10 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
     def group_size(self):
         return len(self.ordered_group_endpoints)
 
-    def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
-        return ChannelCache.get_stub(peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True)
+    def _get_stub(self, peer: Endpoint) -> StubBase:
+        from hivemind.averaging.averager import DecentralizedAverager
+
+        return DecentralizedAverager.get_stub(self._p2p, peer)
 
     async def run(self) -> AsyncIterator[torch.Tensor]:
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""
@@ -136,46 +141,35 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         else:
             loop = asyncio.get_event_loop()
-            stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
-            write_task = asyncio.create_task(self._write_to_peer(stream, peer_index))
+            code = None
+            stream = self._get_stub(peer_endpoint).rpc_aggregate_part(self._generate_input_for_peer(peer_index))
+            async for part_index, msg in aenumerate(stream):
+                if code is None:
+                    code = msg.code
+                averaged_part_delta = await loop.run_in_executor(None, deserialize_torch_tensor, msg.tensor_part)
+                self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part_delta)
 
-            try:
-                code = None
-                async for part_index, msg in aenumerate(stream):
-                    if code is None:
-                        code = msg.code
-                    averaged_part_delta = await loop.run_in_executor(None, deserialize_torch_tensor, msg.tensor_part)
-                    self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part_delta)
-                await write_task
+            if code != averaging_pb2.AVERAGED_PART:
+                raise AllreduceException(
+                    f"peer {peer_endpoint} returned {averaging_pb2.MessageCode.Name(code)} "
+                    f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}"
+                    f", allreduce failed"
+                )
 
-                if code != averaging_pb2.AVERAGED_PART:
-                    raise AllreduceException(
-                        f"peer {peer_endpoint} returned {averaging_pb2.MessageCode.Name(code)} "
-                        f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}"
-                        f", allreduce failed"
-                    )
-            finally:
-                if not write_task.done():
-                    write_task.cancel()
-
-    async def _write_to_peer(self, stream: grpc.aio.StreamStreamCall, peer_index: int):
+    async def _generate_input_for_peer(self, peer_index: int) -> AsyncIterator[averaging_pb2.AveragingData]:
         parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
         first_part = await anext(parts_aiter)
-        await stream.write(
-            averaging_pb2.AveragingData(
-                code=averaging_pb2.PART_FOR_AVERAGING,
-                group_id=self.group_id,
-                endpoint=self.endpoint,
-                tensor_part=first_part,
-            )
+        yield averaging_pb2.AveragingData(
+            code=averaging_pb2.PART_FOR_AVERAGING,
+            group_id=self.group_id,
+            endpoint=self.endpoint.to_base58(),
+            tensor_part=first_part,
         )
         async for part in parts_aiter:
-            await stream.write(averaging_pb2.AveragingData(tensor_part=part))
-
-        await stream.done_writing()
+            yield averaging_pb2.AveragingData(tensor_part=part)
 
     async def rpc_aggregate_part(
-        self, stream: AsyncIterator[averaging_pb2.AveragingData], context: grpc.ServicerContext
+        self, stream: AsyncIterator[averaging_pb2.AveragingData], _: P2PContext
     ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """a peer sends us a part of his tensor; we should average it with other peers and return the difference"""
         request: averaging_pb2.AveragingData = await anext(stream)
@@ -186,7 +180,7 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
 
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
-                sender_index = self.sender_endpoints.index(request.endpoint)
+                sender_index = self.sender_endpoints.index(Endpoint.from_base58(request.endpoint))
                 async for msg in self._accumulate_parts_streaming(achain(aiter(request), stream), sender_index):
                     yield msg
 
@@ -224,9 +218,9 @@ class AllReduceRunner(averaging_pb2_grpc.DecentralizedAveragingServicer):
             yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
 
     async def _send_error_to_peer(self, peer_endpoint: Endpoint, code: averaging_pb2.MessageCode):
-        stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part()
-        await stream.write(averaging_pb2.AveragingData(group_id=self.group_id, endpoint=self.endpoint, code=code))
-        await stream.done_writing()
+        error = averaging_pb2.AveragingData(group_id=self.group_id, endpoint=self.endpoint.to_base58(), code=code)
+        async for _ in self._get_stub(peer_endpoint).rpc_aggregate_part(aiter(error)):
+            pass
 
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):
         """finish or terminate AllReduceRunner, propagate any errors / cancellations to peers."""

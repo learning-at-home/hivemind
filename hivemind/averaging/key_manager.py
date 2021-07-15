@@ -5,9 +5,10 @@ from typing import Optional, List, Tuple
 
 import numpy as np
 
-from hivemind.dht import DHT
 from hivemind.averaging.group_info import GroupInfo
-from hivemind.utils import get_logger, Endpoint, DHTExpiration, get_dht_time, ValueWithExpiration
+from hivemind.dht import DHT
+from hivemind.p2p import PeerID as Endpoint
+from hivemind.utils import get_logger, DHTExpiration, get_dht_time, ValueWithExpiration
 
 GroupKey = str
 GROUP_PATTERN = re.compile("^(([^.])+)[.]0b[01]*$")  # e.g. bert_exp4_averaging.0b01001101
@@ -72,7 +73,7 @@ class GroupKeyManager:
         expiration_time = expiration_time if looking_for_group else float(np.nextafter(expiration_time, float("inf")))
         return await self.dht.store(
             key=group_key,
-            subkey=endpoint,
+            subkey=endpoint.to_base58(),
             value=looking_for_group,
             expiration_time=expiration_time,
             return_future=True,
@@ -93,11 +94,11 @@ class GroupKeyManager:
             logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
             return []
         averagers = [
-            (key, entry.expiration_time)
+            (Endpoint.from_base58(key), entry.expiration_time)
             for key, entry in result.value.items()
             if key != self.RESERVED_KEY_FOR_NBITS and (not only_active or entry.value is True)
         ]
-        num_active_averagers = len([key for key, entry in result.value.items() if entry.value is True])
+        num_active_averagers = sum(1 for entry in result.value.values() if entry.value is True)
 
         suggested_nbits = self.get_suggested_nbits(result)
         if (
