@@ -5,14 +5,14 @@ from contextlib import closing, suppress
 from dataclasses import dataclass
 from importlib.resources import path
 from subprocess import Popen
-from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional, Sequence, Tuple, Union
+from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from multiaddr import Multiaddr
 
 import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
-from hivemind.proto import p2pd_pb2
+from hivemind.proto.p2pd_pb2 import RPCError
 from hivemind.utils.asyncio import aiter
 from hivemind.utils.logging import get_logger
 
@@ -50,7 +50,7 @@ class P2P:
     BYTEORDER = "big"
     MESSAGE_MARKER = b"\x00"
     ERROR_MARKER = b"\x01"
-    END_OF_STREAM = p2pd_pb2.RPCError()
+    END_OF_STREAM = RPCError()
 
     DHT_MODE_MAPPING = {
         "dht": {"dht": 1},
@@ -255,41 +255,47 @@ class P2P:
         await writer.drain()
 
     @staticmethod
-    async def send_protobuf(protobuf, writer: asyncio.StreamWriter) -> None:
-        if isinstance(protobuf, p2pd_pb2.RPCError):
-            writer.write(P2P.ERROR_MARKER)
-        else:
-            writer.write(P2P.MESSAGE_MARKER)
-        await P2P.send_raw_data(protobuf.SerializeToString(), writer)
-
-    @staticmethod
     async def receive_raw_data(reader: asyncio.StreamReader) -> bytes:
         header = await reader.readexactly(P2P.HEADER_LEN)
         content_length = int.from_bytes(header, P2P.BYTEORDER)
         data = await reader.readexactly(content_length)
         return data
 
+    TInputProtobuf = TypeVar("TInputProtobuf")
+    TOutputProtobuf = TypeVar("TOutputProtobuf")
+
+    @staticmethod
+    async def send_protobuf(protobuf: Union[TOutputProtobuf, RPCError], writer: asyncio.StreamWriter) -> None:
+        if isinstance(protobuf, RPCError):
+            writer.write(P2P.ERROR_MARKER)
+        else:
+            writer.write(P2P.MESSAGE_MARKER)
+        await P2P.send_raw_data(protobuf.SerializeToString(), writer)
+
     @staticmethod
     async def receive_protobuf(
-        in_proto_type: type, reader: asyncio.StreamReader
-    ) -> Tuple[Any, Optional[p2pd_pb2.RPCError]]:
+        input_protobuf_type: type, reader: asyncio.StreamReader
+    ) -> Tuple[Optional[TInputProtobuf], Optional[RPCError]]:
         msg_type = await reader.readexactly(1)
         if msg_type == P2P.MESSAGE_MARKER:
-            protobuf = in_proto_type()
+            protobuf = input_protobuf_type()
             protobuf.ParseFromString(await P2P.receive_raw_data(reader))
             return protobuf, None
         elif msg_type == P2P.ERROR_MARKER:
-            protobuf = p2pd_pb2.RPCError()
+            protobuf = RPCError()
             protobuf.ParseFromString(await P2P.receive_raw_data(reader))
             return None, protobuf
         else:
             raise TypeError("Invalid Protobuf message type")
 
+    TInputStream = AsyncIterator[TInputProtobuf]
+    TOutputStream = AsyncIterator[TOutputProtobuf]
+
     async def _add_protobuf_stream_handler(
         self,
         name: str,
-        handler: Callable[[AsyncIterator[Any], P2PContext], AsyncIterator[Any]],
-        in_proto_type: type,
+        handler: Callable[[TInputStream, P2PContext], TOutputStream],
+        input_protobuf_type: type,
         max_prefetch: int = 0,
     ) -> None:
         """
@@ -314,7 +320,7 @@ class P2P:
             )
             requests = asyncio.Queue(max_prefetch)
 
-            async def _read_stream() -> AsyncIterator[in_proto_type]:
+            async def _read_stream() -> P2P.TInputStream:
                 while True:
                     request = await requests.get()
                     if request is None:
@@ -327,13 +333,13 @@ class P2P:
                         await P2P.send_protobuf(response, writer)
                 except Exception as e:
                     logger.warning("Exception while processing stream and sending responses:", exc_info=True)
-                    await P2P.send_protobuf(p2pd_pb2.RPCError(message=str(e)), writer)
+                    await P2P.send_protobuf(RPCError(message=str(e)), writer)
 
             with closing(writer):
                 processing_task = asyncio.create_task(_process_stream())
                 try:
                     while True:
-                        receive_task = asyncio.create_task(P2P.receive_protobuf(in_proto_type, reader))
+                        receive_task = asyncio.create_task(P2P.receive_protobuf(input_protobuf_type, reader))
                         await asyncio.wait({processing_task, receive_task}, return_when=asyncio.FIRST_COMPLETED)
 
                         if processing_task.done():
@@ -354,8 +360,8 @@ class P2P:
         await self._client.stream_handler(name, _handle_stream)
 
     async def _call_protobuf_stream_handler(
-        self, peer_id: PeerID, name: str, requests: AsyncIterator[Any], out_proto_type: type
-    ) -> AsyncIterator[Any]:
+        self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: type
+    ) -> TOutputStream:
         _, reader, writer = await self._client.stream_open(peer_id, (name,))
 
         async def _write_to_stream() -> None:
@@ -368,7 +374,7 @@ class P2P:
             try:
                 while True:
                     try:
-                        response, err = await P2P.receive_protobuf(out_proto_type, reader)
+                        response, err = await P2P.receive_protobuf(output_protobuf_type, reader)
                     except asyncio.IncompleteReadError:  # Connection is closed
                         break
 
@@ -383,20 +389,21 @@ class P2P:
     async def add_protobuf_handler(
         self,
         name: str,
-        handler: Callable[[Any, P2PContext], Union[Awaitable[Any], AsyncIterator[Any]]],
-        in_proto_type: type,
+        handler: Callable[
+            [Union[TInputProtobuf, TInputStream], P2PContext], Union[Awaitable[TOutputProtobuf], TOutputStream]
+        ],
+        input_protobuf_type: type,
         *,
         stream_input: bool = False,
         stream_output: bool = False,
     ) -> None:
         """
-        :param stream_input: If True, expect ``handler`` to take an ``AsyncIterator[in_proto_type]`` as the input.
-                             If False, expect it to take one ``in_proto_type`` instance as the input.
-        :param stream_output: If True, expect ``handler`` to return an ``AsyncIterator[out_proto_type]``.
-                              If False, expect it to return an ``Awaitable[out_proto_type]``.
+        :param stream_input: If True, assume ``handler`` to take ``TInputStream``
+                             (not just ``TInputProtobuf``) as input.
+        :param stream_output: If True, assume ``handler`` to return ``TOutputStream`` (not just ``TOutputProtobuf``).
         """
 
-        async def _stream_handler(requests: AsyncIterator[in_proto_type], context: P2PContext) -> AsyncIterator[Any]:
+        async def _stream_handler(requests: P2P.TInputStream, context: P2PContext) -> P2P.TOutputStream:
             if stream_input:
                 input = requests
             else:
@@ -414,23 +421,21 @@ class P2P:
             else:
                 yield await output
 
-        await self._add_protobuf_stream_handler(name, _stream_handler, in_proto_type)
+        await self._add_protobuf_stream_handler(name, _stream_handler, input_protobuf_type)
 
     def call_protobuf_handler(
         self,
         peer_id: PeerID,
         name: str,
-        input: Any,
-        out_proto_type: type,
+        input: Union[TInputProtobuf, TInputStream],
+        output_protobuf_type: type,
         *,
         stream_input: bool = False,
         stream_output: bool = False,
-    ) -> Union[Awaitable[Any], AsyncIterator[Any]]:
+    ) -> Union[Awaitable[TOutputProtobuf], TOutputStream]:
         """
-        :param stream_input: If True, take an ``AsyncIterator[in_proto_type]`` as the input.
-                             If False, take one ``in_proto_type`` instance as the input.
-        :param stream_output: If True, return an ``AsyncIterator[out_proto_type]``.
-                              If False, return an ``Awaitable[out_proto_type]``.
+        :param stream_input: If True, assume ``input`` to be ``TInputStream`` (not just ``TInputProtobuf``).
+        :param stream_output: If True, return ``TOutputStream`` (not just ``TOutputProtobuf``).
         """
 
         if stream_input:
@@ -438,12 +443,12 @@ class P2P:
         else:
             requests = aiter(input)
 
-        responses = self._call_protobuf_stream_handler(peer_id, name, requests, out_proto_type)
+        responses = self._call_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
 
         if stream_output:
             return responses
 
-        async def _take_one_response() -> Awaitable[out_proto_type]:
+        async def _take_one_response() -> Awaitable[P2P.TOutputProtobuf]:
             count = 0
             async for response in responses:
                 count += 1
