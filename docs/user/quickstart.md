@@ -190,8 +190,6 @@ If you want to learn more about each individual component,
 - Learn how to use `hivemind.DHT` using this basic [DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html),
 - Learn the underlying math behind DecentralizedOptimizer in
   [(Li et al. 2020)](https://arxiv.org/abs/2005.00124) and [(Ryabinin et al. 2021)](https://arxiv.org/abs/2103.03239).
-  
-- Read about setting up Mixture-of-Experts layers in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
+- Read about setting up Mixture-of-Experts training in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
  
-
 
