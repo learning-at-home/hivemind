@@ -161,7 +161,7 @@ with tqdm() as progressbar:
 </details>
 
 
-Instead of setting DHT independently, the second peer will link up with the existing DHT node from the first peer.
+Instead of setting up a new DHT, the second peer will link up with the existing DHT node from the first peer.
 If you run the second peer, you will see that both first and second peer will periodically report averaging parameters:
 
 ```shell
@@ -193,7 +193,6 @@ If you want to learn more about each individual component,
   
 - Read about setting up Mixture-of-Experts layers in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
  
-
 
 
 
