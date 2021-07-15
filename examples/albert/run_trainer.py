@@ -5,7 +5,6 @@ import os
 import pickle
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
 
 import torch
 import transformers
