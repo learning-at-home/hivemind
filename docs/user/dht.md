@@ -6,13 +6,15 @@ can store and get values. To initialize the first DHT node, run
 ```python
 from hivemind import DHT, get_dht_time
 
-dht = DHT(listen_on="127.0.0.1:1337", start=True)
-# create the first DHT node that listens for incoming connections on port 1337 from localhost only
+dht = DHT(start=True)
+# create the first DHT node that listens for incoming connections from localhost only
+
+print("For incoming connections, use:", dht.get_visible_maddrs())
 ```
 
 You can now start more peers that connect to an existing DHT node using its listen address:
 ```python
-dht = DHT(listen_on="127.0.0.1:1338", initial_peers=["127.0.0.1:1337"], start=True)
+dht2 = DHT(initial_peers=dht.get_visible_maddrs(), start=True)
 ```
 
 Note that `initial_peers` contains the address of the first DHT node.
@@ -30,7 +32,7 @@ store_ok = dht.store('my_key', ('i', 'love', 'bees'),
                      expiration_time=get_dht_time() + 600)
 
 # second node: get the value stored by the first node
-value, expiration = dht.get('my_key', latest=True)
+value, expiration = dht2.get('my_key', latest=True)
 assert value == ('i', 'love', 'bees')
 ```
 
@@ -47,10 +49,9 @@ they add sub-keys to the dictionary instead of overwriting it.
 Consider an example where three DHT nodes want to find out who going to attend the party:
 
 ```python
-from hivemind import DHT, get_dht_time
-alice_dht = DHT(listen_on="127.0.0.1:3030", start=True)
-bob_dht = DHT(listen_on="127.0.0.1:3031", initial_peers=["127.0.0.1:3030"], start=True)
-carol_dht = DHT(listen_on="127.0.0.1:3032", initial_peers=["127.0.0.1:3031"], start=True)
+alice_dht = DHT(initial_peers=dht.get_visible_maddrs(), start=True)
+bob_dht = DHT(initial_peers=dht2.get_visible_maddrs(), start=True)
+carol_dht = DHT(initial_peers=alice_dht.get_visible_maddrs(), start=True)
 
 
 # first, each peer stores a subkey for the same key
