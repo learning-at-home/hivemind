@@ -102,7 +102,7 @@ class CollaborationArguments(CollaborativeOptimizerArguments, BaseTrainingArgume
         default=600, metadata={"help": "Statistics will be removed if not updated in this many seconds"}
     )
     backup_every_steps: int = field(
-        default=10, metadata={"help": "In case of NaN, training restore from a backup updated with this frequency."}
+        default=10, metadata={"help": "Frequency of backups to restore from in case of encountering NaN values"}
     )
 
 

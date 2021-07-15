@@ -79,6 +79,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
     def step(self, *args, **kwargs):
         with self.lock_parameters:
             loss = self.opt.step(*args, **kwargs)
+
         self.local_step += 1
         if self.local_step % self.averaging_step_period == 0:
             self.update_event.set()
