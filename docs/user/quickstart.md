@@ -89,7 +89,7 @@ As you can see, this code is regular pytorch with one notable exception: it wrap
 the code (please do so), you will see the following print:
 
 ```shell
-To join training, use initial_peers = ['/ip4/127.0.0.1/tcp/XXX/p2p/YYY']
+To join the training, use initial_peers = ['/ip4/127.0.0.1/tcp/XXX/p2p/YYY']
 [...] Starting a new averaging round with current parameters.
 ```
 
@@ -193,7 +193,6 @@ If you want to learn more about each individual component,
   
 - Read about setting up Mixture-of-Experts layers in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
  
-
 
 
 
