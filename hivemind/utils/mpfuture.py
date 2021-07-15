@@ -70,7 +70,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     _status_requests: Optional[Dict[UID, Tuple[MPFuture, threading.Event]]] = None  # futures to be updated by origin
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
-    SOFT_UPDATE_TIMEOUT = 0.1  # seconds spent awaiting status update before warning is printed
+    SOFT_UPDATE_TIMEOUT = 0.5  # seconds spent awaiting status update before warning is printed
     HARD_UPDATE_TIMEOUT = 10.0  # seconds spent awaiting status update before future is automatically cancelled
 
     def __init__(self, *, synchronize: bool = True, use_lock: bool = True):

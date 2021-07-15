@@ -26,7 +26,6 @@ from multiaddr import Multiaddr
 from hivemind.dht.node import DHTID, DHTNode
 from hivemind.dht.routing import DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
-from hivemind.p2p import P2P
 from hivemind.utils import DHTExpiration, MPFuture, ValueWithExpiration, await_cancelled, get_logger, switch_to_uvloop
 
 logger = get_logger(__name__)
@@ -40,9 +39,6 @@ class DHT(mp.Process):
     * hivemind servers periodically announce their experts via declare_experts (dht_handler.py)
     * trainers find most suitable experts via RemoteMixtureOfExperts (beam_search.py)
 
-    :param p2p: instance of hivemind.p2p.P2P that will be used for communication.
-      If None, DHTNode will create and manage its own P2P instance with given initial_peers and
-      parameters from ``kwargs``
     :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
@@ -60,7 +56,6 @@ class DHT(mp.Process):
 
     def __init__(
         self,
-        p2p: Optional[P2P] = None,
         initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
         *,
         start: bool,
@@ -70,9 +65,9 @@ class DHT(mp.Process):
         shutdown_timeout: float = 3,
         **kwargs,
     ):
+        self._parent_pid = os.getpid()
         super().__init__()
 
-        self.p2p = p2p
         if not (
             initial_peers is None
             or (
@@ -101,7 +96,6 @@ class DHT(mp.Process):
 
             async def _run():
                 self._node = await DHTNode.create(
-                    p2p=self.p2p,
                     initial_peers=self.initial_peers,
                     num_workers=self.max_workers or 1,
                     record_validator=self._record_validator,

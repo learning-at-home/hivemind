@@ -114,7 +114,7 @@ class DHTNode:
         chunk_size: int = 16,
         blacklist_time: float = 5.0,
         backoff_rate: float = 2.0,
-        listen: bool = True,
+        client_mode: bool = False,
         record_validator: Optional[RecordValidatorBase] = None,
         authorizer: Optional[AuthorizerBase] = None,
         validate: bool = True,
@@ -154,8 +154,8 @@ class DHTNode:
         :param backoff_rate: blacklist time will be multiplied by :backoff_rate: for each successive non-response
         :param validate: if True, use initial peers to validate that this node is accessible and synchronized
         :param strict: if True, any error encountered in validation will interrupt the creation of DHTNode
-        :param listen: if True (default), this node will accept incoming request and otherwise be a DHT "citzen"
-          if False, this node will refuse any incoming request, effectively being only a "client"
+        :param client_mode: if False (default), this node will accept incoming requests as a full DHT "citzen"
+          if True, this node will refuse any incoming requests, effectively being only a client
         :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
         :param authorizer: instance of AuthorizerBase used for signing and validating requests and response
           for a given authorization protocol
@@ -203,7 +203,7 @@ class DHTNode:
             wait_timeout,
             parallel_rpc,
             cache_size,
-            listen,
+            client_mode,
             record_validator,
             authorizer,
         )
