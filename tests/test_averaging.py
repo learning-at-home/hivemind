@@ -77,7 +77,6 @@ def _test_allreduce_once(n_clients, n_aux):
             averaging_expiration=15,
             prefix="mygroup",
             client_mode=mode == AveragingMode.CLIENT,
-            listen_on="127.0.0.1:*",
             auxiliary=mode == AveragingMode.AUX,
             start=True,
         )
@@ -136,7 +135,6 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
             averaging_expiration=15,
             prefix="mygroup",
             client_mode=client_mode,
-            listen_on="127.0.0.1:*",
             start=True,
         )
         for tensors, client_mode in zip([tensors1, tensors2, tensors3, tensors4], client_modes)
@@ -191,7 +189,6 @@ def test_allreduce_compression():
             compression_type=compression_type_pair,
             target_group_size=2,
             prefix="mygroup",
-            listen_on="127.0.0.1:*",
             start=True,
         )
 
@@ -239,7 +236,6 @@ def test_allreduce_grid():
             target_group_size=2,
             prefix="mygroup",
             initial_group_bits=bin(i // 2)[2:].rjust(2, "0"),
-            listen_on="127.0.0.1:*",
             start=True,
         )
         for i in range(8)
@@ -278,7 +274,6 @@ def test_allgather():
             averaging_expiration=15,
             prefix="mygroup",
             initial_group_bits="000",
-            listen_on="127.0.0.1:*",
             start=True,
         )
         for _ in range(8)
@@ -361,7 +356,6 @@ def test_too_few_peers():
             request_timeout=0.5,
             prefix="mygroup",
             initial_group_bits=bin(i)[2:].rjust(3, "0"),
-            listen_on="127.0.0.1:*",
             start=True,
         )
         for i in range(4)
@@ -387,7 +381,6 @@ def test_overcrowded(num_peers=16):
             request_timeout=0.5,
             prefix="mygroup",
             initial_group_bits="",
-            listen_on="127.0.0.1:*",
             start=True,
         )
         for _ in range(num_peers)
@@ -426,7 +419,6 @@ def test_load_state_from_peers():
         start=True,
         prefix="demo-run",
         target_group_size=2,
-        listen_on="127.0.0.1:*",
     )
 
     dht2 = hivemind.DHT(initial_peers=initial_peers, start=True)
@@ -437,7 +429,6 @@ def test_load_state_from_peers():
         start=True,
         prefix="demo-run",
         target_group_size=2,
-        listen_on="127.0.0.1:*",
     )
 
     assert num_calls == 0
@@ -468,7 +459,7 @@ def test_load_state_from_peers():
 def test_getset_bits():
     dht = hivemind.DHT(start=True)
     averager = hivemind.averaging.DecentralizedAverager(
-        [torch.randn(3)], dht=dht, start=True, prefix="test_prefix", target_group_size=2, listen_on="127.0.0.1:*"
+        [torch.randn(3)], dht=dht, start=True, prefix="test_prefix", target_group_size=2,
     )
     averager.set_group_bits("00101011101010")
     assert averager.get_group_bits() == "00101011101010"
@@ -482,7 +473,6 @@ def test_training_averager(n_steps: int = 10, n_dims: int = 16):
     common_kwargs = {
         "dht": dht,
         "start": True,
-        "listen_on": "127.0.0.1:*",
         "prefix": "demo-run",
         "target_group_size": 2,
     }

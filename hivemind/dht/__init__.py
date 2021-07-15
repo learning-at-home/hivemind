@@ -25,7 +25,7 @@ from multiaddr import Multiaddr
 
 from hivemind.dht.node import DHTNode
 from hivemind.p2p import P2P
-from hivemind.dht.routing import DHTKey, DHTValue, Subkey
+from hivemind.dht.routing import DHTID, DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.utils import DHTExpiration, MPFuture, ValueWithExpiration, await_cancelled, get_logger, switch_to_uvloop
 
