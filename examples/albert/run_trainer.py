@@ -152,6 +152,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
                 )
                 logger.info(f"Step {self.collaborative_optimizer.local_step}")
                 logger.info(f"Your current contribution: {self.total_samples_processed} samples")
+                logger.info(f"Performance: {samples_per_second} samples per second.")
                 if self.steps:
                     logger.info(f"Local loss: {self.loss / self.steps}")
                 if self.collaborative_optimizer.local_step % self.backup_every_steps == 0:
