@@ -81,6 +81,7 @@ class DHT(mp.Process):
 
         self._record_validator = CompositeValidator(record_validators)
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)
+        self._parent_pid = os.getpid()
         self.shutdown_timeout = shutdown_timeout
         self.ready = mp.Event()
         self.daemon = daemon

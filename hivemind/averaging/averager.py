@@ -31,7 +31,7 @@ from hivemind.utils import Endpoint, Port, MPFuture, get_logger, TensorDescripto
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, split_for_streaming, combine_from_streaming
-from hivemind.utils.networking import choose_ip_address, strip_port
+from hivemind.utils.networking import choose_ip_address, strip_port, Hostname
 from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
 
@@ -139,6 +139,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         super().__init__()
         self.dht = dht
         self.client_mode, self.listen_on, self.kwargs = client_mode, listen_on, kwargs
+        self._parent_pid = os.getpid()
         if self.client_mode:
             self.mode = AveragingMode.CLIENT
         elif auxiliary:
