@@ -107,7 +107,7 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_patt
 By default, the server will only accept connections from your local machine. To access it globally, you should replace
 `127.0.0.1` part from initial peers with server's IP address. Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
 as [libp2p](https://docs.libp2p.io/concepts/addressing/). You can find more details on multiaddresses in the 
-[DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html)ю 
+[DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html).
 
 ## Train the experts
 
