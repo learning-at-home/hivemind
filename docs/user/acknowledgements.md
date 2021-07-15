@@ -25,4 +25,4 @@ In this section, we list several organizations and research projects that bring 
 * [EYDLE](https://www.eydle.com) — a start-up that works towards distributed deep learning on volunteer hardware using centralized infrastructure.
 * [BitTensor](https://github.com/opentensor/BitTensor) — a decentralized deep learning ecosystem with incentive
   mechanism. Each peer trains for its own objective and rewards others for useful features. 
-* Also building collaborative distributed deep learning? Let us know! [TODO EMAIL]
+* Also building collaborative deep learning? Let us know! [TODO EMAIL]
