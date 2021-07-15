@@ -42,9 +42,11 @@ def log_visible_maddrs(visible_maddrs: List[Multiaddr], only_p2p: bool) -> None:
         unique_addrs = {addr["p2p"] for addr in visible_maddrs}
         initial_peers_str = " ".join(f"/p2p/{addr}" for addr in unique_addrs)
     else:
-        available_ips = [addr for addr in visible_maddrs if "ip4" in addr or "ip6" in addr]
+        available_ips = [Multiaddr(addr) for addr in visible_maddrs if "ip4" in addr]
+        available_ips += [Multiaddr(addr) for addr in visible_maddrs if "ip6" in addr]
         if available_ips:
             preferred_ip = choose_ip_address(available_ips)
+            print('!!', preferred_ip)
             selected_maddrs = [
                 addr for addr in visible_maddrs if addr.get("ip4") == preferred_ip or addr.get("ip6") == preferred_ip
             ]
