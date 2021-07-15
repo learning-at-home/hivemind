@@ -26,11 +26,11 @@ You can also install it in the editable mode with `pip install -e .`.
 Hivemind is a set of building blocks for decentralized training.
 In this tutorial, we use two of these blocks to train a simple neural network to classify CIFAR10 images.
 We assume that you are already familiar with the official [CIFAR-10 example](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html)
-from pytorch website.
+from the PyTorch website.
 
 We build on top of the official example to spin up distributed training of a two-layer neural network by averaging weights.
-For simplicity, this tutorial will use two non-GPU peers running on the same machine. If you survive get to end of this
-tutorial, we'll give you an example of actual distributed training of transformers ;)
+For simplicity, this tutorial will use two non-GPU peers running on the same machine. If you get to the end of this
+tutorial, we'll give you an example of actual distributed training of Transformers ;)
 
 For now, let's run our first training peer:
 ```python
