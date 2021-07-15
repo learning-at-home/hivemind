@@ -88,8 +88,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
             self.averager.pending_updates_done.wait()
             return loss
         finally:
-            if not self.lock_parameters.locked():
-                self.lock_parameters.acquire()
+            self.lock_parameters.acquire()
 
     def zero_grad(self, *args, **kwargs):
         return self.opt.zero_grad(*args, **kwargs)
