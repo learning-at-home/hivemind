@@ -56,7 +56,8 @@ opt = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 
 # Create DHT: a decentralized key-value storage shared between peers
-dht = hivemind.DHT(endpoint="127.0.0.1:1337", listen_on="127.0.0.1:1337", start=True)
+dht = hivemind.DHT(start=True)
+print("To join training, use initial_peers =", [str(addr) for addr in dht.get_visible_maddrs()])
 
 # Set up a decentralized optimizer that will average with peers in background
 opt = hivemind.optim.DecentralizedOptimizer(
@@ -98,12 +99,10 @@ Copy the entire script (or notebook) and modify this line:
 
 ```python
 # old version:
-dht = hivemind.DHT(endpoint="127.0.0.1:1337", listen_on="127.0.0.1:1337", start=True)
+dht = hivemind.DHT(start=True)
 
 # new version: added initial_peers
-dht = hivemind.DHT(endpoint="127.0.0.1:1338", listen_on="127.0.0.1:1338",
-                   initial_peers=['127.0.0.1:1337'], start=True)
-# can be shortened to hivemind.DHT(initial_peers=['127.0.0.1:1337'], start=True)
+dht = hivemind.DHT(initial_peers=[SEE_FIRST_PEER_OUTPUTS], start=True)
 ```
 <details style="margin-top:-16px; margin-bottom: 16px;">
   <summary>Here's the full code of the second peer</summary>
@@ -130,7 +129,8 @@ model = nn.Sequential(nn.Conv2d(3, 16, (5, 5)), nn.MaxPool2d(2, 2), nn.ReLU(),
 opt = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 # Create DHT: a decentralized key-value storage shared between peers
-dht = hivemind.DHT(initial_peers=['127.0.0.1:1337'], start=True)
+dht = hivemind.DHT(initial_peers=[COPY_FROM_ANOTHER_PEER_OUTPUTS], start=True)
+print("To join training, use initial_peers =", [str(addr) for addr in dht.get_visible_maddrs()])
 
 # Set up a decentralized optimizer that will average with peers in background
 opt = hivemind.optim.DecentralizedOptimizer(
