@@ -24,7 +24,7 @@ as `initial_peers` to connect to the shared "dictionary".
 
 ### Store/get operations
 
-Once the DHT is formed, all participants can `dht.store` key-value pairs to the DHT and `dht.get` them by key:
+Once the DHT is formed, all participants can `dht.store` key-value pairs in the DHT and `dht.get` them by key:
 
 ```python
 # first node: store a key-value for 600 seconds
