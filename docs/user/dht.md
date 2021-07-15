@@ -68,7 +68,7 @@ print(attendees)
 ```
 
 When training over the Internet, some `dht.get/store` requests may run for hundreds of milliseconds and even seconds.
-To minimize wait time, you can call these requests asynchronously via 
+To minimize the wait time, you can call these requests asynchronously via 
 [`dht.store/get/run_coroutine(..., return_future=True)`__](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#hivemind.dht.DHT.get)
 . This will run the corresponding command in background and return a [Future-like](https://docs.python.org/3/library/concurrent.futures.html) object that can be awaited.
 Please also note that the returned future is compatible with asyncio (i.e. can be awaited inside event loop).
