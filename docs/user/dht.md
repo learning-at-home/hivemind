@@ -75,7 +75,6 @@ Please also note that the returned future is compatible with asyncio (i.e. can b
 
 For a more details on DHT store/get and expiration time, please refer to the [documentation for DHT and DHTNode](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#dht-and-dhtnode)
 
-
 ### Running across the Internet
 
 By default, DHT nodes are only accessible from your localhost. In order to run with multiple geographically
@@ -134,4 +133,3 @@ IPFS nodes.
 To learn more about the network address format, read [libp2p addressing](https://docs.libp2p.io/concepts/addressing/)
 For an example of how to set up DHT in a distributed training experiment, see
  [examples/albert](https://github.com/learning-at-home/hivemind/tree/master/examples/albert)
-

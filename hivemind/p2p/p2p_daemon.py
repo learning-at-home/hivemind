@@ -297,11 +297,11 @@ class P2P:
         name: str,
         handler: Callable[[TInputStream, P2PContext], TOutputStream],
         input_protobuf_type: type,
-        max_prefetch: int = 0,
+        max_prefetch: int = 5,
     ) -> None:
         """
         :param max_prefetch: Maximum number of items to prefetch from the request stream.
-          ``max_prefetch <= 0`` means unlimited (default).
+          ``max_prefetch <= 0`` means unlimited.
 
         :note:  Since the cancel messages are sent via the input stream,
           they will not be received while the prefetch buffer is full.
