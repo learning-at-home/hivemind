@@ -4,7 +4,7 @@ This tutorial will teach you how to install `hivemind`, host your own experts an
 
 ## Installation
 
-Just `pip install hivemind` to get the latest release (requires python 3.7 or newer). 
+Just `pip install hivemind` to get the latest release (requires Python 3.7 or newer). 
 
 You can also install the bleeding edge version from GitHub:
 
