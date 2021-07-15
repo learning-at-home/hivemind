@@ -136,7 +136,7 @@ out = expert1(dummy)  # forward pass
 out.sum().backward()  # backward pass
 ```
 
-When called, expert1 will submit a request to the corresponding server (which you created above) and return the output
+When called, `expert1` will submit a request to the corresponding server (which you created above) and return the output
 tensor(s) or raise an exception. During backward, pytorch will submit the backward requests for the experts as they
 appear in the computation graph.
 
