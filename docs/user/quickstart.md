@@ -57,7 +57,7 @@ opt = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 # Create DHT: a decentralized key-value storage shared between peers
 dht = hivemind.DHT(start=True)
-print("To join training, use initial_peers =", [str(addr) for addr in dht.get_visible_maddrs()])
+print("To join the training, use initial_peers =", [str(addr) for addr in dht.get_visible_maddrs()])
 
 # Set up a decentralized optimizer that will average with peers in background
 opt = hivemind.optim.DecentralizedOptimizer(
@@ -193,7 +193,6 @@ If you want to learn more about each individual component,
   
 - Read about setting up Mixture-of-Experts layers in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
  
-
 
 
 
