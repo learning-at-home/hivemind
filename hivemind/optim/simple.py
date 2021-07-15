@@ -66,6 +66,7 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
             **kwargs,
         )
         self.lock_parameters, self.update_event, self.stop_event = Lock(), Event(), Event()
+        self.lock_parameters.acquire()  # this lock is only released when averager can modify tensors in background
 
         self.background_averaging_thread = Thread(
             name=f"{self.__class__.__name__}",
@@ -77,12 +78,18 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
         self.background_averaging_thread.start()
 
     def step(self, *args, **kwargs):
-        with self.lock_parameters:
-            loss = self.opt.step(*args, **kwargs)
-        self.local_step += 1
-        if self.local_step % self.averaging_step_period == 0:
-            self.update_event.set()
-        return loss
+        loss = self.opt.step(*args, **kwargs)
+        if self.lock_parameters.locked():
+            self.lock_parameters.release()
+        try:
+            self.local_step += 1
+            if self.local_step % self.averaging_step_period == 0:
+                self.update_event.set()
+            return loss
+        finally:
+            if not self.lock_parameters.locked():
+                self.lock_parameters.acquire()
+            self.averager.pending_updates_done.set()
 
     def zero_grad(self, *args, **kwargs):
         return self.opt.zero_grad(*args, **kwargs)
