@@ -24,7 +24,7 @@ You can also install it in the editable mode with `pip install -e .`.
 ## Decentralized Training
 
 Hivemind is a set of building blocks for decentralized training.
-In this tutorial, we use two of these blocks to train a simple neural network to classify CIFAR10 images.
+In this tutorial, we'll use two of these blocks to train a simple neural network to classify CIFAR-10 images.
 We assume that you are already familiar with the official [CIFAR-10 example](https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html)
 from the PyTorch website.
 
