@@ -12,7 +12,7 @@ for now. To host a server with default experts, run this in your shell:
 
 ```sh
 hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_pattern "expert.[0:5]" \
-                --listen_on 0.0.0.0:1337 --dht_port 1338
+                --listen_on 0.0.0.0:1337
 # note: if you omit listen_on and/or dht_port, they will be chosen automatically and printed to stdout.
 ```
 
