@@ -159,8 +159,10 @@ def test_decentralized_optimizer_step():
 
     opt1.step()
     opt2.step()
-
     time.sleep(0.5)
+    opt1.step()
+    opt2.step()
+
     assert torch.allclose(param1, param2)
     reference = 0.5 * (0.0 - 0.1 * 1.0) + 0.5 * (1.0 - 0.05 * 300)
     assert torch.allclose(param1, torch.full_like(param1, reference))
@@ -199,7 +201,9 @@ def test_decentralized_optimizer_averaging():
 
     opt1.step()
     opt2.step()
-
     time.sleep(0.5)
+    opt1.step()
+    opt2.step()
+
     assert torch.allclose(param1, param2)
     assert torch.allclose(opt1.state[param1]["exp_avg_sq"], opt2.state[param2]["exp_avg_sq"])
