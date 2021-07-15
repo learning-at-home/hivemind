@@ -140,10 +140,10 @@ setup(
     version=version_string,
     cmdclass={"build_py": BuildPy, "develop": Develop},
     description="Decentralized deep learning in PyTorch",
-    long_description="Decentralized deep learning in PyTorch. Built to train giant models on "
-    "thousands of volunteers across the world.",
+    long_description="Decentralized deep learning in PyTorch. Built to train models on thousands of volunteers "
+    "across the world.",
     author="Learning@home & contributors",
-    author_email="mryabinin0@gmail.com",
+    author_email="hivemind-team@hotmail.com",
     url="https://github.com/learning-at-home/hivemind",
     packages=find_packages(exclude=["tests"]),
     package_data={"hivemind": ["proto/*", "hivemind_cli/*"]},
