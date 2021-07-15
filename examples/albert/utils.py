@@ -3,6 +3,7 @@ from typing import Dict, List, Tuple
 from multiaddr import Multiaddr
 from pydantic import BaseModel, StrictFloat, confloat, conint
 
+from hivemind import choose_ip_address
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import RecordValidatorBase
