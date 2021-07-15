@@ -54,7 +54,7 @@ architecture [here](https://github.com/learning-at-home/hivemind/blob/master/hiv
 ```
 
 
-You can create additional servers in the same decentralized network using `--initial_peers` argument:
+You can create additional servers in the same decentralized network using the `--initial_peers` argument:
 
 ```sh
 hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_pattern "expert.[5:250]" \
@@ -182,4 +182,3 @@ implements `hivemind.RemoteSwitchMixtureOfExperts` using the simplified routing 
 
 For more code examples related to DMoE, such as defining custom experts or using switch-based routing, please refer to
 [`hivemind/tests/test_training.py`](https://github.com/learning-at-home/hivemind/blob/master/tests/test_training.py).
-
