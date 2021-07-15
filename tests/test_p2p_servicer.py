@@ -33,9 +33,9 @@ async def test_unary_unary(server_client):
 @pytest.mark.asyncio
 async def test_stream_unary(server_client):
     class ExampleServicer(ServicerBase):
-        async def rpc_sum(self, request: AsyncIterator[test_pb2.TestRequest], _: P2PContext) -> test_pb2.TestResponse:
+        async def rpc_sum(self, numbers: AsyncIterator[test_pb2.TestRequest], _: P2PContext) -> test_pb2.TestResponse:
             result = 0
-            async for item in request:
+            async for item in numbers:
                 result += item.number
             return test_pb2.TestResponse(number=result)
 
@@ -76,9 +76,9 @@ async def test_unary_stream(server_client):
 async def test_stream_stream(server_client):
     class ExampleServicer(ServicerBase):
         async def rpc_powers(
-            self, request: AsyncIterator[test_pb2.TestRequest], _: P2PContext
+            self, stream: AsyncIterator[test_pb2.TestRequest], _: P2PContext
         ) -> AsyncIterator[test_pb2.TestResponse]:
-            async for item in request:
+            async for item in stream:
                 yield test_pb2.TestResponse(number=item.number ** 2)
                 yield test_pb2.TestResponse(number=item.number ** 3)
 
