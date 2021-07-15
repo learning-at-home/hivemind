@@ -167,7 +167,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             average_gradients=True,
             prefix=f"{self.prefix}_averaging",
             allreduce_timeout=self.averaging_timeout,
-            listen=not self.client_mode,
+            client_mode=self.client_mode,
             **kwargs,
         )
 
