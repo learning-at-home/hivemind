@@ -24,7 +24,10 @@ class AveragingMode(Enum):
 
 class AllReduceRunner(ServicerBase):
     """
-    An internal class that runs butterfly AllReduce in a predefined group of averagers
+    An internal class that runs butterfly AllReduce in a predefined group of averagers.
+
+    This class inherits hivemind.p2p.ServicerBase, so it can be used as an RPCServicer for testing purposes without
+    creating a full DecentralizedAverager.
 
     :note: this class returns **differences** between averaged and local tensors in order to improve numerical stability
     :param group_id: unique identifier of this specific all-reduce run
