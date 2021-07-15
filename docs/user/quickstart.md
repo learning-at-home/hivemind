@@ -84,7 +84,7 @@ with tqdm() as progressbar:
 ```
 
 
-As you can see, this code is regular pytorch with one notable exception: it wraps your normal pytorch optimizer with a
+As you can see, this code is regular PyTorch with one notable exception: it wraps your regular optimizer with a
 `DecentralizedOptimizer`. This optimizer uses `DHT` to find other peers and tries to exchange weights them. When you run
 the code (please do so), you will see the following output:
 
