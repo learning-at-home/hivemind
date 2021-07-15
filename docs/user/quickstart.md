@@ -57,7 +57,7 @@ opt = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 # Create DHT: a decentralized key-value storage shared between peers
 dht = hivemind.DHT(start=True)
-print("To join training, use initial_peers =", [str(addr) for addr in dht.get_visible_maddrs()])
+print("To join the training, use initial_peers =", [str(addr) for addr in dht.get_visible_maddrs()])
 
 # Set up a decentralized optimizer that will average with peers in background
 opt = hivemind.optim.DecentralizedOptimizer(
@@ -89,7 +89,7 @@ As you can see, this code is regular pytorch with one notable exception: it wrap
 the code (please do so), you will see the following print:
 
 ```shell
-To join training, use initial_peers = ['/ip4/127.0.0.1/tcp/XXX/p2p/YYY']
+To join the training, use initial_peers = ['/ip4/127.0.0.1/tcp/XXX/p2p/YYY']
 [...] Starting a new averaging round with current parameters.
 ```
 
@@ -131,7 +131,7 @@ opt = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 # Create DHT: a decentralized key-value storage shared between peers
 dht = hivemind.DHT(initial_peers=[COPY_FROM_ANOTHER_PEER_OUTPUTS], start=True)
-print("To join training, use initial_peers =", [str(addr) for addr in dht.get_visible_maddrs()])
+print("To join the training, use initial_peers =", [str(addr) for addr in dht.get_visible_maddrs()])
 
 # Set up a decentralized optimizer that will average with peers in background
 opt = hivemind.optim.DecentralizedOptimizer(
@@ -161,7 +161,7 @@ with tqdm() as progressbar:
 </details>
 
 
-Instead of setting DHT independently, the second peer will link up with the existing DHT node from the first peer.
+Instead of setting up a new DHT, the second peer will link up with the existing DHT node from the first peer.
 If you run the second peer, you will see that both first and second peer will periodically report averaging parameters:
 
 ```shell
@@ -190,12 +190,6 @@ If you want to learn more about each individual component,
 - Learn how to use `hivemind.DHT` using this basic [DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html),
 - Learn the underlying math behind DecentralizedOptimizer in
   [(Li et al. 2020)](https://arxiv.org/abs/2005.00124) and [(Ryabinin et al. 2021)](https://arxiv.org/abs/2103.03239).
-  
-- Read about setting up Mixture-of-Experts layers in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
+- Read about setting up Mixture-of-Experts training in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
  
-
-
-
-
-
 

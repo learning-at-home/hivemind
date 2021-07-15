@@ -1,6 +1,6 @@
 # Mixture-of-Experts
 
-This tutorial covers the basics of Decentralized Mixture of Experts (DMoE).
+This tutorial covers the basics of Decentralized Mixture-of-Experts (DMoE).
 From the infrastructure standpoint, DMoE consists of two parts: experts hosted on peer devices, and a gating/routing function that assigns input to one of these experts.
 
 ## Host experts with a server
@@ -182,5 +182,4 @@ implements `hivemind.RemoteSwitchMixtureOfExperts` using the simplified routing 
 
 For more code examples related to DMoE, such as defining custom experts or using switch-based routing, please refer to
 [`hivemind/tests/test_training.py`](https://github.com/learning-at-home/hivemind/blob/master/tests/test_training.py).
-
 

@@ -24,10 +24,10 @@ as `initial_peers` to connect to the shared "dictionary".
 
 ### Store/get operations
 
-Once the DHT is formed, all participants can `dht.store` key-value pairs to the DHT and `dht.get` them by key:
+Once the DHT is formed, all participants can `dht.store` key-value pairs in the DHT and `dht.get` them by key:
 
 ```python
-# first node: store a key-value for 600 seconds
+# first node: store a key-value pair for 600 seconds
 store_ok = dht.store('my_key', ('i', 'love', 'bees'),
                      expiration_time=get_dht_time() + 600)
 
@@ -43,10 +43,10 @@ DHT nodes always prefer values with higher expiration time and may delete any va
 
 ### Values with subkeys
 
-Hivemind DHT also supports a special value type that is itself a dictionary. When nodes store to such a value,
+Hivemind DHT also supports a special value type that is itself a dictionary. When nodes store such a value,
 they add sub-keys to the dictionary instead of overwriting it.
 
-Consider an example where three DHT nodes want to find out who going to attend the party:
+Consider an example where three DHT nodes want to find out who is going to attend the party:
 
 ```python
 alice_dht = DHT(initial_peers=dht.get_visible_maddrs(), start=True)
@@ -67,13 +67,13 @@ print(attendees)
 #  'carol': ValueWithExpiration(value='no', expiration_time=1625504352.3046832)}
 ```
 
-When training over the internet, some `dht.get/store` requests may run for hundreds of milliseconds and even seconds.
-To minimize wait time, you can call these requests asynchronously via 
+When training over the Internet, some `dht.get/store` requests may run for hundreds of milliseconds and even seconds.
+To minimize the wait time, you can call these requests asynchronously via 
 [`dht.store/get/run_coroutine(..., return_future=True)`__](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#hivemind.dht.DHT.get)
 . This will run the corresponding command in background and return a [Future-like](https://docs.python.org/3/library/concurrent.futures.html) object that can be awaited.
-Please also note that the returned future is compatible with asyncio (i.e. can be awaited inside event loop).
+Please also note that the returned future is compatible with asyncio (i.e. can be awaited inside the event loop).
 
-For a more details on DHT store/get and expiration time, please refer to the [documentation for DHT and DHTNode](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#dht-and-dhtnode)
+For more details on DHT store/get and expiration time, please refer to the [documentation for DHT and DHTNode](https://learning-at-home.readthedocs.io/en/latest/modules/dht.html#dht-and-dhtnode)
 
 ### Running across the Internet
 

@@ -21,8 +21,8 @@ We kindly thank (in no particular order)
 # Related projects
 
 In this section, we list several organizations and research projects that bring humanity closer to the dream of world-scale deep learning with volunteer computing.
-* [Hugging Face](https://huggingface.co) — an AI community with world-leading NLP research that builds collaborative hub pre-training using hivemind. 
+* [Hugging Face](https://huggingface.co) — an AI community with world-leading NLP research that builds collaborative hub training using hivemind. 
 * [EYDLE](https://www.eydle.com) — a start-up that works towards distributed deep learning on volunteer hardware using centralized infrastructure.
 * [BitTensor](https://github.com/opentensor/BitTensor) — a decentralized deep learning ecosystem with incentive
   mechanism. Each peer trains for its own objective and rewards others for useful features. 
-* Also building collaborative distributed deep learning? Let us know! [TODO EMAIL]
+* Also building collaborative deep learning? Let us know! [TODO EMAIL]
