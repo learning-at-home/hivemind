@@ -404,7 +404,7 @@ class P2P:
                 async for input in requests:
                     count += 1
                 if count != 1:
-                    raise ValueError(f'Got {count} requests for handler {name} instead of one')
+                    raise ValueError(f"Got {count} requests for handler {name} instead of one")
 
             output = handler(input, context)
 
@@ -448,7 +448,7 @@ class P2P:
             async for response in responses:
                 count += 1
             if count != 1:
-                raise ValueError(f'Got {count} responses from handler {name} instead of one')
+                raise ValueError(f"Got {count} responses from handler {name} instead of one")
             return response
 
         return _take_one_response()

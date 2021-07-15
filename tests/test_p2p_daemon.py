@@ -118,7 +118,9 @@ async def test_call_protobuf_handler(should_cancel, replicate, handle_name="hand
         await asyncio.sleep(0.25)
         assert handler_cancelled
     else:
-        actual_response = await client.call_protobuf_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)
+        actual_response = await client.call_protobuf_handler(
+            server.id, handle_name, ping_request, dht_pb2.PingResponse
+        )
         assert actual_response == expected_response
         assert not handler_cancelled
 
