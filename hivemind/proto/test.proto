@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+message TestRequest {
+    int32 number = 1;
+}
+
+message TestResponse {
+    int32 number = 1;
+}

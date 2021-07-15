@@ -1,7 +1,6 @@
 import asyncio
-import importlib
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, AsyncIterator, Optional, Tuple, get_type_hints
 
 from hivemind.p2p.p2p_daemon import P2P
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
@@ -13,6 +12,8 @@ class RPCHandler:
     handle_name: str
     request_type: type
     response_type: type
+    stream_input: bool
+    stream_output: bool
 
 
 class StubBase:
@@ -28,11 +29,11 @@ class StubBase:
         self._peer = peer
 
 
-class Servicer:
+class ServicerBase:
     """
     Base class for P2P RPC servicers (e.g. DHT, averager, MoE server). The interface mimicks gRPC servicers.
 
-    - ``add_p2p_handlers(self, p2p)`` registers all rpc_* methods of the derived class as P2P unary handlers, allowing
+    - ``add_p2p_handlers(self, p2p)`` registers all rpc_* methods of the derived class as P2P handlers, allowing
       other peers to call them. It uses type annotations for the ``request`` parameter and the return value
       to infer protobufs the methods operate with.
 
@@ -48,18 +49,22 @@ class Servicer:
             if method_name.startswith("rpc_") and callable(method):
                 handle_name = f"{class_name}.{method_name}"
 
-                hints = method.__annotations__
+                hints = get_type_hints(method)
                 try:
-                    request_type = self._hint_to_type(hints["request"])
-                    response_type = self._hint_to_type(hints["return"])
-                except (KeyError, ValueError):
+                    request_type = hints["request"]
+                    response_type = hints["return"]
+                except KeyError:
                     raise ValueError(
-                        f"{handle_name} is expected to have type annotations like `dht_pb2.FindRequest` "
-                        f"(a type from the hivemind.proto module) for the `request` parameter "
-                        f"and the return value"
+                        f"{handle_name} is expected to have type annotations "
+                        f"like `dht_pb2.FindRequest` or `AsyncIterator[dht_pb2.FindRequest]` "
+                        f"for the `request` parameter and the return value"
                     )
+                request_type, stream_input = self._strip_iterator_hint(request_type)
+                response_type, stream_output = self._strip_iterator_hint(response_type)
 
-                self._rpc_handlers.append(RPCHandler(method_name, handle_name, request_type, response_type))
+                self._rpc_handlers.append(
+                    RPCHandler(method_name, handle_name, request_type, response_type, stream_input, stream_output)
+                )
 
         self._stub_type = type(
             f"{class_name}Stub",
@@ -69,14 +74,33 @@ class Servicer:
 
     @staticmethod
     def _make_rpc_caller(handler: RPCHandler):
+        input_type = AsyncIterator[handler.request_type] if handler.stream_input else handler.request_type
+
         # This method will be added to a new Stub type (a subclass of StubBase)
-        async def caller(
-            self: StubBase, request: handler.request_type, timeout: Optional[float] = None
-        ) -> handler.response_type:
-            return await asyncio.wait_for(
-                self._p2p.call_unary_handler(self._peer, handler.handle_name, request, handler.response_type),
-                timeout=timeout,
-            )
+        if handler.stream_output:
+
+            def caller(
+                self: StubBase, input: input_type, timeout: None = None
+            ) -> AsyncIterator[handler.response_type]:
+                if timeout is not None:
+                    raise ValueError("Timeouts for handlers returning streams are not supported")
+
+                return self._p2p.iterate_protobuf_handler(
+                    self._peer,
+                    handler.handle_name,
+                    input,
+                    handler.response_type,
+                )
+
+        else:
+
+            async def caller(
+                self: StubBase, input: input_type, timeout: Optional[float] = None
+            ) -> handler.response_type:
+                return await asyncio.wait_for(
+                    self._p2p.call_protobuf_handler(self._peer, handler.handle_name, input, handler.response_type),
+                    timeout=timeout,
+                )
 
         caller.__name__ = handler.method_name
         return caller
@@ -84,23 +108,19 @@ class Servicer:
     async def add_p2p_handlers(self, p2p: P2P, wrapper: Any = None) -> None:
         servicer = self if wrapper is None else wrapper
         for handler in self._rpc_handlers:
-            await p2p.add_unary_handler(
+            await p2p.add_protobuf_handler(
                 handler.handle_name,
                 getattr(servicer, handler.method_name),
                 handler.request_type,
+                stream_input=handler.stream_input,
             )
 
     def get_stub(self, p2p: P2P, peer: PeerID) -> StubBase:
         return self._stub_type(p2p, peer)
 
     @staticmethod
-    def _hint_to_type(hint: Union[type, str]) -> type:
-        if isinstance(hint, type):
-            return hint
+    def _strip_iterator_hint(hint: type) -> Tuple[type, bool]:
+        if hasattr(hint, "_name") and hint._name in ("AsyncIterator", "AsyncIterable"):
+            return hint.__args__[0], True
 
-        module_name, proto_name = hint.split(".")
-        module = importlib.import_module("hivemind.proto." + module_name)
-        result = getattr(module, proto_name)
-        if not isinstance(result, type):
-            raise ValueError(f"`hivemind.proto.{hint}` is not a type")
-        return result
+        return hint, False
