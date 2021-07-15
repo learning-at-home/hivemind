@@ -139,7 +139,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         super().__init__()
         self.dht = dht
         self.client_mode, self.listen_on, self.kwargs = client_mode, listen_on, kwargs
-        if not self.client_mode:
+        if self.client_mode:
             self.mode = AveragingMode.CLIENT
         elif auxiliary:
             self.mode = AveragingMode.AUX
