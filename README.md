@@ -55,8 +55,8 @@ pip install .
 If you would like to verify that your installation is working properly, you can install with `pip install -e .[dev]`
 instead. Then, you can run the tests with `pytest tests/`.
 
-By default, hivemind uses the compiled prebinary file of the [go-libp2p-daemon](https://github.com/learning-at-home/go-libp2p-daemon) library.
-If this is unacceptable for you for any reason, or your system is not supported by it, you can run `pip install  . --global-option="--buildgo"` to build it from  source during installation. Ensure that your machine has a recent version of Golang (1.15 or higher).
+By default, hivemind uses the precompiled binary file of the [go-libp2p-daemon](https://github.com/learning-at-home/go-libp2p-daemon) library.
+If this is unacceptable for you for any reason, or your system is not supported by it, you can run `pip install  . --global-option="--buildgo"` to build it from  source during installation. Ensure that your machine has a recent version of [Golang](https://golang.org/doc/install) (1.15 or higher).
 
 ## Documentation
 
