@@ -2,9 +2,10 @@
 
 import logging
 import os
+import pickle
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 import torch
 import transformers
@@ -97,6 +98,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
     This callback monitors and reports collaborative training progress,
     In case of a catastrophic failure, it can also revert training to a backup
     """
+
     def __init__(
         self,
         dht: hivemind.DHT,
@@ -104,7 +106,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
         model: torch.nn.Module,
         local_public_key: bytes,
         statistics_expiration: float,
-        backup_every_steps: int
+        backup_every_steps: int,
     ):
         super().__init__()
         self.model = model
@@ -119,7 +121,6 @@ class CollaborativeCallback(transformers.TrainerCallback):
         self.backup_every_steps = backup_every_steps
         self.latest_backup = self.backup_state()
 
-
     def on_train_begin(
         self, args: TrainingArguments, state: transformers.TrainerState, control: transformers.TrainerControl, **kwargs
     ):
@@ -131,9 +132,8 @@ class CollaborativeCallback(transformers.TrainerCallback):
     ):
         control.should_log = True
         if not self.params_are_finite():
-            self.load_from_state(self.previous_state)
+            self.restore_from_backup(self.latest_backup)
             return control
-        self.previous_state = self.get_current_state()
 
         if state.log_history:
             self.loss += state.log_history[-1]["loss"]
@@ -153,6 +153,8 @@ class CollaborativeCallback(transformers.TrainerCallback):
                 logger.info(f"Your current contribution: {self.total_samples_processed} samples")
                 if self.steps:
                     logger.info(f"Local loss: {self.loss / self.steps}")
+                if self.collaborative_optimizer.local_step % self.backup_every_steps == 0:
+                    self.latest_backup = self.backup_state()
 
                 self.loss = 0
                 self.steps = 0
@@ -178,14 +180,15 @@ class CollaborativeCallback(transformers.TrainerCallback):
 
     @torch.no_grad()
     def backup_state(self) -> Any:
-        return pickle.dumps({'model': self.model.state_dict(),
-                             'training': self.collaborative_optimizer.opt.state_dict()})
+        return pickle.dumps(
+            {"model": self.model.state_dict(), "training": self.collaborative_optimizer.opt.state_dict()}
+        )
 
     @torch.no_grad()
     def restore_from_backup(self, backup):
         state = pickle.loads(backup)
-        self.model.load_state_dict(state['model'])
-        self.collaborative_optimizer.opt.load_state_dict(state['training'])
+        self.model.load_state_dict(state["model"])
+        self.collaborative_optimizer.opt.load_state_dict(state["training"])
 
 
 class NoOpScheduler(LRSchedulerBase):
@@ -283,7 +286,12 @@ def main():
         optimizers=(collaborative_optimizer, NoOpScheduler(collaborative_optimizer)),
         callbacks=[
             CollaborativeCallback(
-                dht, collaborative_optimizer, model, local_public_key, collaboration_args.statistics_expiration
+                dht,
+                collaborative_optimizer,
+                model,
+                local_public_key,
+                collaboration_args.statistics_expiration,
+                collaboration_args.backup_every_steps,
             )
         ],
     )
