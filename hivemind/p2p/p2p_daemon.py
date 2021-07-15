@@ -48,9 +48,8 @@ class P2P:
 
     HEADER_LEN = 8
     BYTEORDER = "big"
-    PB_HEADER_LEN = 1
-    RESULT_MESSAGE = b"\x00"
-    ERROR_MESSAGE = b"\x01"
+    MESSAGE_MARKER = b"\x00"
+    ERROR_MARKER = b"\x01"
     END_OF_STREAM = p2pd_pb2.RPCError()
 
     DHT_MODE_MAPPING = {
@@ -258,10 +257,9 @@ class P2P:
     @staticmethod
     async def send_protobuf(protobuf, writer: asyncio.StreamWriter) -> None:
         if isinstance(protobuf, p2pd_pb2.RPCError):
-            await P2P.send_raw_data(P2P.ERROR_MESSAGE, writer)
+            writer.write(P2P.ERROR_MARKER)
         else:
-            await P2P.send_raw_data(P2P.RESULT_MESSAGE, writer)
-
+            writer.write(P2P.MESSAGE_MARKER)
         await P2P.send_raw_data(protobuf.SerializeToString(), writer)
 
     @staticmethod
@@ -275,12 +273,12 @@ class P2P:
     async def receive_protobuf(
         in_proto_type: type, reader: asyncio.StreamReader
     ) -> Tuple[Any, Optional[p2pd_pb2.RPCError]]:
-        msg_type = await P2P.receive_raw_data(reader)
-        if msg_type == P2P.RESULT_MESSAGE:
+        msg_type = await reader.readexactly(1)
+        if msg_type == P2P.MESSAGE_MARKER:
             protobuf = in_proto_type()
             protobuf.ParseFromString(await P2P.receive_raw_data(reader))
             return protobuf, None
-        elif msg_type == P2P.ERROR_MESSAGE:
+        elif msg_type == P2P.ERROR_MARKER:
             protobuf = p2pd_pb2.RPCError()
             protobuf.ParseFromString(await P2P.receive_raw_data(reader))
             return None, protobuf
@@ -328,7 +326,7 @@ class P2P:
                     async for response in handler(_read_stream(), context):
                         await P2P.send_protobuf(response, writer)
                 except Exception as e:
-                    logger.debug("Exception while processing stream and sending responses:", exc_info=True)
+                    logger.warning("Exception while processing stream and sending responses:", exc_info=True)
                     await P2P.send_protobuf(p2pd_pb2.RPCError(message=str(e)), writer)
 
             with closing(writer):
@@ -336,22 +334,20 @@ class P2P:
                 try:
                     while True:
                         receive_task = asyncio.create_task(P2P.receive_protobuf(in_proto_type, reader))
-                        done, _ = await asyncio.wait(
-                            {processing_task, receive_task}, return_when=asyncio.FIRST_COMPLETED
-                        )
+                        await asyncio.wait({processing_task, receive_task}, return_when=asyncio.FIRST_COMPLETED)
 
-                        if processing_task in done:
+                        if processing_task.done():
                             receive_task.cancel()
                             return
 
-                        if receive_task in done:
+                        if receive_task.done():
                             try:
                                 request, _ = await receive_task
                             except asyncio.IncompleteReadError:  # Connection is closed (the client cancelled or died)
                                 return
                             await requests.put(request)  # `request` is None for the end-of-stream message
                 except Exception:
-                    logger.debug("Exception while receiving requests:", exc_info=True)
+                    logger.warning("Exception while receiving requests:", exc_info=True)
                 finally:
                     processing_task.cancel()
 
@@ -404,22 +400,21 @@ class P2P:
             requests: AsyncIterator[in_proto_type], context: P2PContext
         ) -> AsyncIterator[Any]:
             if stream_input:
-                in_value = requests
+                input = requests
             else:
-                try:
-                    # `requests` is expected to contain a single value
-                    async for in_value in requests:
-                        pass
-                except StopAsyncIteration:
-                    raise ValueError("No requests provided for the unary handler")
+                count = 0
+                async for input in requests:
+                    count += 1
+                if count != 1:
+                    raise ValueError(f'Got {count} requests for handler {name} instead of one')
 
-            out_value = handler(in_value, context)
+            output = handler(input, context)
 
             if stream_output:
-                async for item in out_value:
+                async for item in output:
                     yield item
             else:
-                yield await out_value
+                yield await output
 
         await self._add_generator_handler(name, _generator_handler, in_proto_type)
 
@@ -427,7 +422,7 @@ class P2P:
         self,
         peer_id: PeerID,
         name: str,
-        in_value: Any,
+        input: Any,
         out_proto_type: type,
         *,
         stream_input: bool = False,
@@ -441,9 +436,9 @@ class P2P:
         """
 
         if stream_input:
-            requests = in_value
+            requests = input
         else:
-            requests = aiter(in_value)
+            requests = aiter(input)
 
         responses = self._call_generator_handler(peer_id, name, requests, out_proto_type)
 
@@ -451,13 +446,12 @@ class P2P:
             return responses
 
         async def _take_one_response() -> Awaitable[out_proto_type]:
-            try:
-                # `responses` is expected to contain a single value
-                async for out_value in responses:
-                    pass
-                return out_value
-            except StopAsyncIteration:
-                raise ValueError("No responses received from the unary handler")
+            count = 0
+            async for response in responses:
+                count += 1
+            if count != 1:
+                raise ValueError(f'Got {count} responses from handler {name} instead of one')
+            return response
 
         return _take_one_response()
 

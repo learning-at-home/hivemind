@@ -129,7 +129,7 @@ class ServicerBase:
 
     @staticmethod
     def _strip_iterator_hint(hint: type) -> Tuple[type, bool]:
-        if hasattr(hint, "_name") and hint._name == "AsyncIterator":
+        if hasattr(hint, "_name") and hint._name in ("AsyncIterator", "AsyncIterable"):
             return hint.__args__[0], True
 
         return hint, False
