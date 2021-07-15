@@ -69,9 +69,6 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
   You can configure WSL to use GPU following [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA.
   After CUDA toolkit is installed, you can [setup Anaconda for linux](https://www.anaconda.com/products/individual),
   then [install pytorch using conda](https://pytorch.org/get-started/locally/) and `pip install hivemind`.
-  If you don't need GPU support, you can also run without WSL using [Kitematic](https://kitematic.com/) with
-  the [same Docker image]((https://hub.docker.com/r/learningathome/hivemind)) as on macOS.
-
 
 ## Documentation
 
