@@ -12,7 +12,6 @@ single Transformer model on hundreds of computers from different universities, c
 
 ## Key Features
 
-* Train neural networks of arbitrary size: parts of their layers are distributed across the participants.
 * Distributed training without a master node: Distributed Hash Table allows connecting computers in a decentralized
   network.
 * Fault-tolerant backpropagation: forward and backward passes succeed even if some nodes are unresponsive or take too
