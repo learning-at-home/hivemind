@@ -2,7 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from itertools import chain
-from threading import Lock
+from threading import Lock, Event
 from typing import Sequence, Dict, Iterator, Optional
 
 import torch
@@ -50,6 +50,8 @@ class TrainingAverager(DecentralizedAverager):
         self.average_parameters, self.average_gradients = average_parameters, average_gradients
         self.step_executor = ThreadPoolExecutor(max_workers=1)
         self.lock_averager_step = Lock()
+        self.pending_updates_done = Event()
+        self.pending_updates_done.set()
         if initialize_optimizer:
             initialize_optimizer_state(opt)  # note: this will run one optimizer step!
 
@@ -75,6 +77,7 @@ class TrainingAverager(DecentralizedAverager):
         local_tensors = list(self.local_tensors())
         with self.lock_averager_step, torch.no_grad():
             # fill averager's tensors with current local tensors
+            self.pending_updates_done.clear()
             with data_lock, self.get_tensors() as averaged_tensors:
                 if use_old_local_tensors:
                     old_local_tensors = tuple(x.cpu().float().clone() for x in local_tensors)
@@ -83,11 +86,13 @@ class TrainingAverager(DecentralizedAverager):
                 ), "The number of optimized parameters should not change."
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                     averaged_tensor[...] = local_tensor.cpu().float()
+            self.pending_updates_done.set()
 
             # find a group and hopefully average tensors with peers, use batch sizes as weights
             gathered = super().step(**kwargs)
             if gathered is not None:
                 # load averaged tensors back into model
+                self.pending_updates_done.clear()
                 with data_lock, self.get_tensors() as averaged_tensors:
                     if len(averaged_tensors) != len(local_tensors):
                         raise RuntimeError("The number of optimized parameters should not change.")
@@ -109,6 +114,7 @@ class TrainingAverager(DecentralizedAverager):
                     else:
                         for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                             local_tensor.copy_(averaged_tensor, non_blocking=True)
+                self.pending_updates_done.set()
 
             self.local_step += 1
             return gathered
