@@ -76,7 +76,7 @@ def _test_allreduce_once(n_clients, n_aux):
             target_group_size=4,
             averaging_expiration=15,
             prefix="mygroup",
-            listen=mode != AveragingMode.CLIENT,
+            client_mode=mode == AveragingMode.CLIENT,
             listen_on="127.0.0.1:*",
             auxiliary=mode == AveragingMode.AUX,
             start=True,
@@ -121,8 +121,8 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
     dht = hivemind.DHT(start=True)
 
     n_peers = 4
-    should_listen = [False] * n_client_mode_peers + [True] * (n_peers - n_client_mode_peers)
-    random.shuffle(should_listen)
+    client_modes = [True] * n_client_mode_peers + [False] * (n_peers - n_client_mode_peers)
+    random.shuffle(client_modes)
 
     tensors1 = [torch.randn(123), torch.zeros(3)]
     tensors2 = [torch.rand(123), torch.ones(3)]
@@ -135,11 +135,11 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
             target_group_size=4,
             averaging_expiration=15,
             prefix="mygroup",
-            listen=listen,
+            client_mode=client_mode,
             listen_on="127.0.0.1:*",
             start=True,
         )
-        for tensors, listen in zip([tensors1, tensors2, tensors3, tensors4], should_listen)
+        for tensors, client_mode in zip([tensors1, tensors2, tensors3, tensors4], client_modes)
     ]
     weights = list(map(float, np.random.rand(len(averagers)) * 10 + 0.01))
     reference = [
@@ -180,7 +180,7 @@ def test_allreduce_compression():
             [x.clone() for x in tensors1],
             dht=dht,
             compression_type=compression_type_pair,
-            listen=False,
+            client_mode=True,
             target_group_size=2,
             prefix="mygroup",
             start=True,
@@ -306,16 +306,16 @@ def test_allgather():
     dht.shutdown()
 
 
-def get_cost(vector_size, partitions, throughputs):
+def get_cost(vector_size, partitions, bandwidths):
     return max(
-        (vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(throughputs[i], 1e-9)
+        (vector_size - partitions[i] + (len(partitions) - 1) * partitions[i]) / max(bandwidths[i], 1e-9)
         for i in range(len(partitions))
     )
 
 
-def check_optimality(vector_size, throughputs, ref_partitions):
-    partitions = list(load_balance_peers(vector_size, throughputs))
-    assert get_cost(vector_size, partitions, throughputs) <= get_cost(vector_size, ref_partitions, throughputs)
+def check_optimality(vector_size, bandwidths, ref_partitions):
+    partitions = list(load_balance_peers(vector_size, bandwidths))
+    assert get_cost(vector_size, partitions, bandwidths) <= get_cost(vector_size, ref_partitions, bandwidths)
 
 
 @pytest.mark.forked
@@ -342,9 +342,9 @@ def test_load_balancing():
         vector_size = np.random.randint(1, 1024 ** 3)
         num_peers = np.random.randint(1, 256)
         scale = 1e-9 + np.random.rand() * 1e5
-        throughputs = np.random.rand(num_peers) * scale + 1e-6
+        bandwidths = np.random.rand(num_peers) * scale + 1e-6
         min_size = np.random.choice([0, np.random.randint(0, vector_size // 10)])
-        assignment = load_balance_peers(vector_size, throughputs, min_size)
+        assignment = load_balance_peers(vector_size, bandwidths, min_size)
         assert np.sum(assignment) == vector_size
         assert np.min(assignment) >= 0
 

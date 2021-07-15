@@ -77,11 +77,12 @@ def test_dht_protocol():
     peer2_node_id, peer2_proc, peer2_id, _ = launch_protocol_listener(initial_peers=peer1_maddrs)
 
     loop = asyncio.get_event_loop()
-    for listen in [False, True]:  # note: order matters, this test assumes that first run uses listen=False
+    for client_mode in [True, False]:  # note: order matters, this test assumes that first run uses client mode
+        peer_id = DHTID.generate()
         p2p = loop.run_until_complete(P2P.create(initial_peers=peer1_maddrs))
         protocol = loop.run_until_complete(
             DHTProtocol.create(
-                p2p, DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, listen=listen
+                p2p, peer_id, bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, client_mode=client_mode
             )
         )
         logger.info(f"Self id={protocol.node_id}")
@@ -150,7 +151,7 @@ def test_dht_protocol():
         assert recv_dict.data[subkey1] == (protocol.serializer.dumps(value1), expiration)
         assert recv_dict.data[subkey2] == (protocol.serializer.dumps(value2), expiration + 5)
 
-        if listen:
+        if not client_mode:
             loop.run_until_complete(p2p.shutdown())
 
     peer1_proc.terminate()
@@ -166,7 +167,7 @@ def test_empty_table():
     p2p = loop.run_until_complete(P2P.create(initial_peers=peer_maddrs))
     protocol = loop.run_until_complete(
         DHTProtocol.create(
-            p2p, DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, listen=False
+            p2p, DHTID.generate(), bucket_size=20, depth_modulo=5, wait_timeout=5, num_replicas=3, client_mode=True
         )
     )
 
@@ -353,7 +354,7 @@ async def test_dhtnode_caching(T=0.05):
     node1 = await DHTNode.create(
         initial_peers=await node2.protocol.p2p.get_visible_maddrs(),
         cache_refresh_before_expiry=5 * T,
-        listen=False,
+        client_mode=True,
         reuse_get_requests=False,
     )
     await node2.store("k", [123, "value"], expiration_time=hivemind.get_dht_time() + 7 * T)

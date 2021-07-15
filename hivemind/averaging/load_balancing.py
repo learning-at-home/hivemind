@@ -9,30 +9,30 @@ logger = get_logger(__name__)
 LOAD_BALANCING_LP_DECIMALS = 9
 
 
-def load_balance_peers(vector_size, throughputs: Sequence[Optional[float]], min_size: int = 0) -> Tuple[int, ...]:
+def load_balance_peers(vector_size, bandwidths: Sequence[Optional[float]], min_size: int = 0) -> Tuple[int, ...]:
     """
-    Find an optimal partitioning of weights for butterfly all-reduce given peer throughputs.
+    Find an optimal partitioning of weights for butterfly all-reduce given peer bandwidths.
     :param vector_size: total size of the averaged vector (in elements, not bytes)
-    :param throughputs: 1d array of non-negative throughputs for each peer capable of averaging
+    :param bandwidths: 1d array of non-negative bandwidths for each peer capable of averaging
       zeros stand for client-only participants, None represents "not specified" (resolved as mean of other pears)
     :param min_size: peers that can aggregate less than this many elements will be assigned nothing
     :returns: an integer array where i-th element is the number of weights assigned to i-th peer
     """
-    specified_throughputs = [throughput for throughput in throughputs if throughput is not None and throughput > 0]
+    specified_bandwidth = [item for item in bandwidths if item is not None and item > 0]
 
-    if specified_throughputs:
-        default_throughput = np.mean(specified_throughputs)
-        throughputs = [throughput if throughput is not None else default_throughput for throughput in throughputs]
-        scores = optimize_parts_lp(vector_size, np.asarray(throughputs), min_size)
+    if specified_bandwidth:
+        default_bandwidth = np.mean(specified_bandwidth)
+        bandwidths = [item if item is not None else default_bandwidth for item in bandwidths]
+        scores = optimize_parts_lp(vector_size, np.asarray(bandwidths), min_size)
     else:
-        assert not all(throughput == 0 for throughput in throughputs), "Must have at least one nonzero throughput"
-        scores = np.asarray([1.0 if throughput is None else 0.0 for throughput in throughputs])
+        assert not all(item == 0 for item in bandwidths), "Must have at least one nonzero bandwidth"
+        scores = np.asarray([1.0 if item is None else 0.0 for item in bandwidths])
 
     # TODO(jheuristic) we no longer need hagenbach-bishoff with new AllReduceRunner
     return tuple(hagenbach_bishoff(vector_size, scores))
 
 
-def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int = 0) -> np.ndarray:
+def optimize_parts_lp(vector_size: int, bandwidths: np.ndarray, min_size: int = 0) -> np.ndarray:
     """
     This method solves an optimization problem to minimize the total allreduce time.
     In butterfly all-reduce, each peer acts both as a "client" and as an "aggregator":
@@ -42,20 +42,20 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
     Peer i network load as a "client" = vector_size * (1 - fraction_assigned_to_peer_i)
     Peer i network load as an "aggregator" = vector_size * (group_size - 1) * fraction_assigned_to_peer_i
     Peer i total communication = vector_size * [1 + (group_size - 2) * fraction_assigned_to_peer_i]
-    Total time = max_i (total_communication_for_peer_i / throughputs[i])
+    Total time = max_i (total_communication_for_peer_i / bandwidths[i])
 
     We solve this optimization problem by reducing it to linear programming with a minimax reduction
     (see lecture notes: https://www.usna.edu/Users/math/dphillip/sa305.s15/phillips/lessons/32/32.pdf )
 
     :returns: a vector of "scores", i-th score is proportional to the fraction of weights assigned to i-th peer
     """
-    assert np.all(throughputs >= 0) and np.any(throughputs > 0)
-    throughputs = np.asarray(throughputs, dtype=np.float64)
-    permutation = np.argsort(-throughputs)
-    throughputs = throughputs[permutation]
-    is_nonzero = throughputs != 0
+    assert np.all(bandwidths >= 0) and np.any(bandwidths > 0)
+    bandwidths = np.asarray(bandwidths, dtype=np.float64)
+    permutation = np.argsort(-bandwidths)
+    bandwidths = bandwidths[permutation]
+    is_nonzero = bandwidths != 0
 
-    group_size = len(throughputs)
+    group_size = len(bandwidths)
     num_variables = group_size + 1  # [w_1, ..., w_N, xi]
 
     c = np.zeros(num_variables, dtype=np.float64)
@@ -64,9 +64,9 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
     # the constraints below are tuples (A, b) such that Ax <= b
     nonnegative_weights = -np.eye(group_size, num_variables, dtype=c.dtype), np.zeros(group_size, c.dtype)
     weights_sum_to_one = c[None, :] - 1.0, np.array([-1.0])
-    coeff_per_variable = (group_size - 2.0) / np.maximum(throughputs, 10 ** -LOAD_BALANCING_LP_DECIMALS)
+    coeff_per_variable = (group_size - 2.0) / np.maximum(bandwidths, 10 ** -LOAD_BALANCING_LP_DECIMALS)
     coeff_matrix_minus_xi = np.hstack([np.diag(coeff_per_variable), -np.ones((group_size, 1), c.dtype)])
-    xi_is_maximum = coeff_matrix_minus_xi[is_nonzero], -1.0 / throughputs[is_nonzero]
+    xi_is_maximum = coeff_matrix_minus_xi[is_nonzero], -1.0 / bandwidths[is_nonzero]
     force_max_weights = np.eye(group_size, M=num_variables, dtype=c.dtype), is_nonzero.astype(c.dtype)
 
     A, b = list(map(np.concatenate, zip(nonnegative_weights, weights_sum_to_one, xi_is_maximum, force_max_weights)))
@@ -79,7 +79,7 @@ def optimize_parts_lp(vector_size: int, throughputs: np.ndarray, min_size: int =
             peer_scores[peer_scores < min_size / float(vector_size)] = 0.0
         peer_scores = np.round(peer_scores, LOAD_BALANCING_LP_DECIMALS)
     else:
-        logger.error(f"Failed to solve load-balancing for bandwidths {throughputs}.")
+        logger.error(f"Failed to solve load-balancing for bandwidths {bandwidths}.")
         peer_scores = np.ones(group_size, c.dtype)
 
     return peer_scores[np.argsort(permutation)]
