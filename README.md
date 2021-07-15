@@ -72,7 +72,7 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 
 ## Documentation
 
-* [Quickstart tutorial](https://learning-at-home.readthedocs.io/en/latest/user/quickstart.html) walks through installation
+* The [quickstart tutorial](https://learning-at-home.readthedocs.io/en/latest/user/quickstart.html) walks through installation
   and a training a simple neural network with several peers.  
 * [examples/albert](https://github.com/learning-at-home/hivemind/tree/master/examples/albert) contains the starter kit
   and instructions for training a Transformer masked language model collaboratively.
