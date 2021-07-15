@@ -28,10 +28,11 @@ the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).
 
 ## Installation
 
-Before installing hivemind, make sure that your environment has Python 3.7+
+Before installing, make sure that your environment has Python 3.7+ 
 and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.6.0 or newer.
+You can install them either natively or with [Anaconda](https://www.anaconda.com/products/individual).
 
-To start using this library, you can either install [the latest release](https://pypi.org/project/hivemind) or build it from source.
+You can install [the latest release](https://pypi.org/project/hivemind) with pip or build hivemind from source.
 
 ### With pip
 
@@ -67,8 +68,7 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
   To ensure full compatibility, we recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
 - __Windows 10+ (experimental)__ hivemind can be run using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10).
   You can configure WSL to use GPU following [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA.
-  After CUDA toolkit is installed, you can [setup Anaconda for linux](https://www.anaconda.com/products/individual),
-  then [install pytorch using conda](https://pytorch.org/get-started/locally/) and `pip install hivemind`.
+  After CUDA toolkit is you should install hivemind with pip or build it from source using the instructions above.
 
 ## Documentation
 
