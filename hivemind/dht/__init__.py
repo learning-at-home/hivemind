@@ -268,8 +268,7 @@ class DHT(mp.Process):
     async def _get_visible_maddrs(self, node: DHTNode, latest: bool = False) -> List[Multiaddr]:
         return await node.get_visible_maddrs(latest=latest)
 
-    @property
-    def p2p(self) -> P2P:
+    async def replicate_p2p(self) -> P2P:
         """
         Get a replica of a P2P instance used in the DHT process internally.
         """
@@ -278,7 +277,7 @@ class DHT(mp.Process):
             return self._p2p_replica
 
         daemon_listen_maddr = self.run_coroutine(DHT._get_p2p_daemon_listen_maddr)
-        self._p2p_replica = P2P.replicate(daemon_listen_maddr)
+        self._p2p_replica = await P2P.replicate(daemon_listen_maddr)
         return self._p2p_replica
 
     async def _get_p2p_daemon_listen_maddr(self, node: DHTNode) -> Multiaddr:
