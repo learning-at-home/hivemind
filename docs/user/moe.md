@@ -106,7 +106,8 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_patt
 
 By default, the server will only accept connections from your local machine. To access it globally, you should replace
 `127.0.0.1` part from initial peers with server's IP address. Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
-as [libp2p](https://docs.libp2p.io/concepts/addressing/).
+as [libp2p](https://docs.libp2p.io/concepts/addressing/). You can find more details on multiaddresses in the 
+[DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html)ю 
 
 ## Train the experts
 
@@ -117,7 +118,7 @@ import torch
 import hivemind
 
 dht = hivemind.DHT(
-    initial_peers=["/ip4/127.0.0.1/tcp/TODO/COPY/FULL_ADDRESS_FROM_ONE_OF_THE_SERVERS"],
+    initial_peers=["/ip4/127.0.0.1/tcp/TODO/COPYFULL_ADDRESS/FROM_ONE_OF_THE_SERVERS"],
     client_mode=True, start=True)
 
 # note: listen=False means that your peer will operate in "client only" mode: 
