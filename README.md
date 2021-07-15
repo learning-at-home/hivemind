@@ -32,6 +32,8 @@ To start using this library, you can either use the pip package manager or build
 release cycle is not established yet, we recommend installing hivemind from source to keep up with the latest bugfixes
 and improvements.
 
+Note: for now, hivemind can be run on Windows only using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10). If you want to configure WSL to work with the GPU, use the [official guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by Nvidia.
+
 ### With pip
 
 If your versions of Python and PyTorch match the requirements, you can install hivemind from pip:
@@ -52,6 +54,9 @@ pip install .
 
 If you would like to verify that your installation is working properly, you can install with `pip install -e .[dev]`
 instead. Then, you can run the tests with `pytest tests/`.
+
+By default, hivemind uses the compiled prebinary file of the [go-libp2p-daemon](https://github.com/learning-at-home/go-libp2p-daemon) library.
+If this is unacceptable for you for any reason, or your system is not supported by it, you can run `pip install  . --global-option="--buildgo"` to build it from  source during installation. Ensure that your machine has a recent version of Golang (1.15 or higher).
 
 ## Documentation
 
