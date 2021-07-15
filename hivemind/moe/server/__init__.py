@@ -152,7 +152,8 @@ class Server(threading.Thread):
             dht = None
         else:
             dht = hivemind.DHT(initial_peers=initial_peers, start=True)
-            logger.info(f"Running DHT node on {dht.get_visible_maddrs()}, initial peers = {initial_peers}")
+            visible_maddrs_str = [str(a) for a in dht.get_visible_maddrs()]
+            logger.info(f"Running DHT node on {visible_maddrs_str}, initial peers = {initial_peers}")
 
         assert (expert_pattern is None and num_experts is None and expert_uids is not None) or (
             num_experts is not None and expert_uids is None

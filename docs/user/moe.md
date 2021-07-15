@@ -20,107 +20,92 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_patte
   <summary><i>Console outputs</i></summary>
 
 ```sh
-[2020/08/26 11:54:52.645][INFO][server.create:101] Bootstrapping DHT node, initial peers = []
-[2020/08/26 11:54:52.660][INFO][server.create:105] Running dht node on port 1338
-[2020/08/26 11:54:53.182][INFO][server.task_pool.run:130] expert.0_forward starting, pid=19382
-[2020/08/26 11:54:53.182][INFO][server.task_pool.run:130] expert.0_forward starting, pid=19382
-[2020/08/26 11:54:53.189][INFO][server.task_pool.run:130] expert.0_backward starting, pid=19384
-[2020/08/26 11:54:53.189][INFO][server.task_pool.run:130] expert.0_backward starting, pid=19384
-[2020/08/26 11:54:53.196][INFO][server.task_pool.run:130] expert.1_forward starting, pid=19386
-[2020/08/26 11:54:53.196][INFO][server.task_pool.run:130] expert.1_forward starting, pid=19386
-[2020/08/26 11:54:53.206][INFO][server.task_pool.run:130] expert.1_backward starting, pid=19388
-[2020/08/26 11:54:53.206][INFO][server.task_pool.run:130] expert.1_backward starting, pid=19388
-[2020/08/26 11:54:53.212][INFO][server.task_pool.run:130] expert.2_forward starting, pid=19390
-[2020/08/26 11:54:53.212][INFO][server.task_pool.run:130] expert.2_forward starting, pid=19390
-[2020/08/26 11:54:53.218][INFO][server.task_pool.run:130] expert.2_backward starting, pid=19392
-[2020/08/26 11:54:53.218][INFO][server.task_pool.run:130] expert.2_backward starting, pid=19392
-[2020/08/26 11:54:53.225][INFO][server.task_pool.run:130] expert.3_forward starting, pid=19394
-[2020/08/26 11:54:53.225][INFO][server.task_pool.run:130] expert.3_forward starting, pid=19394
-[2020/08/26 11:54:53.232][INFO][server.task_pool.run:130] expert.3_backward starting, pid=19396
-[2020/08/26 11:54:53.232][INFO][server.task_pool.run:130] expert.3_backward starting, pid=19396
-[2020/08/26 11:54:53.235][INFO][server.task_pool.run:130] expert.4_forward starting, pid=19398
-[2020/08/26 11:54:53.235][INFO][server.task_pool.run:130] expert.4_forward starting, pid=19398
-[2020/08/26 11:54:53.241][INFO][server.task_pool.run:130] expert.4_backward starting, pid=19400
-[2020/08/26 11:54:53.241][INFO][server.task_pool.run:130] expert.4_backward starting, pid=19400
-[2020/08/26 11:54:53.244][INFO][server.runtime.run:60] Started
-[2020/08/26 11:54:53.244][INFO][server.runtime.run:60] Started
-[2020/08/26 11:54:53.245][INFO][server.create:136] Server started at 0.0.0.0:1337
-[2020/08/26 11:54:53.245][INFO][server.create:137] Got 5 active experts of type ffn: ['expert.0', 'expert.1', 'expert.2', 'expert.3', 'expert.4']
+[2021/07/15 18:52:01.424][INFO][moe.server.create:156] Running DHT node on ['/ip4/127.0.0.1/tcp/42513/p2p/QmacLgRkAHSqdWYdQ8TePioMxQCNV2JeD3AUDmbVd69gNL'], initial peers = []
+[2021/07/15 18:52:01.424][INFO][moe.server.create:181] Generating 5 expert uids from pattern expert.[0:5]
+[2021/07/15 18:52:01.658][INFO][moe.server.run:233] Server started at 0.0.0.0:1337
+[2021/07/15 18:52:01.658][INFO][moe.server.run:234] Got 5 experts:
+[2021/07/15 18:52:01.658][INFO][moe.server.run:237] expert.4: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:52:01.658][INFO][moe.server.run:237] expert.0: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:52:01.659][INFO][moe.server.run:237] expert.3: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:52:01.659][INFO][moe.server.run:237] expert.2: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:52:01.659][INFO][moe.server.run:237] expert.1: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:52:02.447][INFO][moe.server.task_pool.run:145] expert.4_forward starting, pid=14038
+[2021/07/15 18:52:02.468][INFO][moe.server.task_pool.run:145] expert.4_backward starting, pid=14042
+[2021/07/15 18:52:02.469][INFO][moe.server.task_pool.run:145] expert.0_forward starting, pid=14044
+[2021/07/15 18:52:02.484][INFO][moe.server.task_pool.run:145] expert.0_backward starting, pid=14051
+[2021/07/15 18:52:02.501][INFO][moe.server.task_pool.run:145] expert.3_forward starting, pid=14057
+[2021/07/15 18:52:02.508][INFO][moe.server.task_pool.run:145] expert.3_backward starting, pid=14058
+[2021/07/15 18:52:02.508][INFO][moe.server.task_pool.run:145] expert.2_forward starting, pid=14060
+[2021/07/15 18:52:02.521][INFO][moe.server.task_pool.run:145] expert.2_backward starting, pid=14070
+[2021/07/15 18:52:02.521][INFO][moe.server.task_pool.run:145] expert.1_forward starting, pid=14075
+[2021/07/15 18:52:02.532][INFO][moe.server.task_pool.run:145] expert.1_backward starting, pid=14081
+[2021/07/15 18:52:02.532][INFO][moe.server.runtime.run:80] Started
 ```
 
 </details>
 
 
-This server accepts requests to experts on port 1337 and start a DHT peer on port 1338. In total, it serves 5
-feedforward experts with ReLU and LayerNorm
+This server serves 5 feedforward experts with ReLU and LayerNorm
 (see
 architecture [here](https://github.com/learning-at-home/hivemind/blob/master/hivemind/server/layers/__init__.py#L7-L21))
-.
+. In order to connect to this server, you should copy its address from console outputs:
+```shell
+[...][INFO][moe.server.create:156] Running DHT node on ['ADDRESS_WILL_BE_PRINTED_HERE']
+```
+
 
 You can create additional servers in the same decentralized network using `--initial_peers` argument:
 
 ```sh
-python hivemind/hivemind_cli/run_server.py --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_pattern "expert.[5:250]" \
-                              --initial_peers localhost:1338
+hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_pattern "expert.[5:250]" \
+                --initial_peers /ip4/127.0.0.1/tcp/42513/p2p/COPY_FULL_ADDRESS_HERE
 ```
 
 <details style="margin-top:-24px; margin-bottom: 16px;">
   <summary>Console outputs</summary>
 
 ```sh
-[2020/08/26 13:15:05.078][INFO][server.create:103] Bootstrapping DHT node, initial peers = ['localhost:1338']
-[2020/08/26 13:15:05.101][INFO][server.create:107] Running dht node on port 44291
-expert.[5:250]
-[2020/08/26 13:15:06.326][INFO][server.task_pool.run:130] expert.113_forward starting, pid=29517
-[2020/08/26 13:15:06.326][INFO][server.task_pool.run:130] expert.113_forward starting, pid=29517
-[2020/08/26 13:15:06.333][INFO][server.task_pool.run:130] expert.113_backward starting, pid=29519
-[2020/08/26 13:15:06.333][INFO][server.task_pool.run:130] expert.113_backward starting, pid=29519
-[2020/08/26 13:15:06.340][INFO][server.task_pool.run:130] expert.149_forward starting, pid=29521
-[2020/08/26 13:15:06.340][INFO][server.task_pool.run:130] expert.149_forward starting, pid=29521
-[2020/08/26 13:15:06.352][INFO][server.task_pool.run:130] expert.149_backward starting, pid=29523
-[2020/08/26 13:15:06.352][INFO][server.task_pool.run:130] expert.149_backward starting, pid=29523
-[2020/08/26 13:15:06.363][INFO][server.task_pool.run:130] expert.185_forward starting, pid=29525
-[2020/08/26 13:15:06.363][INFO][server.task_pool.run:130] expert.185_forward starting, pid=29525
-[2020/08/26 13:15:06.375][INFO][server.task_pool.run:130] expert.185_backward starting, pid=29527
-[2020/08/26 13:15:06.375][INFO][server.task_pool.run:130] expert.185_backward starting, pid=29527
-[2020/08/26 13:15:06.381][INFO][server.task_pool.run:130] expert.189_forward starting, pid=29529
-[2020/08/26 13:15:06.381][INFO][server.task_pool.run:130] expert.189_forward starting, pid=29529
-[2020/08/26 13:15:06.388][INFO][server.task_pool.run:130] expert.189_backward starting, pid=29531
-[2020/08/26 13:15:06.388][INFO][server.task_pool.run:130] expert.189_backward starting, pid=29531
-[2020/08/26 13:15:06.400][INFO][server.task_pool.run:130] expert.191_forward starting, pid=29533
-[2020/08/26 13:15:06.400][INFO][server.task_pool.run:130] expert.191_forward starting, pid=29533
-[2020/08/26 13:15:06.407][INFO][server.task_pool.run:130] expert.191_backward starting, pid=29535
-[2020/08/26 13:15:06.407][INFO][server.task_pool.run:130] expert.191_backward starting, pid=29535
-[2020/08/26 13:15:06.415][INFO][server.task_pool.run:130] expert.196_forward starting, pid=29537
-[2020/08/26 13:15:06.415][INFO][server.task_pool.run:130] expert.196_forward starting, pid=29537
-[2020/08/26 13:15:06.426][INFO][server.task_pool.run:130] expert.196_backward starting, pid=29539
-[2020/08/26 13:15:06.426][INFO][server.task_pool.run:130] expert.196_backward starting, pid=29539
-[2020/08/26 13:15:06.435][INFO][server.task_pool.run:130] expert.225_forward starting, pid=29541
-[2020/08/26 13:15:06.435][INFO][server.task_pool.run:130] expert.225_forward starting, pid=29541
-[2020/08/26 13:15:06.445][INFO][server.task_pool.run:130] expert.225_backward starting, pid=29543
-[2020/08/26 13:15:06.445][INFO][server.task_pool.run:130] expert.225_backward starting, pid=29543
-[2020/08/26 13:15:06.454][INFO][server.task_pool.run:130] expert.227_forward starting, pid=29545
-[2020/08/26 13:15:06.454][INFO][server.task_pool.run:130] expert.227_forward starting, pid=29545
-[2020/08/26 13:15:06.467][INFO][server.task_pool.run:130] expert.227_backward starting, pid=29547
-[2020/08/26 13:15:06.467][INFO][server.task_pool.run:130] expert.227_backward starting, pid=29547
-[2020/08/26 13:15:06.475][INFO][server.task_pool.run:130] expert.36_forward starting, pid=29549
-[2020/08/26 13:15:06.475][INFO][server.task_pool.run:130] expert.36_forward starting, pid=29549
-[2020/08/26 13:15:06.482][INFO][server.task_pool.run:130] expert.36_backward starting, pid=29551
-[2020/08/26 13:15:06.482][INFO][server.task_pool.run:130] expert.36_backward starting, pid=29551
-[2020/08/26 13:15:06.497][INFO][server.task_pool.run:130] expert.58_forward starting, pid=29553
-[2020/08/26 13:15:06.497][INFO][server.task_pool.run:130] expert.58_forward starting, pid=29553
-[2020/08/26 13:15:06.507][INFO][server.task_pool.run:130] expert.58_backward starting, pid=29555
-[2020/08/26 13:15:06.507][INFO][server.task_pool.run:130] expert.58_backward starting, pid=29555
-[2020/08/26 13:15:06.509][INFO][server.runtime.run:60] Started
-[2020/08/26 13:15:06.509][INFO][server.runtime.run:60] Started
-[2020/08/26 13:15:06.510][INFO][server.create:166] Server started at 0.0.0.0:40089
-[2020/08/26 13:15:06.510][INFO][server.create:167] Got 10 active experts of type ffn: ['expert.113', 'expert.149', 'expert.185', 'expert.189', 'expert.191', 'expert.196', 'expert.225', 'expert.227', 'expert.36', 'expert.58']
+[2021/07/15 18:53:41.700][INFO][moe.server.create:156] Running DHT node on ['/ip4/127.0.0.1/tcp/34487/p2p/QmcJ3jgbdwphLAiwGjvwrjimJJrdMyhLHf6tFj9viCFFGn'], initial peers = ['/ip4/127.0.0.1/tcp/42513/p2p/QmacLgRkAHSqdWYdQ8TePioMxQCNV2JeD3AUDmbVd69gNL']
+[2021/07/15 18:53:41.700][INFO][moe.server.create:181] Generating 10 expert uids from pattern expert.[5:250]
+[2021/07/15 18:53:42.085][INFO][moe.server.run:233] Server started at 0.0.0.0:36389
+[2021/07/15 18:53:42.086][INFO][moe.server.run:234] Got 10 experts:
+[2021/07/15 18:53:42.086][INFO][moe.server.run:237] expert.55: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:42.086][INFO][moe.server.run:237] expert.173: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:42.086][INFO][moe.server.run:237] expert.164: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:42.086][INFO][moe.server.run:237] expert.99: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:42.086][INFO][moe.server.run:237] expert.149: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:42.087][INFO][moe.server.run:237] expert.66: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:42.087][INFO][moe.server.run:237] expert.106: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:42.087][INFO][moe.server.run:237] expert.31: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:42.087][INFO][moe.server.run:237] expert.95: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:42.087][INFO][moe.server.run:237] expert.167: FeedforwardBlock, 2100736 parameters
+[2021/07/15 18:53:43.892][INFO][moe.server.task_pool.run:145] expert.55_forward starting, pid=14854
+[2021/07/15 18:53:43.901][INFO][moe.server.task_pool.run:145] expert.55_backward starting, pid=14858
+[2021/07/15 18:53:43.915][INFO][moe.server.task_pool.run:145] expert.173_forward starting, pid=14862
+[2021/07/15 18:53:43.929][INFO][moe.server.task_pool.run:145] expert.173_backward starting, pid=14864
+[2021/07/15 18:53:43.930][INFO][moe.server.task_pool.run:145] expert.164_forward starting, pid=14869
+[2021/07/15 18:53:43.948][INFO][moe.server.task_pool.run:145] expert.164_backward starting, pid=14874
+[2021/07/15 18:53:43.968][INFO][moe.server.task_pool.run:145] expert.99_forward starting, pid=14883
+[2021/07/15 18:53:43.977][INFO][moe.server.task_pool.run:145] expert.99_backward starting, pid=14888
+[2021/07/15 18:53:43.995][INFO][moe.server.task_pool.run:145] expert.149_forward starting, pid=14889
+[2021/07/15 18:53:44.007][INFO][moe.server.task_pool.run:145] expert.149_backward starting, pid=14898
+[2021/07/15 18:53:44.021][INFO][moe.server.task_pool.run:145] expert.66_forward starting, pid=14899
+[2021/07/15 18:53:44.034][INFO][moe.server.task_pool.run:145] expert.106_forward starting, pid=14909
+[2021/07/15 18:53:44.036][INFO][moe.server.task_pool.run:145] expert.66_backward starting, pid=14904
+[2021/07/15 18:53:44.058][INFO][moe.server.task_pool.run:145] expert.106_backward starting, pid=14919
+[2021/07/15 18:53:44.077][INFO][moe.server.task_pool.run:145] expert.31_forward starting, pid=14923
+[2021/07/15 18:53:44.077][INFO][moe.server.task_pool.run:145] expert.31_backward starting, pid=14925
+[2021/07/15 18:53:44.095][INFO][moe.server.task_pool.run:145] expert.95_forward starting, pid=14932
+[2021/07/15 18:53:44.106][INFO][moe.server.task_pool.run:145] expert.95_backward starting, pid=14935
+[2021/07/15 18:53:44.118][INFO][moe.server.task_pool.run:145] expert.167_forward starting, pid=14943
+[2021/07/15 18:53:44.119][INFO][moe.server.task_pool.run:145] expert.167_backward starting, pid=14944
+[2021/07/15 18:53:44.123][INFO][moe.server.runtime.run:80] Started
 ```
 
 </details>
 
-Here and below, if you are running on a different machine, replace `localhost:1338` with your original server's public
-IP address (e.g. `12.34.56.78:1338`). Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
+By default, the server will only accept connections from your local machine. To access it globally, you should replace
+`127.0.0.1` part from initial peers with server's IP address. Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
 as [gRPC](https://grpc.io/docs/languages/python/basics/#starting-the-server).
 
 ## Train the experts
@@ -131,12 +116,15 @@ Now let's put these experts to work. Create a python console (or a jupyter) and 
 import torch
 import hivemind
 
-dht = hivemind.DHT(initial_peers=["localhost:1338"], listen=False, start=True)
+dht = hivemind.DHT(
+    initial_peers=["/ip4/127.0.0.1/tcp/TODO/COPY/FULL_ADDRESS_FROM_ONE_OF_THE_SERVERS"],
+    client_mode=True, start=True)
+
 # note: listen=False means that your peer will operate in "client only" mode: 
 # this means that it can request other peers, but will not accept requests in return 
 
-expert1, expert4 = hivemind.get_experts(dht, ["expert.1", "expert.4"])
-assert expert1 is not None and expert4 is not None, "server hasn't declared experts (yet?)"
+expert1, expert4 = hivemind.moe.get_experts(dht, ["expert.1", "expert.4"])
+assert expert1 is not None and expert4 is not None, "experts not found. Please double-check initial peers"
 ```
 
 The experts (e.g. `expert1`) can be used as a pytorch module with autograd support:
