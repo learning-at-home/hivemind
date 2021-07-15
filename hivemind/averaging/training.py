@@ -108,7 +108,7 @@ class TrainingAverager(DecentralizedAverager):
                             local_tensor.add_(averaged_tensor - old_local_tensor)
                     else:
                         for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
-                            local_tensor.data.copy_(averaged_tensor, non_blocking=True)
+                            local_tensor.copy_(averaged_tensor, non_blocking=True)
 
             self.local_step += 1
             return gathered
