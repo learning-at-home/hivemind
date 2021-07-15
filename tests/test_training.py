@@ -196,7 +196,7 @@ def test_decentralized_optimizer_averaging():
         verbose=True,
     )
 
-    assert not torch.allclose(param1, param2)
+    assert not torch.allclose(param1, param2, atol=1e-3, rtol=0)
     (param1.sum() + param2.sum()).backward()
 
     for _ in range(100):
