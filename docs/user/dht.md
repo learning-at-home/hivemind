@@ -43,7 +43,7 @@ DHT nodes always prefer values with higher expiration time and may delete any va
 
 ### Values with subkeys
 
-Hivemind DHT also supports a special value type that is itself a dictionary. When nodes store to such a value,
+Hivemind DHT also supports a special value type that is itself a dictionary. When nodes store such a value,
 they add sub-keys to the dictionary instead of overwriting it.
 
 Consider an example where three DHT nodes want to find out who going to attend the party:
