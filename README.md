@@ -18,8 +18,8 @@ large model on hundreds of computers from different universities, companies, and
   network.
 * Fault-tolerant backpropagation: forward and backward passes succeed even if some nodes are unresponsive or take too
   long to respond.
-* [Decentralized parameter averaging](https://arxiv.org/abs/2103.03239): iteratively aggregate updates from multiple
-  workers without the need to synchronize across the entire network.
+* Decentralized parameter averaging: iteratively aggregate updates from multiple
+  workers without the need to synchronize across the entire network ([paper](https://arxiv.org/abs/2103.03239)).
 * Train neural networks of arbitrary size: parts of their layers are distributed across the participants with the
   [Decentralized Mixture-of-Experts](https://arxiv.org/abs/2002.04013).
 
