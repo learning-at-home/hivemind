@@ -31,12 +31,7 @@ the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).
 Before installing hivemind, make sure that your environment has Python 3.7+
 and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.6.0 or newer.
 
-To start using this library, you can either install [the latest release](https://pypi.org/project/hivemind/) with pip
-or build it from source.
-
-Note: for now, hivemind can be run on Windows only using
-[WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10). If you want to configure WSL to work with the GPU,
-use the [official guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA.
+To start using this library, you can either `pip install hivemind` or build it from source.
 
 ### With pip
 
@@ -65,11 +60,25 @@ or want to build the binary yourself, you can recompile it by running `pip insta
 Before running the compilation, please ensure that your machine has a recent version
 of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 
+### OS support
+- __Linux__ is the default OS for which hivemind is developed and tested. We recommend Ubuntu 18.04+ (64-bit),
+  but other 64-bit distros should work as well. Legacy 32-bit is not recommended.
+- __macOS 10.x__ mostly works but requires building hivemind from source, and some edge cases may fail.
+  To ensure full compatibility, we recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
+- __Windows 10+ (experimental)__ hivemind can be run using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10).
+  You can configure WSL to use GPU following [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA.
+  After CUDA toolkit is installed, you can [setup Anaconda for linux](https://www.anaconda.com/products/individual),
+  then [install pytorch using conda](https://pytorch.org/get-started/locally/) and `pip install hivemind`.
+  If you don't need GPU support, you can also run without WSL using [Kitematic](https://kitematic.com/) with
+  the [same Docker image]((https://hub.docker.com/r/learningathome/hivemind)) as on macOS.
+
+
 ## Documentation
 
-* [Quickstart](https://learning-at-home.readthedocs.io/en/latest/user/quickstart.html): install hivemind, set up a
-  server and train experts
-* Documentation & guides are available at [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
+* [Quickstart tutorial](https://learning-at-home.readthedocs.io/en/latest/user/quickstart.html) walks through installation
+  and a training a simple neural network with multiple  
+* [examples/albert](https://github.com/learning-at-home/hivemind/tree/master/examples/albert) 
+* API reference and other tutorials are available at [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
 
 ## Contributing
 
