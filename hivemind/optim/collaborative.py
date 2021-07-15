@@ -359,7 +359,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                     samples_accumulated=self.local_samples_accumulated,
                     samples_per_second=self.performance_ema.samples_per_second,
                     time=current_time,
-                    client_mode=not self.averager.listen,
+                    client_mode=self.averager.client_mode,
                 )
 
             self.dht.store(
