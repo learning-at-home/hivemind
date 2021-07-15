@@ -2,7 +2,7 @@
 
 [![Documentation Status](https://readthedocs.org/projects/learning-at-home/badge/?version=latest)](https://learning-at-home.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://img.shields.io/pypi/v/hivemind.svg)](https://pypi.org/project/hivemind/)
-[![Gitter](https://badges.gitter.im/learning-at-home/hivemind.svg)](https://gitter.im/learning-at-home/hivemind?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Discord](https://img.shields.io/static/v1?style=default&label=chat&logo=discord&message=join%20chat)](https://discord.gg/xC7ucM8j)
 [![CI status](https://github.com/learning-at-home/hivemind/actions/workflows/run-tests.yml/badge.svg?branch=master)](https://github.com/learning-at-home/hivemind/actions)
 ![Codecov](https://img.shields.io/codecov/c/github/learning-at-home/hivemind)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -78,7 +78,7 @@ documentation improvements to entirely new features, is equally appreciated.
 
 If you want to contribute to hivemind but don't know where to start, take a look at the
 unresolved [issues](https://github.com/learning-at-home/hivemind/issues). Open a new issue or
-join [our chat room](https://gitter.im/learning-at-home/hivemind) in case you want to discuss new functionality or
+join [our chat room](https://discord.gg/xC7ucM8j) in case you want to discuss new functionality or
 report a possible bug. Bug fixes are always welcome, but new features should be preferably discussed with maintainers
 beforehand.
 
