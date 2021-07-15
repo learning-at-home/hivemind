@@ -61,7 +61,7 @@ or want to build the binary yourself, you can recompile it by running `pip insta
 Before running the compilation, please ensure that your machine has a recent version
 of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 
-### OS support
+### System requirements
 - __Linux__ is the default OS for which hivemind is developed and tested. We recommend Ubuntu 18.04+ (64-bit),
   but other 64-bit distros should work as well. Legacy 32-bit is not recommended.
 - __macOS 10.x__ mostly works but requires building hivemind from source, and some edge cases may fail.
