@@ -31,7 +31,7 @@ the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).
 Before installing hivemind, make sure that your environment has Python 3.7+
 and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.6.0 or newer.
 
-To start using this library, you can either `pip install hivemind` or build it from source.
+To start using this library, you can either install [the latest release](https://pypi.org/project/hivemind) or build it from source.
 
 ### With pip
 
@@ -81,6 +81,9 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
   and instructions for training a Transformer masked language model collaboratively.
 * API reference and additional tutorials are available at [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
 
+If you have any questions about intalling and using hivemind, you can ask them in 
+[our discord chat](https://discord.gg/xC7ucM8j) or file an [issue](https://github.com/learning-at-home/hivemind/issues).
+
 ## Contributing
 
 Hivemind is currently at the active development stage, and we welcome all contributions. Everything, from bug fixes and
@@ -99,7 +102,7 @@ our [guide](https://learning-at-home.readthedocs.io/en/latest/user/contributing.
 
 ## Citation
 
-If you found hivemind or its underlying algorithms useful for your experiments, please cite the following source:
+If you found hivemind or its underlying algorithms useful for your research, please cite the relevant papers:
 
 ```
 @misc{hivemind,
@@ -171,7 +174,6 @@ Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired t
 
 </details>
 
-In the documentation, we list
-several [related](https://learning-at-home.readthedocs.io/en/latest/user/acknowledgements.html) projects and
-acknowledgements.
+We also maintain a list of [related projects and
+acknowledgements](https://learning-at-home.readthedocs.io/en/latest/user/acknowledgements.html).
 
