@@ -86,7 +86,7 @@ with tqdm() as progressbar:
 
 As you can see, this code is regular pytorch with one notable exception: it wraps your normal pytorch optimizer with a
 `DecentralizedOptimizer`. This optimizer uses `DHT` to find other peers and tries to exchange weights them. When you run
-the code (please do so), you will see the following print:
+the code (please do so), you will see the following output:
 
 ```shell
 To join the training, use initial_peers = ['/ip4/127.0.0.1/tcp/XXX/p2p/YYY']
