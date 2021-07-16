@@ -395,7 +395,7 @@ def test_overcrowded(num_peers=16):
         for dht in dht_instances
     ]
     for t in range(5):
-        step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
+        step_futures = [averager.step(wait=False) for averager in averagers]
         assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
 
     for averager in averagers + dht_instances:
