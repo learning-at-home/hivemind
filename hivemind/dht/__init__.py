@@ -50,6 +50,7 @@ class DHT(mp.Process):
       The validators will be combined using the CompositeValidator class. It merges them when possible
       (according to their `.merge_with()` policies) and orders them according to the `.priority` properties.
     :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
+    :param await_ready: if True, the constructor waits until the DHT process is ready to process incoming requests
     :param kwargs: any other params will be forwarded to DHTNode and hivemind.p2p.P2P upon creation
     """
 
@@ -64,6 +65,7 @@ class DHT(mp.Process):
         max_workers: Optional[int] = None,
         record_validators: Iterable[RecordValidatorBase] = (),
         shutdown_timeout: float = 3,
+        await_ready: bool = True,
         **kwargs,
     ):
         self._parent_pid = os.getpid()
@@ -91,7 +93,7 @@ class DHT(mp.Process):
         self._p2p_replica = None
 
         if start:
-            self.run_in_background(await_ready=True)
+            self.run_in_background(await_ready=await_ready)
 
     def run(self) -> None:
         """Serve DHT forever. This function will not return until DHT node is shut down"""

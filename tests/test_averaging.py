@@ -290,8 +290,9 @@ def test_allgather():
         futures.append(averager.step(wait=False, gather=dict(batch_size=123 + i, foo="bar")))
 
     gathered_data = [future.result() for future in futures]
-    gathered_data_reprs = [repr(sorted({peer_id.to_base58(): data for peer_id, data in result.items()}))
-                           for result in gathered_data]
+    gathered_data_reprs = [
+        repr(sorted({peer_id.to_base58(): data for peer_id, data in result.items()})) for result in gathered_data
+    ]
     assert len(set(gathered_data_reprs)) == 2
 
     reference_metadata = {
