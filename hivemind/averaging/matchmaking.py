@@ -237,6 +237,7 @@ class Matchmaking:
         self, request: averaging_pb2.JoinRequest, _: P2PContext
     ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """accept or reject a join request from another averager; if accepted, run him through allreduce steps"""
+        request_endpoint = None
         try:
             async with self.lock_request_join_group:
                 reason_to_reject = self._check_reasons_to_reject(request)
@@ -449,9 +450,9 @@ class PotentialLeaders:
             if maybe_next_leader is None or self.max_assured_time <= entry.expiration_time <= self.search_end_time:
                 self.update_triggered.set()
 
-            if maybe_next_leader is None or (entry.expiration_time, maybe_next_leader) > (
+            if maybe_next_leader is None or (entry.expiration_time, maybe_next_leader.to_base58()) > (
                 self.declared_expiration_time,
-                self.endpoint,
+                self.endpoint.to_base58(),
             ):
                 await asyncio.wait(
                     {self.update_finished.wait(), self.declared_expiration.wait()}, return_when=asyncio.FIRST_COMPLETED
