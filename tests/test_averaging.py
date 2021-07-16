@@ -12,6 +12,7 @@ from hivemind.averaging.key_manager import GroupKeyManager
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.p2p import PeerID
 from hivemind.proto.runtime_pb2 import CompressionType
+from test_utils.dht_swarms import launch_dht_instances
 
 
 @pytest.mark.forked
@@ -49,13 +50,6 @@ async def test_key_manager():
     assert len(q3) == 1 and (localhvost, t + 66) in q3
     assert len(q4) == 2 and (localhvost, t + 66) in q4 and (localhvost2, t + 61) in q2
     assert len(q5) == 0
-
-
-def launch_dht_instances(n_peers: int, **kwargs) -> List[hivemind.DHT]:
-    instances = [hivemind.DHT(start=True, **kwargs)]
-    initial_peers = instances[0].get_visible_maddrs()
-    instances.extend(hivemind.DHT(initial_peers=initial_peers, start=True, **kwargs) for _ in range(n_peers - 1))
-    return instances
 
 
 def _test_allreduce_once(n_clients, n_aux):
