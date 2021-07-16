@@ -188,7 +188,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     @property
     def endpoint(self) -> Endpoint:
-        return self._p2p.id
+        return self.dht.peer_id
 
     def run(self):
         """
@@ -257,8 +257,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         remaining_tasks = set()
         for group in self._running_groups.values():
             remaining_tasks.update(group.finalize(cancel=True))
-        if not self.client_mode:
-            remaining_tasks.add(self._server.stop(timeout))
         await asyncio.gather(*remaining_tasks)
 
     def __del__(self):

@@ -24,7 +24,7 @@ from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, Type
 from multiaddr import Multiaddr
 
 from hivemind.dht.node import DHTNode
-from hivemind.p2p import P2P
+from hivemind.p2p import P2P, PeerID
 from hivemind.dht.routing import DHTID, DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.utils import DHTExpiration, MPFuture, ValueWithExpiration, await_cancelled, get_logger, switch_to_uvloop
@@ -86,7 +86,10 @@ class DHT(mp.Process):
         self.shutdown_timeout = shutdown_timeout
         self.ready = mp.Event()
         self.daemon = daemon
+
+        self._peer_id = None
         self._p2p_replica = None
+
         if start:
             self.run_in_background(await_ready=True)
 
@@ -256,6 +259,15 @@ class DHT(mp.Process):
     async def _add_validators(self, node: DHTNode, record_validators: Iterable[RecordValidatorBase]) -> None:
         node.protocol.record_validator.extend(record_validators)
 
+    @property
+    def peer_id(self) -> PeerID:
+        if self._peer_id is None:
+            self._peer_id = self.run_coroutine(DHT._get_peer_id)
+        return self._peer_id
+
+    async def _get_peer_id(self, node: DHTNode) -> PeerID:
+        return node.peer_id
+
     def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
         """
         Get multiaddrs of the current DHT node that should be accessible by other peers.
@@ -273,11 +285,9 @@ class DHT(mp.Process):
         Get a replica of a P2P instance used in the DHT process internally.
         """
 
-        if self._p2p_replica is not None:
-            return self._p2p_replica
-
-        daemon_listen_maddr = self.run_coroutine(DHT._get_p2p_daemon_listen_maddr)
-        self._p2p_replica = await P2P.replicate(daemon_listen_maddr)
+        if self._p2p_replica is None:
+            daemon_listen_maddr = self.run_coroutine(DHT._get_p2p_daemon_listen_maddr)
+            self._p2p_replica = await P2P.replicate(daemon_listen_maddr)
         return self._p2p_replica
 
     async def _get_p2p_daemon_listen_maddr(self, node: DHTNode) -> Multiaddr:

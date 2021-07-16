@@ -237,7 +237,6 @@ class Matchmaking:
         self, request: averaging_pb2.JoinRequest, _: P2PContext
     ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """accept or reject a join request from another averager; if accepted, run him through allreduce steps"""
-        request_endpoint = PeerID.from_base58(request.endpoint)
         try:
             async with self.lock_request_join_group:
                 reason_to_reject = self._check_reasons_to_reject(request)
@@ -245,6 +244,7 @@ class Matchmaking:
                     yield reason_to_reject
                     return
 
+                request_endpoint = PeerID.from_base58(request.endpoint)
                 self.current_followers[request_endpoint] = request
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
@@ -289,7 +289,7 @@ class Matchmaking:
             yield averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.BEGIN_ALLREDUCE,
                 group_id=group_info.group_id,
-                ordered_group_endpoints=group_info.endpoints,
+                ordered_group_endpoints=[item.to_base58() for item in group_info.endpoints],
                 gathered=group_info.gathered,
             )
         except (concurrent.futures.CancelledError, asyncio.CancelledError):
@@ -309,14 +309,17 @@ class Matchmaking:
         if not self.is_looking_for_group or self.assembled_group.done():
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
 
+        try:
+            request_endpoint = PeerID.from_base58(request.endpoint)
+        except (ValueError, TypeError):
+            request_endpoint = None
         if (
             request.ListFields() == 3
             and not isinstance(request.schema_hash, bytes)
             or len(request.schema_hash) == 0
             or not isinstance(request.expiration, DHTExpiration)
             or not isfinite(request.expiration)
-            or not isinstance(request.endpoint, Endpoint)
-            or len(request.endpoint) == 0
+            or request_endpoint is None
             or self.client_mode
         ):
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.PROTOCOL_VIOLATION)
@@ -331,7 +334,7 @@ class Matchmaking:
             return averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.NOT_A_LEADER, suggested_leader=self.current_leader
             )  # note: this suggested leader is currently ignored
-        elif request.endpoint == self.endpoint or request.endpoint in self.current_followers:
+        elif request_endpoint == self.endpoint or request_endpoint in self.current_followers:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
         elif len(self.current_followers) + 1 >= self.target_group_size:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_IS_FULL)
@@ -364,7 +367,8 @@ class Matchmaking:
         assert not self.assembled_group.done()
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
 
-        group_id, ordered_group_endpoints = msg.group_id, msg.ordered_group_endpoints
+        group_id = msg.group_id
+        ordered_group_endpoints = [Endpoint.from_base58(item) for item in msg.ordered_group_endpoints]
         assert self.endpoint in ordered_group_endpoints, "Leader sent us group_endpoints that does not contain us!"
         assert len(ordered_group_endpoints) == len(msg.gathered)
 

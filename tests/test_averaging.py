@@ -51,8 +51,6 @@ async def test_key_manager():
 
 
 def _test_allreduce_once(n_clients, n_aux):
-    dht = hivemind.DHT(start=True)
-
     n_peers = 4
     modes = (
         [AveragingMode.CLIENT] * n_clients
@@ -73,19 +71,23 @@ def _test_allreduce_once(n_clients, n_aux):
         for i in range(len(tensors1))
     ]
 
-    averagers = [
-        hivemind.averaging.DecentralizedAverager(
+    dht_root = hivemind.DHT(start=True)
+    initial_peers = dht_root.get_visible_maddrs()
+    averagers = []
+    dhts = []
+    for tensors, mode in zip(peer_tensors, modes):
+        dht_instance = hivemind.DHT(start=True, initial_peers=initial_peers)
+        dhts.append(dht_instance)
+        averagers.append(hivemind.averaging.DecentralizedAverager(
             tensors,
-            dht=dht,
+            dht=dht_instance,
             target_group_size=4,
             averaging_expiration=15,
             prefix="mygroup",
             client_mode=mode == AveragingMode.CLIENT,
             auxiliary=mode == AveragingMode.AUX,
             start=True,
-        )
-        for tensors, mode in zip(peer_tensors, modes)
-    ]
+        ))
 
     futures = []
     for averager in averagers:
@@ -103,7 +105,9 @@ def _test_allreduce_once(n_clients, n_aux):
 
     for averager in averagers:
         averager.shutdown()
-    dht.shutdown()
+    for instance in dhts:
+        instance.shutdown()
+    dht_root.shutdown()
 
 
 @pytest.mark.forked
