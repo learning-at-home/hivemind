@@ -30,7 +30,6 @@ class GroupKeyManager:
     def __init__(
         self,
         dht: DHT,
-        endpoint: Endpoint,
         prefix: str,
         initial_group_bits: Optional[str],
         target_group_size: int,
@@ -44,7 +43,8 @@ class GroupKeyManager:
             search_result = dht.get(f"{prefix}.0b", latest=True)
             initial_group_nbits = self.get_suggested_nbits(search_result) or 0
             initial_group_bits = "".join(random.choice("01") for _ in range(initial_group_nbits))
-        self.dht, self.endpoint, self.prefix, self.group_bits = dht, endpoint, prefix, initial_group_bits
+        self.dht, self.prefix, self.group_bits = dht, prefix, initial_group_bits
+        self.endpoint = dht.peer_id
         self.target_group_size = target_group_size
         self.insufficient_size = insufficient_size or max(1, target_group_size // 2)
         self.excessive_size = excessive_size or target_group_size * 3

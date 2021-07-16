@@ -59,7 +59,7 @@ class Matchmaking:
         self._p2p = p2p
         self.endpoint = p2p.id
         self.schema_hash = schema_hash
-        self.group_key_manager = GroupKeyManager(dht, self.endpoint, prefix, initial_group_bits, target_group_size)
+        self.group_key_manager = GroupKeyManager(dht, prefix, initial_group_bits, target_group_size)
         self.target_group_size, self.min_group_size = target_group_size, min_group_size
         self.averaging_expiration, self.request_timeout = averaging_expiration, request_timeout
         self.client_mode = client_mode
