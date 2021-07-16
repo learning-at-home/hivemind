@@ -11,7 +11,7 @@ class PerformanceEMA:
 
     def __init__(self, alpha: float = 0.1, eps: float = 1e-20):
         self.alpha, self.eps, self.num_updates = alpha, eps, 0
-        self.ema_seconds_per_sample, self.samples_per_second = 0, eps
+        self.ema_seconds_per_sample, self.samples_per_second = 0.0, eps
         self.timestamp = get_dht_time()
         self.paused = False
 

@@ -75,9 +75,9 @@ async def traverse_dht(
     num_workers: int,
     queries_per_call: int,
     get_neighbors: Callable[[DHTID, Collection[DHTID]], Awaitable[Dict[DHTID, Tuple[Tuple[DHTID], bool]]]],
+    visited_nodes: Dict[DHTID, Set[DHTID]],
     found_callback: Optional[Callable[[DHTID, List[DHTID], Set[DHTID]], Awaitable[Any]]] = None,
     await_all_tasks: bool = True,
-    visited_nodes: Optional[Dict[DHTID, Set[DHTID]]] = (),
 ) -> Tuple[Dict[DHTID, List[DHTID]], Dict[DHTID, Set[DHTID]]]:
     """
     Search the DHT for nearest neighbors to :queries: (based on DHTID.xor_distance). Use get_neighbors to request peers.
@@ -109,6 +109,7 @@ async def traverse_dht(
         nearest neighbors and finishes the remaining tasks (callbacks and queries to known-but-unvisited nodes)
 
     :param visited_nodes: for each query, do not call get_neighbors on these nodes, nor return them among nearest.
+
     :note: the source code of this function can get tricky to read. Take a look at `simple_traverse_dht` function
         for reference. That function implements a special case of traverse_dht with a single query and one worker.
 
@@ -117,13 +118,12 @@ async def traverse_dht(
         visited nodes: { query -> a set of all nodes that received requests for a given query }
     """
     if len(queries) == 0:
-        return {}, dict(visited_nodes or {})
+        return {}, visited_nodes
 
     unfinished_queries = set(queries)  # all queries that haven't triggered finish_search yet
     candidate_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}  # heap: unvisited nodes, ordered nearest-to-farthest
     nearest_nodes: Dict[DHTID, List[Tuple[int, DHTID]]] = {}  # heap: top-k nearest nodes, farthest-to-nearest
     known_nodes: Dict[DHTID, Set[DHTID]] = {}  # all nodes ever added to the heap (for deduplication)
-    visited_nodes: Dict[DHTID, Set[DHTID]] = dict(visited_nodes or {})  # nodes that were chosen for get_neighbors call
     pending_tasks = set()  # all active tasks (get_neighbors and found_callback)
     active_workers = Counter({q: 0 for q in queries})  # count workers that search for this query
 

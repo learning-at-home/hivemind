@@ -290,7 +290,7 @@ class DHTNode:
         if k_nearest > beam_size:
             logger.warning("Warning: beam_size is too small, beam search is not guaranteed to find enough nodes")
         if node_to_peer_id is None:
-            node_to_peer_id: Dict[DHTID, PeerID] = dict()
+            node_to_peer_id = dict()
             for query in queries:
                 neighbors = self.protocol.routing_table.get_nearest_neighbors(query, beam_size, exclude=self.node_id)
                 node_to_peer_id.update(self._filter_blacklisted(dict(neighbors)))

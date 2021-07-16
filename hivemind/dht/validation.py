@@ -1,6 +1,6 @@
 import dataclasses
 from abc import ABC, abstractmethod
-from typing import Iterable
+from typing import Iterable, List
 
 
 @dataclasses.dataclass(init=True, repr=True, frozen=True)
@@ -91,7 +91,7 @@ class RecordValidatorBase(ABC):
 
 class CompositeValidator(RecordValidatorBase):
     def __init__(self, validators: Iterable[RecordValidatorBase] = ()):
-        self._validators = []
+        self._validators: List[RecordValidatorBase] = []
         self.extend(validators)
 
     def extend(self, validators: Iterable[RecordValidatorBase]) -> None:

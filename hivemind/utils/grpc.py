@@ -96,7 +96,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
         cache = cls.get_singleton()
         with cls._lock:
             key = ChannelInfo(target, aio, tuple(options), channel_credentials, compression)
-            entry: ValueWithExpiration = super(cls, cache).get(key)
+            entry: Optional[ValueWithExpiration[Tuple[Any, Dict[Any, Any]]]] = super(cls, cache).get(key)
 
             if entry is not None:
                 channel, stubs = entry.value
@@ -165,13 +165,13 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
             self._is_active = False
             self._update_eviction_evt.set()
 
-    def store(self, *args, **kwargs) -> ValueError:
+    def store(self, *args, **kwargs):
         raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
-    def get(self, *args, **kwargs) -> ValueError:
+    def get(self, *args, **kwargs):
         raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
-    def top(self) -> ValueError:
+    def top(self):
         raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
 

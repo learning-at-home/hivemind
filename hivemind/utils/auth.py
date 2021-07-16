@@ -63,7 +63,7 @@ class TokenAuthorizerBase(AuthorizerBase):
         self._local_access_token = None
         self._refresh_lock = asyncio.Lock()
 
-        self._recent_nonces = TimedStorage()
+        self._recent_nonces: TimedStorage[bytes, None] = TimedStorage()
 
     @abstractmethod
     async def get_token(self) -> AccessToken:

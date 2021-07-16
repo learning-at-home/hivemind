@@ -14,7 +14,7 @@ def add_custom_models_from_file(path: str):
     spec.loader.exec_module(foo)
 
 
-def register_expert_class(name: str, sample_input: Callable[[int, int], torch.tensor]):
+def register_expert_class(name: str, sample_input: Callable[[int, int], torch.Tensor]):
     """
     Adds a custom user expert to hivemind server.
     :param name: the name of the expert. It shouldn't coincide with existing modules\

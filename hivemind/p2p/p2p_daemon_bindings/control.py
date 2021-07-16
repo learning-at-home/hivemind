@@ -43,7 +43,7 @@ class DaemonConnector:
         self.control_maddr = control_maddr
         self.proto_code = parse_conn_protocol(self.control_maddr)
 
-    async def open_connection(self) -> (asyncio.StreamReader, asyncio.StreamWriter):
+    async def open_connection(self) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         if self.proto_code == protocols.P_UNIX:
             control_path = self.control_maddr.value_for_protocol(protocols.P_UNIX)
             return await asyncio.open_unix_connection(control_path)

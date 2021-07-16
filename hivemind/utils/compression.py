@@ -39,7 +39,7 @@ def average_buckets(tensor: torch.Tensor, quant_weight: torch.Tensor, n_bins: in
     return lookup
 
 
-def _quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size: int = 10 ** 5) -> np.ndarray:
+def _quantile_qq_approximation(array: np.ndarray, n_quantiles: int, min_chunk_size: int = 10 ** 5) -> np.ndarray:
     """Estimate uniform quantiles of data using quantile-of-quantiles. Runs in parallel."""
     if not array.data.c_contiguous and array.data.f_contiguous:
         array = array.T
@@ -71,7 +71,7 @@ def _get_chunk_size(num_elements: int, min_chunk_size: int) -> int:
 def _uint8_uniform_buckets_encode(tensor: torch.Tensor, range_in_sigmas: float):
     offset = UINT8_RANGE // 2
     shift = tensor.mean()
-    scale = range_in_sigmas * tensor.std() / UINT8_RANGE
+    scale = range_in_sigmas * tensor.std().item() / UINT8_RANGE
 
     quant_weight = torch.quantize_per_tensor(tensor - shift, scale, offset, torch.quint8).int_repr()
     lookup = average_buckets(tensor, quant_weight, UINT8_RANGE)

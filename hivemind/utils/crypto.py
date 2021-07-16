@@ -30,7 +30,7 @@ class PublicKey(ABC):
 
     @classmethod
     @abstractmethod
-    def from_bytes(cls, key: bytes) -> bytes:
+    def from_bytes(cls, key: bytes) -> PublicKey:
         ...
 
 
@@ -97,7 +97,7 @@ class RSAPublicKey(PublicKey):
 
     @classmethod
     def from_bytes(cls, key: bytes) -> RSAPublicKey:
-        key = serialization.load_ssh_public_key(key)
-        if not isinstance(key, rsa.RSAPublicKey):
-            raise ValueError(f"Expected an RSA public key, got {key}")
-        return cls(key)
+        loaded_key = serialization.load_ssh_public_key(key)
+        if not isinstance(loaded_key, rsa.RSAPublicKey):
+            raise ValueError(f"Expected an RSA public key, got {str(key)}")
+        return cls(loaded_key)

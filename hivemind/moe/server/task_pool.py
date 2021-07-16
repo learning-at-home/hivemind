@@ -10,7 +10,7 @@ from abc import ABCMeta, abstractmethod
 from collections import namedtuple
 from concurrent.futures import Future
 from queue import Empty
-from typing import List, Tuple, Dict, Any, Generator
+from typing import List, Tuple, Dict, Any, Generator, Callable
 
 import torch
 
@@ -24,7 +24,7 @@ Task = namedtuple("Task", ("future", "args"))
 class TaskPoolBase(mp.context.ForkProcess, metaclass=ABCMeta):
     """A pool that accepts tasks and forms batches for parallel processing, interacts with Runtime"""
 
-    def __init__(self, process_func: callable, daemon=True, **kwargs):
+    def __init__(self, process_func: Callable, daemon=True, **kwargs):
         super().__init__(daemon=daemon, **kwargs)
         self.process_func = process_func
         self._priority = mp.Value(ctypes.c_double, 1.0)  # higher priority = the more urgent to process this pool
@@ -73,7 +73,7 @@ class TaskPool(TaskPoolBase):
 
     def __init__(
         self,
-        process_func: callable,
+        process_func: Callable,
         max_batch_size: int,
         name: str,
         min_batch_size=1,
