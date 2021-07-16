@@ -209,14 +209,15 @@ class Matchmaking:
                         return await self.follower_assemble_group(leader, message)
 
             if message.code in (averaging_pb2.GROUP_DISBANDED, averaging_pb2.CANCELLED):
-                if message.suggested_leader and message.suggested_leader != self.endpoint:
-                    logger.debug(f"{self} - leader disbanded group and redirected us to {message.suggested_leader}")
-                    self.current_leader = None
-                    await stream.aclose()
-                    return await self.request_join_group(message.suggested_leader, expiration_time)
-                else:
-                    logger.debug(f"{self} - leader disbanded group")
-                    return None
+                if message.suggested_leader:
+                    suggested_leader = Endpoint.from_base58(message.suggested_leader)
+                    if suggested_leader != self.endpoint:
+                        logger.debug(f"{self} - leader disbanded group and redirected us to {suggested_leader}")
+                        self.current_leader = None
+                        await stream.aclose()
+                        return await self.request_join_group(suggested_leader, expiration_time)
+                logger.debug(f"{self} - leader disbanded group")
+                return None
 
             logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
             return None
@@ -279,7 +280,7 @@ class Matchmaking:
                 if self.current_leader is not None:
                     # outcome 3: found by a leader with higher priority, send our followers to him
                     yield averaging_pb2.MessageFromLeader(
-                        code=averaging_pb2.GROUP_DISBANDED, suggested_leader=self.current_leader
+                        code=averaging_pb2.GROUP_DISBANDED, suggested_leader=self.current_leader.to_base58()
                     )
                     return
                 else:
@@ -333,8 +334,8 @@ class Matchmaking:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
         elif self.current_leader is not None:
             return averaging_pb2.MessageFromLeader(
-                code=averaging_pb2.NOT_A_LEADER, suggested_leader=self.current_leader
-            )  # note: this suggested leader is currently ignored
+                code=averaging_pb2.NOT_A_LEADER, suggested_leader=self.current_leader.to_base58()
+            )
         elif request_endpoint == self.endpoint or request_endpoint in self.current_followers:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_ENDPOINT)
         elif len(self.current_followers) + 1 >= self.target_group_size:
