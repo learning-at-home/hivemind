@@ -5,7 +5,6 @@ from typing import Optional, Sequence
 
 from multiaddr import Multiaddr
 
-
 Hostname, Port = str, int  # flavour types
 Endpoint = str  # e.g. 1.2.3.4:1337 or [2a21:6с8:b192:2105]:8888, https://networkengineering.stackexchange.com/a/9435
 LOCALHOST = "127.0.0.1"

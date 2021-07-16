@@ -1,3 +1,6 @@
 [tool.black]
 line-length = 119
 required-version = "21.6b0"
+[tool.isort]
+profile = "black"
+line_length = 119

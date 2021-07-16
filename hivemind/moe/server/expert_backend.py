@@ -1,12 +1,12 @@
-from typing import Dict, Sequence, Any, Tuple, Union, Callable
+from typing import Any, Callable, Dict, Sequence, Tuple, Union
 
 import torch
 from torch import nn
 
 from hivemind.moe.server.task_pool import TaskPool
-from hivemind.utils.tensor_descr import BatchTensorDescriptor, DUMMY_BATCH_SIZE
 from hivemind.utils.logging import get_logger
-from hivemind.utils.nested import nested_flatten, nested_pack, nested_compare, nested_map
+from hivemind.utils.nested import nested_compare, nested_flatten, nested_map, nested_pack
+from hivemind.utils.tensor_descr import DUMMY_BATCH_SIZE, BatchTensorDescriptor
 
 logger = get_logger(__name__)
 

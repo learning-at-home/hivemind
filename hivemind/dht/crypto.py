@@ -6,7 +6,6 @@ from hivemind.dht.validation import DHTRecord, RecordValidatorBase
 from hivemind.utils import MSGPackSerializer, get_logger
 from hivemind.utils.crypto import RSAPrivateKey, RSAPublicKey
 
-
 logger = get_logger(__name__)
 
 

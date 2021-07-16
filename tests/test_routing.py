@@ -1,10 +1,10 @@
-import random
 import heapq
 import operator
+import random
 from itertools import chain, zip_longest
 
 from hivemind import LOCALHOST
-from hivemind.dht.routing import RoutingTable, DHTID
+from hivemind.dht.routing import DHTID, RoutingTable
 
 
 def test_ids_basic():

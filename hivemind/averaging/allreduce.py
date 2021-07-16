@@ -1,15 +1,15 @@
 import asyncio
-from typing import Sequence, Dict, Tuple, AsyncIterator, Any, Optional
 from enum import Enum
+from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple
 
 import grpc
 import torch
 
-from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer, AllreduceException
-from hivemind.utils import Endpoint, get_logger, ChannelCache
-from hivemind.utils.asyncio import anext, achain, aiter, aenumerate, amap_in_executor
-from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
-from hivemind.proto import averaging_pb2_grpc, averaging_pb2
+from hivemind.averaging.partition import AllreduceException, TensorPartContainer, TensorPartReducer
+from hivemind.proto import averaging_pb2, averaging_pb2_grpc
+from hivemind.utils import ChannelCache, Endpoint, get_logger
+from hivemind.utils.asyncio import achain, aenumerate, aiter, amap_in_executor, anext
+from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 
 # flavour types
 GroupID = bytes

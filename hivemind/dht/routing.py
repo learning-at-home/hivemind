@@ -7,7 +7,8 @@ import os
 import random
 from collections.abc import Iterable
 from itertools import chain
-from typing import Tuple, Optional, List, Dict, Set, Union, Any, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
+
 from hivemind.p2p import PeerID
 from hivemind.utils import MSGPackSerializer, get_dht_time
 

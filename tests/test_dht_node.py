@@ -9,6 +9,7 @@ from typing import List, Sequence, Tuple
 import numpy as np
 import pytest
 from multiaddr import Multiaddr
+from test_utils.dht_swarms import launch_star_shaped_swarm, launch_swarm_in_separate_processes
 
 import hivemind
 from hivemind import get_dht_time
@@ -17,8 +18,6 @@ from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.p2p import P2P, PeerID
 from hivemind.utils.logging import get_logger
-from test_utils.dht_swarms import launch_swarm_in_separate_processes, launch_star_shaped_swarm
-
 
 logger = get_logger(__name__)
 

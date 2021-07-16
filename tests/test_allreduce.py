@@ -7,12 +7,12 @@ import grpc
 import pytest
 import torch
 
-from hivemind import aenumerate, Endpoint
+from hivemind import Endpoint, aenumerate
 from hivemind.averaging.allreduce import AllReduceRunner, AveragingMode
 from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer
 from hivemind.proto import averaging_pb2_grpc
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils import deserialize_torch_tensor, ChannelCache
+from hivemind.utils import ChannelCache, deserialize_torch_tensor
 
 
 @pytest.mark.forked

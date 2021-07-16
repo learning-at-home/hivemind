@@ -1,13 +1,13 @@
 import time
-from threading import Thread, Lock, Event
+from threading import Event, Lock, Thread
 from typing import Optional, Sequence, Tuple
 
 import torch
 
-from hivemind.dht import DHT
 from hivemind.averaging import TrainingAverager
+from hivemind.dht import DHT
 from hivemind.optim.base import DecentralizedOptimizerBase
-from hivemind.utils import get_logger, get_dht_time
+from hivemind.utils import get_dht_time, get_logger
 
 logger = get_logger(__name__)
 

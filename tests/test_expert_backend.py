@@ -6,7 +6,7 @@ import torch
 from torch.nn import Linear
 
 from hivemind import BatchTensorDescriptor, ExpertBackend
-from hivemind.moe.server.checkpoints import store_experts, load_experts
+from hivemind.moe.server.checkpoints import load_experts, store_experts
 from hivemind.moe.server.layers.lr_schedule import get_linear_schedule_with_warmup
 
 EXPERT_WEIGHT_UPDATES = 3

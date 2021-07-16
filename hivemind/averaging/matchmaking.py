@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import contextlib
 import random
 from math import isfinite
-from typing import Optional, AsyncIterator, Set, Tuple, Dict
-import concurrent.futures
-import asyncio
+from typing import AsyncIterator, Dict, Optional, Set, Tuple
 
 import grpc
 import grpc._cython.cygrpc
 
 from hivemind.averaging.group_info import GroupInfo
-from hivemind.averaging.key_manager import GroupKeyManager, GroupKey
+from hivemind.averaging.key_manager import GroupKey, GroupKeyManager
 from hivemind.dht import DHT, DHTID, DHTExpiration
-from hivemind.utils import get_logger, Endpoint, timed_storage, TimedStorage, get_dht_time
 from hivemind.proto import averaging_pb2, averaging_pb2_grpc
+from hivemind.utils import Endpoint, TimedStorage, get_dht_time, get_logger, timed_storage
 from hivemind.utils.grpc import ChannelCache
 
 logger = get_logger(__name__)
