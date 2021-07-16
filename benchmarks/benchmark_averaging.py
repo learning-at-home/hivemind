@@ -61,7 +61,6 @@ def benchmark_averaging(
             dht,
             prefix="my_tensor",
             initial_group_bits=initial_bits,
-            listen_on=f"{LOCALHOST}:*",
             compression_type=runtime_pb2.CompressionType.FLOAT16,
             target_group_size=target_group_size,
             averaging_expiration=averaging_expiration,
