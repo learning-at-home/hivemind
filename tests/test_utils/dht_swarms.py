@@ -90,6 +90,8 @@ async def launch_star_shaped_swarm(n_peers: int, **kwargs) -> List[DHTNode]:
 
 
 def launch_dht_instances(n_peers: int, **kwargs) -> List[DHT]:
+    # TODO: Do it in parallel
+
     instances = [DHT(start=True, **kwargs)]
     initial_peers = instances[0].get_visible_maddrs()
     instances.extend(DHT(initial_peers=initial_peers, start=True, **kwargs) for _ in range(n_peers - 1))
