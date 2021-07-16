@@ -68,8 +68,9 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 - __macOS 10.x__ mostly works but requires building hivemind from source, and some edge cases may fail. To ensure full
   compatibility, we recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
 - __Windows 10+ (experimental)__ can run hivemind
-  using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10). You can configure WSL to use GPU
-  following [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA.
+  using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10). You can configure WSL to use GPU by
+  following sections 1–3 of [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA. After
+  that, you can simply follow the instructions above to install with pip or from source.
 
 ## Documentation
 
@@ -112,7 +113,8 @@ If you found hivemind or its underlying algorithms useful for your research, ple
 ```
 
 Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired the creation of this library
-(prototype implementation of hivemind available at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
+(prototype implementation of hivemind available
+at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```
 @inproceedings{ryabinin2020crowdsourced,
