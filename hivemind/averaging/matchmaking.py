@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
 import random
 from math import isfinite
 from typing import Optional, AsyncIterator, Set, Tuple, Dict
@@ -246,7 +245,7 @@ class Matchmaking:
                     yield reason_to_reject
                     return
 
-                request_endpoint = PeerID.from_base58(request.endpoint)
+                request_endpoint = Endpoint.from_base58(request.endpoint)
                 self.current_followers[request_endpoint] = request
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
@@ -312,7 +311,7 @@ class Matchmaking:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
 
         try:
-            request_endpoint = PeerID.from_base58(request.endpoint)
+            request_endpoint = Endpoint.from_base58(request.endpoint)
         except (ValueError, TypeError):
             request_endpoint = None
         if (
