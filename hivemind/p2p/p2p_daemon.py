@@ -307,9 +307,6 @@ class P2P:
           they will not be received while the prefetch buffer is full.
         """
 
-        if self._listen_task is None:
-            self._start_listening()
-
         async def _handle_stream(
             stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         ) -> None:
@@ -358,12 +355,12 @@ class P2P:
                 finally:
                     processing_task.cancel()
 
-        await self._client.stream_handler(name, _handle_stream)
+        await self.add_binary_stream_handler(name, _handle_stream)
 
     async def _iterate_protobuf_stream_handler(
         self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: type
     ) -> TOutputStream:
-        _, reader, writer = await self._client.stream_open(peer_id, (name,))
+        _, reader, writer = await self.call_binary_stream_handler(peer_id, name)
 
         async def _write_to_stream() -> None:
             async for request in requests:
