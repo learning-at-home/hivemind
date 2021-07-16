@@ -214,7 +214,12 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     logger.debug(f"The averager is running in client mode.")
 
                 self._matchmaking = Matchmaking(
-                    self._p2p, self.schema_hash, self.dht, **self.matchmaking_kwargs, client_mode=self.client_mode
+                    self._p2p,
+                    self,
+                    self.schema_hash,
+                    self.dht,
+                    client_mode=self.client_mode,
+                    **self.matchmaking_kwargs,
                 )
                 if not self.client_mode:
                     asyncio.create_task(self._declare_for_download_periodically())
@@ -378,6 +383,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             async with self.get_tensors_async() as local_tensors:
                 allreduce = AllReduceRunner(
                     p2p=self._p2p,
+                    servicer=self,
                     group_id=group_info.group_id,
                     tensors=local_tensors,
                     ordered_group_endpoints=group_info.endpoints,

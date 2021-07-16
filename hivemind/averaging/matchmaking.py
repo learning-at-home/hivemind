@@ -13,7 +13,7 @@ import asyncio
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.key_manager import GroupKeyManager, GroupKey
 from hivemind.dht import DHT, DHTID, DHTExpiration
-from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID as Endpoint
+from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID as Endpoint, ServicerBase
 from hivemind.utils import get_logger, timed_storage, TimedStorage, get_dht_time
 from hivemind.utils.asyncio import anext
 from hivemind.proto import averaging_pb2
@@ -37,6 +37,7 @@ class Matchmaking:
     def __init__(
         self,
         p2p: P2P,
+        servicer: ServicerBase,
         schema_hash: bytes,
         dht: DHT,
         *,
@@ -57,6 +58,7 @@ class Matchmaking:
 
         super().__init__()
         self._p2p = p2p
+        self._servicer = servicer
         self.endpoint = p2p.id
         self.schema_hash = schema_hash
         self.group_key_manager = GroupKeyManager(dht, prefix, initial_group_bits, target_group_size)
@@ -173,9 +175,7 @@ class Matchmaking:
         stream: AsyncIterator[averaging_pb2.MessageFromLeader] = None
         try:
             async with self.lock_request_join_group:
-                from hivemind.averaging.averager import DecentralizedAverager
-
-                leader_stub = DecentralizedAverager.get_stub(self._p2p, leader)
+                leader_stub = self._servicer.get_stub(self._p2p, leader)
 
                 stream = leader_stub.rpc_join_group(
                     averaging_pb2.JoinRequest(

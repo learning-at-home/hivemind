@@ -24,9 +24,9 @@ from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, Type
 from multiaddr import Multiaddr
 
 from hivemind.dht.node import DHTNode
-from hivemind.p2p import P2P, PeerID
 from hivemind.dht.routing import DHTID, DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
+from hivemind.p2p import P2P, PeerID
 from hivemind.utils import DHTExpiration, MPFuture, ValueWithExpiration, await_cancelled, get_logger, switch_to_uvloop
 
 logger = get_logger(__name__)

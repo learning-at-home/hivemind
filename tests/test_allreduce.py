@@ -176,10 +176,6 @@ NODE, CLIENT, AUX = AveragingMode.NODE, AveragingMode.CLIENT, AveragingMode.AUX
 async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions, part_size_bytes):
     """Run group allreduce protocol manually without grpc, see if the internal logic is working as intended"""
 
-    class AllreduceRunnerForTesting(AllReduceRunner):
-        def _get_stub(self, peer: str) -> StubBase:
-            return AllreduceRunnerForTesting.get_stub(self._p2p, peer)
-
     p2ps = [await P2P.create()]
     visible_maddrs = await p2ps[0].get_visible_maddrs()
     p2ps += await asyncio.gather(*[P2P.create(initial_peers=visible_maddrs) for _ in range(3)])
@@ -194,8 +190,9 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
 
     allreduce_protocols = []
     for p2p in p2ps:
-        allreduce_protocol = AllreduceRunnerForTesting(
+        allreduce_protocol = AllReduceRunner(
             p2p=p2p,
+            servicer=AllReduceRunner,
             group_id=group_id,
             tensors=[x.clone() for x in tensors_by_peer[p2p.id]],
             ordered_group_endpoints=peers,
