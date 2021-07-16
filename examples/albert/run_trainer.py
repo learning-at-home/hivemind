@@ -5,7 +5,6 @@ import os
 import pickle
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
 
 import torch
 import transformers
@@ -97,8 +96,8 @@ def get_optimizer_and_scheduler(training_args, model):
 
 class CollaborativeCallback(transformers.TrainerCallback):
     """
-    This callback monitors and reports collaborative training progress,
-    In case of a catastrophic failure, it can also revert training to a backup
+    This callback monitors and reports collaborative training progress.
+    In case of a catastrophic failure, it can also revert training to a backup.
     """
 
     def __init__(
@@ -153,6 +152,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
                 )
                 logger.info(f"Step {self.collaborative_optimizer.local_step}")
                 logger.info(f"Your current contribution: {self.total_samples_processed} samples")
+                logger.info(f"Performance: {samples_per_second} samples per second.")
                 if self.steps:
                     logger.info(f"Local loss: {self.loss / self.steps}")
                 if self.collaborative_optimizer.local_step % self.backup_every_steps == 0:
@@ -181,16 +181,16 @@ class CollaborativeCallback(transformers.TrainerCallback):
         return True
 
     @torch.no_grad()
-    def backup_state(self) -> Any:
+    def backup_state(self) -> bytes:
         return pickle.dumps(
-            {"model": self.model.state_dict(), "training": self.collaborative_optimizer.opt.state_dict()}
+            {"model": self.model.state_dict(), "optimizer": self.collaborative_optimizer.opt.state_dict()}
         )
 
     @torch.no_grad()
-    def restore_from_backup(self, backup):
+    def restore_from_backup(self, backup: bytes):
         state = pickle.loads(backup)
         self.model.load_state_dict(state["model"])
-        self.collaborative_optimizer.opt.load_state_dict(state["training"])
+        self.collaborative_optimizer.opt.load_state_dict(state["optimizer"])
 
 
 class NoOpScheduler(LRSchedulerBase):
