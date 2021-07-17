@@ -8,14 +8,15 @@ from typing import Optional
 
 import requests
 import torch
-import utils
 import wandb
-from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOptimizerArguments
 from torch_optimizer import Lamb
 from transformers import AlbertConfig, AlbertForPreTraining, HfArgumentParser
 
 import hivemind
 from hivemind.utils.compression import CompressionType
+
+import utils
+from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOptimizerArguments
 
 logger = logging.getLogger(__name__)
 

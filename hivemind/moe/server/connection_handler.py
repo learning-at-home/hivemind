@@ -7,8 +7,7 @@ import grpc
 import torch
 
 from hivemind.moe.server.expert_backend import ExpertBackend
-from hivemind.proto import runtime_pb2
-from hivemind.proto import runtime_pb2_grpc as runtime_grpc
+from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
 from hivemind.utils import Endpoint, get_logger, nested_flatten
 from hivemind.utils.asyncio import switch_to_uvloop
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor

@@ -8,8 +8,6 @@ from pathlib import Path
 
 import torch
 import transformers
-import utils
-from arguments import AlbertTrainingArguments, AveragerArguments, CollaborationArguments, DatasetArguments
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from torch_optimizer import Lamb
@@ -21,6 +19,9 @@ from transformers.trainer_utils import is_main_process
 
 import hivemind
 from hivemind.utils.compression import CompressionType
+
+import utils
+from arguments import AlbertTrainingArguments, AveragerArguments, CollaborationArguments, DatasetArguments
 
 logger = logging.getLogger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
