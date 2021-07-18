@@ -7,18 +7,23 @@ syntax = "proto2";
 package p2pclient.p2pd.pb;
 
 message Request {
-  enum Type {
-    IDENTIFY       = 0;
-    CONNECT        = 1;
-    STREAM_OPEN    = 2;
-    STREAM_HANDLER = 3;
-    DHT            = 4;
-    LIST_PEERS     = 5;
-    CONNMANAGER    = 6;
-    DISCONNECT     = 7;
-    PUBSUB         = 8;
-  }
+   enum Type {
+    IDENTIFY                 = 0;
+    CONNECT                  = 1;
+    STREAM_OPEN              = 2;
+    STREAM_HANDLER           = 3;
+    DHT                      = 4;
+    LIST_PEERS               = 5;
+    CONNMANAGER              = 6;
+    DISCONNECT               = 7;      
+    PUBSUB                   = 8;
 
+    PERSISTENT_CONN_UPGRADE  = 9;
+    CALL_UNARY              = 10;
+    ADD_UNARY_HANDLER       = 11;
+    SEND_RESPONSE_TO_REMOTE = 12;
+
+  }
   required Type type = 1;
 
   optional ConnectRequest connect = 2;
@@ -28,6 +33,10 @@ message Request {
   optional ConnManagerRequest connManager = 6;
   optional DisconnectRequest disconnect = 7;
   optional PSRequest pubsub = 8;
+
+  optional CallUnaryRequest callUnary = 9;
+  optional AddUnaryHandlerRequest addUnaryHandler = 10;
+  optional CallUnaryResponse sendResponseToRemote = 11;
 }
 
 message Response {
@@ -43,6 +52,9 @@ message Response {
   optional DHTResponse dht = 5;
   repeated PeerInfo peers = 6;
   optional PSResponse pubsub = 7;
+
+  optional CallUnaryResponse callUnaryResponse = 8;
+  optional CallUnaryRequest requestHandling = 9;
 }
 
 message IdentifyResponse {
@@ -147,8 +159,9 @@ message PSRequest {
   optional bytes data = 3;
 }
 
+
 message PSMessage {
-  optional bytes from_id = 1;
+  optional bytes from = 1;
   optional bytes data = 2;
   optional bytes seqno = 3;
   repeated string topicIDs = 4;
@@ -161,6 +174,20 @@ message PSResponse {
   repeated bytes peerIDs = 2;
 }
 
-message RPCError {
-  optional string message = 1;
+message CallUnaryRequest {
+  required bytes peer = 1;
+  required string proto = 2;
+  required bytes data = 3;
+  required int64 callId = 4;
+  optional int64 timeout = 5;
+}
+
+message CallUnaryResponse {
+  required int64 callId = 1;
+  optional bytes result = 2;
+  optional bytes error = 3;
+}
+
+message AddUnaryHandlerRequest {
+  required string proto = 1;
 }
