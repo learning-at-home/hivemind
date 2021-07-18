@@ -182,12 +182,12 @@ message CallUnaryRequest {
   required bytes peer = 1;
   required string proto = 2;
   required bytes data = 3;
-  required int64 callId = 4;
+  required bytes callId = 4;
   optional int64 timeout = 5;
 }
 
 message CallUnaryResponse {
-  required int64 callId = 1;
+  required bytes callId = 1;
   optional bytes result = 2;
   optional bytes error = 3;
 }
