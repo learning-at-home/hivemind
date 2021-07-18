@@ -169,6 +169,12 @@ class P2P:
 
         return self
 
+    async def add_unary_handler(self, proto: str, handler: p2pclient.TUnaryHandler):
+        return await self._client.add_unary_handler(proto, handler)
+
+    async def unary_call(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
+        return await self._client.unary_call(peer_id, proto, data)
+
     async def _ping_daemon_with_retries(self, ping_n_attempts: int, ping_delay: float) -> None:
         for try_number in range(ping_n_attempts):
             await asyncio.sleep(ping_delay * (2 ** try_number))

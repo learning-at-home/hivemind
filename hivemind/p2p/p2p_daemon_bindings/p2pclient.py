@@ -10,7 +10,7 @@ from typing import AsyncIterator, Iterable, Sequence, Tuple
 
 from multiaddr import Multiaddr
 
-from hivemind.p2p.p2p_daemon_bindings.control import ControlClient, DaemonConnector, StreamHandler
+from hivemind.p2p.p2p_daemon_bindings.control import ControlClient, DaemonConnector, StreamHandler, TUnaryHandler
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 
 
@@ -29,6 +29,12 @@ class Client:
         """
         async with self.control.listen():
             yield self
+
+    async def add_unary_handler(self, proto: str, handler: TUnaryHandler):
+        await self.control.add_unary_handler(proto, handler)
+        
+    async def unary_call(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
+        return await self.control.unary_call(peer_id, proto, data)
 
     async def identify(self) -> Tuple[PeerID, Tuple[Multiaddr, ...]]:
         """
