@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         python-version: [ 3.7, 3.8, 3.9 ]
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -33,7 +33,7 @@ jobs:
       - name: Test
         run: |
           cd tests
-          while true; do pytest -vvv --durations=0 --durations-min=1.0; done
+          pytest -vvv --durations=0 --durations-min=1.0
 
   build_and_test_p2pd:
     runs-on: ubuntu-latest
