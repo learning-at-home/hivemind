@@ -87,7 +87,7 @@ class ControlClient:
         self.pending_messages: asyncio.Queue[p2pd_pb.Request] = asyncio.Queue()
         self.pending_calls: Dict[CallID, asyncio.Future] = {}
 
-    async def read_from_persistent_conn(self, reader: asyncio.StreamReader):
+    async def _read_from_persistent_conn(self, reader: asyncio.StreamReader):
         while True:
             resp: p2pd_pb.Response = p2pd_pb.Response()  # type: ignore
             await read_pbmsg_safe(reader, resp)
@@ -104,7 +104,7 @@ class ControlClient:
                     logger.debug(f"received unexpected unary call")
 
             elif resp.requestHandling:
-                # asyncio.create_task(self.read)
+                asyncio.create_task(self._handle_persistent_request(resp.requestHandling))
                 pass
 
     async def _handle_persistent_request(self, request):
@@ -123,7 +123,7 @@ class ControlClient:
         await self.pending_messages.put(
             p2pd_pb.Request(type=p2pd_pb.Request.UNARY_RESPONSE, response=response))
 
-    async def write_to_persistent_conn(self, writer: asyncio.StreamWriter):
+    async def _write_to_persistent_conn(self, writer: asyncio.StreamWriter):
         while True:
             msg = await self.pending_messages.get()
             await write_pbmsg(writer, msg)
@@ -159,8 +159,8 @@ class ControlClient:
     async def _ensure_persistent_conn(self):
         if not self._pers_conn_open:
             reader, writer = await self.daemon_connector.open_persistent_connection()
-            asyncio.create_task(self.read_from_persistent_conn(reader))
-            asyncio.create_task(self.write_to_persistent_conn(writer))
+            asyncio.create_task(self._read_from_persistent_conn(reader))
+            asyncio.create_task(self._write_to_persistent_conn(writer))
 
     async def add_unary_handler(self, proto: str, handler: TUnaryHandler):
         await self._ensure_persistent_conn()
