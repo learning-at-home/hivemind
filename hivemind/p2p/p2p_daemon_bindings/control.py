@@ -111,7 +111,7 @@ class ControlClient:
         assert request.proto in self.unary_handlers
 
         try:
-            response_payload: bytes = await self.unary_protocols[request.protocol](request.payload)
+            response_payload: bytes = self.unary_handlers[request.protocol](request.payload)
             response = p2pd_pb.CallUnaryResponse(
                 call_id=request.call_id,
                 data=response_payload)
