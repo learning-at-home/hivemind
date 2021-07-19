@@ -200,7 +200,7 @@ def test_decentralized_optimizer_averaging():
     (param1.sum() + param2.sum()).backward()
 
     for _ in range(100):
-        time.sleep(0.01)
+        time.sleep(0.1)
         opt1.step()
         opt2.step()
         opt1.zero_grad()
