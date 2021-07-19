@@ -424,12 +424,11 @@ class P2P:
 
     # only registers request-response handlers
     async def _add_protobuf_unary_handler(
-            self,
-            handle_name: str,
-            handler: Callable[[TInputProtobuf, P2PContext], Awaitable[TOutputProtobuf]],
-            input_protobuf_type: type,
+        self,
+        handle_name: str,
+        handler: Callable[[TInputProtobuf, P2PContext], Awaitable[TOutputProtobuf]],
+        input_protobuf_type: type,
     ) -> None:
-
         async def _unary_handler(request: bytes) -> bytes:
             input_serialized = input_protobuf_type().FromString(request)
             context = P2PContext(
@@ -464,16 +463,15 @@ class P2P:
         return response
 
     async def _call_unary_protobuf_handler(
-            self,
-            peer_id: PeerID,
-            handle_name: str,
-            input: TInputProtobuf,
-            output_protobuf_type: type,
+        self,
+        peer_id: PeerID,
+        handle_name: str,
+        input: TInputProtobuf,
+        output_protobuf_type: type,
     ) -> Awaitable[TOutputProtobuf]:
         serialized_input = input.SerializeToString()
         response = await self.unary_call(peer_id, handle_name, serialized_input)
         return output_protobuf_type().FromString(response)
-
 
     def iterate_protobuf_handler(
         self,
