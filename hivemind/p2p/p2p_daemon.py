@@ -4,6 +4,7 @@ import secrets
 from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
+from google.protobuf.message import Message
 from importlib.resources import path
 from subprocess import Popen
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar, Union
@@ -171,8 +172,8 @@ class P2P:
     async def add_unary_handler(self, handle_name: str, handler: p2pclient.TUnaryHandler):
         return await self._client.add_unary_handler(handle_name, handler)
 
-    async def unary_call(self, peer_id: PeerID, handle_name: str, data: bytes) -> bytes:
-        return await self._client.unary_call(peer_id, handle_name, data)
+    async def call_unary_handler(self, peer_id: PeerID, handle_name: str, data: bytes) -> bytes:
+        return await self._client.call_unary_handler(peer_id, handle_name, data)
 
     async def _ping_daemon_with_retries(self, ping_n_attempts: int, ping_delay: float) -> None:
         for try_number in range(ping_n_attempts):
@@ -429,12 +430,12 @@ class P2P:
         handler: Callable[[TInputProtobuf, P2PContext], Awaitable[TOutputProtobuf]],
         input_protobuf_type: type,
     ) -> None:
-        async def _unary_handler(request: bytes) -> bytes:
-            input_serialized = input_protobuf_type().FromString(request)
+        async def _unary_handler(request: bytes, remote_id: PeerID) -> bytes:
+            input_serialized = input_protobuf_type.FromString(request)
             context = P2PContext(
                 handle_name=handle_name,
                 local_id=self.id,
-                # TODO: add remote id
+                remote_id=remote_id,
             )
 
             response = await handler(input_serialized, context)
@@ -470,7 +471,7 @@ class P2P:
         output_protobuf_type: type,
     ) -> Awaitable[TOutputProtobuf]:
         serialized_input = input.SerializeToString()
-        response = await self.unary_call(peer_id, handle_name, serialized_input)
+        response = await self.call_unary_handler(peer_id, handle_name, serialized_input)
         return output_protobuf_type().FromString(response)
 
     def iterate_protobuf_handler(

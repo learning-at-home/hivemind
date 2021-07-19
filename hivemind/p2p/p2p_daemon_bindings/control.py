@@ -66,7 +66,7 @@ class DaemonConnector:
         return reader, writer
 
 
-TUnaryHandler = Callable[[bytes], Awaitable[bytes]]
+TUnaryHandler = Callable[[bytes, PeerID], Awaitable[bytes]]
 CallID = uuid.UUID
 
 
@@ -132,7 +132,8 @@ class ControlClient:
         assert request.proto in self.unary_handlers
 
         try:
-            response_payload: bytes = self.unary_handlers[request.proto](request.data)
+            remote_id = PeerID(request.peer)
+            response_payload: bytes = self.unary_handlers[request.proto](request.data, remote_id)
             response = p2pd_pb.CallUnaryResponse(callId=request.callId, result=response_payload)
         except Exception as e:
             response = p2pd_pb.CallUnaryResponse(callId=request.callId, error=repr(e))
@@ -174,7 +175,7 @@ class ControlClient:
             raise ValueError(f"Handler for protocol {proto} already assigned")
         self.unary_handlers[proto] = handler
 
-    async def unary_call(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
+    async def call_unary_handler(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
         call_id = uuid.uuid4()
         call_unary_req = p2pd_pb.CallUnaryRequest(
             peer=peer_id.to_bytes(),

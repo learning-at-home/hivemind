@@ -33,8 +33,8 @@ class Client:
     async def add_unary_handler(self, proto: str, handler: TUnaryHandler):
         await self.control.add_unary_handler(proto, handler)
 
-    async def unary_call(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
-        return await self.control.unary_call(peer_id, proto, data)
+    async def call_unary_handler(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
+        return await self.control.call_unary_handler(peer_id, proto, data)
 
     async def identify(self) -> Tuple[PeerID, Tuple[Multiaddr, ...]]:
         """

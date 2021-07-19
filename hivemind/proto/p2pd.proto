@@ -161,7 +161,7 @@ message PSRequest {
 
 
 message PSMessage {
-  optional bytes from = 1;
+  optional bytes from_id = 1;
   optional bytes data = 2;
   optional bytes seqno = 3;
   repeated string topicIDs = 4;
