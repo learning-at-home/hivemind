@@ -14,6 +14,7 @@ from multiaddr import Multiaddr
 import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
+from hivemind.p2p.p2p_daemon_bindings.control import P2PHandlerError
 from hivemind.proto.p2pd_pb2 import RPCError
 from hivemind.utils.asyncio import aiter
 from hivemind.utils.logging import get_logger
@@ -556,8 +557,4 @@ class P2P:
 
 
 class P2PInterruptedError(Exception):
-    pass
-
-
-class P2PHandlerError(Exception):
     pass
