@@ -383,8 +383,10 @@ def test_too_few_peers():
 
 
 # TODO(@justheuristic): Finish the elasticity_0.0.1 branch and make this test work
-@pytest.mark.skip(reason="The current implementation of elasticity (multi-stage averaging for the case when "
-                         "num_peers > ~3 * target_group_size) is incorrect. Contact @justheuristic for more info")
+@pytest.mark.skip(
+    reason="The current implementation of elasticity (multi-stage averaging for the case when "
+    "num_peers > ~3 * target_group_size) is incorrect"
+)
 @pytest.mark.forked
 def test_overcrowded(num_peers=16):
     dht_instances = launch_dht_instances(num_peers)
