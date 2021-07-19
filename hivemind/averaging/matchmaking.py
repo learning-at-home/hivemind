@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import contextlib
 import random
 from math import isfinite
-from typing import Optional, AsyncIterator, Set, Tuple, Dict
-import concurrent.futures
-import asyncio
+from typing import AsyncIterator, Dict, Optional, Set, Tuple, Type, Union
 
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.key_manager import GroupKeyManager, GroupKey
@@ -36,7 +36,7 @@ class Matchmaking:
     def __init__(
         self,
         p2p: P2P,
-        servicer: ServicerBase,
+        servicer: Union[ServicerBase, Type[ServicerBase]],
         schema_hash: bytes,
         dht: DHT,
         *,

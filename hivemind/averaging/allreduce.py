@@ -1,6 +1,6 @@
 import asyncio
-from typing import Sequence, Dict, Tuple, AsyncIterator, Any, Optional
 from enum import Enum
+from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Type, Union
 
 import torch
 
@@ -51,7 +51,7 @@ class AllReduceRunner(ServicerBase):
         self,
         *,
         p2p: P2P,
-        servicer: Optional[ServicerBase],
+        servicer: Optional[Union[ServicerBase, Type[ServicerBase]]],
         group_id: GroupID,
         tensors: Sequence[torch.Tensor],
         ordered_group_endpoints: Sequence[Endpoint],
