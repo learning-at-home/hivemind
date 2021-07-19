@@ -57,7 +57,7 @@ def benchmark_averaging(
         dht = hivemind.DHT(initial_peers=initial_peers, start=True)
         initial_bits = bin(index % num_groups)[2:].rjust(nbits, "0")
         averager = hivemind.averaging.DecentralizedAverager(
-            peer_tensors[i],
+            peer_tensors[index],
             dht,
             prefix="my_tensor",
             initial_group_bits=initial_bits,
