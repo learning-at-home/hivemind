@@ -157,7 +157,7 @@ class ControlClient:
 
     async def _ensure_persistent_conn(self):
         if not self._pers_conn_open:
-            with self._ensure_conn_lock:
+            async with self._ensure_conn_lock:
                 if not self._pers_conn_open:
                     reader, writer = await self.daemon_connector.open_persistent_connection()
                     asyncio.create_task(self._read_from_persistent_conn(reader))
