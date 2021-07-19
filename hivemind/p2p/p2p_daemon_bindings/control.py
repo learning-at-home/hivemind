@@ -115,7 +115,7 @@ class ControlClient:
                 if call_id in self.pending_calls and resp.callUnaryResponse.HasField("result"):
                     self.pending_calls[call_id].set_result(resp.callUnaryResponse.result)
                 elif call_id in self.pending_calls and resp.callUnaryResponse.HasField("error"):
-                    remote_exc = P2PHandlerError(str(resp.callUnaryResponse.error))
+                    remote_exc = P2PHandlerError(resp.callUnaryResponse.error.decode())
                     self.pending_calls[call_id].set_exception(remote_exc)
                 else:
                     logger.debug(f"received unexpected unary call")
