@@ -86,7 +86,7 @@ class ControlClient:
 
         self._ensure_conn_lock = asyncio.Lock()
         self.pending_messages: asyncio.Queue[p2pd_pb.Request] = asyncio.Queue()
-        self.pending_calls: Dict[CallID, asyncio.Future] = {}
+        self.pending_calls: Dict[CallID, asyncio.Future[bytes]] = {}
 
     @asynccontextmanager
     async def listen(self) -> AsyncIterator["ControlClient"]:
