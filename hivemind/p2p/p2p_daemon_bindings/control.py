@@ -172,11 +172,11 @@ class ControlClient:
             type=p2pd_pb.Request.ADD_UNARY_HANDLER,
             addUnaryHandler=add_unary_handler_req,
         )
-        await self.pending_messages.put(req)
-
         if self.unary_handlers.get(proto):
             raise ValueError(f"Handler for protocol {proto} already assigned")
         self.unary_handlers[proto] = handler
+
+        await self.pending_messages.put(req)
 
     async def call_unary_handler(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
         call_id = uuid.uuid4()
