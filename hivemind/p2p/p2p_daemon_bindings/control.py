@@ -133,7 +133,7 @@ class ControlClient:
 
         try:
             remote_id = PeerID(request.peer)
-            response_payload: bytes = self.unary_handlers[request.proto](request.data, remote_id)
+            response_payload: bytes = await self.unary_handlers[request.proto](request.data, remote_id)
             response = p2pd_pb.CallUnaryResponse(callId=request.callId, result=response_payload)
         except Exception as e:
             response = p2pd_pb.CallUnaryResponse(callId=request.callId, error=repr(e))
