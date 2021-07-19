@@ -66,7 +66,7 @@ class DaemonConnector:
         return reader, writer
 
 
-TUnaryHandler = Callable[[bytes], bytes]
+TUnaryHandler = Callable[[bytes], Awaitable[bytes]]
 CallID = uuid.UUID
 
 
