@@ -106,7 +106,7 @@ class ControlClient:
 
     async def _read_from_persistent_conn(self, reader: asyncio.StreamReader):
         while True:
-            resp: p2pd_pb.Response = p2pd_pb.Response()  # type: ignore
+            resp = p2pd_pb.Response()
             await read_pbmsg_safe(reader, resp)
 
             if resp.HasField("callUnaryResponse"):
