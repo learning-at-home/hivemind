@@ -32,7 +32,7 @@ class Client:
 
     async def add_unary_handler(self, proto: str, handler: TUnaryHandler):
         await self.control.add_unary_handler(proto, handler)
-        
+
     async def unary_call(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
         return await self.control.unary_call(peer_id, proto, data)
 

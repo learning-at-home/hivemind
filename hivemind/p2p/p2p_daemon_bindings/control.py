@@ -74,7 +74,7 @@ class ControlClient:
     DEFAULT_LISTEN_MADDR = "/unix/tmp/p2pclient.sock"
 
     def __init__(
-            self, daemon_connector: DaemonConnector, listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR)
+        self, daemon_connector: DaemonConnector, listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR)
     ) -> None:
         self.listen_maddr = listen_maddr
         self.daemon_connector = daemon_connector
@@ -133,16 +133,13 @@ class ControlClient:
 
         try:
             response_payload: bytes = self.unary_handlers[request.proto](request.data)
-            response = p2pd_pb.CallUnaryResponse(
-                callId=request.callId,
-                result=response_payload)
+            response = p2pd_pb.CallUnaryResponse(callId=request.callId, result=response_payload)
         except Exception as e:
-            response = p2pd_pb.CallUnaryResponse(
-                callId=request.callId,
-                error=repr(e))
+            response = p2pd_pb.CallUnaryResponse(callId=request.callId, error=repr(e))
 
         await self.pending_messages.put(
-            p2pd_pb.Request(type=p2pd_pb.Request.SEND_RESPONSE_TO_REMOTE, sendResponseToRemote=response))
+            p2pd_pb.Request(type=p2pd_pb.Request.SEND_RESPONSE_TO_REMOTE, sendResponseToRemote=response)
+        )
 
     async def _handler(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         pb_stream_info = p2pd_pb.StreamInfo()  # type: ignore
@@ -253,7 +250,7 @@ class ControlClient:
         raise_if_failed(resp)
 
     async def stream_open(
-            self, peer_id: PeerID, protocols: Sequence[str]
+        self, peer_id: PeerID, protocols: Sequence[str]
     ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
         reader, writer = await self.daemon_connector.open_connection()
 
