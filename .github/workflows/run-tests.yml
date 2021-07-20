@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         python-version: [ 3.7, 3.8, 3.9 ]
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -33,7 +33,7 @@ jobs:
       - name: Test
         run: |
           cd tests
-          pytest --durations=0 --durations-min=1.0
+          LOGLEVEL=DEBUG pytest --durations=0 --durations-min=1.0 -vvv
 
   build_and_test_p2pd:
     runs-on: ubuntu-latest
@@ -65,7 +65,7 @@ jobs:
   codecov_in_develop_mode:
 
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -87,6 +87,6 @@ jobs:
           pip install -e .
       - name: Test
         run: |
-          pytest --cov=hivemind tests
+          LOGLEVEL=DEBUG pytest --cov=hivemind tests -vvv
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
