@@ -285,6 +285,7 @@ class DHT(mp.Process):
     async def replicate_p2p(self) -> P2P:
         """
         Get a replica of a P2P instance used in the DHT process internally.
+        The replica uses the same P2P daemon as the DHT and only works while DHT is alive.
         """
 
         if self._p2p_replica is None:
