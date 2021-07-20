@@ -89,7 +89,9 @@ class DHT(mp.Process):
         self.ready = mp.Event()
         self.daemon = daemon
 
+        # These values will be fetched from the child process when requested
         self._peer_id = None
+        self._client_mode = None
         self._p2p_replica = None
 
         if start:
@@ -269,6 +271,15 @@ class DHT(mp.Process):
 
     async def _get_peer_id(self, node: DHTNode) -> PeerID:
         return node.peer_id
+
+    @property
+    def client_mode(self) -> bool:
+        if self._client_mode is None:
+            self._client_mode = self.run_coroutine(DHT._get_client_mode)
+        return self._client_mode
+
+    async def _get_client_mode(self, node: DHTNode) -> bool:
+        return node.protocol.client_mode
 
     def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
         """
