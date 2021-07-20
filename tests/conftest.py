@@ -1,10 +1,12 @@
 import gc
+import multiprocessing as mp
 from contextlib import suppress
 
 import psutil
 import pytest
 
 from hivemind.utils import get_logger
+from hivemind.utils.mpfuture import MPFuture
 
 
 logger = get_logger(__name__)
@@ -26,3 +28,7 @@ def cleanup_children():
         for child in children:
             with suppress(psutil.NoSuchProcess):
                 child.kill()
+
+    # Killing child processes may leave the global MPFuture locks acquired, so we recreate them
+    MPFuture._initialization_lock = mp.Lock()
+    MPFuture._update_lock = mp.Lock()
