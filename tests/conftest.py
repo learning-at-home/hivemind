@@ -29,8 +29,6 @@ def cleanup_children():
             with suppress(psutil.NoSuchProcess):
                 child.kill()
 
-    # Killing child processes may leave the global locks in MPFuture acquired
-    # or the global state broken, so we reset them
+    # Killing child processes may leave the global MPFuture locks acquired, so we recreate them
     MPFuture._initialization_lock = mp.Lock()
     MPFuture._update_lock = mp.Lock()
-    MPFuture._active_pid = None  # This will force to reset the global state
