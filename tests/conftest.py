@@ -1,5 +1,4 @@
 import gc
-import multiprocessing as mp
 from contextlib import suppress
 
 import psutil
@@ -29,6 +28,5 @@ def cleanup_children():
             with suppress(psutil.NoSuchProcess):
                 child.kill()
 
-    # Killing child processes may leave the global MPFuture locks acquired, so we recreate them
-    MPFuture._initialization_lock = mp.Lock()
-    MPFuture._update_lock = mp.Lock()
+    # Killing child processes may leave the global MPFuture state broken, so we reset it
+    MPFuture.reset_backend()
