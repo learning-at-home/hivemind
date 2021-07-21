@@ -477,8 +477,10 @@ class P2P:
                 return await self._client.stream_open(peer_id, (handler_name,))
             except ControlFailure:
                 if try_number == n_attempts - 1:
-                    logger.exception(f"Failed to open stream to {peer_id} for handle `{handler_name}`. "
-                                     f"Made {n_attempts} attempts, giving up:")
+                    logger.exception(
+                        f"Failed to open stream to {peer_id} for handle `{handler_name}`. "
+                        f"Made {n_attempts} attempts, giving up:"
+                    )
                     raise
                 logger.warning(f"Failed to open stream to {peer_id} for handle `{handler_name}`:")
 
