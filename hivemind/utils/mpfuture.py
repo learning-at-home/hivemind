@@ -129,6 +129,13 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     @classmethod
     def reset_backend(cls):
+        """
+        Reset the MPFuture backend. This is useful when the state may have been corrupted
+        (e.g. killing child processes may leave the locks acquired and the background thread blocked).
+
+        This method is neither thread-safe nor process-safe.
+        """
+
         cls._initialization_lock = mp.Lock()
         cls._update_lock = mp.Lock()
         cls._active_pid = None

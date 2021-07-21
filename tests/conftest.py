@@ -28,5 +28,5 @@ def cleanup_children():
             with suppress(psutil.NoSuchProcess):
                 child.kill()
 
-    # Killing child processes may leave the global MPFuture state broken, so we reset it
+    # Killing child processes may leave the MPFuture backend broken
     MPFuture.reset_backend()
