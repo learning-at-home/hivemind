@@ -128,10 +128,26 @@ class MPFuture(base.Future, Generic[ResultType]):
                     cls._pipe_waiter_thread.start()
 
     @classmethod
+    def reset_backend(cls):
+        """
+        Reset the MPFuture backend. This is useful when the state may have been corrupted
+        (e.g. killing child processes may leave the locks acquired and the background thread blocked).
+
+        This method is neither thread-safe nor process-safe.
+        """
+
+        cls._initialization_lock = mp.Lock()
+        cls._update_lock = mp.Lock()
+        cls._active_pid = None
+
+    @classmethod
     def _process_updates_in_background(cls, receiver_pipe: mp.connection.Connection):
         pid = os.getpid()
         while True:
             try:
+                if cls._pipe_waiter_thread is not threading.current_thread():
+                    break  # Backend was reset, a new background thread has started
+
                 uid, msg_type, payload = receiver_pipe.recv()
                 future = None
                 future_ref = cls._active_futures.get(uid)

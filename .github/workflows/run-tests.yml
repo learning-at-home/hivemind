@@ -87,6 +87,6 @@ jobs:
           pip install -e .
       - name: Test
         run: |
-          pytest --cov=hivemind tests -v
+          pytest --cov=hivemind -v tests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
