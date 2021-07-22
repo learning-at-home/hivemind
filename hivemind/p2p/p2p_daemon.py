@@ -459,6 +459,7 @@ class P2P:
         if not (isinstance(input, AsyncIterableABC) or stream_output):
             return await self._call_unary_protobuf_handler(peer_id, name, input, output_protobuf_type)
 
+        requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
         responses = self._iterate_protobuf_stream_handler(peer_id, name, input, output_protobuf_type)
 
         count = 0
