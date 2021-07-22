@@ -28,6 +28,7 @@ enum MessageCode {
   INTERNAL_ERROR = 15;       // "I messed up, we will have to stop allreduce because of that."
   CANCELLED = 16;            // "[from peer during allreduce] I no longer want to participate in AllReduce."
   GROUP_DISBANDED = 17;      // "[from leader] The group is closed. Go find another group."
+  BAD_GROUP_KEY = 18;        // "I will not accept you. My current group key differs (maybe you used my older key)."
 }
 
 message JoinRequest {
@@ -36,6 +37,7 @@ message JoinRequest {
   double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time
   bytes gather = 4;             // optional metadata that is gathered from all peers (e.g. batch size or current loss)
   bool client_mode = 5;         // if True, the incoming averager is a client with no capacity for averaging
+  string group_key = 6;         // group key identifying an All-Reduce bucket, e.g my_averager.0b011011101
 }
 
 message MessageFromLeader {

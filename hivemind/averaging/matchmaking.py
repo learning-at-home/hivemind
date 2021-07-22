@@ -180,6 +180,7 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
                         expiration=expiration_time,
                         client_mode=self.client_mode,
                         gather=self.data_for_gather,
+                        group_key=self.group_key_manager.current_key,
                     )
                 )
                 message = await asyncio.wait_for(call.read(), timeout=self.request_timeout)
@@ -315,11 +316,14 @@ class Matchmaking(averaging_pb2_grpc.DecentralizedAveragingServicer):
             or not isinstance(request.endpoint, Endpoint)
             or len(request.endpoint) == 0
             or self.client_mode
+            or not isinstance(request.group_key, GroupKey)
         ):
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.PROTOCOL_VIOLATION)
 
         elif request.schema_hash != self.schema_hash:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_SCHEMA_HASH)
+        elif request.group_key != self.group_key_manager.current_key:
+            return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_GROUP_KEY)
         elif self.potential_leaders.declared_group_key is None:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_DECLARED)
         elif self.potential_leaders.declared_expiration_time > (request.expiration or float("inf")):
