@@ -41,7 +41,7 @@ message PCRequest {
 
   oneof message {
     AddUnaryHandlerRequest addUnaryHandler = 2;
-    CallUnaryRequest  callUnary = 3;
+    CallUnaryRequest callUnary = 3;
     CallUnaryResponse unaryResponse = 4;
   }
 }
