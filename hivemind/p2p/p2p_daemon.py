@@ -415,7 +415,15 @@ class P2P:
             return
 
         async def _stream_handler(requests: P2P.TInputStream, context: P2PContext) -> P2P.TOutputStream:
-            input = requests
+            if stream_input:
+                input = requests
+            else:
+                count = 0
+                async for input in requests:
+                    count += 1
+                if count != 1:
+                    raise ValueError(f"Got {count} requests for handler {name} instead of one")
+
             output = handler(input, context)
 
             if isinstance(output, AsyncIterableABC):
