@@ -60,7 +60,7 @@ jobs:
       - name: Test
         run: |
           cd tests
-          pytest -k "p2p"
+          pytest -k "p2p" -v
 
   codecov_in_develop_mode:
 
