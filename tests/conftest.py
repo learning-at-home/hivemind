@@ -1,5 +1,4 @@
 import gc
-import multiprocessing as mp
 from contextlib import suppress
 
 import psutil
