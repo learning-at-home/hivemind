@@ -4,7 +4,6 @@ import asyncio
 import concurrent.futures._base as base
 from contextlib import nullcontext, suppress
 import multiprocessing as mp
-import multiprocessing.connection
 import os
 import threading
 import uuid
