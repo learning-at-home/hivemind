@@ -234,7 +234,6 @@ def compute_mean_std(averagers, unbiased=True):
     return means, stds
 
 
-@pytest.mark.skip(reason="Skipped until finishing a more stable averager implementation (TODO @justheuristic)")
 @pytest.mark.forked
 def test_allreduce_grid():
     dht_instances = launch_dht_instances(8)
@@ -256,10 +255,6 @@ def test_allreduce_grid():
     prev_means, prev_stds = means0, stds0
 
     for i in range(5):
-        time.sleep(0.2)
-        # FIXME: An averager does not have time to update the key in GroupKeyManager
-        # if .step() is called without any delays
-
         step_futures = [averager.step(wait=False) for averager in averagers]
         groups = [future.result() for future in step_futures]
         [means], [stds] = compute_mean_std(averagers)
