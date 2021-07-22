@@ -98,7 +98,13 @@ class ServicerBase:
                 self: StubBase, input: input_type, timeout: Optional[float] = None
             ) -> handler.response_type:
                 return await asyncio.wait_for(
-                    self._p2p.call_protobuf_handler(self._peer, handler.handle_name, input, handler.response_type),
+                    self._p2p.call_protobuf_handler(
+                        self._peer,
+                        handler.handle_name,
+                        input,
+                        handler.response_type,
+                        stream_output=handler.stream_output,
+                    ),
                     timeout=timeout,
                 )
 

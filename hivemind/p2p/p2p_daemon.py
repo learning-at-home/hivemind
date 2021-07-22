@@ -402,7 +402,7 @@ class P2P:
         input_protobuf_type: type,
         *,
         stream_input: bool = False,
-        stream_output:bool = False,
+        stream_output: bool = False,
     ) -> None:
         """
         :param stream_input: If True, assume ``handler`` to take ``TInputStream``
@@ -452,9 +452,11 @@ class P2P:
         name: str,
         input: Union[TInputProtobuf, TInputStream],
         output_protobuf_type: type,
+        *,
+        stream_output: bool = False,
     ) -> Awaitable[TOutputProtobuf]:
 
-        if not isinstance(input, AsyncIterableABC):
+        if not (isinstance(input, AsyncIterableABC) or stream_output):
             return await self._call_unary_protobuf_handler(peer_id, name, input, output_protobuf_type)
 
         responses = self._iterate_protobuf_stream_handler(peer_id, name, input, output_protobuf_type)
