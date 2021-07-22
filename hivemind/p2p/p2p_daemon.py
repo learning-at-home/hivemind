@@ -402,13 +402,15 @@ class P2P:
         input_protobuf_type: type,
         *,
         stream_input: bool = False,
+        stream_output:bool = False,
     ) -> None:
         """
         :param stream_input: If True, assume ``handler`` to take ``TInputStream``
                              (not just ``TInputProtobuf``) as input.
+        :param stream_output: If True, assume ``handler`` to return ``TOutputStream``
         """
 
-        if not stream_input:
+        if not (stream_input or stream_output):
             await self._add_protobuf_unary_handler(name, handler, input_protobuf_type)
             return
 

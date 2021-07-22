@@ -113,6 +113,7 @@ class ServicerBase:
                 getattr(servicer, handler.method_name),
                 handler.request_type,
                 stream_input=handler.stream_input,
+                stream_output=handler.stream_output,
             )
 
     def get_stub(self, p2p: P2P, peer: PeerID) -> StubBase:
