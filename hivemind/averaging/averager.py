@@ -122,6 +122,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         super().__init__()
         self.dht = dht
+        self.prefix = prefix
 
         if client_mode is None:
             client_mode = dht.client_mode
@@ -214,7 +215,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             async def _run():
                 self._p2p = await self.dht.replicate_p2p()
                 if not self.client_mode:
-                    await self.add_p2p_handlers(self._p2p)
+                    await self.add_p2p_handlers(self._p2p, namespace=self.prefix)
                 else:
                     logger.debug(f"The averager is running in client mode.")
 
@@ -389,6 +390,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 allreduce = AllReduceRunner(
                     p2p=self._p2p,
                     servicer=self,
+                    prefix=self.prefix,
                     group_id=group_info.group_id,
                     tensors=local_tensors,
                     ordered_group_endpoints=group_info.endpoints,
@@ -560,7 +562,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 if peer != self.endpoint:
                     logger.info(f"Downloading parameters from peer {peer}")
                     try:
-                        stub = self.get_stub(self._p2p, peer)
+                        stub = self.get_stub(self._p2p, peer, namespace=self.prefix)
                         stream = stub.rpc_download_state(averaging_pb2.DownloadRequest())
                         current_tensor_parts, tensors = [], []
                         async for message in stream:

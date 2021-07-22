@@ -174,7 +174,7 @@ class Matchmaking:
         stream: AsyncIterator[averaging_pb2.MessageFromLeader] = None
         try:
             async with self.lock_request_join_group:
-                leader_stub = self._servicer.get_stub(self._p2p, leader)
+                leader_stub = self._servicer.get_stub(self._p2p, leader, namespace=self._servicer.prefix)
 
                 stream = leader_stub.rpc_join_group(
                     averaging_pb2.JoinRequest(

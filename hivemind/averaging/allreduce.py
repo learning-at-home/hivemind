@@ -34,6 +34,7 @@ class AllReduceRunner(ServicerBase):
     :param servicer: a hivemind.p2p.ServicerBase instance whose RPC signatures are used when requesting other peers.
       Typically, it is a DecentralizedAverager instance or its derivative.
       If None, uses ``self`` for this purpose (since this class may be a servicer itself for testing purposes).
+    :param prefix: namespace for servicer's RPCs (typically, equal to prefix for group keys)
     :param group_id: unique identifier of this specific all-reduce run
     :param tensors: local tensors that should be averaged with groupmates
     :param tensors: local tensors that should be averaged with groupmates
@@ -52,6 +53,7 @@ class AllReduceRunner(ServicerBase):
         *,
         p2p: P2P,
         servicer: Optional[Union[ServicerBase, Type[ServicerBase]]],
+        prefix: Optional[str],
         group_id: GroupID,
         tensors: Sequence[torch.Tensor],
         ordered_group_endpoints: Sequence[Endpoint],
@@ -68,6 +70,7 @@ class AllReduceRunner(ServicerBase):
         if servicer is None:
             servicer = self
         self._servicer = servicer
+        self._prefix = prefix
 
         modes = modes or tuple(AveragingMode.CLIENT if frac == 0 else AveragingMode.NODE for frac in peer_fractions)
         weights = weights or tuple(int(mode != AveragingMode.AUX) for mode in modes)
@@ -111,7 +114,7 @@ class AllReduceRunner(ServicerBase):
         return len(self.ordered_group_endpoints)
 
     def _get_peer_stub(self, peer: Endpoint) -> StubBase:
-        return self._servicer.get_stub(self._p2p, peer)
+        return self._servicer.get_stub(self._p2p, peer, namespace=self._prefix)
 
     async def run(self) -> AsyncIterator[torch.Tensor]:
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""

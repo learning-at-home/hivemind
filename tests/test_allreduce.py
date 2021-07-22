@@ -193,6 +193,7 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
         allreduce_protocol = AllReduceRunner(
             p2p=p2p,
             servicer=AllReduceRunner,
+            prefix=None,
             group_id=group_id,
             tensors=[x.clone() for x in tensors_by_peer[p2p.id]],
             ordered_group_endpoints=peers,

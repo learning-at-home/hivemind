@@ -24,9 +24,10 @@ class StubBase:
     adding the necessary rpc_* methods. Calls to these methods are translated to calls to the remote peer.
     """
 
-    def __init__(self, p2p: P2P, peer: PeerID):
+    def __init__(self, p2p: P2P, peer: PeerID, namespace: Optional[str]):
         self._p2p = p2p
         self._peer = peer
+        self._namespace = namespace
 
 
 class ServicerBase:
@@ -97,7 +98,7 @@ class ServicerBase:
 
                 return self._p2p.iterate_protobuf_handler(
                     self._peer,
-                    cls._get_handle_name(handler.method_name),
+                    cls._get_handle_name(self._namespace, handler.method_name),
                     input,
                     handler.response_type,
                 )
@@ -110,7 +111,7 @@ class ServicerBase:
                 return await asyncio.wait_for(
                     self._p2p.call_protobuf_handler(
                         self._peer,
-                        cls._get_handle_name(handler.method_name),
+                        cls._get_handle_name(self._namespace, handler.method_name),
                         input,
                         handler.response_type,
                     ),
@@ -120,26 +121,29 @@ class ServicerBase:
         caller.__name__ = handler.method_name
         return caller
 
-    async def add_p2p_handlers(self, p2p: P2P, wrapper: Any = None) -> None:
+    async def add_p2p_handlers(self, p2p: P2P, wrapper: Any = None, *, namespace: Optional[str] = None) -> None:
         self._collect_rpc_handlers()
 
         servicer = self if wrapper is None else wrapper
         for handler in self._rpc_handlers:
             await p2p.add_protobuf_handler(
-                self._get_handle_name(handler.method_name),
+                self._get_handle_name(namespace, handler.method_name),
                 getattr(servicer, handler.method_name),
                 handler.request_type,
                 stream_input=handler.stream_input,
             )
 
     @classmethod
-    def get_stub(cls, p2p: P2P, peer: PeerID) -> StubBase:
+    def get_stub(cls, p2p: P2P, peer: PeerID, *, namespace: Optional[str] = None) -> StubBase:
         cls._collect_rpc_handlers()
-        return cls._stub_type(p2p, peer)
+        return cls._stub_type(p2p, peer, namespace)
 
     @classmethod
-    def _get_handle_name(cls, method_name: str) -> str:
-        return f"{cls.__name__}.{method_name}"
+    def _get_handle_name(cls, namespace: Optional[str], method_name: str) -> str:
+        handle_name = f"{cls.__name__}.{method_name}"
+        if namespace is not None:
+            handle_name = f"{namespace}::{handle_name}"
+        return handle_name
 
     @staticmethod
     def _strip_iterator_hint(hint: type) -> Tuple[type, bool]:
