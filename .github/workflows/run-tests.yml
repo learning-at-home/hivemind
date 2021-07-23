@@ -35,4 +35,4 @@ jobs:
       - name: Test
         run: |
           cd tests
-          pytest --durations=0 --durations-min=1.0 -v
+          pytest test_averaging.py --durations=0 --durations-min=1.0 -v
