@@ -194,11 +194,9 @@ def test_empty_table():
 
 
 @pytest.mark.forked
-def test_dht_node(n_peers: int = 20,
-                  n_sequential_peers: int = 5,
-                  parallel_rpc: int = 10,
-                  bucket_size: int = 5,
-                  num_replicas: int = 3):
+def test_dht_node(
+    n_peers: int = 20, n_sequential_peers: int = 5, parallel_rpc: int = 10, bucket_size: int = 5, num_replicas: int = 3
+):
     # step A: create a swarm of 50 dht nodes in separate processes
     #         (first 5 created sequentially, others created in parallel)
 
@@ -215,7 +213,7 @@ def test_dht_node(n_peers: int = 20,
             parallel_rpc=parallel_rpc,
             bucket_size=bucket_size,
             num_replicas=num_replicas,
-            cache_refresh_before_expiry=False
+            cache_refresh_before_expiry=False,
         )
     )
 
@@ -291,7 +289,7 @@ def test_dht_node(n_peers: int = 20,
             initial_peers=initial_peers,
             parallel_rpc=parallel_rpc,
             cache_refresh_before_expiry=False,
-            cache_locally=False
+            cache_locally=False,
         )
     )
 
