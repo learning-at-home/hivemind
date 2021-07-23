@@ -145,8 +145,8 @@ class MPFuture(base.Future, Generic[ResultType]):
     def _process_updates_in_background(cls):
         pid = os.getpid()
         with DefaultSelector() as selector:
-            selector.register(cls._process_inner_pipe, EVENT_READ, data=cls._process_inner_pipe)
-            selector.register(cls._process_outer_pipe, EVENT_READ, data=cls._process_outer_pipe)
+            selector.register(cls._process_inner_pipe, EVENT_READ)
+            selector.register(cls._process_outer_pipe, EVENT_READ)
 
             while True:
                 try:
