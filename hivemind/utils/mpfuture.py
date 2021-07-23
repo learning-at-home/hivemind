@@ -228,7 +228,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         # otherwise create a new request for synchronization
 
         try:
-            with MPFuture._status_lock if self._use_lock else nullcontext():
+            with MPFuture._update_lock if self._use_lock else nullcontext():
                 payload = (self._use_lock, self._process_inner_pipe)
                 self._pipe_to_origin.send((self._uid, MessageType.STATE_REQUEST, payload))
             status_updated.wait(MPFuture.SOFT_UPDATE_TIMEOUT)
