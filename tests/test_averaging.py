@@ -36,9 +36,6 @@ def cleanup_children():
             with suppress(psutil.NoSuchProcess):
                 child.terminate()
         psutil.wait_procs(children, timeout=1)
-        for child in children:
-            with suppress(psutil.NoSuchProcess):
-                child.kill()
 
     # Broken code or killing of child processes may leave the MPFuture backend corrupted
     MPFuture.reset_backend()
@@ -577,6 +574,7 @@ def test_training_averager(n_steps: int = 10, n_dims: int = 16):
 
 if __name__ == '__main__':
     with cleanup_children():
+        print(f"BEGAN test_key_manager()")
         loop = asyncio.new_event_loop()
         loop.run_until_complete(test_key_manager())
         print(f"PASSED test_key_manager()")
@@ -584,20 +582,25 @@ if __name__ == '__main__':
     for n_clients in [0, 1, 2]:
         for n_aux in [0, 1, 2]:
             with cleanup_children():
+                print(f"BEGAN _test_allreduce_once({n_clients}, {n_aux})")
                 _test_allreduce_once(n_clients, n_aux)
                 print(f"PASSED _test_allreduce_once({n_clients}, {n_aux})")
     for n_clients, n_aux in [(0, 4), (1, 3), (0, 3)]:
         with cleanup_children():
+            print(f"BEGAN _test_allreduce_once({n_clients}, {n_aux})")
             _test_allreduce_once(n_clients, n_aux)
             print(f"PASSED _test_allreduce_once({n_clients}, {n_aux})")
 
     with cleanup_children():
+        print(f"BEGAN _test_allreduce_weighted")
         test_allreduce_weighted()
         print(f"PASSED _test_allreduce_weighted")
     with cleanup_children():
+        print(f"BEGAN _test_allreduce_grid")
         test_allreduce_grid()
         print(f"PASSED _test_allreduce_grid")
     with cleanup_children():
+        print("BEGAN _test_allreduce_compression")
         test_allreduce_compression()
         print(f"PASSED _test_allreduce_compression")
     with cleanup_children():
