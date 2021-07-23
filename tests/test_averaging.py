@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import gc
 import random
 import time
@@ -22,6 +23,7 @@ from test_utils.dht_swarms import launch_dht_instances
 logger = get_logger(__name__)
 
 
+@contextlib.contextmanager
 def cleanup_children():
     yield
 
