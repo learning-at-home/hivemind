@@ -139,6 +139,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
         cls._initialization_lock = mp.Lock()
         cls._update_lock = mp.Lock()
+        cls._status_lock = mp.Lock()
         cls._active_pid = None
 
     @classmethod
