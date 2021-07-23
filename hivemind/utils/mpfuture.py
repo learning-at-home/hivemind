@@ -156,7 +156,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                 if msg_type == MessageType.STATE_REQUEST:
                     future_state = None if future is None else future.__getstate__()
                     use_lock, return_pipe = payload
-                    with nullcontext():
+                    with MPFuture._update_lock if use_lock else nullcontext():
                         return_pipe.send((uid, MessageType.STATE_RESPONSE, future_state))
 
                 elif msg_type == MessageType.STATE_RESPONSE:
