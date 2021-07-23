@@ -12,7 +12,7 @@ jobs:
         python-version: [ 3.7, 3.8, 3.9 ]
         attempt: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 ]
       fail-fast: false
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -35,4 +35,4 @@ jobs:
       - name: Test
         run: |
           cd tests
-          pytest test_averaging.py --durations=0 --durations-min=1.0 -v
+          python test_averaging.py #--durations=0 --durations-min=1.0 -v
