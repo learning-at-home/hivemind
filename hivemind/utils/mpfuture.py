@@ -64,7 +64,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     _initialization_lock = mp.Lock()  # global lock that prevents simultaneous initialization of two processes
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing of results/exceptions through same pipe
-    _status_lock = mp.Lock()  # global lock that prevents simultaneous sening of status updates through same pipe
+    _status_lock = mp.Lock()  # global lock that prevents simultaneous sending of status updates through same pipe
     _process_inner_pipe: Optional[PipeEnd] = None  # a pipe that is used to read results and send status updates
     _process_outer_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results and receive status updates
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
