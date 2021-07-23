@@ -574,6 +574,7 @@ def test_training_averager(n_steps: int = 10, n_dims: int = 16):
     for instance in [averager1, averager2] + dht_instances:
         instance.shutdown()
 
+
 if __name__ == '__main__':
     with cleanup_children():
         loop = asyncio.new_event_loop()
@@ -589,4 +590,32 @@ if __name__ == '__main__':
         with cleanup_children():
             _test_allreduce_once(n_clients, n_aux)
             print(f"PASSED _test_allreduce_once({n_clients}, {n_aux})")
+
+    with cleanup_children():
+        test_allreduce_weighted()
+        print(f"PASSED _test_allreduce_weighted")
+    with cleanup_children():
+        test_allreduce_grid()
+        print(f"PASSED _test_allreduce_grid")
+    with cleanup_children():
+        test_allreduce_compression()
+        print(f"PASSED _test_allreduce_compression")
+    with cleanup_children():
+        test_allgather()
+        print(f"PASSED _test_allreduce_allgather")
+    with cleanup_children():
+        test_load_balancing()
+        print(f"PASSED _test_loadbalancing")
+    with cleanup_children():
+        test_too_few_peers()
+        print(f"PASSED _test_too_few")
+    with cleanup_children():
+        test_load_state_from_peers()
+        print(f"PASSED _test_load_state")
+    with cleanup_children():
+        test_getset_bits()
+        print(f"PASSED _test_getset")
+    with cleanup_children():
+        test_training_averager()
+        print(f"PASSED _test_training")
     print("DONE!")
