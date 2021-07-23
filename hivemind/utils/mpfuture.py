@@ -153,8 +153,8 @@ class MPFuture(base.Future, Generic[ResultType]):
                     if cls._pipe_waiter_thread is not threading.current_thread():
                         break  # Backend was reset, a new background thread has started
 
-                    pipe = next((key.data for (key, events) in selector.select()))
-                    uid, msg_type, payload = pipe.recv()
+                    (key, events), *_ = selector.select()
+                    uid, msg_type, payload = key.fileobj.recv()
                     future = None
                     future_ref = cls._active_futures.get(uid)
                     if future_ref is not None:
