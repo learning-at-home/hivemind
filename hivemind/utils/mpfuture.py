@@ -81,12 +81,12 @@ class MPFuture(base.Future, Generic[ResultType]):
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
     _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
-    _active_futures: Optional[Dict[UID, Type[ref][MPFuture]]] = None  # non-done futures originated from this process
+    _active_futures: Optional[Dict[UID, MPFuture]] = None  # non-done futures originated from this process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
     def __init__(self, use_lock: bool = True):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
-        self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
+        self._shared_state_code = SharedBytes.next()
         self._state_cache: Dict[State, State] = {}
         # mapping from global to cached local future used that makes updates immediately
         # available on setter side; dictionary-based cache works because future can visit any state at most once
@@ -101,7 +101,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     # note: the second if is intentional, see https://en.wikipedia.org/wiki/Double-checked_locking
                     self._initialize_mpfuture_backend()
         assert self._uid not in MPFuture._active_futures
-        MPFuture._active_futures[self._uid] = ref(self)
+        MPFuture._active_futures[self._uid] = self
         self._sender_pipe = MPFuture._global_sender_pipe
 
         try:
@@ -159,10 +159,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     break  # backend was reset, a new background thread has started
 
                 uid, update_type, payload = receiver_pipe.recv()
-                future = None
-                future_ref = cls._active_futures.pop(uid, None)
-                if future_ref is not None:
-                    future = future_ref()
+                future = cls._active_futures.pop(uid, None)
 
                 if future is None:
                     logger.debug(f"Ignoring update to future with uid={uid}: the future is already done or destroyed")
