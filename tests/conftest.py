@@ -5,7 +5,7 @@ import multiprocessing as mp
 import psutil
 import pytest
 
-from hivemind.utils.mpfuture import MPFuture, SharedBytes
+from hivemind.utils.mpfuture import MPFuture
 from hivemind.utils.logging import get_logger
 
 
@@ -30,6 +30,5 @@ def cleanup_children():
                 child.kill()
 
     MPFuture._active_pid = None
-    SharedBytes.current_pid = None
     MPFuture._initialization_lock = mp.Lock()
     MPFuture._update_lock = mp.Lock()

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures._base as base
-from weakref import ref
 from contextlib import nullcontext
 import multiprocessing as mp
 import multiprocessing.connection
@@ -10,7 +9,7 @@ import os
 import threading
 import uuid
 from enum import Enum, auto
-from typing import Generic, TypeVar, Dict, Optional, Any, Callable, Type
+from typing import Generic, TypeVar, Dict, Optional, Any, Callable
 
 import torch  # used for py3.7-compatible shared memory
 
@@ -35,25 +34,6 @@ except ImportError:
         """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
 
 
-class SharedBytes:
-    lock = threading.Lock()
-    current_pid: Optional[PID] = None
-    current_buffer: Optional[torch.Tensor] = None
-    current_index: Optional[int] = 0
-
-    @classmethod
-    def next(cls):
-        with cls.lock:
-            if cls.current_pid != os.getpid() or cls.current_buffer is None or cls.current_index >= len(cls.current_buffer):
-                buffer_size = os.environ.get('HIVEMIND_SHM_BUFFER_SIZE', 4096)
-                cls.current_pid = os.getpid()
-                cls.current_buffer = torch.empty([buffer_size], dtype=torch.uint8).share_memory_()
-                cls.current_index = 0
-
-            cls.current_index += 1
-            return cls.current_buffer[cls.current_index - 1]
-
-
 class UpdateType(Enum):
     RESULT = auto()
     EXCEPTION = auto()
@@ -69,6 +49,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     :param use_lock: if True, operations with MPFuture use a global lock to prevent concurrent writes to the same pipe;
       If set to False, writing to this future ignores global lock, slightly improving performance, but making user
       responsible for avoiding concurrent set_result / set_exception calls to futures with the same process of origin.
+    :param loop: if specified, overrides default asyncio event loop for the purpose of awaiting MPFuture
 
     :note: This is an internal primitive that is not guaranteed to work outside of hivemind applications.
      More specifically, there are two known limitations:
@@ -81,12 +62,12 @@ class MPFuture(base.Future, Generic[ResultType]):
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
     _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
-    _active_futures: Optional[Dict[UID, MPFuture]] = None  # non-done futures originated from this process
+    _active_futures: Optional[Dict[UID, MPFuture]] = None  # pending or running futures originated from current process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
-    def __init__(self, use_lock: bool = True):
+    def __init__(self, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
-        self._shared_state_code = SharedBytes.next()
+        self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state_cache: Dict[State, State] = {}
         # mapping from global to cached local future used that makes updates immediately
         # available on setter side; dictionary-based cache works because future can visit any state at most once
@@ -105,7 +86,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._sender_pipe = MPFuture._global_sender_pipe
 
         try:
-            self._loop = asyncio.get_event_loop()
+            self._loop = loop or asyncio.get_event_loop()
             self._aio_event = asyncio.Event()
         except RuntimeError:
             self._loop, self._aio_event = None, None
@@ -130,12 +111,10 @@ class MPFuture(base.Future, Generic[ResultType]):
         async def _event_setter():
             self._aio_event.set()
 
-        if self.get_loop().is_running() and loop == self.get_loop():
+        if loop == self.get_loop():
             asyncio.create_task(_event_setter())
-        elif self.get_loop().is_running() and loop != self.get_loop():
-            asyncio.run_coroutine_threadsafe(_event_setter(), self.get_loop())
         else:
-            self.get_loop().run_until_complete(_event_setter())
+            asyncio.run_coroutine_threadsafe(_event_setter(), self._loop)
 
     @classmethod
     def _initialize_mpfuture_backend(cls):
@@ -155,34 +134,26 @@ class MPFuture(base.Future, Generic[ResultType]):
         pid = os.getpid()
         while True:
             try:
-                if cls._pipe_waiter_thread is not threading.current_thread():
-                    break  # backend was reset, a new background thread has started
-
                 uid, update_type, payload = receiver_pipe.recv()
-                future = cls._active_futures.pop(uid, None)
-
-                if future is None:
+                if uid not in cls._active_futures:
                     logger.debug(f"Ignoring update to future with uid={uid}: the future is already done or destroyed")
                 elif update_type == UpdateType.RESULT:
-                    future.set_result(payload)
+                    cls._active_futures.pop(uid).set_result(payload)
                 elif update_type == UpdateType.EXCEPTION:
-                    future.set_exception(payload)
+                    cls._active_futures.pop(uid).set_exception(payload)
                 elif update_type == UpdateType.CANCEL:
-                    future.cancel()
+                    cls._active_futures.pop(uid).cancel()
                 else:
                     raise RuntimeError(f"Received unexpected update type {update_type}")
-            except (BrokenPipeError, EOFError, ConnectionError):
+            except (BrokenPipeError, EOFError):
                 logger.debug(f"Update pipe was was shut down unexpectedly (pid={pid})")
             except Exception as e:
                 logger.exception(f"Could not retrieve update: caught {repr(e)} (pid={pid})")
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """This method sends result, exception or cancel to the MPFuture origin."""
-        try:
-            with MPFuture._update_lock if self._use_lock else nullcontext():
-                self._sender_pipe.send((self._uid, update_type, payload))
-        except (ConnectionError, BrokenPipeError, EOFError) as e:
-            logger.debug(f"No updates were sent: pipe to origin process was broken ({e}).", exc_info=True)
+        with MPFuture._update_lock if self._use_lock else nullcontext():
+            self._sender_pipe.send((self._uid, update_type, payload))
 
     def set_result(self, result: ResultType):
         if os.getpid() == self._origin_pid:
@@ -269,7 +240,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise RuntimeError("Can't await: MPFuture was created with no event loop")
         yield from self._aio_event.wait().__await__()
         try:
-            return super().result()
+            return super().result(timeout=0)
         except base.CancelledError:
             raise asyncio.CancelledError()
 
@@ -301,4 +272,3 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._condition = threading.Condition()
         self._aio_event, self._loop = None, None
         self._state_cache = {}
-
