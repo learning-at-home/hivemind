@@ -98,8 +98,11 @@ class GroupKeyManager:
             for key, looking_for_group in result.value.items()
             if key != self.RESERVED_KEY_FOR_NBITS and (not only_active or looking_for_group.value)
         ]
-        num_active_averagers = sum(1 for key, looking_for_group in result.value.items()
-                                   if key != self.RESERVED_KEY_FOR_NBITS and looking_for_group.value)
+        num_active_averagers = sum(
+            1
+            for key, looking_for_group in result.value.items()
+            if key != self.RESERVED_KEY_FOR_NBITS and looking_for_group.value
+        )
 
         suggested_nbits = self.get_suggested_nbits(result)
         if (

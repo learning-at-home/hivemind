@@ -83,7 +83,7 @@ async def amap_in_executor(
     func: Callable[..., T],
     *iterables: AsyncIterable,
     max_prefetch: Optional[int] = None,
-    executor: Optional[ThreadPoolExecutor] = None
+    executor: Optional[ThreadPoolExecutor] = None,
 ) -> AsyncIterator[T]:
     """iterate from an async iterable in a background thread, yield results to async iterable"""
     loop = asyncio.get_event_loop()
