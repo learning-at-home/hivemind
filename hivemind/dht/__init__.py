@@ -260,7 +260,8 @@ class DHT(mp.Process):
 
         self.run_coroutine(partial(DHT._add_validators, record_validators=record_validators))
 
-    async def _add_validators(self, node: DHTNode, record_validators: Iterable[RecordValidatorBase]) -> None:
+    @staticmethod
+    async def _add_validators(_: DHT, node: DHTNode, record_validators: Iterable[RecordValidatorBase]) -> None:
         node.protocol.record_validator.extend(record_validators)
 
     @property
@@ -269,7 +270,8 @@ class DHT(mp.Process):
             self._peer_id = self.run_coroutine(DHT._get_peer_id)
         return self._peer_id
 
-    async def _get_peer_id(self, node: DHTNode) -> PeerID:
+    @staticmethod
+    async def _get_peer_id(_: DHT, node: DHTNode) -> PeerID:
         return node.peer_id
 
     @property
@@ -278,7 +280,8 @@ class DHT(mp.Process):
             self._client_mode = self.run_coroutine(DHT._get_client_mode)
         return self._client_mode
 
-    async def _get_client_mode(self, node: DHTNode) -> bool:
+    @staticmethod
+    async def _get_client_mode(_: DHT, node: DHTNode) -> bool:
         return node.protocol.client_mode
 
     def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
@@ -290,7 +293,8 @@ class DHT(mp.Process):
 
         return self.run_coroutine(partial(DHT._get_visible_maddrs, latest=latest))
 
-    async def _get_visible_maddrs(self, node: DHTNode, latest: bool = False) -> List[Multiaddr]:
+    @staticmethod
+    async def _get_visible_maddrs(_: DHT, node: DHTNode, latest: bool = False) -> List[Multiaddr]:
         return await node.get_visible_maddrs(latest=latest)
 
     async def replicate_p2p(self) -> P2P:
@@ -304,7 +308,8 @@ class DHT(mp.Process):
             self._p2p_replica = await P2P.replicate(daemon_listen_maddr)
         return self._p2p_replica
 
-    async def _get_p2p_daemon_listen_maddr(self, node: DHTNode) -> Multiaddr:
+    @staticmethod
+    async def _get_p2p_daemon_listen_maddr(_: DHT, node: DHTNode) -> Multiaddr:
         return node.p2p.daemon_listen_maddr
 
     def __del__(self):
