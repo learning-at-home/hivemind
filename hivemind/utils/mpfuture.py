@@ -86,7 +86,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __init__(self, use_lock: bool = True):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
-        self._shared_state_code = SharedBytes.next()
+        self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state_cache: Dict[State, State] = {}
         # mapping from global to cached local future used that makes updates immediately
         # available on setter side; dictionary-based cache works because future can visit any state at most once
