@@ -169,7 +169,7 @@ def test_decentralized_optimizer_step():
     assert torch.allclose(param1, torch.full_like(param1, reference))
 
 
-@pytest.mark.skip(reason="Skipped until finishing a more stable averager implementation (TODO @justheuristic)")
+@pytest.mark.skip(reason="Skipped until a more stable averager implementation is ready (TODO @justheuristic)")
 @pytest.mark.forked
 def test_decentralized_optimizer_averaging():
     dht_root = DHT(start=True)

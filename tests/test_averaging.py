@@ -103,8 +103,8 @@ def _test_allreduce_once(n_clients, n_aux):
                 for ref, our in zip(reference, averaged_tensors):
                     assert torch.allclose(ref, our, atol=1e-6)
 
-    for instance in averagers + dht_instances:
-        instance.shutdown()
+    for process in averagers + dht_instances:
+        process.shutdown()
 
 
 @pytest.mark.forked
@@ -163,8 +163,8 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
             for ref, our in zip(reference, averaged_tensors):
                 assert torch.allclose(ref, our, atol=1e-6)
 
-    for instance in averagers + dht_instances:
-        instance.shutdown()
+    for process in averagers + dht_instances:
+        process.shutdown()
 
 
 @pytest.mark.forked
@@ -266,8 +266,8 @@ def test_allreduce_grid():
         else:
             assert torch.allclose(stds, torch.zeros_like(stds), atol=1e-6, rtol=0)
 
-    for averager in averagers + dht_instances:
-        averager.shutdown()
+    for process in averagers + dht_instances:
+        process.shutdown()
 
 
 @pytest.mark.forked
@@ -307,8 +307,8 @@ def test_allgather():
         for endpoint in gathered:
             assert gathered[endpoint] == reference_metadata[endpoint]
 
-    for averager in averagers + dht_instances:
-        averager.shutdown()
+    for process in averagers + dht_instances:
+        process.shutdown()
 
 
 def get_cost(vector_size, partitions, bandwidths):
@@ -374,13 +374,13 @@ def test_too_few_peers():
     for future in step_futures:
         assert len(future.result()) == 2
 
-    for averager in averagers + dht_instances:
-        averager.shutdown()
+    for process in averagers + dht_instances:
+        process.shutdown()
 
 
 @pytest.mark.skip(
-    reason="The current implementation of elasticity (multi-stage averaging for the case when "
-    "num_peers > ~3 * target_group_size) is incorrect (TODO @justheuristic)"
+    reason="The current implementation of elasticity (multi-stage averaging when num_peers > ~3 * target_group_size) "
+    "is incorrect (TODO @justheuristic)"
 )
 @pytest.mark.forked
 def test_overcrowded(num_peers=16):
@@ -402,8 +402,8 @@ def test_overcrowded(num_peers=16):
         step_futures = [averager.step(wait=False, timeout=5) for averager in averagers]
         assert sum(len(future.result() or []) == 2 for future in step_futures) >= len(averagers) - 1
 
-    for averager in averagers + dht_instances:
-        averager.shutdown()
+    for process in averagers + dht_instances:
+        process.shutdown()
 
 
 @pytest.mark.forked
