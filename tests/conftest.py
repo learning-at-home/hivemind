@@ -5,7 +5,6 @@ import psutil
 import pytest
 
 from hivemind.utils.logging import get_logger
-from hivemind.utils.mpfuture import MPFuture
 
 
 logger = get_logger(__name__)
@@ -27,6 +26,3 @@ def cleanup_children():
         for child in children:
             with suppress(psutil.NoSuchProcess):
                 child.kill()
-
-    # Broken code or killing of child processes may leave the MPFuture backend corrupted
-    MPFuture.reset_backend()
