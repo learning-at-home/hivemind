@@ -59,6 +59,16 @@ async def aenumerate(aiterable: AsyncIterable[T]) -> AsyncIterable[Tuple[int, T]
         index += 1
 
 
+async def asingle(aiter: AsyncIterable[T]) -> T:
+    """If ``aiter`` has exactly one item, returns this item. Otherwise, raises `ValueError`."""
+    count = 0
+    async for item in aiter:
+        count += 1
+    if count != 1:
+        raise ValueError(f"Iterable has {count} items instead of one (as expected)")
+    return item
+
+
 async def await_cancelled(awaitable: Awaitable) -> bool:
     try:
         await awaitable

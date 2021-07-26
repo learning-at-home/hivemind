@@ -15,7 +15,7 @@ import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure
 from hivemind.proto.p2pd_pb2 import RPCError
-from hivemind.utils.asyncio import aiter
+from hivemind.utils.asyncio import aiter, asingle
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -401,15 +401,7 @@ class P2P:
         """
 
         async def _stream_handler(requests: P2P.TInputStream, context: P2PContext) -> P2P.TOutputStream:
-            if stream_input:
-                input = requests
-            else:
-                count = 0
-                async for input in requests:
-                    count += 1
-                if count != 1:
-                    raise ValueError(f"Got {count} requests for handler {name} instead of one")
-
+            input = requests if stream_input else await asingle(requests)
             output = handler(input, context)
 
             if isinstance(output, AsyncIterableABC):
@@ -429,13 +421,7 @@ class P2P:
     ) -> Awaitable[TOutputProtobuf]:
         requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
         responses = self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
-
-        count = 0
-        async for response in responses:
-            count += 1
-        if count != 1:
-            raise ValueError(f"Got {count} responses from handler {name} instead of one")
-        return response
+        return await asingle(responses)
 
     def iterate_protobuf_handler(
         self,
