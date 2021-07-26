@@ -12,13 +12,13 @@ from hivemind.dht.node import DHTID, DHTNode
 from hivemind.p2p import PeerID
 
 
-def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
+def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue, **kwargs):
     if asyncio.get_event_loop().is_running():
         asyncio.get_event_loop().stop()  # if we're in jupyter, get rid of its built-in event loop
         asyncio.set_event_loop(asyncio.new_event_loop())
     loop = asyncio.get_event_loop()
 
-    node = loop.run_until_complete(DHTNode.create(initial_peers=initial_peers, ping_n_attempts=10))
+    node = loop.run_until_complete(DHTNode.create(initial_peers=initial_peers, ping_n_attempts=10, **kwargs))
     maddrs = loop.run_until_complete(node.get_visible_maddrs())
 
     info_queue.put((node.node_id, node.peer_id, maddrs))
@@ -32,7 +32,7 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue):
 
 
 def launch_swarm_in_separate_processes(
-    n_peers: int, n_sequential_peers: int
+    n_peers: int, n_sequential_peers: int, **kwargs
 ) -> Tuple[List[mp.Process], Dict[PeerID, DHTID], List[List[Multiaddr]]]:
     assert (
         n_sequential_peers < n_peers
@@ -48,7 +48,7 @@ def launch_swarm_in_separate_processes(
     for _ in range(n_sequential_peers):
         initial_peers = random.choice(swarm_maddrs) if swarm_maddrs else []
 
-        proc = mp.Process(target=run_node, args=(initial_peers, info_queue), daemon=True)
+        proc = mp.Process(target=run_node, args=(initial_peers, info_queue), kwargs=kwargs, daemon=True)
         proc.start()
         processes.append(proc)
 
@@ -73,7 +73,7 @@ def launch_swarm_in_separate_processes(
         with info_lock:
             initial_peers = random.choice(swarm_maddrs)
 
-        proc = mp.Process(target=run_node, args=(initial_peers, info_queue), daemon=True)
+        proc = mp.Process(target=run_node, args=(initial_peers, info_queue), kwargs=kwargs, daemon=True)
         proc.start()
         processes.append(proc)
 
