@@ -1,6 +1,6 @@
 import asyncio
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Type, Union
+from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Type
 
 import torch
 
@@ -31,9 +31,9 @@ class AllReduceRunner(ServicerBase):
 
     :note: this class returns **differences** between averaged and local tensors in order to improve numerical stability
     :param p2p: a hivemind.p2p.P2P instance used for communication with other peers
-    :param servicer: a hivemind.p2p.ServicerBase instance whose RPC signatures are used when requesting other peers.
-      Typically, it is a DecentralizedAverager instance or its derivative.
-      If None, uses ``self`` for this purpose (since this class may be a servicer itself for testing purposes).
+    :param servicer_type: a hivemind.p2p.ServicerBase subclass whose RPC signatures are used
+      when requesting other peers. Typically, it is DecentralizedAverager, its derivative,
+      or AllReduceRunner itself (for testing purposes).
     :param prefix: namespace for servicer's RPCs (typically, equal to prefix for group keys)
     :param group_id: unique identifier of this specific all-reduce run
     :param tensors: local tensors that should be averaged with groupmates
@@ -52,7 +52,7 @@ class AllReduceRunner(ServicerBase):
         self,
         *,
         p2p: P2P,
-        servicer: Optional[Union[ServicerBase, Type[ServicerBase]]],
+        servicer_type: Type[ServicerBase],
         prefix: Optional[str],
         group_id: GroupID,
         tensors: Sequence[torch.Tensor],
@@ -67,9 +67,9 @@ class AllReduceRunner(ServicerBase):
         self.endpoint = p2p.id
         assert self.endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
 
-        if servicer is None:
-            servicer = self
-        self._servicer = servicer
+        if not issubclass(servicer_type, ServicerBase):
+            raise TypeError("`servicer_type` is expected to be a ServicerBase subclass")
+        self._servicer_type = servicer_type
         self._prefix = prefix
 
         modes = modes or tuple(AveragingMode.CLIENT if frac == 0 else AveragingMode.NODE for frac in peer_fractions)
@@ -114,7 +114,7 @@ class AllReduceRunner(ServicerBase):
         return len(self.ordered_group_endpoints)
 
     def _get_peer_stub(self, peer: Endpoint) -> StubBase:
-        return self._servicer.get_stub(self._p2p, peer, namespace=self._prefix)
+        return self._servicer_type.get_stub(self._p2p, peer, namespace=self._prefix)
 
     async def run(self) -> AsyncIterator[torch.Tensor]:
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""

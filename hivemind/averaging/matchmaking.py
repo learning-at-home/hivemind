@@ -7,7 +7,7 @@ import concurrent.futures
 import contextlib
 import random
 from math import isfinite
-from typing import AsyncIterator, Dict, Optional, Set, Tuple, Type, Union
+from typing import AsyncIterator, Dict, Optional, Set, Tuple, Type
 
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.key_manager import GroupKeyManager, GroupKey
@@ -36,10 +36,10 @@ class Matchmaking:
     def __init__(
         self,
         p2p: P2P,
-        servicer: Union[ServicerBase, Type[ServicerBase]],
         schema_hash: bytes,
         dht: DHT,
         *,
+        servicer_type: Type[ServicerBase],
         prefix: str,
         target_group_size: int,
         min_group_size: int,
@@ -57,7 +57,12 @@ class Matchmaking:
 
         super().__init__()
         self._p2p = p2p
-        self._servicer = servicer
+
+        if not issubclass(servicer_type, ServicerBase):
+            raise TypeError("`servicer_type` is expected to be a ServicerBase subclass")
+        self._servicer_type = servicer_type
+        self._prefix = prefix
+
         self.endpoint = p2p.id
         self.schema_hash = schema_hash
         self.group_key_manager = GroupKeyManager(dht, prefix, initial_group_bits, target_group_size)
@@ -174,7 +179,7 @@ class Matchmaking:
         stream: AsyncIterator[averaging_pb2.MessageFromLeader] = None
         try:
             async with self.lock_request_join_group:
-                leader_stub = self._servicer.get_stub(self._p2p, leader, namespace=self._servicer.prefix)
+                leader_stub = self._servicer_type.get_stub(self._p2p, leader, namespace=self._prefix)
 
                 stream = leader_stub.rpc_join_group(
                     averaging_pb2.JoinRequest(

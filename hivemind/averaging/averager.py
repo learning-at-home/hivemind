@@ -149,6 +149,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         self.bandwidth = bandwidth
 
         self.matchmaking_kwargs = dict(
+            servicer_type=type(self),
             prefix=prefix,
             initial_group_bits=initial_group_bits,
             target_group_size=target_group_size,
@@ -221,7 +222,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
                 self._matchmaking = Matchmaking(
                     self._p2p,
-                    self,
                     self.schema_hash,
                     self.dht,
                     client_mode=self.client_mode,
@@ -389,7 +389,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             async with self.get_tensors_async() as local_tensors:
                 allreduce = AllReduceRunner(
                     p2p=self._p2p,
-                    servicer=self,
+                    servicer_type=type(self),
                     prefix=self.prefix,
                     group_id=group_info.group_id,
                     tensors=local_tensors,
