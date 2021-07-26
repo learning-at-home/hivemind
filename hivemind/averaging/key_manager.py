@@ -94,11 +94,12 @@ class GroupKeyManager:
             logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
             return []
         averagers = [
-            (Endpoint.from_base58(key), entry.expiration_time)
-            for key, entry in result.value.items()
-            if key != self.RESERVED_KEY_FOR_NBITS and (not only_active or entry.value is True)
+            (Endpoint.from_base58(key), looking_for_group.expiration_time)
+            for key, looking_for_group in result.value.items()
+            if key != self.RESERVED_KEY_FOR_NBITS and (not only_active or looking_for_group.value)
         ]
-        num_active_averagers = sum(1 for entry in result.value.values() if entry.value is True)
+        num_active_averagers = sum(1 for key, looking_for_group in result.value.items()
+                                   if key != self.RESERVED_KEY_FOR_NBITS and looking_for_group.value)
 
         suggested_nbits = self.get_suggested_nbits(result)
         if (

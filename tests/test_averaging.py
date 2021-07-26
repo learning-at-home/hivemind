@@ -271,13 +271,13 @@ def test_allreduce_grid():
 
 
 @pytest.mark.forked
-def test_allgather():
-    dht_instances = launch_dht_instances(8)
+def test_allgather(n_averagers=8, target_group_size=4):
+    dht_instances = launch_dht_instances(n_averagers)
     averagers = [
         hivemind.averaging.DecentralizedAverager(
             [torch.ones(1)],
             dht=dht,
-            target_group_size=4,
+            target_group_size=target_group_size,
             averaging_expiration=15,
             prefix="mygroup",
             initial_group_bits="000",
@@ -290,20 +290,12 @@ def test_allgather():
     for i, averager in enumerate(averagers):
         futures.append(averager.step(wait=False, gather=dict(batch_size=123 + i, foo="bar")))
 
-    gathered_data = [future.result() for future in futures]
-    gathered_data_reprs = [
-        repr(sorted({peer_id.to_base58(): data for peer_id, data in result.items()})) for result in gathered_data
-    ]
-    assert len(set(gathered_data_reprs)) == 2
-
     reference_metadata = {
         averager.endpoint: dict(batch_size=123 + i, foo="bar") for i, averager in enumerate(averagers)
     }
     for future in futures:
         gathered = future.result()
-
-        assert len(gathered) == 4
-
+        assert len(gathered) == target_group_size
         for endpoint in gathered:
             assert gathered[endpoint] == reference_metadata[endpoint]
 
