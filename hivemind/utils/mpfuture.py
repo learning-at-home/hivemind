@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures._base as base
+from weakref import ref
 from contextlib import nullcontext
 import multiprocessing as mp
 import multiprocessing.connection
@@ -9,7 +10,6 @@ import os
 import threading
 import uuid
 from enum import Enum, auto
-from weakref import ref
 from typing import Generic, TypeVar, Dict, Optional, Any, Callable, Type
 
 import torch  # used for py3.7-compatible shared memory
@@ -50,7 +50,6 @@ class MPFuture(base.Future, Generic[ResultType]):
     :param use_lock: if True, operations with MPFuture use a global lock to prevent concurrent writes to the same pipe;
       If set to False, writing to this future ignores global lock, slightly improving performance, but making user
       responsible for avoiding concurrent set_result / set_exception calls to futures with the same process of origin.
-    :param loop: if specified, overrides default asyncio event loop for the purpose of awaiting MPFuture
 
     :note: This is an internal primitive that is not guaranteed to work outside of hivemind applications.
      More specifically, there are two known limitations:
@@ -63,10 +62,10 @@ class MPFuture(base.Future, Generic[ResultType]):
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
     _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
-    _active_futures: Optional[Dict[UID, Type[ref][MPFuture]]] = None  # pending or running futures originated from current process
+    _active_futures: Optional[Dict[UID, Type[ref][MPFuture]]] = None  # non-done futures originated from this process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
-    def __init__(self, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
+    def __init__(self, use_lock: bool = True):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state_cache: Dict[State, State] = {}
@@ -87,7 +86,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._sender_pipe = MPFuture._global_sender_pipe
 
         try:
-            self._loop = loop or asyncio.get_event_loop()
+            self._loop = asyncio.get_event_loop()
             self._aio_event = asyncio.Event()
         except RuntimeError:
             self._loop, self._aio_event = None, None
