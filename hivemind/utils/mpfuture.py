@@ -35,25 +35,6 @@ except ImportError:
         """Raised when attempting to change state of a future in a terminal state (e.g. finished)"""
 
 
-class SharedBytes:
-    lock = threading.Lock()
-    current_pid: Optional[PID] = None
-    current_buffer: Optional[torch.Tensor] = None
-    current_index: Optional[int] = 0
-
-    @classmethod
-    def next(cls):
-        with cls.lock:
-            if cls.current_pid != os.getpid() or cls.current_buffer is None or cls.current_index >= len(cls.current_buffer):
-                buffer_size = os.environ.get('HIVEMIND_SHM_BUFFER_SIZE', 4096)
-                cls.current_pid = os.getpid()
-                cls.current_buffer = torch.empty([buffer_size], dtype=torch.uint8).share_memory_()
-                cls.current_index = 0
-
-            cls.current_index += 1
-            return cls.current_buffer[cls.current_index - 1]
-
-
 class UpdateType(Enum):
     RESULT = auto()
     EXCEPTION = auto()
@@ -86,7 +67,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __init__(self, use_lock: bool = True):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
-        self._shared_state_code = SharedBytes.next()
+        self._shared_state_code = torch.empty([], dtype=torch.uint8).share_memory_()
         self._state_cache: Dict[State, State] = {}
         # mapping from global to cached local future used that makes updates immediately
         # available on setter side; dictionary-based cache works because future can visit any state at most once
