@@ -35,28 +35,6 @@ message Request {
   optional PSRequest pubsub = 8;
 }
 
-// Persistent connection request
-message PCRequest {
-  required bytes callId = 1;
-
-  oneof message {
-    AddUnaryHandlerRequest addUnaryHandler = 2;
-    CallUnaryRequest callUnary = 3;
-    CallUnaryResponse unaryResponse = 4;
-  }
-}
-
-// Persistent connection response
-message PCResponse {
-  required bytes callId = 1;
-
-  oneof message {
-    CallUnaryResponse callUnaryResponse = 2;
-    CallUnaryRequest requestHandling = 3;
-    DaemonError daemonError = 4;
-  }
-}
-
 message Response {
   enum Type {
     OK    = 0;
@@ -70,6 +48,31 @@ message Response {
   optional DHTResponse dht = 5;
   repeated PeerInfo peers = 6;
   optional PSResponse pubsub = 7;
+}
+
+// Persistent connection request
+message PCRequest {
+  required bytes callId = 1;
+  optional int64 timeout = 2;
+
+  oneof message {
+    AddUnaryHandlerRequest addUnaryHandler = 3;
+    CallUnaryRequest  callUnary = 4;
+    CallUnaryResponse unaryResponse = 5;
+    Cancel cancel = 6;
+  }
+}
+
+// Persistent connection response
+message PCResponse {
+  required bytes callId = 1;
+
+  oneof message {
+    CallUnaryResponse callUnaryResponse = 2;
+    CallUnaryRequest requestHandling = 3;
+    DaemonError daemonError = 4;
+    Cancel cancel = 5;
+  }
 }
 
 message IdentifyResponse {
@@ -192,7 +195,6 @@ message CallUnaryRequest {
   required bytes peer = 1;
   required string proto = 2;
   required bytes data = 3;
-  optional int64 timeout = 4;
 }
 
 message CallUnaryResponse {
@@ -206,6 +208,9 @@ message AddUnaryHandlerRequest {
 
 message DaemonError {
   optional string message = 1;
+}
+
+message Cancel {
 }
 
 message RPCError {
