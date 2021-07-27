@@ -179,8 +179,11 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def _send_update(self, update_type: UpdateType, payload: Any = None):
         """This method sends result, exception or cancel to the MPFuture origin."""
-        with MPFuture._update_lock if self._use_lock else nullcontext():
-            self._sender_pipe.send((self._uid, update_type, payload))
+        try:
+            with MPFuture._update_lock if self._use_lock else nullcontext():
+                self._sender_pipe.send((self._uid, update_type, payload))
+        except (ConnectionError, BrokenPipeError, EOFError) as e:
+            logger.debug(f"No updates were sent: pipe to origin process was broken ({e}).", exc_info=True)
 
     def set_result(self, result: ResultType):
         if os.getpid() == self._origin_pid:
