@@ -173,6 +173,8 @@ class P2P:
     async def add_unary_handler(self, handle_name: str, handler: p2pclient.TUnaryHandler):
         return await self._client.add_unary_handler(handle_name, handler)
 
+
+
     async def call_unary_handler(self, peer_id: PeerID, handle_name: str, data: bytes) -> bytes:
         return await self._client.call_unary_handler(peer_id, handle_name, data)
 
@@ -538,6 +540,13 @@ class P2P:
 
     def _terminate(self) -> None:
         self._alive = False
+
+        if self._client.control._write_task is not None:
+            self._client.control._write_task.cancel()
+
+        if self._client.control._read_task is not None:
+            self._client.control._read_task.cancel()
+
         if self._child is not None and self._child.poll() is None:
             self._child.terminate()
             self._child.wait()
