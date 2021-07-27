@@ -148,7 +148,6 @@ class MPFuture(base.Future, Generic[ResultType]):
     def _initialize_mpfuture_backend(cls):
         pid = os.getpid()
         logger.debug(f"Initializing MPFuture backend for pid {pid}")
-        assert pid != cls._active_pid, "already initialized"
 
         receiver_pipe, cls._global_sender_pipe = mp.Pipe(duplex=False)
         cls._active_pid, cls._active_futures = pid, {}
