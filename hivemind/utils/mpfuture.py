@@ -38,7 +38,10 @@ except ImportError:
 class SharedBytes:
     """
     A process-wide object that allocates large chunks of shared memory and partitions it into individual bytes.
-    Note: this process is only responsible for bulk allocation, it does not manage/remove unused bytes.
+
+    Note: this process is only responsible for bulk allocation, it does not manage/free unused bytes.
+    The chunks are deallocated by the garbage collector,
+    when it detects that all processes no longer use any bytes from this chunk.
     """
     _lock = mp.Lock()
     _pid: Optional[PID] = None
@@ -146,7 +149,6 @@ class MPFuture(base.Future, Generic[ResultType]):
     def _initialize_mpfuture_backend(cls):
         pid = os.getpid()
         logger.debug(f"Initializing MPFuture backend for pid {pid}")
-        assert pid != cls._active_pid, "already initialized"
 
         receiver_pipe, cls._global_sender_pipe = mp.Pipe(duplex=False)
         cls._active_pid, cls._active_futures = pid, {}
