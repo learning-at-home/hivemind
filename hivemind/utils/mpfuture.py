@@ -38,7 +38,10 @@ except ImportError:
 class SharedBytes:
     """
     A process-wide object that allocates large chunks of shared memory and partitions it into individual bytes.
-    Note: this process is only responsible for bulk allocation, it does not manage/remove unused bytes.
+
+    Note: this process is only responsible for bulk allocation, it does not manage/free unused bytes.
+    The chunks are deallocated by the garbage collector,
+    when it detects that all processes no longer use any bytes from this chunk.
     """
     _lock = mp.Lock()
     _pid: Optional[PID] = None
