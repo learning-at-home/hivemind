@@ -9,7 +9,8 @@ import os
 import threading
 import uuid
 from enum import Enum, auto
-from typing import Generic, TypeVar, Dict, Optional, Any, Callable
+from weakref import ref
+from typing import Generic, TypeVar, Dict, Optional, Any, Callable, Type
 
 import torch  # used for py3.7-compatible shared memory
 
@@ -62,7 +63,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
     _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
-    _active_futures: Optional[Dict[UID, MPFuture]] = None  # pending or running futures originated from current process
+    _active_futures: Optional[Dict[UID, Type[ref][MPFuture]]] = None  # pending or running futures originated from current process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
     def __init__(self, use_lock: bool = True, loop: Optional[asyncio.BaseEventLoop] = None):
@@ -82,7 +83,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     # note: the second if is intentional, see https://en.wikipedia.org/wiki/Double-checked_locking
                     self._initialize_mpfuture_backend()
         assert self._uid not in MPFuture._active_futures
-        MPFuture._active_futures[self._uid] = self
+        MPFuture._active_futures[self._uid] = ref(self)
         self._sender_pipe = MPFuture._global_sender_pipe
 
         try:
@@ -134,18 +135,26 @@ class MPFuture(base.Future, Generic[ResultType]):
         pid = os.getpid()
         while True:
             try:
+                if cls._pipe_waiter_thread is not threading.current_thread():
+                    break  # backend was reset, a new background thread has started
+
                 uid, update_type, payload = receiver_pipe.recv()
-                if uid not in cls._active_futures:
+                future = None
+                future_ref = cls._active_futures.pop(uid, None)
+                if future_ref is not None:
+                    future = future_ref()
+
+                if future is None:
                     logger.debug(f"Ignoring update to future with uid={uid}: the future is already done or destroyed")
                 elif update_type == UpdateType.RESULT:
-                    cls._active_futures.pop(uid).set_result(payload)
+                    future.set_result(payload)
                 elif update_type == UpdateType.EXCEPTION:
-                    cls._active_futures.pop(uid).set_exception(payload)
+                    future.set_exception(payload)
                 elif update_type == UpdateType.CANCEL:
-                    cls._active_futures.pop(uid).cancel()
+                    future.cancel()
                 else:
                     raise RuntimeError(f"Received unexpected update type {update_type}")
-            except (BrokenPipeError, EOFError):
+            except (BrokenPipeError, EOFError, ConnectionError):
                 logger.debug(f"Update pipe was was shut down unexpectedly (pid={pid})")
             except Exception as e:
                 logger.exception(f"Could not retrieve update: caught {repr(e)} (pid={pid})")
