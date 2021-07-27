@@ -123,7 +123,6 @@ class ControlClient:
 
             elif resp.HasField("requestHandling"):
                 handler_task = asyncio.create_task(self._handle_persistent_request(call_id, resp.requestHandling))
-                # TODO: fix race condition at the of ._handle_persistent_request(...)
                 self.handler_tasks[call_id] = handler_task
 
             elif call_id in self.handler_tasks and resp.HasField("cancel"):
@@ -211,7 +210,7 @@ class ControlClient:
             return await self.pending_calls[call_id]
 
         except asyncio.CancelledError:
-            await self._send_call_cancel(call_id)
+            asyncio.create_task(self._send_call_cancel(call_id))
             raise
 
         finally:
