@@ -32,4 +32,4 @@ def cleanup_children():
     MPFuture._active_pid = None
     MPFuture._initialization_lock = mp.Lock()
     MPFuture._update_lock = mp.Lock()
-    SharedBytes.lock = mp.Lock()
+    SharedBytes._lock = mp.Lock()

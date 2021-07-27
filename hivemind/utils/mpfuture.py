@@ -36,22 +36,26 @@ except ImportError:
 
 
 class SharedBytes:
-    lock = mp.Lock()
-    pid: Optional[PID] = None
-    buffer: Optional[torch.Tensor] = None
-    index: Optional[int] = 0
+    """
+    A process-wide object that allocates large chunks of shared memory and partitions it into individual bytes.
+    Note: this process is only responsible for bulk allocation, it does not manage/remove unused bytes.
+    """
+    _lock = mp.Lock()
+    _pid: Optional[PID] = None
+    _buffer: Optional[torch.Tensor] = None
+    _index: Optional[int] = 0
 
     @classmethod
     def next(cls):
-        with cls.lock:
-            if cls.pid != os.getpid() or cls.buffer is None or cls.index >= len(cls.buffer):
+        with cls._lock:
+            if cls._pid != os.getpid() or cls._buffer is None or cls._index >= len(cls._buffer):
                 buffer_size = os.environ.get("HIVEMIND_SHM_BUFFER_SIZE", 4096)
-                cls.pid = os.getpid()
-                cls.buffer = torch.empty([buffer_size], dtype=torch.uint8).share_memory_()
-                cls.index = 0
+                cls._pid = os.getpid()
+                cls._buffer = torch.empty([buffer_size], dtype=torch.uint8).share_memory_()
+                cls._index = 0
 
-            cls.index += 1
-            return cls.buffer[cls.index - 1]
+            cls._index += 1
+            return cls._buffer[cls._index - 1]
 
 
 class UpdateType(Enum):
