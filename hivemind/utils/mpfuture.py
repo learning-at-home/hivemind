@@ -37,21 +37,21 @@ except ImportError:
 
 class SharedBytes:
     lock = mp.Lock()
-    current_pid: Optional[PID] = None
-    current_buffer: Optional[torch.Tensor] = None
-    current_index: Optional[int] = 0
+    pid: Optional[PID] = None
+    buffer: Optional[torch.Tensor] = None
+    index: Optional[int] = 0
 
     @classmethod
     def next(cls):
         with cls.lock:
-            if cls.current_pid != os.getpid() or cls.current_buffer is None or cls.current_index >= len(cls.current_buffer):
-                buffer_size = os.environ.get('HIVEMIND_SHM_BUFFER_SIZE', 4096)
-                cls.current_pid = os.getpid()
-                cls.current_buffer = torch.empty([buffer_size], dtype=torch.uint8).share_memory_()
-                cls.current_index = 0
+            if cls.pid != os.getpid() or cls.buffer is None or cls.index >= len(cls.buffer):
+                buffer_size = os.environ.get("HIVEMIND_SHM_BUFFER_SIZE", 4096)
+                cls.pid = os.getpid()
+                cls.buffer = torch.empty([buffer_size], dtype=torch.uint8).share_memory_()
+                cls.index = 0
 
-            cls.current_index += 1
-            return cls.current_buffer[cls.current_index - 1]
+            cls.index += 1
+            return cls.buffer[cls.index - 1]
 
 
 class UpdateType(Enum):
