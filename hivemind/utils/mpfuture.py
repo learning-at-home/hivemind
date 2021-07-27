@@ -46,7 +46,8 @@ class SharedBytes:
     _index: Optional[int] = 0
 
     @classmethod
-    def next(cls):
+    def next(cls) -> torch.Tensor:
+        """Create another shared byte value, represented as a scalar uint8 tensor"""
         with cls._lock:
             if cls._pid != os.getpid() or cls._buffer is None or cls._index >= len(cls._buffer):
                 buffer_size = os.environ.get("HIVEMIND_SHM_BUFFER_SIZE", 4096)
