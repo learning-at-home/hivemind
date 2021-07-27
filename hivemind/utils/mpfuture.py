@@ -267,7 +267,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise RuntimeError("Can't await: MPFuture was created with no event loop")
         yield from self._aio_event.wait().__await__()
         try:
-            return super().result(timeout=0)
+            return super().result()
         except base.CancelledError:
             raise asyncio.CancelledError()
 
