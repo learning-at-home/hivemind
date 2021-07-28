@@ -5,9 +5,10 @@ from typing import Optional, List, Tuple
 
 import numpy as np
 
-from hivemind.dht import DHT
 from hivemind.averaging.group_info import GroupInfo
-from hivemind.utils import get_logger, Endpoint, DHTExpiration, get_dht_time, ValueWithExpiration
+from hivemind.dht import DHT
+from hivemind.p2p import PeerID as Endpoint
+from hivemind.utils import get_logger, DHTExpiration, get_dht_time, ValueWithExpiration
 
 GroupKey = str
 GROUP_PATTERN = re.compile("^(([^.])+)[.]0b[01]*$")  # e.g. bert_exp4_averaging.0b01001101
@@ -29,7 +30,6 @@ class GroupKeyManager:
     def __init__(
         self,
         dht: DHT,
-        endpoint: Endpoint,
         prefix: str,
         initial_group_bits: Optional[str],
         target_group_size: int,
@@ -43,7 +43,8 @@ class GroupKeyManager:
             search_result = dht.get(f"{prefix}.0b", latest=True)
             initial_group_nbits = self.get_suggested_nbits(search_result) or 0
             initial_group_bits = "".join(random.choice("01") for _ in range(initial_group_nbits))
-        self.dht, self.endpoint, self.prefix, self.group_bits = dht, endpoint, prefix, initial_group_bits
+        self.dht, self.prefix, self.group_bits = dht, prefix, initial_group_bits
+        self.endpoint = dht.peer_id
         self.target_group_size = target_group_size
         self.insufficient_size = insufficient_size or max(1, target_group_size // 2)
         self.excessive_size = excessive_size or target_group_size * 3
@@ -72,7 +73,7 @@ class GroupKeyManager:
         expiration_time = expiration_time if looking_for_group else float(np.nextafter(expiration_time, float("inf")))
         return await self.dht.store(
             key=group_key,
-            subkey=endpoint,
+            subkey=endpoint.to_base58(),
             value=looking_for_group,
             expiration_time=expiration_time,
             return_future=True,
@@ -93,11 +94,15 @@ class GroupKeyManager:
             logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
             return []
         averagers = [
-            (key, entry.expiration_time)
-            for key, entry in result.value.items()
-            if key != self.RESERVED_KEY_FOR_NBITS and (not only_active or entry.value is True)
+            (Endpoint.from_base58(key), looking_for_group.expiration_time)
+            for key, looking_for_group in result.value.items()
+            if key != self.RESERVED_KEY_FOR_NBITS and (not only_active or looking_for_group.value)
         ]
-        num_active_averagers = len([key for key, entry in result.value.items() if entry.value is True])
+        num_active_averagers = sum(
+            1
+            for key, looking_for_group in result.value.items()
+            if key != self.RESERVED_KEY_FOR_NBITS and looking_for_group.value
+        )
 
         suggested_nbits = self.get_suggested_nbits(result)
         if (

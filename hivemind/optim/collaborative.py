@@ -42,7 +42,7 @@ class CollaborationState:
 
 
 class TrainingState(BaseModel):
-    endpoint: Endpoint
+    peer_id: str
     step: conint(ge=0, strict=True)
     samples_accumulated: conint(ge=0, strict=True)
     samples_per_second: confloat(ge=0.0, strict=True)
@@ -354,7 +354,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             with self.lock_local_progress:
                 current_time = get_dht_time()
                 local_state_info = TrainingState(
-                    endpoint=self.averager.endpoint,
+                    peer_id=self.averager.endpoint.to_base58(),
                     step=self.local_step,
                     samples_accumulated=self.local_samples_accumulated,
                     samples_per_second=self.performance_ema.samples_per_second,

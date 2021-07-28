@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 from multiaddr import Multiaddr
 
+from hivemind.dht import DHT
 from hivemind.dht.node import DHTID, DHTNode
 from hivemind.p2p import PeerID
 
@@ -86,3 +87,14 @@ async def launch_star_shaped_swarm(n_peers: int, **kwargs) -> List[DHTNode]:
     initial_peers = await nodes[0].get_visible_maddrs()
     nodes += await asyncio.gather(*[DHTNode.create(initial_peers=initial_peers, **kwargs) for _ in range(n_peers - 1)])
     return nodes
+
+
+def launch_dht_instances(n_peers: int, **kwargs) -> List[DHT]:
+    dhts = [DHT(start=True, **kwargs)]
+    initial_peers = dhts[0].get_visible_maddrs()
+
+    dhts.extend(DHT(initial_peers=initial_peers, start=True, await_ready=False, **kwargs) for _ in range(n_peers - 1))
+    for instance in dhts[1:]:
+        instance.ready.wait()
+
+    return dhts

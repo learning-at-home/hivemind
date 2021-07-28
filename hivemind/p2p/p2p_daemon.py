@@ -14,7 +14,7 @@ import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto.p2pd_pb2 import RPCError
-from hivemind.utils.asyncio import aiter
+from hivemind.utils.asyncio import aiter, asingle
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -307,9 +307,6 @@ class P2P:
           they will not be received while the prefetch buffer is full.
         """
 
-        if self._listen_task is None:
-            self._start_listening()
-
         async def _handle_stream(
             stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         ) -> None:
@@ -358,12 +355,12 @@ class P2P:
                 finally:
                     processing_task.cancel()
 
-        await self._client.stream_handler(name, _handle_stream)
+        await self.add_binary_stream_handler(name, _handle_stream)
 
     async def _iterate_protobuf_stream_handler(
         self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: type
     ) -> TOutputStream:
-        _, reader, writer = await self._client.stream_open(peer_id, (name,))
+        _, reader, writer = await self.call_binary_stream_handler(peer_id, name)
 
         async def _write_to_stream() -> None:
             async for request in requests:
@@ -403,15 +400,7 @@ class P2P:
         """
 
         async def _stream_handler(requests: P2P.TInputStream, context: P2PContext) -> P2P.TOutputStream:
-            if stream_input:
-                input = requests
-            else:
-                count = 0
-                async for input in requests:
-                    count += 1
-                if count != 1:
-                    raise ValueError(f"Got {count} requests for handler {name} instead of one")
-
+            input = requests if stream_input else await asingle(requests)
             output = handler(input, context)
 
             if isinstance(output, AsyncIterableABC):
@@ -431,13 +420,7 @@ class P2P:
     ) -> Awaitable[TOutputProtobuf]:
         requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
         responses = self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
-
-        count = 0
-        async for response in responses:
-            count += 1
-        if count != 1:
-            raise ValueError(f"Got {count} responses from handler {name} instead of one")
-        return response
+        return await asingle(responses)
 
     def iterate_protobuf_handler(
         self,

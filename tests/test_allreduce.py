@@ -3,16 +3,15 @@ import random
 import time
 from typing import Sequence
 
-import grpc
 import pytest
 import torch
 
-from hivemind import aenumerate, Endpoint
+from hivemind import aenumerate
 from hivemind.averaging.allreduce import AllReduceRunner, AveragingMode
 from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer
-from hivemind.proto import averaging_pb2_grpc
+from hivemind.p2p import P2P, StubBase
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils import deserialize_torch_tensor, ChannelCache
+from hivemind.utils import deserialize_torch_tensor
 
 
 @pytest.mark.forked
@@ -152,19 +151,6 @@ async def test_reducer(num_senders: int, num_parts: int, synchronize_prob: float
             assert torch.allclose(averaging_result, reference_tensor, rtol=1e-3, atol=1e-5)
 
 
-class AllreduceRunnerForTesting(AllReduceRunner):
-    """a version of AllReduceRunner that was monkey-patched to accept custom endpoint names"""
-
-    def __init__(self, *args, peer_endpoints, **kwargs):
-        self.__peer_endpoints = peer_endpoints
-        super().__init__(*args, **kwargs)
-
-    def _get_peer_stub(self, peer: Endpoint) -> averaging_pb2_grpc.DecentralizedAveragingStub:
-        return ChannelCache.get_stub(
-            self.__peer_endpoints[peer], averaging_pb2_grpc.DecentralizedAveragingStub, aio=True
-        )
-
-
 NODE, CLIENT, AUX = AveragingMode.NODE, AveragingMode.CLIENT, AveragingMode.AUX
 
 
@@ -188,8 +174,11 @@ NODE, CLIENT, AUX = AveragingMode.NODE, AveragingMode.CLIENT, AveragingMode.AUX
 async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions, part_size_bytes):
     """Run group allreduce protocol manually without grpc, see if the internal logic is working as intended"""
 
-    peers = "alice", "bob", "carol", "colab"
+    p2ps = [await P2P.create()]
+    visible_maddrs = await p2ps[0].get_visible_maddrs()
+    p2ps += await asyncio.gather(*[P2P.create(initial_peers=visible_maddrs) for _ in range(3)])
 
+    peers = [instance.id for instance in p2ps]
     tensors_by_peer = {
         peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
         for i, peer in enumerate(peers)
@@ -197,28 +186,22 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
 
     group_id = random.getrandbits(160).to_bytes(length=20, byteorder="big")
 
-    servers = []
     allreduce_protocols = []
-    peer_endpoints = {}
-
-    for peer in peers:
-        server = grpc.aio.server()
-        allreduce_protocol = AllreduceRunnerForTesting(
+    for p2p in p2ps:
+        allreduce_protocol = AllReduceRunner(
+            p2p=p2p,
+            servicer_type=AllReduceRunner,
+            prefix=None,
             group_id=group_id,
-            endpoint=peer,
-            tensors=[x.clone() for x in tensors_by_peer[peer]],
+            tensors=[x.clone() for x in tensors_by_peer[p2p.id]],
             ordered_group_endpoints=peers,
             peer_fractions=peer_fractions,
             modes=peer_modes,
             weights=averaging_weights,
-            peer_endpoints=peer_endpoints,
             part_size_bytes=part_size_bytes,
         )
-        averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(allreduce_protocol, server)
-        peer_endpoints[peer] = f"127.0.0.1:{server.add_insecure_port('127.0.0.1:*')}"
+        await allreduce_protocol.add_p2p_handlers(p2p)
         allreduce_protocols.append(allreduce_protocol)
-        servers.append(server)
-        await server.start()
 
     async def _run_allreduce_inplace(allreduce: AllReduceRunner):
         async for tensor_index, tensor_delta in aenumerate(allreduce):
@@ -242,5 +225,5 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
         assert len(output_tensors) == len(targets_for_peer)
         assert all(torch.allclose(our, ref, atol=1e-6, rtol=0) for our, ref in zip(output_tensors, targets_for_peer))
 
-    for server in servers:
-        await server.stop(grace=1)
+    for instance in p2ps:
+        await instance.shutdown()
