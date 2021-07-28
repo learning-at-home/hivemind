@@ -70,7 +70,7 @@ def benchmark_averaging(
         processes.update({dht, averager})
 
         logger.info(
-            f"Averager {index}: started on endpoint {averager.endpoint}, group_bits: {averager.get_group_bits()}"
+            f"Averager {index}: started on peer id {averager.peer_id}, group_bits: {averager.get_group_bits()}"
         )
         for step in range(num_rounds):
             try:

@@ -354,7 +354,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             with self.lock_local_progress:
                 current_time = get_dht_time()
                 local_state_info = TrainingState(
-                    peer_id=self.averager.endpoint.to_base58(),
+                    peer_id=self.averager.peer_id.to_base58(),
                     step=self.local_step,
                     samples_accumulated=self.local_samples_accumulated,
                     samples_per_second=self.performance_ema.samples_per_second,
