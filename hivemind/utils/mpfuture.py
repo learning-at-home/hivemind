@@ -43,6 +43,7 @@ class SharedBytes:
     The chunks are deallocated by the garbage collector,
     when it detects that all processes no longer use any bytes from this chunk.
     """
+
     _lock = mp.Lock()
     _pid: Optional[PID] = None
     _buffer: Optional[torch.Tensor] = None
@@ -89,7 +90,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
     _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
-    _active_futures: Optional[Dict[UID, 'ref[MPFuture]']] = None  # non-done futures originated from this process
+    _active_futures: Optional[Dict[UID, "ref[MPFuture]"]] = None  # non-done futures originated from this process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
     def __init__(self, *, use_lock: bool = True):
