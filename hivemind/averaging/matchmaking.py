@@ -296,7 +296,7 @@ class Matchmaking:
             yield averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.BEGIN_ALLREDUCE,
                 group_id=group_info.group_id,
-                ordered_group_peer_ids=[item.to_bytes() for item in group_info.peer_ids],
+                ordered_peer_ids=[item.to_bytes() for item in group_info.peer_ids],
                 gathered=group_info.gathered,
             )
         except (concurrent.futures.CancelledError, asyncio.CancelledError):
@@ -356,17 +356,17 @@ class Matchmaking:
         assert self.lock_looking_for_group.locked() and self.lock_request_join_group.locked() and not self.client_mode
         assert not self.assembled_group.done()
         group_id = DHTID.generate().to_bytes()  # note: both groupd_id and the order of peer_ids must be random
-        ordered_group_peer_ids = list(self.current_followers)
-        ordered_group_peer_ids.append(self.peer_id)
-        random.shuffle(ordered_group_peer_ids)
+        ordered_peer_ids = list(self.current_followers)
+        ordered_peer_ids.append(self.peer_id)
+        random.shuffle(ordered_peer_ids)
 
         gathered = tuple(
             self.data_for_gather if peer_id == self.peer_id else self.current_followers[peer_id].gather
-            for peer_id in ordered_group_peer_ids
+            for peer_id in ordered_peer_ids
         )
 
-        logger.debug(f"{self.peer_id} - assembled group of {len(ordered_group_peer_ids)} peers.")
-        group_info = GroupInfo(group_id, tuple(ordered_group_peer_ids), gathered)
+        logger.debug(f"{self.peer_id} - assembled group of {len(ordered_peer_ids)} peers.")
+        group_info = GroupInfo(group_id, tuple(ordered_peer_ids), gathered)
         await self.group_key_manager.update_key_on_group_assembled(group_info, is_leader=True)
         self.assembled_group.set_result(group_info)
         return group_info
@@ -378,12 +378,12 @@ class Matchmaking:
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
 
         group_id = msg.group_id
-        ordered_group_peer_ids = [PeerID(item) for item in msg.ordered_group_peer_ids]
-        assert self.peer_id in ordered_group_peer_ids, "Leader sent us group_peer_ids that does not contain us!"
-        assert len(ordered_group_peer_ids) == len(msg.gathered)
+        ordered_peer_ids = [PeerID(item) for item in msg.ordered_peer_ids]
+        assert self.peer_id in ordered_peer_ids, "Leader sent us group_peer_ids that does not contain us!"
+        assert len(ordered_peer_ids) == len(msg.gathered)
 
         logger.debug(f"{self.peer_id} - follower assembled group with leader {leader}.")
-        group_info = GroupInfo(group_id, tuple(ordered_group_peer_ids), tuple(msg.gathered))
+        group_info = GroupInfo(group_id, tuple(ordered_peer_ids), tuple(msg.gathered))
         await self.group_key_manager.update_key_on_group_assembled(group_info)
         self.assembled_group.set_result(group_info)
         return group_info

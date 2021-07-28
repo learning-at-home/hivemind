@@ -393,7 +393,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     prefix=self.prefix,
                     group_id=group_info.group_id,
                     tensors=local_tensors,
-                    ordered_group_peer_ids=group_info.peer_ids,
+                    ordered_peer_ids=group_info.peer_ids,
                     peer_fractions=peer_fractions,
                     weights=weights,
                     gathered=user_gathered,
