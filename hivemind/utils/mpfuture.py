@@ -46,7 +46,7 @@ class SharedBytes:
     _lock = mp.Lock()
     _pid: Optional[PID] = None
     _buffer: Optional[torch.Tensor] = None
-    _index: Optional[int] = 0
+    _index: int = 0
 
     @classmethod
     def next(cls) -> torch.Tensor:
