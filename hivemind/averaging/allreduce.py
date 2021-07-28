@@ -231,8 +231,8 @@ class AllReduceRunner(ServicerBase):
             yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
 
     async def _send_error_to_peer(self, peer_endpoint: Endpoint, code: averaging_pb2.MessageCode):
-        # In case of reporting the error, we expect the response stream to contain exactly one item
         error = averaging_pb2.AveragingData(group_id=self.group_id, endpoint=self.endpoint.to_base58(), code=code)
+        # In case of reporting the error, we expect the response stream to contain exactly one item
         await asingle(self._get_peer_stub(peer_endpoint).rpc_aggregate_part(aiter(error)))
 
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):

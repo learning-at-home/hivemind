@@ -64,8 +64,10 @@ async def asingle(aiter: AsyncIterable[T]) -> T:
     count = 0
     async for item in aiter:
         count += 1
-    if count != 1:
-        raise ValueError(f"Iterable has {count} items instead of one (as expected)")
+        if count == 2:
+            raise ValueError("asingle() expected an iterable with exactly one item, but got two or more items")
+    if count == 0:
+        raise ValueError("asingle() expected an iterable with exactly one item, but got an empty iterable")
     return item
 
 
