@@ -182,7 +182,7 @@ class AllReduceRunner(ServicerBase):
             yield averaging_pb2.AveragingData(tensor_part=part)
 
     async def rpc_aggregate_part(
-        self, stream: AsyncIterator[averaging_pb2.AveragingData], _: P2PContext
+        self, stream: AsyncIterator[averaging_pb2.AveragingData], _context: P2PContext
     ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """a peer sends us a part of his tensor; we should average it with other peers and return the difference"""
         request: averaging_pb2.AveragingData = await anext(stream)

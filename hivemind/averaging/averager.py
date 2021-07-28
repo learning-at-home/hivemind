@@ -492,7 +492,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             await asyncio.sleep(self._matchmaking.averaging_expiration)
 
     async def rpc_download_state(
-        self, request: averaging_pb2.DownloadRequest, _: P2PContext
+        self, _request: averaging_pb2.DownloadRequest, _context: P2PContext
     ) -> AsyncIterator[averaging_pb2.DownloadData]:
         """
         Get the up-to-date trainer state from a peer.

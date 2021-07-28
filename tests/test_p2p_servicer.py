@@ -19,7 +19,7 @@ async def server_client():
 @pytest.mark.asyncio
 async def test_unary_unary(server_client):
     class ExampleServicer(ServicerBase):
-        async def rpc_square(self, request: test_pb2.TestRequest, _: P2PContext) -> test_pb2.TestResponse:
+        async def rpc_square(self, request: test_pb2.TestRequest, _context: P2PContext) -> test_pb2.TestResponse:
             return test_pb2.TestResponse(number=request.number ** 2)
 
     server, client = server_client
@@ -33,7 +33,9 @@ async def test_unary_unary(server_client):
 @pytest.mark.asyncio
 async def test_stream_unary(server_client):
     class ExampleServicer(ServicerBase):
-        async def rpc_sum(self, stream: AsyncIterator[test_pb2.TestRequest], _: P2PContext) -> test_pb2.TestResponse:
+        async def rpc_sum(
+            self, stream: AsyncIterator[test_pb2.TestRequest], _context: P2PContext
+        ) -> test_pb2.TestResponse:
             result = 0
             async for item in stream:
                 result += item.number
@@ -55,7 +57,7 @@ async def test_stream_unary(server_client):
 async def test_unary_stream(server_client):
     class ExampleServicer(ServicerBase):
         async def rpc_count(
-            self, request: test_pb2.TestRequest, _: P2PContext
+            self, request: test_pb2.TestRequest, _context: P2PContext
         ) -> AsyncIterator[test_pb2.TestResponse]:
             for i in range(request.number):
                 yield test_pb2.TestResponse(number=i)
@@ -76,7 +78,7 @@ async def test_unary_stream(server_client):
 async def test_stream_stream(server_client):
     class ExampleServicer(ServicerBase):
         async def rpc_powers(
-            self, stream: AsyncIterator[test_pb2.TestRequest], _: P2PContext
+            self, stream: AsyncIterator[test_pb2.TestRequest], _context: P2PContext
         ) -> AsyncIterator[test_pb2.TestResponse]:
             async for item in stream:
                 yield test_pb2.TestResponse(number=item.number ** 2)
@@ -109,7 +111,9 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
     handler_cancelled = False
 
     class ExampleServicer(ServicerBase):
-        async def rpc_wait(self, request: test_pb2.TestRequest, _: P2PContext) -> AsyncIterator[test_pb2.TestResponse]:
+        async def rpc_wait(
+            self, request: test_pb2.TestRequest, _context: P2PContext
+        ) -> AsyncIterator[test_pb2.TestResponse]:
             try:
                 yield test_pb2.TestResponse(number=request.number + 1)
                 await asyncio.sleep(2)

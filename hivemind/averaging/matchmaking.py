@@ -240,7 +240,7 @@ class Matchmaking:
                 await stream.aclose()
 
     async def rpc_join_group(
-        self, request: averaging_pb2.JoinRequest, _: P2PContext
+        self, request: averaging_pb2.JoinRequest, _context: P2PContext
     ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """accept or reject a join request from another averager; if accepted, run him through allreduce steps"""
         request_endpoint = None
