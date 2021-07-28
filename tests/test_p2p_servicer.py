@@ -106,7 +106,6 @@ async def test_stream_stream(server_client):
 )
 @pytest.mark.asyncio
 async def test_unary_stream_cancel(server_client, cancel_reason):
-    '''
     handler_cancelled = False
 
     class ExampleServicer(ServicerBase):
@@ -147,4 +146,3 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
 
     await asyncio.sleep(0.25)
     assert handler_cancelled
-    '''
