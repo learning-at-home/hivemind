@@ -243,7 +243,7 @@ class Matchmaking:
         self, request: averaging_pb2.JoinRequest, _context: P2PContext
     ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """accept or reject a join request from another averager; if accepted, run him through allreduce steps"""
-        request_peer_id = None
+        remote_peer_id = None
         try:
             async with self.lock_request_join_group:
                 reason_to_reject = self._check_reasons_to_reject(request)
@@ -251,8 +251,8 @@ class Matchmaking:
                     yield reason_to_reject
                     return
 
-                request_peer_id = PeerID(request.peer_id)
-                self.current_followers[request_peer_id] = request
+                remote_peer_id = PeerID(request.peer_id)
+                self.current_followers[remote_peer_id] = request
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
                 if len(self.current_followers) + 1 >= self.target_group_size and not self.assembled_group.done():
@@ -280,7 +280,7 @@ class Matchmaking:
                 self.was_accepted_to_group.is_set()
                 or not self.assembled_group.done()
                 or self.assembled_group.cancelled()
-                or request_peer_id not in self.assembled_group.result()
+                or remote_peer_id not in self.assembled_group.result()
             ):
                 if self.current_leader is not None:
                     # outcome 3: found by a leader with higher priority, send our followers to him
@@ -306,7 +306,7 @@ class Matchmaking:
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
 
         finally:  # note: this code is guaranteed to run even if the coroutine is destroyed prematurely
-            self.current_followers.pop(request_peer_id, None)
+            self.current_followers.pop(remote_peer_id, None)
             self.follower_was_discarded.set()
 
     def _check_reasons_to_reject(
@@ -317,16 +317,16 @@ class Matchmaking:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
 
         try:
-            request_peer_id = PeerID(request.peer_id)
+            remote_peer_id = PeerID(request.peer_id)
         except (ValueError, TypeError):
-            request_peer_id = None
+            remote_peer_id = None
         if (
             request.ListFields() == 3
             and not isinstance(request.schema_hash, bytes)
             or len(request.schema_hash) == 0
             or not isinstance(request.expiration, DHTExpiration)
             or not isfinite(request.expiration)
-            or request_peer_id is None
+            or remote_peer_id is None
             or self.client_mode
             or not isinstance(request.group_key, GroupKey)
         ):
@@ -344,7 +344,7 @@ class Matchmaking:
             return averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.NOT_A_LEADER, suggested_leader=self.current_leader.to_bytes()
             )
-        elif request_peer_id == self.peer_id or request_peer_id in self.current_followers:
+        elif remote_peer_id == self.peer_id or remote_peer_id in self.current_followers:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_PEER_ID)
         elif len(self.current_followers) + 1 >= self.target_group_size:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_IS_FULL)
