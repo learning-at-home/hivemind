@@ -92,7 +92,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     _active_futures: Optional[Dict[UID, Type[ref][MPFuture]]] = None  # non-done futures originated from this process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
-    def __init__(self, use_lock: bool = True):
+    def __init__(self, *, use_lock: bool = True):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._shared_state_code = SharedBytes.next()
         self._state_cache: Dict[State, State] = {}
