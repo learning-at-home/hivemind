@@ -13,7 +13,7 @@ from hivemind.utils import nested_flatten, nested_pack, get_logger
 logger = get_logger(__name__)
 
 
-print(17)
+print(18)
 
 
 class TrainingAverager(DecentralizedAverager):
