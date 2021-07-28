@@ -183,7 +183,7 @@ class Matchmaking:
 
                 stream = leader_stub.rpc_join_group(
                     averaging_pb2.JoinRequest(
-                        peer_id=self.peer_id.to_base58(),
+                        peer_id=self.peer_id.to_bytes(),
                         schema_hash=self.schema_hash,
                         expiration=expiration_time,
                         client_mode=self.client_mode,
@@ -215,7 +215,7 @@ class Matchmaking:
 
             if message.code in (averaging_pb2.GROUP_DISBANDED, averaging_pb2.CANCELLED):
                 if message.suggested_leader:
-                    suggested_leader = PeerID.from_base58(message.suggested_leader)
+                    suggested_leader = PeerID(message.suggested_leader)
                     if suggested_leader != self.peer_id:
                         logger.debug(f"{self} - leader disbanded group and redirected us to {suggested_leader}")
                         self.current_leader = None
@@ -251,7 +251,7 @@ class Matchmaking:
                     yield reason_to_reject
                     return
 
-                request_peer_id = PeerID.from_base58(request.peer_id)
+                request_peer_id = PeerID(request.peer_id)
                 self.current_followers[request_peer_id] = request
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
@@ -285,7 +285,7 @@ class Matchmaking:
                 if self.current_leader is not None:
                     # outcome 3: found by a leader with higher priority, send our followers to him
                     yield averaging_pb2.MessageFromLeader(
-                        code=averaging_pb2.GROUP_DISBANDED, suggested_leader=self.current_leader.to_base58()
+                        code=averaging_pb2.GROUP_DISBANDED, suggested_leader=self.current_leader.to_bytes()
                     )
                     return
                 else:
@@ -296,7 +296,7 @@ class Matchmaking:
             yield averaging_pb2.MessageFromLeader(
                 code=averaging_pb2.BEGIN_ALLREDUCE,
                 group_id=group_info.group_id,
-                ordered_group_peer_ids=[item.to_base58() for item in group_info.peer_ids],
+                ordered_group_peer_ids=[item.to_bytes() for item in group_info.peer_ids],
                 gathered=group_info.gathered,
             )
         except (concurrent.futures.CancelledError, asyncio.CancelledError):
@@ -317,7 +317,7 @@ class Matchmaking:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.NOT_LOOKING_FOR_GROUP)
 
         try:
-            request_peer_id = PeerID.from_base58(request.peer_id)
+            request_peer_id = PeerID(request.peer_id)
         except (ValueError, TypeError):
             request_peer_id = None
         if (
@@ -342,7 +342,7 @@ class Matchmaking:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.BAD_EXPIRATION_TIME)
         elif self.current_leader is not None:
             return averaging_pb2.MessageFromLeader(
-                code=averaging_pb2.NOT_A_LEADER, suggested_leader=self.current_leader.to_base58()
+                code=averaging_pb2.NOT_A_LEADER, suggested_leader=self.current_leader.to_bytes()
             )
         elif request_peer_id == self.peer_id or request_peer_id in self.current_followers:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_PEER_ID)
@@ -378,7 +378,7 @@ class Matchmaking:
         assert self.current_leader == leader, f"averager does not follow {leader} (actual: {self.current_leader})"
 
         group_id = msg.group_id
-        ordered_group_peer_ids = [PeerID.from_base58(item) for item in msg.ordered_group_peer_ids]
+        ordered_group_peer_ids = [PeerID(item) for item in msg.ordered_group_peer_ids]
         assert self.peer_id in ordered_group_peer_ids, "Leader sent us group_peer_ids that does not contain us!"
         assert len(ordered_group_peer_ids) == len(msg.gathered)
 
@@ -459,9 +459,9 @@ class PotentialLeaders:
             if maybe_next_leader is None or self.max_assured_time <= entry.expiration_time <= self.search_end_time:
                 self.update_triggered.set()
 
-            if maybe_next_leader is None or (entry.expiration_time, maybe_next_leader.to_base58()) > (
+            if maybe_next_leader is None or (entry.expiration_time, maybe_next_leader.to_bytes()) > (
                 self.declared_expiration_time,
-                self.peer_id.to_base58(),
+                self.peer_id.to_bytes(),
             ):
                 await asyncio.wait(
                     {self.update_finished.wait(), self.declared_expiration.wait()}, return_when=asyncio.FIRST_COMPLETED

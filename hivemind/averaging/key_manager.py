@@ -73,7 +73,7 @@ class GroupKeyManager:
         expiration_time = expiration_time if looking_for_group else float(np.nextafter(expiration_time, float("inf")))
         return await self.dht.store(
             key=group_key,
-            subkey=peer_id.to_base58(),
+            subkey=peer_id.to_bytes(),
             value=looking_for_group,
             expiration_time=expiration_time,
             return_future=True,
@@ -94,7 +94,7 @@ class GroupKeyManager:
             logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
             return []
         averagers = [
-            (PeerID.from_base58(key), looking_for_group.expiration_time)
+            (PeerID(key), looking_for_group.expiration_time)
             for key, looking_for_group in result.value.items()
             if key != self.RESERVED_KEY_FOR_NBITS and (not only_active or looking_for_group.value)
         ]

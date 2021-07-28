@@ -32,7 +32,7 @@ enum MessageCode {
 }
 
 message JoinRequest {
-  string peer_id = 1;           // A follower accepts incoming allreduce requests at this address
+  bytes peer_id = 1;            // A follower accepts incoming allreduce requests at this address
   bytes schema_hash = 2;        // A hash that describes follower's tensors (shapes, num tensors, etc)
   double expiration = 3;        // Follower would like to **begin** all_reduce by this point in time
   bytes gather = 4;             // optional metadata that is gathered from all peers (e.g. batch size or current loss)
@@ -42,16 +42,16 @@ message JoinRequest {
 
 message MessageFromLeader {
   MessageCode code = 1;
-  bytes group_id = 2;        // a unique identifier of this group, only valid until allreduce is finished/failed
-  string suggested_leader = 3;  // if peer is already in a group, it'll provide us with a peer id of its leader
-  repeated string ordered_group_peer_ids = 4;  // a sequence of peers, each responsible for one shard during averaging
+  bytes group_id = 2;           // a unique identifier of this group, only valid until allreduce is finished/failed
+  bytes suggested_leader = 3;   // if peer is already in a group, it'll provide us with a peer id of its leader
+  repeated bytes ordered_group_peer_ids = 4;  // a sequence of peers, each responsible for one shard during averaging
   repeated bytes gathered = 5;  // metadata (gather) from all groupmates in the same order as their peer ids
 }
 
 message AveragingData {
   MessageCode code = 1;     // in case of a protocol violation, this will be the error message
   bytes group_id = 2;       // a unique group identifier, same as in MessageFromLeader
-  string peer_id = 3;       // sender's rpc peer_id, used for coordination
+  bytes peer_id = 3;        // sender's rpc peer_id, used for coordination
   Tensor tensor_part = 4;   // either peer's local tensor part (rpc input) or group average of this part (rpc output)
   bytes metadata = 5;       // reserved user-extendable metadata
 }

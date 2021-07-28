@@ -481,7 +481,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     asyncio.wait_for(
                         self.dht.store(
                             download_key,
-                            subkey=self.peer_id.to_base58(),
+                            subkey=self.peer_id.to_bytes(),
                             value=self.last_updated,
                             expiration_time=get_dht_time() + self._matchmaking.averaging_expiration,
                             return_future=True,
@@ -547,8 +547,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             key_manager = self._matchmaking.group_key_manager
             peer_priority, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
             peer_priority = {
-                PeerID.from_base58(peer): float(info.value)
-                for peer, info in peer_priority.items()
+                PeerID(peer_id): float(info.value)
+                for peer_id, info in peer_priority.items()
                 if isinstance(info, ValueWithExpiration) and isinstance(info.value, (float, int))
             }
 

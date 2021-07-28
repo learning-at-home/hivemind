@@ -175,7 +175,7 @@ class AllReduceRunner(ServicerBase):
         yield averaging_pb2.AveragingData(
             code=averaging_pb2.PART_FOR_AVERAGING,
             group_id=self.group_id,
-            peer_id=self.peer_id.to_base58(),
+            peer_id=self.peer_id.to_bytes(),
             tensor_part=first_part,
         )
         async for part in parts_aiter:
@@ -193,7 +193,7 @@ class AllReduceRunner(ServicerBase):
 
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
-                sender_index = self.sender_peer_ids.index(PeerID.from_base58(request.peer_id))
+                sender_index = self.sender_peer_ids.index(PeerID(request.peer_id))
                 async for msg in self._accumulate_parts_streaming(achain(aiter(request), stream), sender_index):
                     yield msg
 
@@ -231,7 +231,7 @@ class AllReduceRunner(ServicerBase):
             yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
 
     async def _send_error_to_peer(self, peer_id: PeerID, code: averaging_pb2.MessageCode):
-        error = averaging_pb2.AveragingData(group_id=self.group_id, peer_id=self.peer_id.to_base58(), code=code)
+        error = averaging_pb2.AveragingData(group_id=self.group_id, peer_id=self.peer_id.to_bytes(), code=code)
         # In case of reporting the error, we expect the response stream to contain exactly one item
         await asingle(self._get_peer_stub(peer_id).rpc_aggregate_part(aiter(error)))
 
