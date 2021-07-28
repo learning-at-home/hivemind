@@ -46,7 +46,7 @@ class SharedBytes:
     _lock = mp.Lock()
     _pid: Optional[PID] = None
     _buffer: Optional[torch.Tensor] = None
-    _index: Optional[int] = 0
+    _index: int = 0
 
     @classmethod
     def next(cls) -> torch.Tensor:
@@ -89,10 +89,10 @@ class MPFuture(base.Future, Generic[ResultType]):
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
     _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
-    _active_futures: Optional[Dict[UID, Type[ref][MPFuture]]] = None  # non-done futures originated from this process
+    _active_futures: Optional[Dict[UID, 'ref[MPFuture]']] = None  # non-done futures originated from this process
     _active_pid: Optional[PID] = None  # pid of currently active process; used to handle forks natively
 
-    def __init__(self, use_lock: bool = True):
+    def __init__(self, *, use_lock: bool = True):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
         self._shared_state_code = SharedBytes.next()
         self._state_cache: Dict[State, State] = {}
