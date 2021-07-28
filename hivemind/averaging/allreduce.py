@@ -175,14 +175,13 @@ class AllReduceRunner(ServicerBase):
         yield averaging_pb2.AveragingData(
             code=averaging_pb2.PART_FOR_AVERAGING,
             group_id=self.group_id,
-            peer_id=self.peer_id.to_bytes(),
             tensor_part=first_part,
         )
         async for part in parts_aiter:
             yield averaging_pb2.AveragingData(tensor_part=part)
 
     async def rpc_aggregate_part(
-        self, stream: AsyncIterator[averaging_pb2.AveragingData], _context: P2PContext
+        self, stream: AsyncIterator[averaging_pb2.AveragingData], context: P2PContext
     ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """a peer sends us a part of his tensor; we should average it with other peers and return the difference"""
         request: averaging_pb2.AveragingData = await anext(stream)
@@ -193,7 +192,7 @@ class AllReduceRunner(ServicerBase):
 
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
-                sender_index = self.sender_peer_ids.index(PeerID(request.peer_id))
+                sender_index = self.sender_peer_ids.index(context.remote_id)
                 async for msg in self._accumulate_parts_streaming(achain(aiter(request), stream), sender_index):
                     yield msg
 
@@ -202,8 +201,8 @@ class AllReduceRunner(ServicerBase):
                 yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
         else:
             error_code = averaging_pb2.MessageCode.Name(request.code)
-            logger.debug(f"{self} - peer {request.peer_id} sent {error_code}, allreduce cannot continue")
-            self.finalize(exception=AllreduceException(f"peer {request.peer_id} sent {error_code}."))
+            logger.debug(f"{self} - peer {context.remote_id} sent {error_code}, allreduce cannot continue")
+            self.finalize(exception=AllreduceException(f"peer {context.remote_id} sent {error_code}."))
             yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
     def _check_reasons_to_reject(self, request: averaging_pb2.AveragingData) -> Optional[averaging_pb2.AveragingData]:
@@ -231,7 +230,7 @@ class AllReduceRunner(ServicerBase):
             yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
 
     async def _send_error_to_peer(self, peer_id: PeerID, code: averaging_pb2.MessageCode):
-        error = averaging_pb2.AveragingData(group_id=self.group_id, peer_id=self.peer_id.to_bytes(), code=code)
+        error = averaging_pb2.AveragingData(group_id=self.group_id, code=code)
         # In case of reporting the error, we expect the response stream to contain exactly one item
         await asingle(self._get_peer_stub(peer_id).rpc_aggregate_part(aiter(error)))
 
