@@ -2,13 +2,6 @@ syntax = "proto3";
 import "runtime.proto";
 
 
-// Runs alongside each trainer to perform gating function averaging every now and then. Read more: client/averaging.py
-service DecentralizedAveraging {
-  rpc rpc_join_group(JoinRequest) returns (stream MessageFromLeader);  // assemble a group for allreduce
-  rpc rpc_aggregate_part(stream AveragingData) returns (stream AveragingData);  // send local part => get average part
-  rpc rpc_download_state(DownloadRequest) returns (stream DownloadData);
-}
-
 enum MessageCode {
   NO_CODE = 0;               // Default value that should not be used explicitly
   REQUEST_JOIN = 1;          // "Dear maybe leader, will you have me in your group as a follower?"
