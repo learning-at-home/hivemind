@@ -25,7 +25,7 @@ async def test_unary_unary(server_client):
     server, client = server_client
     servicer = ExampleServicer()
     await servicer.add_p2p_handlers(server)
-    stub = ExampleServicer.get_stub(client, server.id)
+    stub = ExampleServicer.get_stub(client, server.peer_id)
 
     assert await stub.rpc_square(test_pb2.TestRequest(number=10)) == test_pb2.TestResponse(number=100)
 
@@ -44,7 +44,7 @@ async def test_stream_unary(server_client):
     server, client = server_client
     servicer = ExampleServicer()
     await servicer.add_p2p_handlers(server)
-    stub = ExampleServicer.get_stub(client, server.id)
+    stub = ExampleServicer.get_stub(client, server.peer_id)
 
     async def generate_requests() -> AsyncIterator[test_pb2.TestRequest]:
         for i in range(10):
@@ -65,7 +65,7 @@ async def test_unary_stream(server_client):
     server, client = server_client
     servicer = ExampleServicer()
     await servicer.add_p2p_handlers(server)
-    stub = ExampleServicer.get_stub(client, server.id)
+    stub = ExampleServicer.get_stub(client, server.peer_id)
 
     i = 0
     async for item in stub.rpc_count(test_pb2.TestRequest(number=10)):
@@ -87,7 +87,7 @@ async def test_stream_stream(server_client):
     server, client = server_client
     servicer = ExampleServicer()
     await servicer.add_p2p_handlers(server)
-    stub = ExampleServicer.get_stub(client, server.id)
+    stub = ExampleServicer.get_stub(client, server.peer_id)
 
     async def generate_requests() -> AsyncIterator[test_pb2.TestRequest]:
         for i in range(10):
@@ -128,7 +128,7 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
     await servicer.add_p2p_handlers(server)
 
     if cancel_reason == "close_connection":
-        _, reader, writer = await client.call_binary_stream_handler(server.id, "ExampleServicer.rpc_wait")
+        _, reader, writer = await client.call_binary_stream_handler(server.peer_id, "ExampleServicer.rpc_wait")
         await P2P.send_protobuf(test_pb2.TestRequest(number=10), writer)
         await P2P.send_protobuf(P2P.END_OF_STREAM, writer)
 
@@ -138,7 +138,7 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
 
         writer.close()
     elif cancel_reason == "close_generator":
-        stub = ExampleServicer.get_stub(client, server.id)
+        stub = ExampleServicer.get_stub(client, server.peer_id)
         iter = stub.rpc_wait(test_pb2.TestRequest(number=10)).__aiter__()
 
         assert await iter.__anext__() == test_pb2.TestResponse(number=11)

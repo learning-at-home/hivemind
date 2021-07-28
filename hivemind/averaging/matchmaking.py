@@ -63,7 +63,7 @@ class Matchmaking:
         self._servicer_type = servicer_type
         self._prefix = prefix
 
-        self.peer_id = p2p.id
+        self.peer_id = p2p.peer_id
         self.schema_hash = schema_hash
         self.group_key_manager = GroupKeyManager(dht, prefix, initial_group_bits, target_group_size)
         self.target_group_size, self.min_group_size = target_group_size, min_group_size

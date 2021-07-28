@@ -64,7 +64,7 @@ class AllReduceRunner(ServicerBase):
         **kwargs,
     ):
         self._p2p = p2p
-        self.peer_id = p2p.id
+        self.peer_id = p2p.peer_id
         assert self.peer_id in ordered_group_peer_ids, "peer_id is not a part of the group"
 
         if not issubclass(servicer_type, ServicerBase):

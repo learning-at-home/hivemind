@@ -207,7 +207,7 @@ class DHTNode:
             record_validator,
             authorizer,
         )
-        self.peer_id = p2p.id
+        self.peer_id = p2p.peer_id
 
         if initial_peers:
             initial_peers = {PeerID.from_base58(Multiaddr(item)["p2p"]) for item in initial_peers}
