@@ -131,19 +131,19 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def _set_event_threadsafe(self):
         try:
-            loop = asyncio.get_running_loop()
+            running_loop = asyncio.get_running_loop()
         except RuntimeError:
-            loop = None
+            running_loop = None
 
         async def _event_setter():
             self._aio_event.set()
 
-        if self.get_loop().is_running() and loop == self.get_loop():
+        if self._loop.is_running() and running_loop == self._loop:
             asyncio.create_task(_event_setter())
-        elif self.get_loop().is_running() and loop != self.get_loop():
-            asyncio.run_coroutine_threadsafe(_event_setter(), self.get_loop())
+        elif self._loop.is_running() and running_loop != self._loop:
+            asyncio.run_coroutine_threadsafe(_event_setter(), self._loop)
         else:
-            self.get_loop().run_until_complete(_event_setter())
+            self._loop.run_until_complete(_event_setter())
 
     @classmethod
     def _initialize_mpfuture_backend(cls):
@@ -278,9 +278,6 @@ class MPFuture(base.Future, Generic[ResultType]):
         if os.getpid() != self._origin_pid:
             raise RuntimeError("Only the process that created MPFuture can set callbacks")
         return super().add_done_callback(callback)
-
-    def get_loop(self) -> Optional[asyncio.BaseEventLoop]:
-        return self._loop
 
     def __await__(self):
         if not self._aio_event:
