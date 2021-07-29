@@ -5,6 +5,7 @@ import time
 from tqdm import trange
 
 import hivemind
+from hivemind.dht import DHT_DEFAULT_NUM_WORKERS
 from hivemind.moe.server import declare_experts, get_experts
 from hivemind.utils.limits import increase_file_limit
 
@@ -28,6 +29,7 @@ def benchmark_dht(
     wait_before_read: float,
     wait_timeout: float,
     expiration: float,
+    dht_max_workers: int,
 ):
     random.seed(random_seed)
 
@@ -37,7 +39,9 @@ def benchmark_dht(
         neighbors = sum(
             [peer.get_visible_maddrs() for peer in random.sample(peers, min(initial_peers, len(peers)))], []
         )
-        peer = hivemind.DHT(initial_peers=neighbors, start=True, wait_timeout=wait_timeout)
+        peer = hivemind.DHT(
+            initial_peers=neighbors, start=True, wait_timeout=wait_timeout, max_workers=dht_max_workers
+        )
         peers.append(peer)
 
     store_peer, get_peer = peers[-2:]
@@ -118,6 +122,7 @@ if __name__ == "__main__":
     parser.add_argument("--wait_before_read", type=float, default=0, required=False)
     parser.add_argument("--wait_timeout", type=float, default=5, required=False)
     parser.add_argument("--random_seed", type=int, default=random.randint(1, 1000))
+    parser.add_argument("--dht_max_workers", type=int, default=DHT_DEFAULT_NUM_WORKERS)
     parser.add_argument("--increase_file_limit", action="store_true")
     args = vars(parser.parse_args())
 

@@ -23,7 +23,7 @@ from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, Type
 
 from multiaddr import Multiaddr
 
-from hivemind.dht.node import DHTNode
+from hivemind.dht.node import DHT_DEFAULT_NUM_WORKERS, DHTNode
 from hivemind.dht.routing import DHTID, DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.p2p import P2P, PeerID
@@ -62,7 +62,7 @@ class DHT(mp.Process):
         *,
         start: bool,
         daemon: bool = True,
-        max_workers: Optional[int] = None,
+        max_workers: int = DHT_DEFAULT_NUM_WORKERS,
         record_validators: Iterable[RecordValidatorBase] = (),
         shutdown_timeout: float = 3,
         await_ready: bool = True,

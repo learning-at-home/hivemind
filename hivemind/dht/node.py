@@ -39,6 +39,9 @@ from hivemind.utils.timed_storage import DHTExpiration, TimedStorage, ValueWithE
 logger = get_logger(__name__)
 
 
+DHT_DEFAULT_NUM_WORKERS = os.environ.get("HIVEMIND_DHT_NUM_WORKERS", 8)
+
+
 class DHTNode:
     """
     Asyncio-based class that represents one DHT participant. Created via await DHTNode.create(...)
@@ -111,7 +114,7 @@ class DHTNode:
         cache_refresh_before_expiry: float = 5,
         cache_on_store: bool = True,
         reuse_get_requests: bool = True,
-        num_workers: int = 8,
+        num_workers: int = DHT_DEFAULT_NUM_WORKERS,
         chunk_size: int = 16,
         blacklist_time: float = 5.0,
         backoff_rate: float = 2.0,
@@ -165,13 +168,7 @@ class DHTNode:
         """
         self = cls(_initialized_with_create=True)
         self.node_id = node_id if node_id is not None else DHTID.generate()
-
-        if num_workers is None:
-            self.num_workers = int(os.environ.get("HIVEMIND_DHT_NUM_WORKERS", 8))
-        else:
-            self.num_workers = num_workers
-
-        self.num_replicas, self.chunk_size = num_replicas, chunk_size
+        self.num_replicas, self.num_workers, self.chunk_size = num_replicas, num_workers, chunk_size
         self.is_alive = True  # if set to False, cancels all background jobs such as routing table refresh
 
         self.reuse_get_requests = reuse_get_requests
