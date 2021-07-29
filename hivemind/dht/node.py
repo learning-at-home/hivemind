@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import os
 import random
 from collections import defaultdict, Counter
 from dataclasses import dataclass, field
@@ -154,7 +155,7 @@ class DHTNode:
         :param backoff_rate: blacklist time will be multiplied by :backoff_rate: for each successive non-response
         :param validate: if True, use initial peers to validate that this node is accessible and synchronized
         :param strict: if True, any error encountered in validation will interrupt the creation of DHTNode
-        :param client_mode: if False (default), this node will accept incoming requests as a full DHT "citzen"
+        :param client_mode: if False (default), this node will accept incoming requests as a full DHT "citizen"
           if True, this node will refuse any incoming requests, effectively being only a client
         :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
         :param authorizer: instance of AuthorizerBase used for signing and validating requests and response
@@ -164,7 +165,13 @@ class DHTNode:
         """
         self = cls(_initialized_with_create=True)
         self.node_id = node_id if node_id is not None else DHTID.generate()
-        self.num_replicas, self.num_workers, self.chunk_size = num_replicas, num_workers, chunk_size
+
+        if num_workers is None:
+            self.num_workers = int(os.environ.get("HIVEMIND_DHT_NUM_WORKERS", 8))
+        else:
+            self.num_workers = num_workers
+
+        self.num_replicas, self.chunk_size = num_replicas, chunk_size
         self.is_alive = True  # if set to False, cancels all background jobs such as routing table refresh
 
         self.reuse_get_requests = reuse_get_requests

@@ -106,7 +106,7 @@ class DHT(mp.Process):
             async def _run():
                 self._node = await DHTNode.create(
                     initial_peers=self.initial_peers,
-                    num_workers=self.max_workers or 1,
+                    num_workers=self.max_workers,
                     record_validator=self._record_validator,
                     **self.kwargs,
                 )
