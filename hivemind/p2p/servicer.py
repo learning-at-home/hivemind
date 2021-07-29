@@ -1,6 +1,7 @@
 import asyncio
+import inspect
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Optional, Tuple, get_type_hints
+from typing import Any, AsyncIterator, List, Optional, Tuple, Type, get_type_hints
 
 from hivemind.p2p.p2p_daemon import P2P
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
@@ -9,7 +10,6 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID
 @dataclass
 class RPCHandler:
     method_name: str
-    handle_name: str
     request_type: type
     response_type: type
     stream_input: bool
@@ -24,9 +24,10 @@ class StubBase:
     adding the necessary rpc_* methods. Calls to these methods are translated to calls to the remote peer.
     """
 
-    def __init__(self, p2p: P2P, peer: PeerID):
+    def __init__(self, p2p: P2P, peer: PeerID, namespace: Optional[str]):
         self._p2p = p2p
         self._peer = peer
+        self._namespace = namespace
 
 
 class ServicerBase:
@@ -41,39 +42,49 @@ class ServicerBase:
       to calls to the remote peer.
     """
 
-    def __init__(self):
-        class_name = self.__class__.__name__
+    _rpc_handlers: Optional[List[RPCHandler]] = None
+    _stub_type: Optional[Type[StubBase]] = None
 
-        self._rpc_handlers = []
-        for method_name, method in self.__class__.__dict__.items():
-            if method_name.startswith("rpc_") and callable(method):
-                handle_name = f"{class_name}.{method_name}"
+    @classmethod
+    def _collect_rpc_handlers(cls) -> None:
+        if cls._rpc_handlers is not None:
+            return
 
+        cls._rpc_handlers = []
+        for method_name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
+            if method_name.startswith("rpc_"):
+                spec = inspect.getfullargspec(method)
+                if len(spec.args) < 3:
+                    raise ValueError(
+                        f"{method_name} is expected to at least three positional arguments "
+                        f"(self, request: TInputProtobuf | AsyncIterator[TInputProtobuf], context: P2PContext)"
+                    )
+                request_arg = spec.args[1]
                 hints = get_type_hints(method)
                 try:
-                    request_type = hints["request"]
+                    request_type = hints[request_arg]
                     response_type = hints["return"]
                 except KeyError:
                     raise ValueError(
-                        f"{handle_name} is expected to have type annotations "
+                        f"{method_name} is expected to have type annotations "
                         f"like `dht_pb2.FindRequest` or `AsyncIterator[dht_pb2.FindRequest]` "
-                        f"for the `request` parameter and the return value"
+                        f"for the `{request_arg}` parameter and the return value"
                     )
-                request_type, stream_input = self._strip_iterator_hint(request_type)
-                response_type, stream_output = self._strip_iterator_hint(response_type)
+                request_type, stream_input = cls._strip_iterator_hint(request_type)
+                response_type, stream_output = cls._strip_iterator_hint(response_type)
 
-                self._rpc_handlers.append(
-                    RPCHandler(method_name, handle_name, request_type, response_type, stream_input, stream_output)
+                cls._rpc_handlers.append(
+                    RPCHandler(method_name, request_type, response_type, stream_input, stream_output)
                 )
 
-        self._stub_type = type(
-            f"{class_name}Stub",
+        cls._stub_type = type(
+            f"{cls.__name__}Stub",
             (StubBase,),
-            {handler.method_name: self._make_rpc_caller(handler) for handler in self._rpc_handlers},
+            {handler.method_name: cls._make_rpc_caller(handler) for handler in cls._rpc_handlers},
         )
 
-    @staticmethod
-    def _make_rpc_caller(handler: RPCHandler):
+    @classmethod
+    def _make_rpc_caller(cls, handler: RPCHandler):
         input_type = AsyncIterator[handler.request_type] if handler.stream_input else handler.request_type
 
         # This method will be added to a new Stub type (a subclass of StubBase)
@@ -87,7 +98,7 @@ class ServicerBase:
 
                 return self._p2p.iterate_protobuf_handler(
                     self._peer,
-                    handler.handle_name,
+                    cls._get_handle_name(self._namespace, handler.method_name),
                     input,
                     handler.response_type,
                 )
@@ -98,25 +109,41 @@ class ServicerBase:
                 self: StubBase, input: input_type, timeout: Optional[float] = None
             ) -> handler.response_type:
                 return await asyncio.wait_for(
-                    self._p2p.call_protobuf_handler(self._peer, handler.handle_name, input, handler.response_type),
+                    self._p2p.call_protobuf_handler(
+                        self._peer,
+                        cls._get_handle_name(self._namespace, handler.method_name),
+                        input,
+                        handler.response_type,
+                    ),
                     timeout=timeout,
                 )
 
         caller.__name__ = handler.method_name
         return caller
 
-    async def add_p2p_handlers(self, p2p: P2P, wrapper: Any = None) -> None:
+    async def add_p2p_handlers(self, p2p: P2P, wrapper: Any = None, *, namespace: Optional[str] = None) -> None:
+        self._collect_rpc_handlers()
+
         servicer = self if wrapper is None else wrapper
         for handler in self._rpc_handlers:
             await p2p.add_protobuf_handler(
-                handler.handle_name,
+                self._get_handle_name(namespace, handler.method_name),
                 getattr(servicer, handler.method_name),
                 handler.request_type,
                 stream_input=handler.stream_input,
             )
 
-    def get_stub(self, p2p: P2P, peer: PeerID) -> StubBase:
-        return self._stub_type(p2p, peer)
+    @classmethod
+    def get_stub(cls, p2p: P2P, peer: PeerID, *, namespace: Optional[str] = None) -> StubBase:
+        cls._collect_rpc_handlers()
+        return cls._stub_type(p2p, peer, namespace)
+
+    @classmethod
+    def _get_handle_name(cls, namespace: Optional[str], method_name: str) -> str:
+        handle_name = f"{cls.__name__}.{method_name}"
+        if namespace is not None:
+            handle_name = f"{namespace}::{handle_name}"
+        return handle_name
 
     @staticmethod
     def _strip_iterator_hint(hint: type) -> Tuple[type, bool]:

@@ -256,8 +256,8 @@ def test_mpfuture_done_callback():
 
     assert future1.done() and not future1.cancelled()
     assert future2.done() and future2.cancelled()
-    events[0].wait(1)
-    events[1].wait(1)
+    for i in 0, 1, 4:
+        events[i].wait(1)
     assert events[0].is_set() and events[1].is_set() and events[2].is_set() and events[4].is_set()
     assert not events[3].is_set()
 
@@ -266,15 +266,14 @@ def test_mpfuture_done_callback():
 
 
 @pytest.mark.forked
-@pytest.mark.parametrize("synchronize", [True, False])
-def test_many_futures(synchronize: bool):
+def test_many_futures():
     evt = mp.Event()
     receiver, sender = mp.Pipe()
-    main_futures = [hivemind.MPFuture(synchronize=synchronize) for _ in range(1000)]
+    main_futures = [hivemind.MPFuture() for _ in range(1000)]
     assert len(hivemind.MPFuture._active_futures) == 1000
 
     def _run_peer():
-        fork_futures = [hivemind.MPFuture(synchronize=synchronize) for _ in range(500)]
+        fork_futures = [hivemind.MPFuture() for _ in range(500)]
         assert len(hivemind.MPFuture._active_futures) == 500
 
         for i, future in enumerate(random.sample(main_futures, 300)):
@@ -299,8 +298,6 @@ def test_many_futures(synchronize: bool):
     p.start()
 
     some_fork_futures = receiver.recv()
-
-    time.sleep(0.5)  # wait for active futures to synchronize
     assert len(hivemind.MPFuture._active_futures) == 700
 
     for future in some_fork_futures:

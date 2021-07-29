@@ -45,10 +45,6 @@ class AveragerArguments:
     averaging_timeout: float = field(
         default=30.0, metadata={"help": "Give up on averaging step after this many seconds"}
     )
-    listen_on: str = field(
-        default="[::]:*",
-        metadata={"help": "Network interface used for incoming averager communication. Default: all ipv6"},
-    )
     min_refresh_period: float = field(
         default=0.5, metadata={"help": "Wait for at least this many seconds before fetching new collaboration state"}
     )

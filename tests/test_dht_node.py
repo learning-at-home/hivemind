@@ -44,7 +44,7 @@ def run_protocol_listener(
     for peer_id in maddrs_to_peer_ids(initial_peers):
         loop.run_until_complete(protocol.call_ping(peer_id))
 
-    maddr_conn.send((p2p.id, visible_maddrs))
+    maddr_conn.send((p2p.peer_id, visible_maddrs))
 
     async def shutdown():
         await p2p.shutdown()
@@ -194,16 +194,27 @@ def test_empty_table():
 
 
 @pytest.mark.forked
-def test_dht_node():
+def test_dht_node(
+    n_peers: int = 20, n_sequential_peers: int = 5, parallel_rpc: int = 10, bucket_size: int = 5, num_replicas: int = 3
+):
     # step A: create a swarm of 50 dht nodes in separate processes
     #         (first 5 created sequentially, others created in parallel)
-    processes, dht, swarm_maddrs = launch_swarm_in_separate_processes(n_peers=50, n_sequential_peers=5)
+
+    processes, dht, swarm_maddrs = launch_swarm_in_separate_processes(
+        n_peers=n_peers, n_sequential_peers=n_sequential_peers, bucket_size=bucket_size, num_replicas=num_replicas
+    )
 
     # step B: run 51-st node in this process
     loop = asyncio.get_event_loop()
     initial_peers = random.choice(swarm_maddrs)
     me = loop.run_until_complete(
-        DHTNode.create(initial_peers=initial_peers, parallel_rpc=10, cache_refresh_before_expiry=False)
+        DHTNode.create(
+            initial_peers=initial_peers,
+            parallel_rpc=parallel_rpc,
+            bucket_size=bucket_size,
+            num_replicas=num_replicas,
+            cache_refresh_before_expiry=False,
+        )
     )
 
     # test 1: find self
@@ -223,7 +234,7 @@ def test_dht_node():
     jaccard_numerator = jaccard_denominator = 0  # jaccard similarity aka intersection over union
     all_node_ids = list(dht.values())
 
-    for _ in range(10):
+    for _ in range(20):
         query_id = DHTID.generate()
         k_nearest = random.randint(1, 10)
         exclude_self = random.random() > 0.5
@@ -249,10 +260,10 @@ def test_dht_node():
         jaccard_denominator += k_nearest
 
     accuracy = accuracy_numerator / accuracy_denominator
-    logger.debug(f"Top-1 accuracy: {accuracy}")  # should be 98-100%
+    logger.debug(f"Top-1 accuracy: {accuracy}")  # should be 90-100%
     jaccard_index = jaccard_numerator / jaccard_denominator
     logger.debug(f"Jaccard index (intersection over union): {jaccard_index}")  # should be 95-100%
-    assert accuracy >= 0.9, f"Top-1 accuracy only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
+    assert accuracy >= 0.8, f"Top-1 accuracy only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
     assert jaccard_index >= 0.9, f"Jaccard index only {accuracy} ({accuracy_numerator} / {accuracy_denominator})"
 
     # test 4: find all nodes
@@ -275,7 +286,10 @@ def test_dht_node():
     initial_peers = random.choice(swarm_maddrs)
     that_guy = loop.run_until_complete(
         DHTNode.create(
-            initial_peers=initial_peers, parallel_rpc=10, cache_refresh_before_expiry=False, cache_locally=False
+            initial_peers=initial_peers,
+            parallel_rpc=parallel_rpc,
+            cache_refresh_before_expiry=False,
+            cache_locally=False,
         )
     )
 

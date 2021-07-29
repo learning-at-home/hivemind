@@ -33,7 +33,7 @@ jobs:
       - name: Test
         run: |
           cd tests
-          pytest --durations=0 --durations-min=1.0
+          pytest --durations=0 --durations-min=1.0 -v
 
   build_and_test_p2pd:
     runs-on: ubuntu-latest
@@ -60,7 +60,7 @@ jobs:
       - name: Test
         run: |
           cd tests
-          pytest -k "p2p" 
+          pytest -k "p2p" -v
 
   codecov_in_develop_mode:
 
@@ -87,6 +87,6 @@ jobs:
           pip install -e .
       - name: Test
         run: |
-          pytest --cov=hivemind tests
+          pytest --cov=hivemind -v tests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1

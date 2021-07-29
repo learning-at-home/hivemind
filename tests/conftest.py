@@ -1,10 +1,12 @@
 import gc
 from contextlib import suppress
+import multiprocessing as mp
 
 import psutil
 import pytest
 
-from hivemind.utils import get_logger
+from hivemind.utils.mpfuture import MPFuture, SharedBytes
+from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -25,3 +27,5 @@ def cleanup_children():
         for child in children:
             with suppress(psutil.NoSuchProcess):
                 child.kill()
+
+    MPFuture.reset_backend()

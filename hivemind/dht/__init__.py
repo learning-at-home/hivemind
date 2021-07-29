@@ -23,9 +23,10 @@ from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, Type
 
 from multiaddr import Multiaddr
 
-from hivemind.dht.node import DHTID, DHTNode
-from hivemind.dht.routing import DHTKey, DHTValue, Subkey
+from hivemind.dht.node import DHTNode
+from hivemind.dht.routing import DHTID, DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
+from hivemind.p2p import P2P, PeerID
 from hivemind.utils import DHTExpiration, MPFuture, ValueWithExpiration, await_cancelled, get_logger, switch_to_uvloop
 
 logger = get_logger(__name__)
@@ -49,6 +50,7 @@ class DHT(mp.Process):
       The validators will be combined using the CompositeValidator class. It merges them when possible
       (according to their `.merge_with()` policies) and orders them according to the `.priority` properties.
     :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
+    :param await_ready: if True, the constructor waits until the DHT process is ready to process incoming requests
     :param kwargs: any other params will be forwarded to DHTNode and hivemind.p2p.P2P upon creation
     """
 
@@ -63,6 +65,7 @@ class DHT(mp.Process):
         max_workers: Optional[int] = None,
         record_validators: Iterable[RecordValidatorBase] = (),
         shutdown_timeout: float = 3,
+        await_ready: bool = True,
         **kwargs,
     ):
         self._parent_pid = os.getpid()
@@ -85,8 +88,14 @@ class DHT(mp.Process):
         self.shutdown_timeout = shutdown_timeout
         self.ready = mp.Event()
         self.daemon = daemon
+
+        # These values will be fetched from the child process when requested
+        self._peer_id = None
+        self._client_mode = None
+        self._p2p_replica = None
+
         if start:
-            self.run_in_background(await_ready=True)
+            self.run_in_background(await_ready=await_ready)
 
     def run(self) -> None:
         """Serve DHT forever. This function will not return until DHT node is shut down"""
@@ -251,8 +260,29 @@ class DHT(mp.Process):
 
         self.run_coroutine(partial(DHT._add_validators, record_validators=record_validators))
 
-    async def _add_validators(self, node: DHTNode, record_validators: Iterable[RecordValidatorBase]) -> None:
+    @staticmethod
+    async def _add_validators(_dht: DHT, node: DHTNode, record_validators: Iterable[RecordValidatorBase]) -> None:
         node.protocol.record_validator.extend(record_validators)
+
+    @property
+    def peer_id(self) -> PeerID:
+        if self._peer_id is None:
+            self._peer_id = self.run_coroutine(DHT._get_peer_id)
+        return self._peer_id
+
+    @staticmethod
+    async def _get_peer_id(_dht: DHT, node: DHTNode) -> PeerID:
+        return node.peer_id
+
+    @property
+    def client_mode(self) -> bool:
+        if self._client_mode is None:
+            self._client_mode = self.run_coroutine(DHT._get_client_mode)
+        return self._client_mode
+
+    @staticmethod
+    async def _get_client_mode(_dht: DHT, node: DHTNode) -> bool:
+        return node.protocol.client_mode
 
     def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
         """
@@ -263,8 +293,24 @@ class DHT(mp.Process):
 
         return self.run_coroutine(partial(DHT._get_visible_maddrs, latest=latest))
 
-    async def _get_visible_maddrs(self, node: DHTNode, latest: bool = False) -> List[Multiaddr]:
+    @staticmethod
+    async def _get_visible_maddrs(_dht: DHT, node: DHTNode, latest: bool = False) -> List[Multiaddr]:
         return await node.get_visible_maddrs(latest=latest)
+
+    async def replicate_p2p(self) -> P2P:
+        """
+        Get a replica of a P2P instance used in the DHT process internally.
+        The replica uses the same P2P daemon as the DHT and only works while DHT is alive.
+        """
+
+        if self._p2p_replica is None:
+            daemon_listen_maddr = self.run_coroutine(DHT._get_p2p_daemon_listen_maddr)
+            self._p2p_replica = await P2P.replicate(daemon_listen_maddr)
+        return self._p2p_replica
+
+    @staticmethod
+    async def _get_p2p_daemon_listen_maddr(_dht: DHT, node: DHTNode) -> Multiaddr:
+        return node.p2p.daemon_listen_maddr
 
     def __del__(self):
         if self._parent_pid == os.getpid() and self.is_alive():
