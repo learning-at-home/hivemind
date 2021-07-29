@@ -12,6 +12,7 @@ from hivemind.averaging.key_manager import GroupKeyManager
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.p2p import PeerID
 from hivemind.proto.runtime_pb2 import CompressionType
+
 from test_utils.dht_swarms import launch_dht_instances
 
 

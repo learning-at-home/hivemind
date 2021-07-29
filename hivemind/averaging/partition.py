@@ -2,16 +2,15 @@
 Auxiliary data structures for AllReduceRunner
 """
 import asyncio
-from typing import Sequence, AsyncIterable, Tuple, Optional, TypeVar, Union, AsyncIterator
 from collections import deque
+from typing import AsyncIterable, AsyncIterator, Optional, Sequence, Tuple, TypeVar, Union
 
-import torch
 import numpy as np
+import torch
 
 from hivemind.proto.runtime_pb2 import CompressionType, Tensor
-from hivemind.utils.compression import serialize_torch_tensor, get_nbytes_per_value
 from hivemind.utils.asyncio import amap_in_executor
-
+from hivemind.utils.compression import get_nbytes_per_value, serialize_torch_tensor
 
 T = TypeVar("T")
 DEFAULT_PART_SIZE_BYTES = 2 ** 19

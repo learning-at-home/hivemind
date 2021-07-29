@@ -10,7 +10,7 @@ from sklearn.datasets import load_digits
 from hivemind import DHT
 from hivemind.moe.client import RemoteExpert, RemoteMixtureOfExperts, RemoteSwitchMixtureOfExperts
 from hivemind.moe.server import background_server
-from hivemind.optim import DecentralizedSGD, DecentralizedAdam
+from hivemind.optim import DecentralizedAdam, DecentralizedSGD
 
 
 @pytest.mark.forked

@@ -10,12 +10,12 @@ from math import isfinite
 from typing import AsyncIterator, Dict, Optional, Set, Tuple, Type
 
 from hivemind.averaging.group_info import GroupInfo
-from hivemind.averaging.key_manager import GroupKeyManager, GroupKey
+from hivemind.averaging.key_manager import GroupKey, GroupKeyManager
 from hivemind.dht import DHT, DHTID, DHTExpiration
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, ServicerBase
-from hivemind.utils import get_logger, timed_storage, TimedStorage, get_dht_time
-from hivemind.utils.asyncio import anext
 from hivemind.proto import averaging_pb2
+from hivemind.utils import TimedStorage, get_dht_time, get_logger, timed_storage
+from hivemind.utils.asyncio import anext
 
 logger = get_logger(__name__)
 

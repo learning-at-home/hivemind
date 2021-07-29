@@ -1,14 +1,13 @@
 import os
+import warnings
 from concurrent.futures import ThreadPoolExecutor
-from typing import Tuple, Sequence, Optional
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 import torch
-import warnings
 
 from hivemind.proto import runtime_pb2
 from hivemind.proto.runtime_pb2 import CompressionType
-
 
 FP32_EPS = 1e-06
 NUM_BYTES_FLOAT32 = 4

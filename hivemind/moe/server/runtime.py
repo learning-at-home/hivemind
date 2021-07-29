@@ -4,7 +4,7 @@ import threading
 from collections import defaultdict
 from itertools import chain
 from queue import SimpleQueue
-from selectors import DefaultSelector, EVENT_READ
+from selectors import EVENT_READ, DefaultSelector
 from statistics import mean
 from time import time
 from typing import Dict, NamedTuple, Optional

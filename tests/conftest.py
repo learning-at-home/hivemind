@@ -1,13 +1,12 @@
 import gc
-from contextlib import suppress
 import multiprocessing as mp
+from contextlib import suppress
 
 import psutil
 import pytest
 
-from hivemind.utils.mpfuture import MPFuture, SharedBytes
 from hivemind.utils.logging import get_logger
-
+from hivemind.utils.mpfuture import MPFuture, SharedBytes
 
 logger = get_logger(__name__)
 

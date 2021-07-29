@@ -6,11 +6,11 @@ import numpy as np
 import pytest
 
 import hivemind
-from hivemind.dht import DHTNode
 from hivemind import LOCALHOST
+from hivemind.dht import DHTNode
 from hivemind.moe.client.beam_search import MoEBeamSearcher
 from hivemind.moe.server import declare_experts, get_experts
-from hivemind.moe.server.expert_uid import UidEndpoint, is_valid_uid, is_valid_prefix, split_uid
+from hivemind.moe.server.expert_uid import UidEndpoint, is_valid_prefix, is_valid_uid, split_uid
 
 
 @pytest.mark.forked

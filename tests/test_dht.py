@@ -6,6 +6,7 @@ import pytest
 from multiaddr import Multiaddr
 
 import hivemind
+
 from test_utils.dht_swarms import launch_dht_instances
 
 

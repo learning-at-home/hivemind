@@ -2,20 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures._base as base
-from weakref import ref
-from contextlib import nullcontext
 import multiprocessing as mp
 import multiprocessing.connection
 import os
 import threading
 import uuid
+from contextlib import nullcontext
 from enum import Enum, auto
-from typing import Generic, TypeVar, Dict, Optional, Any, Callable, Type
+from typing import Any, Callable, Dict, Generic, Optional, Type, TypeVar
+from weakref import ref
 
 import torch  # used for py3.7-compatible shared memory
 
 from hivemind.utils.logging import get_logger
-
 
 logger = get_logger(__name__)
 

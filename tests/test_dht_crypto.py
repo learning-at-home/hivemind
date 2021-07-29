@@ -1,15 +1,15 @@
 import dataclasses
-import pickle
 import multiprocessing as mp
+import pickle
 
 import pytest
 
 import hivemind
-from hivemind.utils.timed_storage import get_dht_time
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.node import DHTNode
 from hivemind.dht.validation import DHTRecord
 from hivemind.utils.crypto import RSAPrivateKey
+from hivemind.utils.timed_storage import get_dht_time
 
 
 def test_rsa_signature_validator():

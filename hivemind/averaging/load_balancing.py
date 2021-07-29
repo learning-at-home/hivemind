@@ -1,4 +1,5 @@
-from typing import Sequence, Optional, Tuple
+from typing import Optional, Sequence, Tuple
+
 import numpy as np
 import scipy.optimize
 
