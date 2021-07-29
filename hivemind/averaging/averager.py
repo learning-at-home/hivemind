@@ -22,7 +22,7 @@ from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.averaging.partition import DEFAULT_PART_SIZE_BYTES
 from hivemind.dht import DHT, DHTID
-from hivemind.p2p import P2PContext, P2PHandlerError, PeerID as Endpoint, ServicerBase
+from hivemind.p2p import P2PContext, P2PHandlerError, PeerID, ServicerBase
 from hivemind.proto import averaging_pb2, runtime_pb2
 from hivemind.utils import MPFuture, get_logger, TensorDescriptor
 from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
@@ -194,7 +194,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             self._allow_state_sharing.value = value
 
     @property
-    def endpoint(self) -> Endpoint:
+    def peer_id(self) -> PeerID:
         return self.dht.peer_id
 
     def run(self):
@@ -281,7 +281,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         timeout: Optional[float] = None,
         allow_retries: bool = True,
         wait: bool = True,
-    ) -> Union[Optional[Dict[Endpoint, GatheredData]], MPFuture]:
+    ) -> Union[Optional[Dict[PeerID, GatheredData]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
 
@@ -375,7 +375,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         """Run All-Reduce in a given group and update tensors in place, return gathered metadata"""
         try:
             weights, bandwidths, mode_ids, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
-            user_gathered = dict(zip(group_info.endpoints, map(self.serializer.loads, user_gathered)))
+            user_gathered = dict(zip(group_info.peer_ids, map(self.serializer.loads, user_gathered)))
             modes = tuple(map(AveragingMode, mode_ids))
 
             # compute optimal part sizes from peer bandwidths; TODO: replace with proper load balancing
@@ -393,7 +393,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     prefix=self.prefix,
                     group_id=group_info.group_id,
                     tensors=local_tensors,
-                    ordered_group_endpoints=group_info.endpoints,
+                    ordered_peer_ids=group_info.peer_ids,
                     peer_fractions=peer_fractions,
                     weights=weights,
                     gathered=user_gathered,
@@ -406,7 +406,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     # actually run all-reduce
                     averaging_outputs = [output async for output in allreduce]
 
-                    if modes[group_info.endpoints.index(self.endpoint)] != AveragingMode.AUX:
+                    if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
                         assert len(local_tensors) == len(self._averaged_tensors)
                         for tensor, update in zip(local_tensors, averaging_outputs):
                             tensor.add_(update, alpha=self._averaging_alpha)
@@ -481,7 +481,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     asyncio.wait_for(
                         self.dht.store(
                             download_key,
-                            subkey=self.endpoint.to_base58(),
+                            subkey=self.peer_id.to_bytes(),
                             value=self.last_updated,
                             expiration_time=get_dht_time() + self._matchmaking.averaging_expiration,
                             return_future=True,
@@ -547,8 +547,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             key_manager = self._matchmaking.group_key_manager
             peer_priority, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
             peer_priority = {
-                Endpoint.from_base58(peer): float(info.value)
-                for peer, info in peer_priority.items()
+                PeerID(peer_id): float(info.value)
+                for peer_id, info in peer_priority.items()
                 if isinstance(info, ValueWithExpiration) and isinstance(info.value, (float, int))
             }
 
@@ -559,7 +559,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
             metadata = None
             for peer in sorted(peer_priority.keys(), key=peer_priority.get, reverse=True):
-                if peer != self.endpoint:
+                if peer != self.peer_id:
                     logger.info(f"Downloading parameters from peer {peer}")
                     try:
                         stub = self.get_stub(self._p2p, peer, namespace=self.prefix)

@@ -92,7 +92,7 @@ async def test_call_protobuf_handler(should_cancel, replicate, handle_name="hand
         except asyncio.CancelledError:
             nonlocal handler_cancelled
             handler_cancelled = True
-        return dht_pb2.PingResponse(peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()), available=True)
+        return dht_pb2.PingResponse(peer=dht_pb2.NodeInfo(node_id=server.peer_id.to_bytes()), available=True)
 
     server_pid = server_primary._child.pid
     await server.add_protobuf_handler(handle_name, ping_handler, dht_pb2.PingRequest)
@@ -104,12 +104,12 @@ async def test_call_protobuf_handler(should_cancel, replicate, handle_name="hand
     assert is_process_running(client_pid)
     await client.wait_for_at_least_n_peers(1)
 
-    ping_request = dht_pb2.PingRequest(peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()), validate=True)
-    expected_response = dht_pb2.PingResponse(peer=dht_pb2.NodeInfo(node_id=server.id.to_bytes()), available=True)
+    ping_request = dht_pb2.PingRequest(peer=dht_pb2.NodeInfo(node_id=client.peer_id.to_bytes()), validate=True)
+    expected_response = dht_pb2.PingResponse(peer=dht_pb2.NodeInfo(node_id=server.peer_id.to_bytes()), available=True)
 
     if should_cancel:
         call_task = asyncio.create_task(
-            client.call_protobuf_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)
+            client.call_protobuf_handler(server.peer_id, handle_name, ping_request, dht_pb2.PingResponse)
         )
         await asyncio.sleep(0.25)
 
@@ -119,7 +119,7 @@ async def test_call_protobuf_handler(should_cancel, replicate, handle_name="hand
         assert handler_cancelled
     else:
         actual_response = await client.call_protobuf_handler(
-            server.id, handle_name, ping_request, dht_pb2.PingResponse
+            server.peer_id, handle_name, ping_request, dht_pb2.PingResponse
         )
         assert actual_response == expected_response
         assert not handler_cancelled
@@ -147,10 +147,10 @@ async def test_call_protobuf_handler_error(handle_name="handle"):
     assert is_process_running(client_pid)
     await client.wait_for_at_least_n_peers(1)
 
-    ping_request = dht_pb2.PingRequest(peer=dht_pb2.NodeInfo(node_id=client.id.to_bytes()), validate=True)
+    ping_request = dht_pb2.PingRequest(peer=dht_pb2.NodeInfo(node_id=client.peer_id.to_bytes()), validate=True)
 
     with pytest.raises(P2PHandlerError) as excinfo:
-        await client.call_protobuf_handler(server.id, handle_name, ping_request, dht_pb2.PingResponse)
+        await client.call_protobuf_handler(server.peer_id, handle_name, ping_request, dht_pb2.PingResponse)
     assert "boom" in str(excinfo.value)
 
     await server.shutdown()
@@ -196,7 +196,7 @@ async def test_call_peer_single_process():
 
     await client.wait_for_at_least_n_peers(1)
 
-    _, reader, writer = await client.call_binary_stream_handler(server.id, handler_name)
+    _, reader, writer = await client.call_binary_stream_handler(server.peer_id, handler_name)
     await validate_square_stream(reader, writer)
 
     await server.shutdown()
@@ -213,7 +213,7 @@ async def run_server(handler_name, server_side, response_received):
 
     await server.add_binary_stream_handler(handler_name, handle_square_stream)
 
-    server_side.send(server.id)
+    server_side.send(server.peer_id)
     server_side.send(await server.get_visible_maddrs())
     while response_received.value == 0:
         await asyncio.sleep(0.5)
@@ -281,7 +281,7 @@ async def test_error_closes_connection():
 
     await client.wait_for_at_least_n_peers(1)
 
-    _, reader, writer = await client.call_binary_stream_handler(server.id, handler_name)
+    _, reader, writer = await client.call_binary_stream_handler(server.peer_id, handler_name)
     with closing(writer):
         await P2P.send_raw_data(b"raise_error", writer)
         with pytest.raises(asyncio.IncompleteReadError):  # Means that the connection is closed
@@ -290,7 +290,7 @@ async def test_error_closes_connection():
     # Despite the handler raised an exception, the server did not crash and ready for next requests
     assert is_process_running(server_pid)
 
-    _, reader, writer = await client.call_binary_stream_handler(server.id, handler_name)
+    _, reader, writer = await client.call_binary_stream_handler(server.peer_id, handler_name)
     with closing(writer):
         await P2P.send_raw_data(b"behave_normally", writer)
         assert await P2P.receive_raw_data(reader) == b"okay"
@@ -309,7 +309,7 @@ async def test_handlers_on_different_replicas():
             await P2P.send_raw_data(key, writer)
 
     server_primary = await P2P.create()
-    server_id = server_primary.id
+    server_id = server_primary.peer_id
     await server_primary.add_binary_stream_handler("handle_primary", partial(handler, key=b"primary"))
 
     server_replica1 = await replicate_if_needed(server_primary, True)

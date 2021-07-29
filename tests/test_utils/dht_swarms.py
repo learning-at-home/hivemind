@@ -52,15 +52,15 @@ def launch_swarm_in_separate_processes(
         proc.start()
         processes.append(proc)
 
-        node_id, peer_endpoint, peer_maddrs = info_queue.get()
-        dht[peer_endpoint] = node_id
+        node_id, peer_id, peer_maddrs = info_queue.get()
+        dht[peer_id] = node_id
         swarm_maddrs.append(peer_maddrs)
 
     def collect_info():
         while True:
-            node_id, peer_endpoint, peer_maddrs = info_queue.get()
+            node_id, peer_id, peer_maddrs = info_queue.get()
             with info_lock:
-                dht[peer_endpoint] = node_id
+                dht[peer_id] = node_id
                 swarm_maddrs.append(peer_maddrs)
 
                 if len(dht) == n_peers:

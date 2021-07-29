@@ -95,7 +95,7 @@ def _test_allreduce_once(n_clients, n_aux):
     for future in futures:
         result = future.result()
         for averager in averagers:
-            assert averager.endpoint in result
+            assert averager.peer_id in result
 
     for averager in averagers:
         if averager.mode != AveragingMode.AUX:
@@ -291,13 +291,13 @@ def test_allgather(n_averagers=8, target_group_size=4):
         futures.append(averager.step(wait=False, gather=dict(batch_size=123 + i, foo="bar")))
 
     reference_metadata = {
-        averager.endpoint: dict(batch_size=123 + i, foo="bar") for i, averager in enumerate(averagers)
+        averager.peer_id: dict(batch_size=123 + i, foo="bar") for i, averager in enumerate(averagers)
     }
     for future in futures:
         gathered = future.result()
         assert len(gathered) == target_group_size
-        for endpoint in gathered:
-            assert gathered[endpoint] == reference_metadata[endpoint]
+        for peer_id in gathered:
+            assert gathered[peer_id] == reference_metadata[peer_id]
 
     for process in averagers + dht_instances:
         process.shutdown()

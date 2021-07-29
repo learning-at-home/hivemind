@@ -5,7 +5,7 @@ from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Type
 import torch
 
 from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer, AllreduceException
-from hivemind.p2p import P2P, P2PContext, PeerID as Endpoint, ServicerBase, StubBase
+from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase, StubBase
 from hivemind.utils import get_logger
 from hivemind.utils.asyncio import anext, achain, aiter, aenumerate, amap_in_executor, asingle
 from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
@@ -38,11 +38,11 @@ class AllReduceRunner(ServicerBase):
     :param group_id: unique identifier of this specific all-reduce run
     :param tensors: local tensors that should be averaged with groupmates
     :param tensors: local tensors that should be averaged with groupmates
-    :param endpoint: your endpoint, must be included in ordered_group_endpoints
-    :param ordered_group_endpoints: group endpoints ordered s.t. i-th endpoint is responsible for averaging i-th part
+    :param peer_id: your peer_id, must be included in ordered_peer_ids
+    :param ordered_peer_ids: group peer_ids ordered s.t. i-th peer_id is responsible for averaging i-th part
     :param peer_fractions: for each peer, a target fraction of vector elements that this peer should average
       (the actual number of values by peer will be nearly proportional, but there are no exact guarantees)
-    :param modes: AveragingMode for each peer in ordered_group_endpoints (normal, client-only or auxiliary)
+    :param modes: AveragingMode for each peer in ordered_peer_ids (normal, client-only or auxiliary)
     :param weights: scaling coefficients for weighted averaging (default = equal weights for all non-aux peers)
     :param gathered: additional user-defined data collected from this group
     :param kwargs: additional paramters (e.g. part_size_bytes) will be passed to TensorPartContainer
@@ -56,16 +56,16 @@ class AllReduceRunner(ServicerBase):
         prefix: Optional[str],
         group_id: GroupID,
         tensors: Sequence[torch.Tensor],
-        ordered_group_endpoints: Sequence[Endpoint],
+        ordered_peer_ids: Sequence[PeerID],
         peer_fractions: Tuple[float, ...],
         weights: Optional[Sequence[float]] = None,
         modes: Optional[Sequence[AveragingMode]] = None,
-        gathered: Optional[Dict[Endpoint, Any]] = None,
+        gathered: Optional[Dict[PeerID, Any]] = None,
         **kwargs,
     ):
         self._p2p = p2p
-        self.endpoint = p2p.id
-        assert self.endpoint in ordered_group_endpoints, "endpoint is not a part of the group"
+        self.peer_id = p2p.peer_id
+        assert self.peer_id in ordered_peer_ids, "peer_id is not a part of the group"
 
         if not issubclass(servicer_type, ServicerBase):
             raise TypeError("`servicer_type` is expected to be a ServicerBase subclass")
@@ -74,60 +74,60 @@ class AllReduceRunner(ServicerBase):
 
         modes = modes or tuple(AveragingMode.CLIENT if frac == 0 else AveragingMode.NODE for frac in peer_fractions)
         weights = weights or tuple(int(mode != AveragingMode.AUX) for mode in modes)
-        assert len(weights) == len(modes) == len(ordered_group_endpoints), "lists have inconsistent length"
+        assert len(weights) == len(modes) == len(ordered_peer_ids), "lists have inconsistent length"
         assert any(mode != AveragingMode.CLIENT for mode in modes), "cannot run allreduce without reducers"
         for mode, frac, weight in zip(modes, peer_fractions, weights):
             assert mode != AveragingMode.CLIENT or frac == 0, "client-mode peer should have zero all-reduce fraction"
             assert mode != AveragingMode.AUX or weight == 0, "auxiliary peer should have zero averaging weight"
 
-        self.group_id, self.ordered_group_endpoints = group_id, ordered_group_endpoints
+        self.group_id, self.ordered_peer_ids = group_id, ordered_peer_ids
         self.modes, self.peer_fractions, self.gathered = modes, peer_fractions, gathered
 
         self._future = asyncio.Future()
 
-        self.sender_endpoints, self.sender_weights = [], []
-        for endpoint, weight, mode in zip(self.ordered_group_endpoints, weights, modes):
+        self.sender_peer_ids, self.sender_weights = [], []
+        for peer_id, weight, mode in zip(self.ordered_peer_ids, weights, modes):
             if mode != AveragingMode.AUX:
-                self.sender_endpoints.append(endpoint)
+                self.sender_peer_ids.append(peer_id)
                 self.sender_weights.append(weight)
 
-        endpoint_index = self.ordered_group_endpoints.index(self.endpoint)
+        peer_id_index = self.ordered_peer_ids.index(self.peer_id)
         self.tensor_part_container = TensorPartContainer(tensors, peer_fractions, **kwargs)
-        self.parts_for_local_averaging = self.tensor_part_container.get_raw_input_parts(endpoint_index)
+        self.parts_for_local_averaging = self.tensor_part_container.get_raw_input_parts(peer_id_index)
         self.tensor_part_reducer = TensorPartReducer(
             tuple(part.shape for part in self.parts_for_local_averaging),
-            len(self.sender_endpoints),
+            len(self.sender_peer_ids),
             self.sender_weights,
         )
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.endpoint}, group_size={self.group_size})"
+        return f"{self.__class__.__name__}({self.peer_id}, group_size={self.group_size})"
 
     def __aiter__(self):
         return self.run()
 
-    def __contains__(self, endpoint: Endpoint):
-        return endpoint in self.ordered_group_endpoints
+    def __contains__(self, peer_id: PeerID):
+        return peer_id in self.ordered_peer_ids
 
     @property
     def group_size(self):
-        return len(self.ordered_group_endpoints)
+        return len(self.ordered_peer_ids)
 
-    def _get_peer_stub(self, peer: Endpoint) -> StubBase:
+    def _get_peer_stub(self, peer: PeerID) -> StubBase:
         return self._servicer_type.get_stub(self._p2p, peer, namespace=self._prefix)
 
     async def run(self) -> AsyncIterator[torch.Tensor]:
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""
         pending_tasks = set()
         try:
-            if len(self.sender_endpoints) == 0:
+            if len(self.sender_peer_ids) == 0:
                 logger.debug(f"{self} - finished all-reduce early: all peers are auxiliaries ({self.modes})")
                 self.finalize()
 
-            elif self.endpoint in self.sender_endpoints:
-                for endpoint, parts in zip(self.ordered_group_endpoints, self.tensor_part_container.num_parts_by_peer):
+            elif self.peer_id in self.sender_peer_ids:
+                for peer_id, parts in zip(self.ordered_peer_ids, self.tensor_part_container.num_parts_by_peer):
                     if parts != 0:
-                        pending_tasks.add(asyncio.create_task(self._communicate_with_peer(endpoint)))
+                        pending_tasks.add(asyncio.create_task(self._communicate_with_peer(peer_id)))
 
                 async for averaged_tensor_delta in self.tensor_part_container.iterate_output_tensors():
                     yield averaged_tensor_delta  # delta = averaged_tensor - original_tensor
@@ -143,11 +143,11 @@ class AllReduceRunner(ServicerBase):
                 task.cancel()
             raise
 
-    async def _communicate_with_peer(self, peer_endpoint: Endpoint):
+    async def _communicate_with_peer(self, peer_id: PeerID):
         """Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors"""
-        peer_index = self.ordered_group_endpoints.index(peer_endpoint)
-        if peer_endpoint == self.endpoint:
-            sender_index = self.sender_endpoints.index(peer_endpoint)
+        peer_index = self.ordered_peer_ids.index(peer_id)
+        if peer_id == self.peer_id:
+            sender_index = self.sender_peer_ids.index(peer_id)
             for part_index, tensor_part in enumerate(self.parts_for_local_averaging):
                 averaged_part = await self.tensor_part_reducer.accumulate_part(sender_index, part_index, tensor_part)
                 self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part - tensor_part)
@@ -155,7 +155,7 @@ class AllReduceRunner(ServicerBase):
         else:
             loop = asyncio.get_event_loop()
             code = None
-            stream = self._get_peer_stub(peer_endpoint).rpc_aggregate_part(self._generate_input_for_peer(peer_index))
+            stream = self._get_peer_stub(peer_id).rpc_aggregate_part(self._generate_input_for_peer(peer_index))
             async for part_index, msg in aenumerate(stream):
                 if code is None:
                     code = msg.code
@@ -164,7 +164,7 @@ class AllReduceRunner(ServicerBase):
 
             if code != averaging_pb2.AVERAGED_PART:
                 raise AllreduceException(
-                    f"peer {peer_endpoint} returned {averaging_pb2.MessageCode.Name(code)} "
+                    f"peer {peer_id} returned {averaging_pb2.MessageCode.Name(code)} "
                     f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}"
                     f", allreduce failed"
                 )
@@ -175,14 +175,13 @@ class AllReduceRunner(ServicerBase):
         yield averaging_pb2.AveragingData(
             code=averaging_pb2.PART_FOR_AVERAGING,
             group_id=self.group_id,
-            endpoint=self.endpoint.to_base58(),
             tensor_part=first_part,
         )
         async for part in parts_aiter:
             yield averaging_pb2.AveragingData(tensor_part=part)
 
     async def rpc_aggregate_part(
-        self, stream: AsyncIterator[averaging_pb2.AveragingData], _context: P2PContext
+        self, stream: AsyncIterator[averaging_pb2.AveragingData], context: P2PContext
     ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """a peer sends us a part of his tensor; we should average it with other peers and return the difference"""
         request: averaging_pb2.AveragingData = await anext(stream)
@@ -193,7 +192,7 @@ class AllReduceRunner(ServicerBase):
 
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
-                sender_index = self.sender_endpoints.index(Endpoint.from_base58(request.endpoint))
+                sender_index = self.sender_peer_ids.index(context.remote_id)
                 async for msg in self._accumulate_parts_streaming(achain(aiter(request), stream), sender_index):
                     yield msg
 
@@ -202,8 +201,8 @@ class AllReduceRunner(ServicerBase):
                 yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
         else:
             error_code = averaging_pb2.MessageCode.Name(request.code)
-            logger.debug(f"{self} - peer {request.endpoint} sent {error_code}, allreduce cannot continue")
-            self.finalize(exception=AllreduceException(f"peer {request.endpoint} sent {error_code}."))
+            logger.debug(f"{self} - peer {context.remote_id} sent {error_code}, allreduce cannot continue")
+            self.finalize(exception=AllreduceException(f"peer {context.remote_id} sent {error_code}."))
             yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
     def _check_reasons_to_reject(self, request: averaging_pb2.AveragingData) -> Optional[averaging_pb2.AveragingData]:
@@ -230,10 +229,10 @@ class AllReduceRunner(ServicerBase):
             )
             yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
 
-    async def _send_error_to_peer(self, peer_endpoint: Endpoint, code: averaging_pb2.MessageCode):
-        error = averaging_pb2.AveragingData(group_id=self.group_id, endpoint=self.endpoint.to_base58(), code=code)
+    async def _send_error_to_peer(self, peer_id: PeerID, code: averaging_pb2.MessageCode):
+        error = averaging_pb2.AveragingData(group_id=self.group_id, code=code)
         # In case of reporting the error, we expect the response stream to contain exactly one item
-        await asingle(self._get_peer_stub(peer_endpoint).rpc_aggregate_part(aiter(error)))
+        await asingle(self._get_peer_stub(peer_id).rpc_aggregate_part(aiter(error)))
 
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):
         """finish or terminate AllReduceRunner, propagate any errors / cancellations to peers."""
@@ -246,9 +245,9 @@ class AllReduceRunner(ServicerBase):
             else:
                 code = averaging_pb2.INTERNAL_ERROR
             logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
-            for peer_endpoint, mode in zip(self.ordered_group_endpoints, self.modes):
-                if peer_endpoint != self.endpoint and mode != AveragingMode.CLIENT:
-                    pending_tasks.add(asyncio.create_task(self._send_error_to_peer(peer_endpoint, code)))
+            for peer_id, mode in zip(self.ordered_peer_ids, self.modes):
+                if peer_id != self.peer_id and mode != AveragingMode.CLIENT:
+                    pending_tasks.add(asyncio.create_task(self._send_error_to_peer(peer_id, code)))
 
         if not self._future.done():
             if cancel:
