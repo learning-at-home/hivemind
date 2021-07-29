@@ -1,8 +1,8 @@
 import time
 
-from hivemind.utils.timed_storage import get_dht_time
-from hivemind.dht.storage import DHTLocalStorage, DHTID, DictionaryDHTValue
+from hivemind.dht.storage import DHTID, DHTLocalStorage, DictionaryDHTValue
 from hivemind.utils.serializer import MSGPackSerializer
+from hivemind.utils.timed_storage import get_dht_time
 
 
 def test_store():

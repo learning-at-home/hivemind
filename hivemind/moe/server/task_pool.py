@@ -15,7 +15,7 @@ from typing import List, Tuple, Dict, Any, Generator, Callable
 import torch
 
 from hivemind.utils import get_logger
-from hivemind.utils.mpfuture import MPFuture, InvalidStateError
+from hivemind.utils.mpfuture import InvalidStateError, MPFuture
 
 logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))
@@ -100,7 +100,7 @@ class TaskPool(TaskPoolBase):
 
     def submit_task(self, *args: torch.Tensor) -> Future:
         """Add task to this pool's queue, return Future for its output"""
-        task = Task(MPFuture(synchronize=False), args)
+        task = Task(MPFuture(), args)
         if self.get_task_size(task) > self.max_batch_size:
             exc = ValueError(f"Task size greater than max_batch_size ({self.max_batch_size}), it can't be processed")
             task.future.set_exception(exc)

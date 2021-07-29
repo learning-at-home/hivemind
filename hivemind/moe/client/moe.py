@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import time
-from queue import Queue, Empty
-from typing import Tuple, List, Optional, Dict, Any
+from queue import Empty, Queue
+from typing import Any, Dict, List, Optional, Tuple
 
 import grpc
 import torch
@@ -11,11 +11,11 @@ from torch.autograd.function import once_differentiable
 
 import hivemind
 from hivemind.moe.client.beam_search import MoEBeamSearcher
-from hivemind.moe.client.expert import RemoteExpert, DUMMY, _get_expert_stub
-from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
+from hivemind.moe.client.expert import DUMMY, RemoteExpert, _get_expert_stub
 from hivemind.moe.server.expert_uid import UID_DELIMITER
-from hivemind.utils import nested_pack, nested_flatten, nested_map
-from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
+from hivemind.utils import nested_flatten, nested_map, nested_pack
+from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)

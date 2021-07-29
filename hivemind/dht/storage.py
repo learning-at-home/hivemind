@@ -4,7 +4,7 @@ from typing import Optional, Union
 
 from hivemind.dht.routing import DHTID, BinaryDHTValue, Subkey
 from hivemind.utils.serializer import MSGPackSerializer
-from hivemind.utils.timed_storage import KeyType, ValueType, TimedStorage, DHTExpiration
+from hivemind.utils.timed_storage import DHTExpiration, KeyType, TimedStorage, ValueType
 
 
 @MSGPackSerializer.ext_serializable(0x50)

@@ -57,11 +57,10 @@ def benchmark_averaging(
         dht = hivemind.DHT(initial_peers=initial_peers, start=True)
         initial_bits = bin(index % num_groups)[2:].rjust(nbits, "0")
         averager = hivemind.averaging.DecentralizedAverager(
-            peer_tensors[i],
+            peer_tensors[index],
             dht,
             prefix="my_tensor",
             initial_group_bits=initial_bits,
-            listen_on=f"{LOCALHOST}:*",
             compression_type=runtime_pb2.CompressionType.FLOAT16,
             target_group_size=target_group_size,
             averaging_expiration=averaging_expiration,
@@ -71,7 +70,7 @@ def benchmark_averaging(
         processes.update({dht, averager})
 
         logger.info(
-            f"Averager {index}: started on endpoint {averager.endpoint}, group_bits: {averager.get_group_bits()}"
+            f"Averager {index}: started with peer id {averager.peer_id}, group_bits: {averager.get_group_bits()}"
         )
         for step in range(num_rounds):
             try:

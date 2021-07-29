@@ -14,7 +14,7 @@ import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto.p2pd_pb2 import RPCError
-from hivemind.utils.asyncio import aiter
+from hivemind.utils.asyncio import aiter, asingle
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -44,7 +44,7 @@ class P2P:
       - `P2P.add_binary_stream_handler` transfers raw data using bi-directional streaming interface
 
     To access these handlers, a P2P instance can `P2P.call_protobuf_handler`/`P2P.call_binary_stream_handler`,
-    using the recipient's unique `P2P.id` and the name of the corresponding handler.
+    using the recipient's unique `P2P.peer_id` and the name of the corresponding handler.
     """
 
     HEADER_LEN = 8
@@ -65,7 +65,7 @@ class P2P:
     _UNIX_SOCKET_PREFIX = "/unix/tmp/hivemind-"
 
     def __init__(self):
-        self.id = None
+        self.peer_id = None
         self._child = None
         self._alive = False
         self._listen_task = None
@@ -212,8 +212,8 @@ class P2P:
         return self
 
     async def _ping_daemon(self) -> None:
-        self.id, self._visible_maddrs = await self._client.identify()
-        logger.debug(f"Launched p2pd with id = {self.id}, host multiaddrs = {self._visible_maddrs}")
+        self.peer_id, self._visible_maddrs = await self._client.identify()
+        logger.debug(f"Launched p2pd with peer id = {self.peer_id}, host multiaddrs = {self._visible_maddrs}")
 
     async def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
         """
@@ -226,9 +226,9 @@ class P2P:
             _, self._visible_maddrs = await self._client.identify()
 
         if not self._visible_maddrs:
-            raise ValueError(f"No multiaddrs found for peer {self.id}")
+            raise ValueError(f"No multiaddrs found for peer {self.peer_id}")
 
-        p2p_maddr = Multiaddr(f"/p2p/{self.id.to_base58()}")
+        p2p_maddr = Multiaddr(f"/p2p/{self.peer_id.to_base58()}")
         return [addr.encapsulate(p2p_maddr) for addr in self._visible_maddrs]
 
     async def list_peers(self) -> List[PeerInfo]:
@@ -307,15 +307,12 @@ class P2P:
           they will not be received while the prefetch buffer is full.
         """
 
-        if self._listen_task is None:
-            self._start_listening()
-
         async def _handle_stream(
             stream_info: StreamInfo, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         ) -> None:
             context = P2PContext(
                 handle_name=name,
-                local_id=self.id,
+                local_id=self.peer_id,
                 remote_id=stream_info.peer_id,
                 remote_maddr=stream_info.addr,
             )
@@ -358,12 +355,12 @@ class P2P:
                 finally:
                     processing_task.cancel()
 
-        await self._client.stream_handler(name, _handle_stream)
+        await self.add_binary_stream_handler(name, _handle_stream)
 
     async def _iterate_protobuf_stream_handler(
         self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: type
     ) -> TOutputStream:
-        _, reader, writer = await self._client.stream_open(peer_id, (name,))
+        _, reader, writer = await self.call_binary_stream_handler(peer_id, name)
 
         async def _write_to_stream() -> None:
             async for request in requests:
@@ -403,15 +400,7 @@ class P2P:
         """
 
         async def _stream_handler(requests: P2P.TInputStream, context: P2PContext) -> P2P.TOutputStream:
-            if stream_input:
-                input = requests
-            else:
-                count = 0
-                async for input in requests:
-                    count += 1
-                if count != 1:
-                    raise ValueError(f"Got {count} requests for handler {name} instead of one")
-
+            input = requests if stream_input else await asingle(requests)
             output = handler(input, context)
 
             if isinstance(output, AsyncIterableABC):
@@ -431,13 +420,7 @@ class P2P:
     ) -> Awaitable[TOutputProtobuf]:
         requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
         responses = self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
-
-        count = 0
-        async for response in responses:
-            count += 1
-        if count != 1:
-            raise ValueError(f"Got {count} responses from handler {name} instead of one")
-        return response
+        return await asingle(responses)
 
     def iterate_protobuf_handler(
         self,
@@ -492,7 +475,7 @@ class P2P:
         if self._child is not None and self._child.poll() is None:
             self._child.terminate()
             self._child.wait()
-            logger.debug(f"Terminated p2pd with id = {self.id}")
+            logger.debug(f"Terminated p2pd with id = {self.peer_id}")
 
             with suppress(FileNotFoundError):
                 os.remove(self._daemon_listen_maddr["unix"])

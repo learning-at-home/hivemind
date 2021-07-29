@@ -1,6 +1,6 @@
 """ A unified interface for several common serialization methods """
-from typing import Dict, Any
 from abc import ABC, abstractmethod
+from typing import Any, Dict
 
 import msgpack
 

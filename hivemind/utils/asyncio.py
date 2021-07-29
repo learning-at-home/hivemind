@@ -1,11 +1,10 @@
-from concurrent.futures import ThreadPoolExecutor
-from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable, Tuple, Optional, Callable
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from typing import AsyncIterable, AsyncIterator, Awaitable, Callable, Optional, Tuple, TypeVar, Union
 
 import uvloop
 
 from hivemind.utils.logging import get_logger
-
 
 T = TypeVar("T")
 logger = get_logger(__name__)
@@ -59,6 +58,18 @@ async def aenumerate(aiterable: AsyncIterable[T]) -> AsyncIterable[Tuple[int, T]
         index += 1
 
 
+async def asingle(aiter: AsyncIterable[T]) -> T:
+    """If ``aiter`` has exactly one item, returns this item. Otherwise, raises `ValueError`."""
+    count = 0
+    async for item in aiter:
+        count += 1
+        if count == 2:
+            raise ValueError("asingle() expected an iterable with exactly one item, but got two or more items")
+    if count == 0:
+        raise ValueError("asingle() expected an iterable with exactly one item, but got an empty iterable")
+    return item
+
+
 async def await_cancelled(awaitable: Awaitable) -> bool:
     try:
         await awaitable
@@ -70,7 +81,10 @@ async def await_cancelled(awaitable: Awaitable) -> bool:
 
 
 async def amap_in_executor(
-    func: Callable[..., T], *iterables: AsyncIterable, max_prefetch: int, executor: Optional[ThreadPoolExecutor] = None
+    func: Callable[..., T],
+    *iterables: AsyncIterable,
+    max_prefetch: Optional[int] = None,
+    executor: Optional[ThreadPoolExecutor] = None,
 ) -> AsyncIterator[T]:
     """iterate from an async iterable in a background thread, yield results to async iterable"""
     loop = asyncio.get_event_loop()

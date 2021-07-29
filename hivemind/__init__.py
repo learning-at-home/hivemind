@@ -2,19 +2,19 @@ from hivemind.averaging import DecentralizedAverager, TrainingAverager
 from hivemind.dht import DHT
 from hivemind.moe import (
     ExpertBackend,
-    Server,
-    register_expert_class,
     RemoteExpert,
     RemoteMixtureOfExperts,
     RemoteSwitchMixtureOfExperts,
+    Server,
+    register_expert_class,
 )
 from hivemind.optim import (
     CollaborativeAdaptiveOptimizer,
-    DecentralizedOptimizerBase,
     CollaborativeOptimizer,
-    DecentralizedOptimizer,
-    DecentralizedSGD,
     DecentralizedAdam,
+    DecentralizedOptimizer,
+    DecentralizedOptimizerBase,
+    DecentralizedSGD,
 )
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, PeerInfo
 from hivemind.utils import *

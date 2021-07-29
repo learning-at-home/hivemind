@@ -2,7 +2,7 @@
 import asyncio
 import heapq
 from collections import Counter
-from typing import Dict, Awaitable, Callable, Any, Tuple, List, Set, Collection, Optional
+from typing import Any, Awaitable, Callable, Collection, Dict, List, Optional, Set, Tuple
 
 from hivemind.dht.routing import DHTID
 

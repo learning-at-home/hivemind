@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from typing import Tuple, List
+from typing import List, Tuple
 
 import grpc
 import torch
 
-from hivemind.moe.client.expert import RemoteExpert, DUMMY
+from hivemind.moe.client.expert import DUMMY, RemoteExpert
 from hivemind.moe.client.moe import RemoteMixtureOfExperts, _RemoteCallMany
 from hivemind.moe.server.expert_uid import UID_DELIMITER
-from hivemind.utils import nested_pack, nested_flatten
+from hivemind.utils import nested_flatten, nested_pack
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
