@@ -10,7 +10,7 @@ from abc import ABCMeta, abstractmethod
 from collections import namedtuple
 from concurrent.futures import Future
 from queue import Empty
-from typing import List, Tuple, Dict, Any, Generator, Callable
+from typing import Any, Callable, Dict, Generator, List, Tuple
 
 import torch
 
