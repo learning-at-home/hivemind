@@ -138,13 +138,14 @@ class ControlClient:
                 self.handler_tasks[call_id].cancel()
 
     async def _write_to_persistent_conn(self, writer: asyncio.StreamWriter):
-        # with closing(writer):
-        while True:
-            msg = await self.pending_messages.get()
-            await write_pbmsg(writer, msg)
+        with closing(writer):
+            while True:
+                msg = await self.pending_messages.get()
+                await write_pbmsg(writer, msg)
 
     async def _handle_persistent_request(self, call_id: uuid.UUID, request: p2pd_pb.CallUnaryRequest):
-        assert request.proto in self.unary_handlers
+        if request.proto not in self.unary_handlers:
+            logger.warning(f"Protocol {request.proto} not supported")
 
         try:
             remote_id = PeerID(request.peer)
