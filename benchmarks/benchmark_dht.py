@@ -38,9 +38,7 @@ def benchmark_dht(
         neighbors = sum(
             [peer.get_visible_maddrs() for peer in random.sample(peers, min(initial_peers, len(peers)))], []
         )
-        peer = hivemind.DHT(
-            initial_peers=neighbors, start=True, wait_timeout=wait_timeout
-        )
+        peer = hivemind.DHT(initial_peers=neighbors, start=True, wait_timeout=wait_timeout)
         peers.append(peer)
 
     store_peer, get_peer = peers[-2:]
