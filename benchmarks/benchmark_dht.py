@@ -5,7 +5,6 @@ import time
 from tqdm import trange
 
 import hivemind
-from hivemind.dht import DEFAULT_NUM_WORKERS
 from hivemind.moe.server import declare_experts, get_experts
 from hivemind.utils.limits import increase_file_limit
 
