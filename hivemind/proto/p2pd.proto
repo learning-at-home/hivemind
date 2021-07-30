@@ -53,13 +53,12 @@ message Response {
 // Persistent connection request
 message PCRequest {
   required bytes callId = 1;
-  optional int64 timeout = 2;
 
   oneof message {
-    AddUnaryHandlerRequest addUnaryHandler = 3;
-    CallUnaryRequest  callUnary = 4;
-    CallUnaryResponse unaryResponse = 5;
-    Cancel cancel = 6;
+    AddUnaryHandlerRequest addUnaryHandler = 2;
+    CallUnaryRequest  callUnary = 3;
+    CallUnaryResponse unaryResponse = 4;
+    Cancel cancel = 5;
   }
 }
 

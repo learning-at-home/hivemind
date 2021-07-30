@@ -138,7 +138,7 @@ class ControlClient:
                 self.handler_tasks[call_id].cancel()
 
     async def _write_to_persistent_conn(self, writer: asyncio.StreamWriter):
-        #with closing(writer):
+        # with closing(writer):
         while True:
             msg = await self.pending_messages.get()
             await write_pbmsg(writer, msg)
