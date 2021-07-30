@@ -39,7 +39,7 @@ from hivemind.utils.timed_storage import DHTExpiration, TimedStorage, ValueWithE
 logger = get_logger(__name__)
 
 
-DHT_DEFAULT_NUM_WORKERS = os.environ.get("HIVEMIND_DHT_NUM_WORKERS", 8)
+DEFAULT_NUM_WORKERS = os.environ.get("HIVEMIND_DHT_NUM_WORKERS", 8)
 
 
 class DHTNode:
@@ -114,7 +114,7 @@ class DHTNode:
         cache_refresh_before_expiry: float = 5,
         cache_on_store: bool = True,
         reuse_get_requests: bool = True,
-        num_workers: int = DHT_DEFAULT_NUM_WORKERS,
+        num_workers: int = DEFAULT_NUM_WORKERS,
         chunk_size: int = 16,
         blacklist_time: float = 5.0,
         backoff_rate: float = 2.0,
