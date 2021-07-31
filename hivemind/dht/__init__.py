@@ -23,7 +23,7 @@ from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, Type
 
 from multiaddr import Multiaddr
 
-from hivemind.dht.node import DHTNode
+from hivemind.dht.node import DEFAULT_NUM_WORKERS, DHTNode
 from hivemind.dht.routing import DHTID, DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.p2p import P2P, PeerID
@@ -43,7 +43,7 @@ class DHT(mp.Process):
     :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
     :param start: if True, automatically starts the background process on creation. Otherwise await manual start
     :param daemon: if True, the background process is marked as daemon and automatically terminated after main process
-    :param max_workers: declare_experts and get_experts will use up to this many parallel workers
+    :param num_workers: declare_experts and get_experts will use up to this many parallel workers
       (but no more than one per key)
     :param expiration: experts declared from this node expire after this many seconds (default = 5 minutes)
     :param record_validators: instances of RecordValidatorBase used for signing and validating stored records.
@@ -62,7 +62,7 @@ class DHT(mp.Process):
         *,
         start: bool,
         daemon: bool = True,
-        max_workers: Optional[int] = None,
+        num_workers: int = DEFAULT_NUM_WORKERS,
         record_validators: Iterable[RecordValidatorBase] = (),
         shutdown_timeout: float = 3,
         await_ready: bool = True,
@@ -81,7 +81,7 @@ class DHT(mp.Process):
             raise TypeError("initial_peers should be of type Optional[Sequence[Union[Multiaddr, str]]]")
         self.initial_peers = initial_peers
         self.kwargs = kwargs
-        self.max_workers = max_workers
+        self.num_workers = num_workers
 
         self._record_validator = CompositeValidator(record_validators)
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)
@@ -106,7 +106,7 @@ class DHT(mp.Process):
             async def _run():
                 self._node = await DHTNode.create(
                     initial_peers=self.initial_peers,
-                    num_workers=self.max_workers or 1,
+                    num_workers=self.num_workers,
                     record_validator=self._record_validator,
                     **self.kwargs,
                 )
