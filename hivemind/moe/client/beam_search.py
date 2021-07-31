@@ -2,22 +2,22 @@ import asyncio
 import heapq
 from collections import deque
 from functools import partial
-from typing import Sequence, Optional, List, Tuple, Dict, Deque, Union, Set, Iterator
+from typing import Deque, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
-from hivemind.dht import DHT, DHTNode, DHTExpiration
+from hivemind.dht import DHT, DHTExpiration, DHTNode
 from hivemind.moe.client.expert import RemoteExpert
 from hivemind.moe.server.expert_uid import (
-    ExpertUID,
-    ExpertPrefix,
     FLAT_EXPERT,
-    UidEndpoint,
-    Score,
-    Coordinate,
     PREFIX_PATTERN,
     UID_DELIMITER,
+    Coordinate,
+    ExpertPrefix,
+    ExpertUID,
+    Score,
+    UidEndpoint,
     is_valid_prefix,
 )
-from hivemind.utils import get_logger, get_dht_time, MPFuture
+from hivemind.utils import MPFuture, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 

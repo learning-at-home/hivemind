@@ -6,6 +6,7 @@ import pytest
 from multiaddr import Multiaddr
 
 import hivemind
+
 from test_utils.dht_swarms import launch_dht_instances
 
 
@@ -103,5 +104,5 @@ async def test_dht_get_visible_maddrs():
     p2p = await hivemind.p2p.P2P.create(announce_maddrs=[dummy_endpoint])
     dht = hivemind.DHT(start=True, p2p=await p2p.replicate(p2p.daemon_listen_maddr))
 
-    assert dht.get_visible_maddrs() == [dummy_endpoint.encapsulate(f"/p2p/{p2p.id}")]
+    assert dht.get_visible_maddrs() == [dummy_endpoint.encapsulate(f"/p2p/{p2p.peer_id}")]
     dht.shutdown()

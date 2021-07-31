@@ -4,9 +4,8 @@ import pytest
 import torch
 
 import hivemind
-from hivemind.moe.server import background_server, declare_experts
 from hivemind.moe.client.expert import DUMMY
-from hivemind.moe.server import layers
+from hivemind.moe.server import background_server, declare_experts, layers
 
 
 @pytest.mark.forked

@@ -1,14 +1,14 @@
 import asyncio
-import re
 import random
-from typing import Optional, List, Tuple
+import re
+from typing import List, Optional, Tuple
 
 import numpy as np
 
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.dht import DHT
-from hivemind.p2p import PeerID as Endpoint
-from hivemind.utils import get_logger, DHTExpiration, get_dht_time, ValueWithExpiration
+from hivemind.p2p import PeerID
+from hivemind.utils import DHTExpiration, ValueWithExpiration, get_dht_time, get_logger
 
 GroupKey = str
 GROUP_PATTERN = re.compile("^(([^.])+)[.]0b[01]*$")  # e.g. bert_exp4_averaging.0b01001101
@@ -44,7 +44,7 @@ class GroupKeyManager:
             initial_group_nbits = self.get_suggested_nbits(search_result) or 0
             initial_group_bits = "".join(random.choice("01") for _ in range(initial_group_nbits))
         self.dht, self.prefix, self.group_bits = dht, prefix, initial_group_bits
-        self.endpoint = dht.peer_id
+        self.peer_id = dht.peer_id
         self.target_group_size = target_group_size
         self.insufficient_size = insufficient_size or max(1, target_group_size // 2)
         self.excessive_size = excessive_size or target_group_size * 3
@@ -56,13 +56,13 @@ class GroupKeyManager:
         return f"{self.prefix}.0b{self.group_bits}"
 
     async def declare_averager(
-        self, group_key: GroupKey, endpoint: Endpoint, expiration_time: float, looking_for_group: bool = True
+        self, group_key: GroupKey, peer_id: PeerID, expiration_time: float, looking_for_group: bool = True
     ) -> bool:
         """
         Add (or remove) the averager to a given allreduce bucket
 
         :param group_key: allreduce group key, e.g. my_averager.0b011011101
-        :param endpoint: averager public endpoint for incoming requests
+        :param peer_id: averager public peer_id for incoming requests
         :param expiration_time: intent to run allreduce before this timestamp
         :param looking_for_group: by default (True), declare the averager as "looking for group" in a given group;
           If False, this will instead mark that the averager as no longer looking for group, (e.g. it already finished)
@@ -73,20 +73,20 @@ class GroupKeyManager:
         expiration_time = expiration_time if looking_for_group else float(np.nextafter(expiration_time, float("inf")))
         return await self.dht.store(
             key=group_key,
-            subkey=endpoint.to_base58(),
+            subkey=peer_id.to_bytes(),
             value=looking_for_group,
             expiration_time=expiration_time,
             return_future=True,
         )
 
-    async def get_averagers(self, group_key: GroupKey, only_active: bool) -> List[Tuple[Endpoint, DHTExpiration]]:
+    async def get_averagers(self, group_key: GroupKey, only_active: bool) -> List[Tuple[PeerID, DHTExpiration]]:
         """
         Find and return averagers that were declared with a given all-reduce key
 
         :param group_key: finds averagers that have the this group key, e.g. my_averager.0b011011101
         :param only_active: if True, return only active averagers that are looking for group (i.e. with value = True)
             if False, return all averagers under a given group_key regardless of value
-        :return: endpoints and expirations of every matching averager
+        :return: peer_ids and expirations of every matching averager
         """
         assert is_valid_group(group_key), f"Group key {group_key} is invalid, must follow {GROUP_PATTERN}"
         result = await self.dht.get(group_key, latest=True, return_future=True)
@@ -94,7 +94,7 @@ class GroupKeyManager:
             logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
             return []
         averagers = [
-            (Endpoint.from_base58(key), looking_for_group.expiration_time)
+            (PeerID(key), looking_for_group.expiration_time)
             for key, looking_for_group in result.value.items()
             if key != self.RESERVED_KEY_FOR_NBITS and (not only_active or looking_for_group.value)
         ]
@@ -111,10 +111,10 @@ class GroupKeyManager:
             and suggested_nbits != self.suggested_nbits
         ):
             self.suggested_nbits = suggested_nbits
-            logger.warning(f"{self.endpoint} - another averager suggested {self.suggested_nbits}-bit keys")
+            logger.warning(f"{self.peer_id} - another averager suggested {self.suggested_nbits}-bit keys")
         elif num_active_averagers >= self.excessive_size:
             self.suggested_nbits = max(suggested_nbits or 0, len(self.group_bits) + 1)
-            logger.warning(f"{self.endpoint} - too many peers in bucket, switching to {self.suggested_nbits}-bit keys")
+            logger.warning(f"{self.peer_id} - too many peers in bucket, switching to {self.suggested_nbits}-bit keys")
         return averagers
 
     async def declare_nbits(self, group_key: GroupKey, nbits: int, expiration_time: DHTExpiration) -> bool:
@@ -141,12 +141,12 @@ class GroupKeyManager:
     async def update_key_on_group_assembled(self, group_info: GroupInfo, is_leader: bool = True):
         """this function is triggered every time an averager finds an allreduce group"""
         rng = random.Random(group_info.group_id)
-        index = group_info.endpoints.index(self.endpoint)
+        index = group_info.peer_ids.index(self.peer_id)
         generalized_index = rng.sample(range(self.target_group_size), group_info.group_size)[index]
         nbits = int(np.ceil(np.log2(self.target_group_size)))
         new_bits = bin(generalized_index)[2:].rjust(nbits, "0")
         self.group_bits = (self.group_bits + new_bits)[-len(self.group_bits) :] if self.group_bits else ""
-        logger.debug(f"{self.endpoint} - updated group key to {self.group_bits}")
+        logger.debug(f"{self.peer_id} - updated group key to {self.group_bits}")
 
         if is_leader and self.insufficient_size < group_info.group_size < self.excessive_size:
             asyncio.create_task(self.notify_stragglers())
@@ -161,7 +161,7 @@ class GroupKeyManager:
         new_nbits = self.suggested_nbits if self.suggested_nbits is not None else len(self.group_bits) - 1
         prev_nbits, self.group_bits = self.group_bits, self.group_bits[-new_nbits:] if new_nbits else ""
         if self.group_bits != prev_nbits:
-            logger.warning(f"{self.endpoint} - switching to {len(self.group_bits)}-bit keys")
+            logger.warning(f"{self.peer_id} - switching to {len(self.group_bits)}-bit keys")
         self.suggested_nbits = None
 
     async def notify_stragglers(self):

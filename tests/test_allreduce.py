@@ -178,7 +178,7 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
     visible_maddrs = await p2ps[0].get_visible_maddrs()
     p2ps += await asyncio.gather(*[P2P.create(initial_peers=visible_maddrs) for _ in range(3)])
 
-    peers = [instance.id for instance in p2ps]
+    peers = [instance.peer_id for instance in p2ps]
     tensors_by_peer = {
         peer: [torch.randn(3, 128), torch.rand(32), torch.tensor(i, dtype=torch.float32)]
         for i, peer in enumerate(peers)
@@ -193,8 +193,8 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
             servicer_type=AllReduceRunner,
             prefix=None,
             group_id=group_id,
-            tensors=[x.clone() for x in tensors_by_peer[p2p.id]],
-            ordered_group_endpoints=peers,
+            tensors=[x.clone() for x in tensors_by_peer[p2p.peer_id]],
+            ordered_peer_ids=peers,
             peer_fractions=peer_fractions,
             modes=peer_modes,
             weights=averaging_weights,

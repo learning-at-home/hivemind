@@ -5,10 +5,9 @@ import pytest
 
 from hivemind.proto import dht_pb2
 from hivemind.proto.auth_pb2 import AccessToken
-from hivemind.utils.auth import AuthRPCWrapper, AuthRole, TokenAuthorizerBase
+from hivemind.utils.auth import AuthRole, AuthRPCWrapper, TokenAuthorizerBase
 from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.logging import get_logger
-
 
 logger = get_logger(__name__)
 

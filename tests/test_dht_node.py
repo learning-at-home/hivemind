@@ -17,8 +17,8 @@ from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.p2p import P2P, PeerID
 from hivemind.utils.logging import get_logger
-from test_utils.dht_swarms import launch_swarm_in_separate_processes, launch_star_shaped_swarm
 
+from test_utils.dht_swarms import launch_star_shaped_swarm, launch_swarm_in_separate_processes
 
 logger = get_logger(__name__)
 
@@ -44,7 +44,7 @@ def run_protocol_listener(
     for peer_id in maddrs_to_peer_ids(initial_peers):
         loop.run_until_complete(protocol.call_ping(peer_id))
 
-    maddr_conn.send((p2p.id, visible_maddrs))
+    maddr_conn.send((p2p.peer_id, visible_maddrs))
 
     async def shutdown():
         await p2p.shutdown()

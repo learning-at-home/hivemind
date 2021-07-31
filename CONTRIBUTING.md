@@ -34,10 +34,11 @@ with the following rules:
 
 ## Code style
 
-* We use [black](https://github.com/psf/black) for code formatting. Before submitting a PR, make sure to install and
-  run `black .` in the root of the repository.
 * The code must follow [PEP8](https://www.python.org/dev/peps/pep-0008/) unless absolutely necessary. Also, each line
   cannot be longer than 119 characters.
+* We use [black](https://github.com/psf/black) for code formatting and [isort](https://github.com/PyCQA/isort) for 
+  import sorting. Before submitting a PR, make sure to install and run `black .` and `isort .` in the root of the
+  repository.
 * We highly encourage the use of [typing](https://docs.python.org/3/library/typing.html) where applicable.
 * Use `get_logger` from `hivemind.utils.logging` to log any information instead of `print`ing directly to standard
   output/error streams.

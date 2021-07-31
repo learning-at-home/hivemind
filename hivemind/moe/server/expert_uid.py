@@ -1,6 +1,6 @@
 import random
 import re
-from typing import NamedTuple, Union, Tuple, Optional, List
+from typing import List, NamedTuple, Optional, Tuple, Union
 
 import hivemind
 from hivemind.dht import DHT

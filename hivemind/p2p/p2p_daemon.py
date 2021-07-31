@@ -44,7 +44,7 @@ class P2P:
       - `P2P.add_binary_stream_handler` transfers raw data using bi-directional streaming interface
 
     To access these handlers, a P2P instance can `P2P.call_protobuf_handler`/`P2P.call_binary_stream_handler`,
-    using the recipient's unique `P2P.id` and the name of the corresponding handler.
+    using the recipient's unique `P2P.peer_id` and the name of the corresponding handler.
     """
 
     HEADER_LEN = 8
@@ -65,7 +65,7 @@ class P2P:
     _UNIX_SOCKET_PREFIX = "/unix/tmp/hivemind-"
 
     def __init__(self):
-        self.id = None
+        self.peer_id = None
         self._child = None
         self._alive = False
         self._listen_task = None
@@ -212,8 +212,8 @@ class P2P:
         return self
 
     async def _ping_daemon(self) -> None:
-        self.id, self._visible_maddrs = await self._client.identify()
-        logger.debug(f"Launched p2pd with id = {self.id}, host multiaddrs = {self._visible_maddrs}")
+        self.peer_id, self._visible_maddrs = await self._client.identify()
+        logger.debug(f"Launched p2pd with peer id = {self.peer_id}, host multiaddrs = {self._visible_maddrs}")
 
     async def get_visible_maddrs(self, latest: bool = False) -> List[Multiaddr]:
         """
@@ -226,9 +226,9 @@ class P2P:
             _, self._visible_maddrs = await self._client.identify()
 
         if not self._visible_maddrs:
-            raise ValueError(f"No multiaddrs found for peer {self.id}")
+            raise ValueError(f"No multiaddrs found for peer {self.peer_id}")
 
-        p2p_maddr = Multiaddr(f"/p2p/{self.id.to_base58()}")
+        p2p_maddr = Multiaddr(f"/p2p/{self.peer_id.to_base58()}")
         return [addr.encapsulate(p2p_maddr) for addr in self._visible_maddrs]
 
     async def list_peers(self) -> List[PeerInfo]:
@@ -312,7 +312,7 @@ class P2P:
         ) -> None:
             context = P2PContext(
                 handle_name=name,
-                local_id=self.id,
+                local_id=self.peer_id,
                 remote_id=stream_info.peer_id,
                 remote_maddr=stream_info.addr,
             )
@@ -475,7 +475,7 @@ class P2P:
         if self._child is not None and self._child.poll() is None:
             self._child.terminate()
             self._child.wait()
-            logger.debug(f"Terminated p2pd with id = {self.id}")
+            logger.debug(f"Terminated p2pd with id = {self.peer_id}")
 
             with suppress(FileNotFoundError):
                 os.remove(self._daemon_listen_maddr["unix"])

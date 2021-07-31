@@ -1,11 +1,10 @@
-from concurrent.futures import ThreadPoolExecutor
-from typing import TypeVar, AsyncIterator, Union, AsyncIterable, Awaitable, Tuple, Optional, Callable
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from typing import AsyncIterable, AsyncIterator, Awaitable, Callable, Optional, Tuple, TypeVar, Union
 
 import uvloop
 
 from hivemind.utils.logging import get_logger
-
 
 T = TypeVar("T")
 logger = get_logger(__name__)
