@@ -155,7 +155,6 @@ class P2P:
             autoRelay=use_auto_relay,
             relayHopLimit=relay_hop_limit,
             b=need_bootstrap,
-            q=False,
             **process_kwargs,
         )
 
