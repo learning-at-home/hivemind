@@ -5,7 +5,7 @@ from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
 from importlib.resources import path
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from multiaddr import Multiaddr
