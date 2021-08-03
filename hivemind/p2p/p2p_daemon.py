@@ -67,6 +67,7 @@ class P2P:
         self.peer_id = None
         self._child = None
         self._alive = False
+        self._reader_task = None
         self._listen_task = None
         self._server_stopped = asyncio.Event()
 
@@ -160,10 +161,13 @@ class P2P:
         self._child = await asyncio.subprocess.create_subprocess_exec(
             *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
         self._alive = True
+
+        ready = asyncio.Future()
+        self._reader_task = asyncio.create_task(self._read_outputs(ready))
+        await ready
+
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
-
-        await self._wait_until_ready()
-
+        await self._ping_daemon()
         return self
 
     @classmethod
@@ -451,6 +455,9 @@ class P2P:
         await asyncio.get_event_loop().run_in_executor(None, self._terminate)
 
     def _terminate(self) -> None:
+        if self._reader_task is not None:
+            self._reader_task.cancel()
+
         self._alive = False
         if self._child is not None and self._child.returncode is None:
             self._child.terminate()
@@ -481,16 +488,22 @@ class P2P:
     def _maddrs_to_str(maddrs: List[Multiaddr]) -> str:
         return ",".join(str(addr) for addr in maddrs)
 
-    async def _wait_until_ready(self):
+    async def _read_outputs(self, ready: asyncio.Future) -> None:
+        last_line = None
         while True:
-            line = (await self._child.stdout.readline()).rstrip().decode()
-            if line.startswith("Peer ID:"):
+            line = await self._child.stdout.readline()
+            if not line:  # Stream closed
                 break
+            last_line = line.rstrip().decode(errors='ignore')
 
-        self.peer_id, self._visible_maddrs = await self._client.identify()
+            if last_line.startswith("Peer ID:"):
+                ready.set_result(None)
+
+        if not ready.done():
+            ready.set_exception(P2PDaemonError(f'Daemon failed to start: {last_line}'))
 
 
-class P2PInterruptedError(Exception):
+class P2PDaemonError(RuntimeError):
     pass
 
 
