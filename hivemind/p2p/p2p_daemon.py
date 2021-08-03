@@ -460,15 +460,12 @@ class P2P:
         name: str,
         input: Union[TInputProtobuf, TInputStream],
         output_protobuf_type: type,
-        *,
-        stream_output: bool = False,
     ) -> Awaitable[TOutputProtobuf]:
 
-        if not (isinstance(input, AsyncIterableABC) or stream_output):
+        if not isinstance(input, AsyncIterableABC):
             return await self._call_unary_protobuf_handler(peer_id, name, input, output_protobuf_type)
 
-        requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
-        responses = self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
+        responses = self._iterate_protobuf_stream_handler(peer_id, name, input, output_protobuf_type)
 
         count = 0
         async for response in responses:

@@ -103,7 +103,6 @@ class ServicerBase:
                         handler.handle_name,
                         input,
                         handler.response_type,
-                        stream_output=handler.stream_output,
                     ),
                     timeout=timeout,
                 )
