@@ -419,7 +419,7 @@ class P2P:
     def _start_listening(self) -> None:
         async def listen() -> None:
             async with self._client.listen():
-                await asyncio.Future()  # Block until this task will be cancelled in _terminate()
+                await asyncio.Future()  # Wait until this task will be cancelled in _terminate()
 
         self._listen_task = asyncio.create_task(listen())
 
