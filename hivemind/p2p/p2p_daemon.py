@@ -159,7 +159,8 @@ class P2P:
         )
 
         self._child = await asyncio.subprocess.create_subprocess_exec(
-            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+        )
         self._alive = True
 
         ready = asyncio.Future()
@@ -494,13 +495,13 @@ class P2P:
             line = await self._child.stdout.readline()
             if not line:  # Stream closed
                 break
-            last_line = line.rstrip().decode(errors='ignore')
+            last_line = line.rstrip().decode(errors="ignore")
 
             if last_line.startswith("Peer ID:"):
                 ready.set_result(None)
 
         if not ready.done():
-            ready.set_exception(P2PDaemonError(f'Daemon failed to start: {last_line}'))
+            ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
 
 
 class P2PDaemonError(RuntimeError):
