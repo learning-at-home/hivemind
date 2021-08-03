@@ -18,7 +18,7 @@ dht2 = DHT(initial_peers=dht.get_visible_maddrs(), start=True)
 ```
 
 Note that `initial_peers` contains the address of the first DHT node.
-This implies that the resulting node will have shared key-value with the first node, __as well as any other
+This implies that the new node will share the key-value data with the first node, __as well as any other
 nodes connected to it.__ When the two nodes are connected, subsequent peers can use any one of them (or both)
 as `initial_peers` to connect to the shared "dictionary".
 
