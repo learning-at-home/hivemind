@@ -7,7 +7,7 @@ syntax = "proto2";
 package p2pclient.p2pd.pb;
 
 message Request {
-   enum Type {
+  enum Type {
     IDENTIFY                 = 0;
     CONNECT                  = 1;
     STREAM_OPEN              = 2;
@@ -15,15 +15,12 @@ message Request {
     DHT                      = 4;
     LIST_PEERS               = 5;
     CONNMANAGER              = 6;
-    DISCONNECT               = 7;
+    DISCONNECT               = 7;      
     PUBSUB                   = 8;
 
     PERSISTENT_CONN_UPGRADE  = 9;
-    CALL_UNARY              = 10;
-    ADD_UNARY_HANDLER       = 11;
-    SEND_RESPONSE_TO_REMOTE = 12;
-
   }
+
   required Type type = 1;
 
   optional ConnectRequest connect = 2;
@@ -73,6 +70,7 @@ message PCResponse {
     Cancel cancel = 5;
   }
 }
+
 
 message IdentifyResponse {
   required bytes id = 1;
@@ -197,8 +195,10 @@ message CallUnaryRequest {
 }
 
 message CallUnaryResponse {
-  optional bytes result = 1;
-  optional bytes error = 2;
+  oneof result {
+    bytes response = 1;
+    bytes error = 2;
+  }
 }
 
 message AddUnaryHandlerRequest {
