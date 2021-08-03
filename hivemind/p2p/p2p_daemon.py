@@ -5,7 +5,6 @@ from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
 from importlib.resources import path
-from subprocess import PIPE, Popen
 from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
 
 from multiaddr import Multiaddr
@@ -158,7 +157,8 @@ class P2P:
             **process_kwargs,
         )
 
-        self._child = Popen(args=proc_args, stdout=PIPE, encoding="utf8")
+        self._child = await asyncio.subprocess.create_subprocess_exec(
+            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
         self._alive = True
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
@@ -452,9 +452,8 @@ class P2P:
 
     def _terminate(self) -> None:
         self._alive = False
-        if self._child is not None and self._child.poll() is None:
+        if self._child is not None and self._child.returncode is None:
             self._child.terminate()
-            self._child.wait()
             logger.debug(f"Terminated p2pd with id = {self.peer_id}")
 
             with suppress(FileNotFoundError):
@@ -484,7 +483,7 @@ class P2P:
 
     async def _wait_until_ready(self):
         while True:
-            line = self._child.stdout.readline().rstrip()
+            line = (await self._child.stdout.readline()).rstrip().decode()
             if line.startswith("Peer ID:"):
                 break
 
