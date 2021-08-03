@@ -11,7 +11,7 @@ from multiaddr import Multiaddr
 
 from hivemind.p2p import P2P, P2PDaemonError, P2PHandlerError
 from hivemind.proto import dht_pb2
-from hivemind.utils.networking import find_open_port
+from hivemind.utils.networking import get_free_port
 from hivemind.utils.serializer import MSGPackSerializer
 
 
@@ -38,7 +38,7 @@ async def test_daemon_killed_on_del():
 async def test_startup_error_message():
     with pytest.raises(P2PDaemonError, match=r"Failed to connect to bootstrap peers"):
         await P2P.create(
-            initial_peers=[f"/ip4/127.0.0.1/tcp/{find_open_port()}/p2p/QmdaK4LUeQaKhqSFPRu9N7MvXUEWDxWwtCvPrS444tCgd1"]
+            initial_peers=[f"/ip4/127.0.0.1/tcp/{get_free_port()}/p2p/QmdaK4LUeQaKhqSFPRu9N7MvXUEWDxWwtCvPrS444tCgd1"]
         )
 
     with pytest.raises(P2PDaemonError, match=r"Daemon failed to start in .+ seconds"):

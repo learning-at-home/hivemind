@@ -10,7 +10,7 @@ from typing import NamedTuple
 from multiaddr import Multiaddr, protocols
 from pkg_resources import resource_filename
 
-from hivemind import find_open_port
+from hivemind import get_free_port
 from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
 
 TIMEOUT_DURATION = 30  # seconds
@@ -57,7 +57,7 @@ class Daemon:
 
     def _run(self):
         cmd_list = [P2PD_PATH, f"-listen={str(self.control_maddr)}"]
-        cmd_list += [f"-hostAddrs=/ip4/127.0.0.1/tcp/{find_open_port()}"]
+        cmd_list += [f"-hostAddrs=/ip4/127.0.0.1/tcp/{get_free_port()}"]
         if self.enable_connmgr:
             cmd_list += ["-connManager=true", "-connLo=1", "-connHi=2", "-connGrace=0"]
         if self.enable_dht:
@@ -129,8 +129,8 @@ async def make_p2pd_pair_unix(enable_control, enable_connmgr, enable_dht, enable
 
 @asynccontextmanager
 async def make_p2pd_pair_ip4(enable_control, enable_connmgr, enable_dht, enable_pubsub):
-    control_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{find_open_port()}")
-    listen_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{find_open_port()}")
+    control_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{get_free_port()}")
+    listen_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{get_free_port()}")
     async with _make_p2pd_pair(
         control_maddr=control_maddr,
         listen_maddr=listen_maddr,
