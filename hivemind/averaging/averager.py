@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import contextlib
 import ctypes
 import multiprocessing as mp
 import os
 import threading
 import weakref
+from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import asdict
 from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Union
 
@@ -211,7 +211,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         """Serve DecentralizedAverager forever. This function will not return until the averager is shut down"""
         loop = switch_to_uvloop()
         # initialize asyncio synchronization primitives in this event loop
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
+        with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
 
             async def _run():
                 try:
@@ -259,10 +259,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             self.wait_until_ready(timeout)
 
     def wait_until_ready(self, timeout: Optional[float] = None) -> None:
-        try:
-            self._ready.result(timeout=timeout)
-        except concurrent.futures.TimeoutError:
-            raise TimeoutError(f"Averager failed to start in {timeout:.1f} seconds")
+        self._ready.result(timeout=timeout)
 
     def shutdown(self) -> None:
         """Shut down the averager process"""

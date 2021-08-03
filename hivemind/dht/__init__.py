@@ -15,9 +15,9 @@ The code is organized as follows:
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import multiprocessing as mp
 import os
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, TypeVar, Union
 
@@ -101,7 +101,7 @@ class DHT(mp.Process):
         """Serve DHT forever. This function will not return until DHT node is shut down"""
         loop = switch_to_uvloop()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
+        with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
 
             async def _run():
                 try:
@@ -138,10 +138,7 @@ class DHT(mp.Process):
             self.wait_until_ready(timeout)
 
     def wait_until_ready(self, timeout: Optional[float] = None) -> None:
-        try:
-            self._ready.result(timeout=timeout)
-        except concurrent.futures.TimeoutError:
-            raise TimeoutError(f"DHT failed to start in {timeout:.1f} seconds")
+        self._ready.result(timeout=timeout)
 
     def shutdown(self) -> None:
         """Shut down a running dht process"""
