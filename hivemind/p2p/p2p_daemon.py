@@ -331,7 +331,9 @@ class P2P:
                         await P2P.send_protobuf(response, writer)
                 except Exception as e:
                     logger.warning("Exception while processing stream and sending responses:", exc_info=True)
-                    await P2P.send_protobuf(RPCError(message=str(e)), writer)
+                    # Sometimes `e` is a connection error, so we won't be able to report the error to the caller
+                    with suppress(Exception):
+                        await P2P.send_protobuf(RPCError(message=str(e)), writer)
 
             with closing(writer):
                 processing_task = asyncio.create_task(_process_stream())
