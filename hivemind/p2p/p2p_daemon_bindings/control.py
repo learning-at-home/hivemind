@@ -120,12 +120,9 @@ class ControlClient:
                 resp = p2pd_pb.PCResponse()
                 await read_pbmsg_safe(reader, resp)
 
-                print("received response:", resp)
-
                 call_id = uuid.UUID(bytes=resp.callId)
 
                 if resp.HasField("callUnaryResponse"):
-                    print("HASHSAHAS")
                     if call_id in self.pending_calls and resp.callUnaryResponse.HasField("response"):
                         self.pending_calls[call_id].set_result(resp.callUnaryResponse.response)
                     elif call_id in self.pending_calls and resp.callUnaryResponse.HasField("error"):
@@ -145,7 +142,6 @@ class ControlClient:
         with closing(writer):
             while True:
                 msg = await self.pending_messages.get()
-                print("writing to persicon:", msg)
                 await write_pbmsg(writer, msg)
 
     async def _handle_persistent_request(self, call_id: uuid.UUID, request: p2pd_pb.CallUnaryRequest):
