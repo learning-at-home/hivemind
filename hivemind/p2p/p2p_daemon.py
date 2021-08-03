@@ -69,7 +69,6 @@ class P2P:
         self._alive = False
         self._reader_task = None
         self._listen_task = None
-        self._server_stopped = asyncio.Event()
 
     @classmethod
     async def create(
@@ -420,19 +419,9 @@ class P2P:
     def _start_listening(self) -> None:
         async def listen() -> None:
             async with self._client.listen():
-                await self._server_stopped.wait()
+                await asyncio.Future()  # Block until this task will be cancelled in _terminate()
 
         self._listen_task = asyncio.create_task(listen())
-
-    async def _stop_listening(self) -> None:
-        if self._listen_task is not None:
-            self._server_stopped.set()
-            self._listen_task.cancel()
-            try:
-                await self._listen_task
-            except asyncio.CancelledError:
-                self._listen_task = None
-                self._server_stopped.clear()
 
     async def add_binary_stream_handler(self, name: str, handler: p2pclient.StreamHandler) -> None:
         if self._listen_task is None:
@@ -452,12 +441,13 @@ class P2P:
         return self._alive
 
     async def shutdown(self) -> None:
-        await self._stop_listening()
         self._terminate()
         if self._child is not None:
             await self._child.wait()
 
     def _terminate(self) -> None:
+        if self._listen_task is not None:
+            self._listen_task.cancel()
         if self._reader_task is not None:
             self._reader_task.cancel()
 
