@@ -453,7 +453,9 @@ class P2P:
 
     async def shutdown(self) -> None:
         await self._stop_listening()
-        await asyncio.get_event_loop().run_in_executor(None, self._terminate)
+        self._terminate()
+        if self._child is not None:
+            await self._child.wait()
 
     def _terminate(self) -> None:
         if self._reader_task is not None:
