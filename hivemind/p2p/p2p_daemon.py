@@ -89,8 +89,7 @@ class P2P:
         use_relay_discovery: bool = False,
         use_auto_relay: bool = False,
         relay_hop_limit: int = 0,
-        ping_n_attempts: int = 5,
-        ping_delay: float = 0.4,
+        startup_timeout: float = 15,
     ) -> "P2P":
         """
         Start a new p2pd process and connect to it.
@@ -111,9 +110,7 @@ class P2P:
         :param use_relay_discovery: enables passive discovery for relay
         :param use_auto_relay: enables autorelay
         :param relay_hop_limit: sets the hop limit for hop relays
-        :param ping_n_attempts: try to ping the daemon with this number of attempts after starting it
-        :param ping_delay: wait for ``ping_delay * (2 ** (k - 1))`` seconds before the k-th attempt to ping the daemon
-          (in particular, wait for ``ping_delay`` seconds before the first attempt)
+        :param startup_timeout: raise a P2PDaemonError if the daemon does not start in ``startup_timeout`` seconds
         :return: a wrapper for the p2p daemon
         """
 
@@ -164,7 +161,11 @@ class P2P:
 
         ready = asyncio.Future()
         self._reader_task = asyncio.create_task(self._read_outputs(ready))
-        await ready
+        try:
+            await asyncio.wait_for(ready, startup_timeout)
+        except asyncio.TimeoutError:
+            await self.shutdown()
+            raise P2PDaemonError(f"Daemon failed to start in {startup_timeout:.1f} seconds")
 
         self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
         await self._ping_daemon()
