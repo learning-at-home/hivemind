@@ -7,7 +7,7 @@ import time
 import torch
 
 import hivemind
-from hivemind import find_open_port
+from hivemind import get_free_port
 from hivemind.moe.server import layers
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger
@@ -66,7 +66,7 @@ def benchmark_throughput(
         or torch.device(device) == torch.device("cpu")
     )
     assert expert_cls in layers.name_to_block
-    port = port or find_open_port()
+    port = port or get_free_port()
     max_batch_size = max_batch_size or batch_size * 4
     num_handlers = max(1, num_handlers or num_clients // 2)
     benchmarking_failed = mp.Event()
