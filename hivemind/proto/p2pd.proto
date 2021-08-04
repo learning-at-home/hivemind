@@ -47,8 +47,7 @@ message Response {
   optional PSResponse pubsub = 7;
 }
 
-// Persistent connection request
-message PCRequest {
+message PersistentConnectionRequest {
   required bytes callId = 1;
 
   oneof message {
@@ -59,8 +58,7 @@ message PCRequest {
   }
 }
 
-// Persistent connection response
-message PCResponse {
+message PersistentConnectionResponse {
   required bytes callId = 1;
 
   oneof message {

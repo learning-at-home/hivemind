@@ -4,11 +4,11 @@ import secrets
 from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
-from google.protobuf.message import Message
 from importlib.resources import path
 from subprocess import Popen
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar, Union
 
+from google.protobuf.message import Message
 from multiaddr import Multiaddr
 
 import hivemind.hivemind_cli as cli
@@ -170,12 +170,6 @@ class P2P:
 
         return self
 
-    async def add_unary_handler(self, handle_name: str, handler: p2pclient.TUnaryHandler):
-        return await self._client.add_unary_handler(handle_name, handler)
-
-    async def call_unary_handler(self, peer_id: PeerID, handle_name: str, data: bytes) -> bytes:
-        return await self._client.call_unary_handler(peer_id, handle_name, data)
-
     async def _ping_daemon_with_retries(self, ping_n_attempts: int, ping_delay: float) -> None:
         for try_number in range(ping_n_attempts):
             await asyncio.sleep(ping_delay * (2 ** try_number))
@@ -282,7 +276,7 @@ class P2P:
 
     @staticmethod
     async def receive_protobuf(
-        input_protobuf_type: type, reader: asyncio.StreamReader
+        input_protobuf_type: Message, reader: asyncio.StreamReader
     ) -> Tuple[Optional[TInputProtobuf], Optional[RPCError]]:
         msg_type = await reader.readexactly(1)
         if msg_type == P2P.MESSAGE_MARKER:
@@ -303,7 +297,7 @@ class P2P:
         self,
         name: str,
         handler: Callable[[TInputStream, P2PContext], TOutputStream],
-        input_protobuf_type: type,
+        input_protobuf_type: Message,
         max_prefetch: int = 5,
     ) -> None:
         """
@@ -367,7 +361,7 @@ class P2P:
         await self._client.stream_handler(name, _handle_stream)
 
     async def _iterate_protobuf_stream_handler(
-        self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: type
+        self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: Message
     ) -> TOutputStream:
         _, reader, writer = await self._client.stream_open(peer_id, (name,))
 
@@ -399,7 +393,7 @@ class P2P:
         handler: Callable[
             [Union[TInputProtobuf, TInputStream], P2PContext], Union[Awaitable[TOutputProtobuf], TOutputStream]
         ],
-        input_protobuf_type: type,
+        input_protobuf_type: Message,
         *,
         stream_input: bool = False,
         stream_output: bool = False,
@@ -410,7 +404,7 @@ class P2P:
         :param stream_output: If True, assume ``handler`` to return ``TOutputStream``
         """
 
-        if not (stream_input or stream_output):
+        if not stream_input and not stream_output:
             await self._add_protobuf_unary_handler(name, handler, input_protobuf_type)
             return
 
@@ -439,8 +433,17 @@ class P2P:
         self,
         handle_name: str,
         handler: Callable[[TInputProtobuf, P2PContext], Awaitable[TOutputProtobuf]],
-        input_protobuf_type: type,
+        input_protobuf_type: Message,
     ) -> None:
+        """
+        Register a request-response (unary) handler. Unary requests and responses
+        are sent through persistent multiplexed connections to the daemon for the
+        sake of reducing the number of open files.
+        :param handle_name: name of the handler (protocol id)
+        :param handler: function handling the unary requests
+        :param input_protobuf_type: protobuf type of the request
+        """
+
         async def _unary_handler(request: bytes, remote_id: PeerID) -> bytes:
             input_serialized = input_protobuf_type.FromString(request)
             context = P2PContext(
@@ -452,14 +455,14 @@ class P2P:
             response = await handler(input_serialized, context)
             return response.SerializeToString()
 
-        await self.add_unary_handler(handle_name, _unary_handler)
+        await self._client.add_unary_handler(handle_name, _unary_handler)
 
     async def call_protobuf_handler(
         self,
         peer_id: PeerID,
         name: str,
         input: Union[TInputProtobuf, TInputStream],
-        output_protobuf_type: type,
+        output_protobuf_type: Message,
     ) -> Awaitable[TOutputProtobuf]:
 
         if not isinstance(input, AsyncIterableABC):
@@ -479,10 +482,10 @@ class P2P:
         peer_id: PeerID,
         handle_name: str,
         input: TInputProtobuf,
-        output_protobuf_type: type,
+        output_protobuf_type: Message,
     ) -> Awaitable[TOutputProtobuf]:
         serialized_input = input.SerializeToString()
-        response = await self.call_unary_handler(peer_id, handle_name, serialized_input)
+        response = await self._client.call_unary_handler(peer_id, handle_name, serialized_input)
         return output_protobuf_type().FromString(response)
 
     def iterate_protobuf_handler(
@@ -490,7 +493,7 @@ class P2P:
         peer_id: PeerID,
         name: str,
         input: Union[TInputProtobuf, TInputStream],
-        output_protobuf_type: type,
+        output_protobuf_type: Message,
     ) -> TOutputStream:
         requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
         return self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
