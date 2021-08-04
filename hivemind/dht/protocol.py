@@ -2,20 +2,20 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional, List, Tuple, Dict, Sequence, Union, Collection
+from typing import Collection, Dict, List, Optional, Sequence, Tuple, Union
 
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
-from hivemind.dht.routing import RoutingTable, DHTID, BinaryDHTValue, Subkey
+from hivemind.dht.routing import DHTID, BinaryDHTValue, RoutingTable, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase
 from hivemind.proto import dht_pb2
-from hivemind.utils import get_logger, MSGPackSerializer
-from hivemind.utils.auth import AuthRole, AuthRPCWrapper, AuthorizerBase
+from hivemind.utils import MSGPackSerializer, get_logger
+from hivemind.utils.auth import AuthorizerBase, AuthRole, AuthRPCWrapper
 from hivemind.utils.timed_storage import (
-    DHTExpiration,
-    get_dht_time,
     MAX_DHT_TIME_DISCREPANCY_SECONDS,
+    DHTExpiration,
     ValueWithExpiration,
+    get_dht_time,
 )
 
 logger = get_logger(__name__)
@@ -296,7 +296,7 @@ class DHTProtocol(ServicerBase):
                 nearest = dict(
                     zip(
                         map(DHTID.from_bytes, result.nearest_node_ids),
-                        map(PeerID.from_base58, result.nearest_peer_ids),
+                        map(PeerID, result.nearest_peer_ids),
                     )
                 )
 
@@ -359,7 +359,7 @@ class DHTProtocol(ServicerBase):
                 key_id, k=self.bucket_size, exclude=DHTID.from_bytes(request.peer.node_id)
             ):
                 item.nearest_node_ids.append(node_id.to_bytes())
-                item.nearest_peer_ids.append(peer_id.to_base58())
+                item.nearest_peer_ids.append(peer_id.to_bytes())
             response.results.append(item)
         return response
 

@@ -2,13 +2,13 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from itertools import chain
-from threading import Lock, Event
-from typing import Sequence, Dict, Iterator, Optional
+from threading import Event, Lock
+from typing import Dict, Iterator, Optional, Sequence
 
 import torch
 
 from hivemind.averaging import DecentralizedAverager
-from hivemind.utils import nested_flatten, nested_pack, get_logger
+from hivemind.utils import get_logger, nested_flatten, nested_pack
 
 logger = get_logger(__name__)
 

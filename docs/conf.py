@@ -17,9 +17,8 @@
 # sys.path.insert(0, os.path.abspath('.'))
 import sys
 
-from recommonmark.transform import AutoStructify
 from recommonmark.parser import CommonMarkParser
-
+from recommonmark.transform import AutoStructify
 
 # -- Project information -----------------------------------------------------
 src_path = "../hivemind"

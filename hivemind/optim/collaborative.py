@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from threading import Thread, Lock, Event
-from typing import Dict, Optional, Iterator
+from threading import Event, Lock, Thread
+from typing import Dict, Iterator, Optional
 
 import numpy as np
 import torch
@@ -42,7 +42,7 @@ class CollaborationState:
 
 
 class TrainingState(BaseModel):
-    endpoint: Endpoint
+    peer_id: bytes
     step: conint(ge=0, strict=True)
     samples_accumulated: conint(ge=0, strict=True)
     samples_per_second: confloat(ge=0.0, strict=True)
@@ -354,7 +354,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             with self.lock_local_progress:
                 current_time = get_dht_time()
                 local_state_info = TrainingState(
-                    endpoint=self.averager.endpoint,
+                    peer_id=self.averager.peer_id.to_bytes(),
                     step=self.local_step,
                     samples_accumulated=self.local_samples_accumulated,
                     samples_per_second=self.performance_ema.samples_per_second,

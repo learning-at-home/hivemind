@@ -10,13 +10,13 @@ import requests
 import torch
 import wandb
 from torch_optimizer import Lamb
-from transformers import AlbertForPreTraining, AlbertConfig, HfArgumentParser
+from transformers import AlbertConfig, AlbertForPreTraining, HfArgumentParser
 
 import hivemind
 from hivemind.utils.compression import CompressionType
 
 import utils
-from arguments import BaseTrainingArguments, CollaborativeOptimizerArguments, AveragerArguments
+from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOptimizerArguments
 
 logger = logging.getLogger(__name__)
 

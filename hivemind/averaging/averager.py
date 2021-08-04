@@ -8,42 +8,36 @@ import ctypes
 import multiprocessing as mp
 import os
 import threading
-import uuid
 import weakref
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import asdict
-from ipaddress import ip_address
-from typing import Sequence, Optional, Tuple, Any, Union, Dict, AsyncIterator
+from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Union
 
-import grpc
 import numpy as np
 import torch
-from grpc._cython.cygrpc import InternalError
 
-from hivemind.averaging.allreduce import AllReduceRunner, AllreduceException, GroupID, AveragingMode
+from hivemind.averaging.allreduce import AllreduceException, AllReduceRunner, AveragingMode, GroupID
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.averaging.partition import DEFAULT_PART_SIZE_BYTES
 from hivemind.dht import DHT, DHTID
-from hivemind.proto import averaging_pb2, averaging_pb2_grpc, runtime_pb2
-from hivemind.utils import Endpoint, Port, MPFuture, get_logger, TensorDescriptor
-from hivemind.utils.asyncio import anext, achain, aiter, switch_to_uvloop
-from hivemind.utils.compression import serialize_torch_tensor, deserialize_torch_tensor
-from hivemind.utils.grpc import ChannelCache, GRPC_KEEPALIVE_OPTIONS, split_for_streaming, combine_from_streaming
-from hivemind.utils.networking import choose_ip_address, strip_port, Hostname
+from hivemind.p2p import P2PContext, P2PHandlerError, PeerID, ServicerBase
+from hivemind.proto import averaging_pb2, runtime_pb2
+from hivemind.utils import MPFuture, TensorDescriptor, get_logger
+from hivemind.utils.asyncio import achain, aiter, anext, switch_to_uvloop
+from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.utils.grpc import combine_from_streaming, split_for_streaming
 from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
-from hivemind.utils.timed_storage import get_dht_time, ValueWithExpiration, DHTExpiration
+from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration, get_dht_time
 
 # flavour types
-StreamCallToLeader = grpc.aio.UnaryStreamCall[averaging_pb2.JoinRequest, averaging_pb2.MessageFromLeader]
 GatheredData = Any
 logger = get_logger(__name__)
 
 
-class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragingServicer):
+class DecentralizedAverager(mp.Process, ServicerBase):
     """
-
     Parameter averaging service. A trainer can run this service in background to periodically average his parameters
     with other trainers. The averaging pattern is chosen so that (1) you only need to average with a small
     group of peers at a time, but (2) all trainers will converge to global average in a logarithmic number of steps.
@@ -67,14 +61,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
     :param bandwidth: if specified, this value represents the network bandwidth available to averager.
           By default, the averager is assumed to have the average bandwidth of his group.
           If bandwidth == 0, averager will rely on its groupmates to do all the averaging.
-    :param client_mode: if False (default), this averager will accept incoming requests from other peers
-            if True, the averager will only join existing groups where at least one peer has client_mode=False
-    :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
-    :param announced_host: visible IP address the averager will announce for external connections from other peers.
-          If None, the address will be chosen from p2p.get_visible_maddrs() (global IPv4 addresses are preferred)
-    :param channel_options: options for grpc.aio.insecure_channel, e.g. [('grpc.enable_retries', 0)]
-          see https://grpc.github.io/grpc/core/group__grpc__arg__keys.html for a list of all options
-    :param kwargs: extra parameters forwarded to grpc.aio.server
+    :param client_mode: if False, this averager will accept incoming requests from other peers.
+          if True, the averager will only join existing groups where at least one peer has client_mode=False.
+          By default, this flag is copied from DHTNode inside the ``dht`` instance.
     :param auxiliary: if this flag is specified, averager.step will only assist others without sending
           local tensors for averaging
     :param allow_state_sharing: if set to True, other peers can download this peer's state. Can be overwritten
@@ -96,7 +85,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
     _matchmaking: Matchmaking
     _pending_group_assembled: asyncio.Event
-    _server: grpc.aio.Server
     serializer = MSGPackSerializer
 
     def __init__(
@@ -119,13 +107,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         min_vector_size: int = 0,
         auxiliary: bool = False,
         allow_state_sharing: Optional[bool] = None,
-        client_mode: bool = False,
-        listen_on: Endpoint = "0.0.0.0:*",
+        client_mode: Optional[bool] = None,
         daemon: bool = True,
-        announced_host: Optional[str] = None,
-        channel_options: Sequence[Tuple[str, Any]] = (),
         shutdown_timeout: float = 5,
-        **kwargs,
     ):
         assert "." not in prefix, "group prefix must be a string without trailing '.'"
         assert bandwidth is None or (
@@ -138,7 +122,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
         super().__init__()
         self.dht = dht
-        self.client_mode, self.listen_on, self.kwargs = client_mode, listen_on, kwargs
+        self.prefix = prefix
+
+        if client_mode is None:
+            client_mode = dht.client_mode
+        self.client_mode = client_mode
+
         self._parent_pid = os.getpid()
         if self.client_mode:
             self.mode = AveragingMode.CLIENT
@@ -146,11 +135,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self.mode = AveragingMode.AUX
         else:
             self.mode = AveragingMode.NODE
-
-        if announced_host is None:
-            announced_host = self._choose_announced_host()
-        self.announced_host = announced_host
-        self.channel_options = channel_options
         self.daemon = daemon
 
         self._averaged_tensors = tuple(averaged_tensors)
@@ -165,6 +149,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self.bandwidth = bandwidth
 
         self.matchmaking_kwargs = dict(
+            servicer_type=type(self),
             prefix=prefix,
             initial_group_bits=initial_group_bits,
             target_group_size=target_group_size,
@@ -179,16 +164,11 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
 
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with daemon
-        self._port = mp.Value(ctypes.c_uint32, 0)  # assigned when averager starts, accessible via self.port
 
         self._allow_state_sharing = mp.Value(ctypes.c_bool, 0)
         if allow_state_sharing is None:
             allow_state_sharing = not client_mode and not auxiliary
         self.allow_state_sharing = allow_state_sharing
-
-        self._averager_endpoint: Optional[Endpoint] = None
-        if self.client_mode:
-            self._averager_endpoint = f"client::{uuid.uuid4()}"
 
         self.ready = mp.Event()  # whether the averager process has started (and ready for incoming requests)
         # note: we create a background thread weakref and with daemon=True to ensure garbage collection
@@ -200,22 +180,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         background_fetcher.start()
         if start:
             self.run_in_background(await_ready=True)
-
-    def _choose_announced_host(self) -> Hostname:
-        announced_host = strip_port(self.listen_on).strip("[]")  # Stripping square brackets for IPv6
-        if ip_address(announced_host) not in [ip_address("0.0.0.0"), ip_address("::")]:
-            return announced_host
-
-        maddrs = self.dht.get_visible_maddrs()
-        announced_host = choose_ip_address(maddrs)
-        logger.info(
-            f"Choosing IP {announced_host} as endpoint for DecentralizedAverager " f"from visible multiaddrs {maddrs}"
-        )
-        return announced_host
-
-    @property
-    def port(self) -> Optional[Port]:
-        return self._port.value if self._port.value != 0 else None
 
     @property
     def allow_state_sharing(self) -> bool:
@@ -230,15 +194,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self._allow_state_sharing.value = value
 
     @property
-    def endpoint(self) -> Optional[Endpoint]:
-        if self._averager_endpoint is None and not self.client_mode:
-            assert self.port is not None, "Averager is not running yet"
-            self._averager_endpoint = f"{self.announced_host}:{self.port}"
-            logger.debug(f"Assuming averager endpoint to be {self._averager_endpoint}")
-        return self._averager_endpoint
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.endpoint})"
+    def peer_id(self) -> PeerID:
+        return self.dht.peer_id
 
     def run(self):
         """
@@ -257,20 +214,18 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
 
             async def _run():
-                grpc.aio.init_grpc_aio()
-
+                self._p2p = await self.dht.replicate_p2p()
                 if not self.client_mode:
-                    self._server = grpc.aio.server(**self.kwargs, options=GRPC_KEEPALIVE_OPTIONS)
-                    averaging_pb2_grpc.add_DecentralizedAveragingServicer_to_server(self, self._server)
-                    found_port = self._server.add_insecure_port(self.listen_on)
-                    assert found_port != 0, f"Failed to listen to {self.listen_on}"
-                    self._port.value = found_port
-                    await self._server.start()
+                    await self.add_p2p_handlers(self._p2p, namespace=self.prefix)
                 else:
                     logger.debug(f"The averager is running in client mode.")
 
                 self._matchmaking = Matchmaking(
-                    self.endpoint, self.schema_hash, self.dht, **self.matchmaking_kwargs, client_mode=self.client_mode
+                    self._p2p,
+                    self.schema_hash,
+                    self.dht,
+                    client_mode=self.client_mode,
+                    **self.matchmaking_kwargs,
                 )
                 if not self.client_mode:
                     asyncio.create_task(self._declare_for_download_periodically())
@@ -313,8 +268,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         remaining_tasks = set()
         for group in self._running_groups.values():
             remaining_tasks.update(group.finalize(cancel=True))
-        if not self.client_mode:
-            remaining_tasks.add(self._server.stop(timeout))
         await asyncio.gather(*remaining_tasks)
 
     def __del__(self):
@@ -328,7 +281,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         timeout: Optional[float] = None,
         allow_retries: bool = True,
         wait: bool = True,
-    ) -> Union[Optional[Dict[Endpoint, GatheredData]], MPFuture]:
+    ) -> Union[Optional[Dict[PeerID, GatheredData]], MPFuture]:
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
 
@@ -394,11 +347,9 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     MatchmakingException,
                     AssertionError,
                     StopAsyncIteration,
-                    InternalError,
                     asyncio.CancelledError,
                     asyncio.InvalidStateError,
-                    grpc.RpcError,
-                    grpc.aio.AioRpcError,
+                    P2PHandlerError,
                 ) as e:
                     time_elapsed = get_dht_time() - start_time
                     if not allow_retries or (timeout is not None and timeout < time_elapsed):
@@ -424,7 +375,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
         """Run All-Reduce in a given group and update tensors in place, return gathered metadata"""
         try:
             weights, bandwidths, mode_ids, user_gathered = zip(*map(self.serializer.loads, group_info.gathered))
-            user_gathered = dict(zip(group_info.endpoints, map(self.serializer.loads, user_gathered)))
+            user_gathered = dict(zip(group_info.peer_ids, map(self.serializer.loads, user_gathered)))
             modes = tuple(map(AveragingMode, mode_ids))
 
             # compute optimal part sizes from peer bandwidths; TODO: replace with proper load balancing
@@ -437,10 +388,12 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
             async with self.get_tensors_async() as local_tensors:
                 allreduce = AllReduceRunner(
+                    p2p=self._p2p,
+                    servicer_type=type(self),
+                    prefix=self.prefix,
                     group_id=group_info.group_id,
                     tensors=local_tensors,
-                    endpoint=self.endpoint,
-                    ordered_group_endpoints=group_info.endpoints,
+                    ordered_peer_ids=group_info.peer_ids,
                     peer_fractions=peer_fractions,
                     weights=weights,
                     gathered=user_gathered,
@@ -453,7 +406,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     # actually run all-reduce
                     averaging_outputs = [output async for output in allreduce]
 
-                    if modes[group_info.endpoints.index(self.endpoint)] != AveragingMode.AUX:
+                    if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
                         assert len(local_tensors) == len(self._averaged_tensors)
                         for tensor, update in zip(local_tensors, averaging_outputs):
                             tensor.add_(update, alpha=self._averaging_alpha)
@@ -496,14 +449,14 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             self.lock_averaged_tensors.release()
 
     async def rpc_join_group(
-        self, request: averaging_pb2.JoinRequest, context: grpc.ServicerContext
+        self, request: averaging_pb2.JoinRequest, context: P2PContext
     ) -> AsyncIterator[averaging_pb2.MessageFromLeader]:
         """accept or reject a join request from another averager; if accepted, run him through allreduce steps"""
         async for response in self._matchmaking.rpc_join_group(request, context):
             yield response
 
     async def rpc_aggregate_part(
-        self, stream: AsyncIterator[averaging_pb2.AveragingData], context: grpc.ServicerContext
+        self, stream: AsyncIterator[averaging_pb2.AveragingData], context: P2PContext
     ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """a groupmate sends us a part of his tensor; we should average it with other peers and return the result"""
         request = await anext(stream)
@@ -528,7 +481,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                     asyncio.wait_for(
                         self.dht.store(
                             download_key,
-                            subkey=self.endpoint,
+                            subkey=self.peer_id.to_bytes(),
                             value=self.last_updated,
                             expiration_time=get_dht_time() + self._matchmaking.averaging_expiration,
                             return_future=True,
@@ -539,7 +492,7 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             await asyncio.sleep(self._matchmaking.averaging_expiration)
 
     async def rpc_download_state(
-        self, request: averaging_pb2.DownloadRequest, context: grpc.ServicerContext
+        self, _request: averaging_pb2.DownloadRequest, _context: P2PContext
     ) -> AsyncIterator[averaging_pb2.DownloadData]:
         """
         Get the up-to-date trainer state from a peer.
@@ -594,8 +547,8 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
             key_manager = self._matchmaking.group_key_manager
             peer_priority, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
             peer_priority = {
-                peer: float(info.value)
-                for peer, info in peer_priority.items()
+                PeerID(peer_id): float(info.value)
+                for peer_id, info in peer_priority.items()
                 if isinstance(info, ValueWithExpiration) and isinstance(info.value, (float, int))
             }
 
@@ -606,13 +559,10 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
 
             metadata = None
             for peer in sorted(peer_priority.keys(), key=peer_priority.get, reverse=True):
-                if peer != self.endpoint:
+                if peer != self.peer_id:
                     logger.info(f"Downloading parameters from peer {peer}")
-                    stream = None
                     try:
-                        stub = ChannelCache.get_stub(
-                            peer, averaging_pb2_grpc.DecentralizedAveragingStub, aio=True, options=self.channel_options
-                        )
+                        stub = self.get_stub(self._p2p, peer, namespace=self.prefix)
                         stream = stub.rpc_download_state(averaging_pb2.DownloadRequest())
                         current_tensor_parts, tensors = [], []
                         async for message in stream:
@@ -636,9 +586,6 @@ class DecentralizedAverager(mp.Process, averaging_pb2_grpc.DecentralizedAveragin
                         return
                     except BaseException as e:
                         logger.exception(f"Failed to download state from {peer} - {repr(e)}")
-                    finally:
-                        if stream is not None:
-                            await stream.code()
 
         finally:
             if not future.done():

@@ -1,16 +1,16 @@
 import threading
 from functools import partial
-from typing import Sequence, Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 
-from hivemind.dht import DHT, DHTNode, DHTExpiration, DHTValue
+from hivemind.dht import DHT, DHTExpiration, DHTNode, DHTValue
 from hivemind.moe.client.expert import RemoteExpert
 from hivemind.moe.server.expert_uid import (
-    ExpertUID,
-    ExpertPrefix,
     FLAT_EXPERT,
-    Coordinate,
     UID_DELIMITER,
     UID_PATTERN,
+    Coordinate,
+    ExpertPrefix,
+    ExpertUID,
     is_valid_uid,
     split_uid,
 )
@@ -56,7 +56,7 @@ def declare_experts(
 async def _declare_experts(
     dht: DHT, node: DHTNode, uids: List[ExpertUID], endpoint: Endpoint, expiration: DHTExpiration
 ) -> Dict[ExpertUID, bool]:
-    num_workers = len(uids) if dht.max_workers is None else min(len(uids), dht.max_workers)
+    num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
     expiration_time = get_dht_time() + expiration
     data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
     for uid in uids:
@@ -89,7 +89,7 @@ async def _get_experts(
 ) -> List[Optional[RemoteExpert]]:
     if expiration_time is None:
         expiration_time = get_dht_time()
-    num_workers = len(uids) if dht.max_workers is None else min(len(uids), dht.max_workers)
+    num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
     found: Dict[ExpertUID, DHTValue] = await node.get_many(uids, expiration_time, num_workers=num_workers)
 
     experts: List[Optional[RemoteExpert]] = [None] * len(uids)

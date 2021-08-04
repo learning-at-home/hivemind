@@ -2,7 +2,7 @@
 
 [![Documentation Status](https://readthedocs.org/projects/learning-at-home/badge/?version=latest)](https://learning-at-home.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://img.shields.io/pypi/v/hivemind.svg)](https://pypi.org/project/hivemind/)
-[![Discord](https://img.shields.io/static/v1?style=default&label=Discord&logo=discord&message=join)](https://discord.gg/xC7ucM8j)
+[![Discord](https://img.shields.io/static/v1?style=default&label=Discord&logo=discord&message=join)](https://discord.gg/uGugx9zYvN)
 [![CI status](https://github.com/learning-at-home/hivemind/actions/workflows/run-tests.yml/badge.svg?branch=master)](https://github.com/learning-at-home/hivemind/actions)
 ![Codecov](https://img.shields.io/codecov/c/github/learning-at-home/hivemind)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
@@ -18,21 +18,21 @@ large model on hundreds of computers from different universities, companies, and
   network.
 * Fault-tolerant backpropagation: forward and backward passes succeed even if some nodes are unresponsive or take too
   long to respond.
-* Decentralized parameter averaging: iteratively aggregate updates from multiple
-  workers without the need to synchronize across the entire network ([paper](https://arxiv.org/abs/2103.03239)).
+* Decentralized parameter averaging: iteratively aggregate updates from multiple workers without the need to
+  synchronize across the entire network ([paper](https://arxiv.org/abs/2103.03239)).
 * Train neural networks of arbitrary size: parts of their layers are distributed across the participants with the
-  decentralized mixture-of-experts ([paper](https://arxiv.org/abs/2002.04013)).
+  Decentralized Mixture-of-Experts ([paper](https://arxiv.org/abs/2002.04013)).
 
 To learn more about the ideas behind this library, see https://learning-at-home.github.io or read
 the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).
 
 ## Installation
 
-Before installing, make sure that your environment has Python 3.7+ 
-and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.6.0 or newer.
-You can install them either natively or with [Anaconda](https://www.anaconda.com/products/individual).
+Before installing, make sure that your environment has Python 3.7+
+and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.6.0 or newer. They can be installed either
+natively or with [Anaconda](https://www.anaconda.com/products/individual).
 
-You can install [the latest release](https://pypi.org/project/hivemind) with pip or build hivemind from source.
+You can get [the latest release](https://pypi.org/project/hivemind) with pip or build hivemind from source.
 
 ### With pip
 
@@ -62,24 +62,29 @@ Before running the compilation, please ensure that your machine has a recent ver
 of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 
 ### System requirements
-- __Linux__ is the default OS for which hivemind is developed and tested. We recommend Ubuntu 18.04+ (64-bit),
-  but other 64-bit distros should work as well. Legacy 32-bit is not recommended.
-- __macOS 10.x__ mostly works but requires building hivemind from source, and some edge cases may fail.
-  To ensure full compatibility, we recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
-- __Windows 10+ (experimental)__ can run hivemind using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10).
-  You can configure WSL to use GPU following [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA.
-  After the CUDA toolkit is installed you can simply follow the instructions above to install with pip or from source.
+
+- __Linux__ is the default OS for which hivemind is developed and tested. We recommend Ubuntu 18.04+ (64-bit), but
+  other 64-bit distros should work as well. Legacy 32-bit is not recommended.
+- __macOS 10.x__ mostly works but requires building hivemind from source, and some edge cases may fail. To ensure full
+  compatibility, we recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
+- __Windows 10+ (experimental)__ can run hivemind
+  using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10). You can configure WSL to use GPU by
+  following sections 1–3 of [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA. After
+  that, you can simply follow the instructions above to install with pip or from source.
 
 ## Documentation
 
-* The [quickstart tutorial](https://learning-at-home.readthedocs.io/en/latest/user/quickstart.html) walks through installation
-  and a training a simple neural network with several peers.  
+* The [quickstart tutorial](https://learning-at-home.readthedocs.io/en/latest/user/quickstart.html) walks through
+  installation and a training a simple neural network with several peers.
 * [examples/albert](https://github.com/learning-at-home/hivemind/tree/master/examples/albert) contains the starter kit
   and instructions for training a Transformer masked language model collaboratively.
-* API reference and additional tutorials are available at [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
+* The [Mixture-of-Experts tutorial](https://learning-at-home.readthedocs.io/en/latest/user/moe.html)
+  covers the usage of Decentralized Mixture-of-Experts layers.
+* API reference and additional tutorials are available
+  at [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
 
-If you have any questions about installing and using hivemind, you can ask them in 
-[our Discord chat](https://discord.gg/xC7ucM8j) or file an [issue](https://github.com/learning-at-home/hivemind/issues).
+If you have any questions about installing and using hivemind, you can ask them in
+[our Discord chat](https://discord.gg/uGugx9zYvN) or file an [issue](https://github.com/learning-at-home/hivemind/issues).
 
 ## Contributing
 
@@ -88,9 +93,8 @@ documentation improvements to entirely new features, is equally appreciated.
 
 If you want to contribute to hivemind but don't know where to start, take a look at the
 unresolved [issues](https://github.com/learning-at-home/hivemind/issues). Open a new issue or
-join [our chat room](https://discord.gg/xC7ucM8j) in case you want to discuss new functionality or
-report a possible bug. Bug fixes are always welcome, but new features should be preferably discussed with maintainers
-beforehand.
+join [our chat room](https://discord.gg/xC7ucM8j) in case you want to discuss new functionality or report a possible
+bug. Bug fixes are always welcome, but new features should be preferably discussed with maintainers beforehand.
 
 If you want to start contributing to the source code of hivemind, please see
 the [contributing guidelines](https://github.com/learning-at-home/hivemind/blob/master/CONTRIBUTING.md) first. To learn
@@ -99,7 +103,7 @@ our [guide](https://learning-at-home.readthedocs.io/en/latest/user/contributing.
 
 ## Citation
 
-If you found hivemind or its underlying algorithms useful for your research, please cite the relevant papers:
+If you found hivemind or its underlying algorithms useful for your research, please cite the following source:
 
 ```
 @misc{hivemind,
@@ -111,7 +115,8 @@ If you found hivemind or its underlying algorithms useful for your research, ple
 ```
 
 Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired the creation of this library
-(prototype implementation of hivemind available at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
+(prototype implementation of hivemind available
+at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```
 @inproceedings{ryabinin2020crowdsourced,
@@ -171,5 +176,5 @@ Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired t
 
 </details>
 
-We also maintain a list of [related projects and
-acknowledgements](https://learning-at-home.readthedocs.io/en/latest/user/acknowledgements.html).
+We also maintain a list
+of [related projects and acknowledgements](https://learning-at-home.readthedocs.io/en/latest/user/acknowledgements.html).

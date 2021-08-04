@@ -7,12 +7,12 @@ from multiaddr import Multiaddr
 
 import hivemind
 
+from test_utils.dht_swarms import launch_dht_instances
+
 
 @pytest.mark.forked
 def test_get_store(n_peers=10):
-    peers = [hivemind.DHT(start=True)]
-    initial_peers = peers[0].get_visible_maddrs()
-    peers += [hivemind.DHT(initial_peers=initial_peers, start=True) for _ in range(n_peers - 1)]
+    peers = launch_dht_instances(n_peers)
 
     node1, node2 = random.sample(peers, 2)
     assert node1.store("key1", "value1", expiration_time=hivemind.get_dht_time() + 30)
@@ -104,5 +104,5 @@ async def test_dht_get_visible_maddrs():
     p2p = await hivemind.p2p.P2P.create(announce_maddrs=[dummy_endpoint])
     dht = hivemind.DHT(start=True, p2p=await p2p.replicate(p2p.daemon_listen_maddr))
 
-    assert dht.get_visible_maddrs() == [dummy_endpoint.encapsulate(f"/p2p/{p2p.id}")]
+    assert dht.get_visible_maddrs() == [dummy_endpoint.encapsulate(f"/p2p/{p2p.peer_id}")]
     dht.shutdown()
