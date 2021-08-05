@@ -228,7 +228,7 @@ class ControlClient:
             return await self._pending_calls[call_id]
 
         except asyncio.CancelledError:
-            asyncio.create_task(self._send_call_cancel(call_id))
+            await self._send_call_cancel(call_id)
             raise
 
         finally:

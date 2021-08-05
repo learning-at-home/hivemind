@@ -384,6 +384,7 @@ class P2P:
         :param stream_input: If True, assume ``handler`` to take ``TInputStream``
                              (not just ``TInputProtobuf``) as input.
         :param stream_output: If True, assume ``handler`` to return ``TOutputStream``
+                              (not ``Awaitable[TOutputProtobuf]``).
         """
 
         if not stream_input and not stream_output:
@@ -402,7 +403,6 @@ class P2P:
 
         await self._add_protobuf_stream_handler(name, _stream_handler, input_protobuf_type)
 
-    # only registers request-response handlers
     async def _add_protobuf_unary_handler(
         self,
         handle_name: str,
@@ -455,7 +455,7 @@ class P2P:
     ) -> Awaitable[TOutputProtobuf]:
         serialized_input = input.SerializeToString()
         response = await self._client.call_unary_handler(peer_id, handle_name, serialized_input)
-        return output_protobuf_type().FromString(response)
+        return output_protobuf_type.FromString(response)
 
     def iterate_protobuf_handler(
         self,
