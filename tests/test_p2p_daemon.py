@@ -36,7 +36,7 @@ async def test_daemon_killed_on_del():
 
 @pytest.mark.asyncio
 async def test_startup_error_message():
-    with pytest.raises(P2PDaemonError, match=r"failed to connect to bootstrap peers"):
+    with pytest.raises(P2PDaemonError, match=r"(?i)Failed to connect to bootstrap peers"):
         await P2P.create(
             initial_peers=[f"/ip4/127.0.0.1/tcp/{get_free_port()}/p2p/QmdaK4LUeQaKhqSFPRu9N7MvXUEWDxWwtCvPrS444tCgd1"]
         )
