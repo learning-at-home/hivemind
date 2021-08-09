@@ -91,6 +91,7 @@ class P2P:
         use_auto_relay: bool = False,
         relay_hop_limit: int = 0,
         startup_timeout: float = 15,
+        idle_timeout: int = 0,
     ) -> "P2P":
         """
         Start a new p2pd process and connect to it.
@@ -112,6 +113,8 @@ class P2P:
         :param use_auto_relay: enables autorelay
         :param relay_hop_limit: sets the hop limit for hop relays
         :param startup_timeout: raise a P2PDaemonError if the daemon does not start in ``startup_timeout`` seconds
+        :param idle_timeout: kill daemon if client has been idle for a given number of
+                             seconds before opening persistent streams
         :return: a wrapper for the p2p daemon
         """
 
@@ -151,6 +154,7 @@ class P2P:
             relayDiscovery=use_relay_discovery,
             autoRelay=use_auto_relay,
             relayHopLimit=relay_hop_limit,
+            idleTimeout=str(idle_timeout) + "s",
             b=need_bootstrap,
             **process_kwargs,
         )
@@ -168,7 +172,7 @@ class P2P:
             await self.shutdown()
             raise P2PDaemonError(f"Daemon failed to start in {startup_timeout:.1f} seconds")
 
-        self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
+        self._client = await p2pclient.Client.create(self._daemon_listen_maddr, self._client_listen_maddr)
         await self._ping_daemon()
         return self
 
@@ -190,7 +194,7 @@ class P2P:
         self._daemon_listen_maddr = daemon_listen_maddr
         self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pclient-{socket_uid}.sock")
 
-        self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
+        self._client = await p2pclient.Client.create(self._daemon_listen_maddr, self._client_listen_maddr)
 
         await self._ping_daemon()
         return self

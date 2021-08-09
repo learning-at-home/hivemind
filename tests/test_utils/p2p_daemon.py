@@ -160,7 +160,7 @@ async def _make_p2pd_pair(
     )
     # wait for daemon ready
     await p2pd.wait_until_ready()
-    client = Client(control_maddr=control_maddr, listen_maddr=listen_maddr)
+    client = await Client.create(control_maddr=control_maddr, listen_maddr=listen_maddr)
     try:
         async with client.listen():
             yield DaemonTuple(daemon=p2pd, client=client)
