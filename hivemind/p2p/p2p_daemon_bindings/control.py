@@ -74,8 +74,14 @@ class ControlClient:
     DEFAULT_LISTEN_MADDR = "/unix/tmp/p2pclient.sock"
 
     def __init__(
-        self, daemon_connector: DaemonConnector, listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR)
+        self,
+        daemon_connector: DaemonConnector,
+        listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR),
+        *,
+        _initialized_with_create=False,
     ) -> None:
+        assert _initialized_with_create, "Please use ControlClient.create coroutine to spawn new control instances"
+
         self.listen_maddr = listen_maddr
         self.daemon_connector = daemon_connector
         self.handlers: Dict[str, StreamHandler] = {}
@@ -83,13 +89,26 @@ class ControlClient:
         self._is_persistent_conn_open: bool = False
         self.unary_handlers: Dict[str, TUnaryHandler] = {}
 
-        self._ensure_conn_lock = asyncio.Lock()
         self._pending_messages: asyncio.Queue[p2pd_pb.PersistentConnectionRequest] = asyncio.Queue()
         self._pending_calls: Dict[CallID, asyncio.Future[bytes]] = {}
         self._handler_tasks: Dict[CallID, asyncio.Task] = {}
 
         self._read_task: Optional[asyncio.Task] = None
         self._write_task: Optional[asyncio.Task] = None
+
+    @classmethod
+    async def create(
+        cls,
+        daemon_connector: DaemonConnector,
+        listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR),
+        use_persistent_conn: bool = True,
+    ) -> "ControlClient":
+        control = cls(daemon_connector, listen_maddr, _initialized_with_create=True)
+
+        if use_persistent_conn:
+            await control._ensure_persistent_conn()
+
+        return control
 
     async def _handler(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         pb_stream_info = p2pd_pb.StreamInfo()  # type: ignore
@@ -184,19 +203,14 @@ class ControlClient:
         )
 
     async def _ensure_persistent_conn(self):
-        if not self._is_persistent_conn_open:
-            async with self._ensure_conn_lock:
-                if not self._is_persistent_conn_open:
-                    reader, writer = await self.daemon_connector.open_persistent_connection()
+        reader, writer = await self.daemon_connector.open_persistent_connection()
 
-                    self._read_task = asyncio.create_task(self._read_from_persistent_conn(reader))
-                    self._write_task = asyncio.create_task(self._write_to_persistent_conn(writer))
+        self._read_task = asyncio.create_task(self._read_from_persistent_conn(reader))
+        self._write_task = asyncio.create_task(self._write_to_persistent_conn(writer))
 
-                    self._is_persistent_conn_open = True
+        self._is_persistent_conn_open = True
 
     async def add_unary_handler(self, proto: str, handler: TUnaryHandler):
-        await self._ensure_persistent_conn()
-
         call_id = uuid.uuid4()
 
         add_unary_handler_req = p2pd_pb.AddUnaryHandlerRequest(proto=proto)
@@ -219,8 +233,6 @@ class ControlClient:
             callId=call_id.bytes,
             callUnary=call_unary_req,
         )
-
-        await self._ensure_persistent_conn()
 
         try:
             self._pending_calls[call_id] = asyncio.Future()
