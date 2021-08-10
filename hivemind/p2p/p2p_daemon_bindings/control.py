@@ -101,11 +101,11 @@ class ControlClient:
         cls,
         daemon_connector: DaemonConnector,
         listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR),
-        do_connect: bool = True,
+        use_persistent_conn: bool = True,
     ) -> "ControlClient":
         control = cls(daemon_connector, listen_maddr, _initialized_with_create=True)
 
-        if do_connect:
+        if use_persistent_conn:
             await control._ensure_persistent_conn()
 
         return control
