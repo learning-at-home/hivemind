@@ -210,14 +210,14 @@ async def test_control_client_ctor_listen_maddr(listen_maddr_str):
     c = await ControlClient.create(
         daemon_connector=DaemonConnector(),
         listen_maddr=Multiaddr(listen_maddr_str),
-        do_connect=False,
+        use_persistent_conn=False,
     )
     assert c.listen_maddr == Multiaddr(listen_maddr_str)
 
 
 @pytest.mark.asyncio
 async def test_control_client_ctor_default_listen_maddr():
-    c = await ControlClient.create(daemon_connector=DaemonConnector(), do_connect=False)
+    c = await ControlClient.create(daemon_connector=DaemonConnector(), use_persistent_conn=False)
     assert c.listen_maddr == Multiaddr(ControlClient.DEFAULT_LISTEN_MADDR)
 
 
