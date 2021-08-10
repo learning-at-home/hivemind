@@ -80,7 +80,7 @@ class ControlClient:
         *,
         _initialized_with_create=False,
     ) -> None:
-        assert _initialized_with_create, "Please use ControlClient.create coroutine to spawn new control instances "
+        assert _initialized_with_create, "Please use ControlClient.create coroutine to spawn new control instances"
 
         self.listen_maddr = listen_maddr
         self.daemon_connector = daemon_connector
