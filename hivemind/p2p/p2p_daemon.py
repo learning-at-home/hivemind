@@ -91,7 +91,7 @@ class P2P:
         use_auto_relay: bool = False,
         relay_hop_limit: int = 0,
         startup_timeout: float = 15,
-        idle_timeout: int = 0,
+        idle_timeout: float = 0,
     ) -> "P2P":
         """
         Start a new p2pd process and connect to it.
