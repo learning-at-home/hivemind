@@ -187,7 +187,8 @@ class ExpertBackend:
 
     def get_stats(self) -> Dict:
         """
-        Return current expert training statistics (number of updates, number of processed examples after last optimizer step)
+        Return current expert training statistics (number of updates, number of processed examples after
+        last optimizer step)
         """
         return {"updates": self.update_count, "examples_processed": self.examples_processed}
 
