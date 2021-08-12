@@ -21,8 +21,9 @@ def main():
                         help="'localhost' for local connections only, '0.0.0.0' for ipv4 '[::]' for ipv6")
     parser.add_argument('--num_experts', type=int, default=None, required=False, help="The number of experts to serve")
     parser.add_argument('--expert_pattern', type=str, default=None, required=False,
-                        help='all expert uids will follow this pattern, e.g. "myexpert.[0:256].[0:1024]" will sample random expert uids'
-                             ' between myexpert.0.0 and myexpert.255.1023 . Use either num_experts and this or expert_uids')
+                        help='all expert uids will follow this pattern, e.g. "myexpert.[0:256].[0:1024]" will'
+                             ' sample random expert uids between myexpert.0.0 and myexpert.255.1023 . Use either'
+                             ' num_experts and this or expert_uids')
     parser.add_argument('--expert_uids', type=str, nargs="*", default=None, required=False,
                         help="specify the exact list of expert uids to create. Use either this or num_experts"
                              " and expert_pattern, not both")
@@ -42,7 +43,8 @@ def main():
     parser.add_argument('--optimizer', type=str, default='adam', required=False, help='adam, sgd or none')
     parser.add_argument('--scheduler', type=str, choices=schedule_name_to_scheduler.keys(), default='none',
                         help='LR scheduler type to use')
-    parser.add_argument('--num_warmup_steps', type=int, required=False, help='The number of warmup steps for LR schedule')
+    parser.add_argument('--num_warmup_steps', type=int, required=False,
+                        help='The number of warmup steps for LR schedule')
     parser.add_argument('--num_total_steps', type=int, required=False, help='The total number of steps for LR schedule')
     parser.add_argument('--clip_grad_norm', type=float, required=False, help='Maximum gradient norm used for clipping')
 
