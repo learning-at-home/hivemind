@@ -5,7 +5,7 @@ Author: Kevin Mai-Husan Chia
 """
 
 import asyncio
-import uuid
+from uuid import UUID, uuid4
 from contextlib import asynccontextmanager, closing
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterable, Optional, Sequence, Tuple
 
@@ -67,7 +67,7 @@ class DaemonConnector:
 
 
 TUnaryHandler = Callable[[bytes, PeerID], Awaitable[bytes]]
-CallID = uuid.UUID
+CallID = UUID
 
 
 class ControlClient:
@@ -149,7 +149,7 @@ class ControlClient:
             resp = p2pd_pb.PersistentConnectionResponse()
             await read_pbmsg_safe(reader, resp)
 
-            call_id = uuid.UUID(bytes=resp.callId)
+            call_id = UUID(bytes=resp.callId)
 
             if resp.HasField("callUnaryResponse"):
                 if call_id in self._pending_calls and resp.callUnaryResponse.HasField("response"):
@@ -158,7 +158,7 @@ class ControlClient:
                     remote_exc = P2PHandlerError(resp.callUnaryResponse.error.decode(errors="ignore"))
                     self._pending_calls[call_id].set_exception(remote_exc)
                 else:
-                    logger.debug("received unexpected unary call")
+                    logger.debug("received unexpected unary call:", resp)
 
             elif resp.HasField("requestHandling"):
                 handler_task = asyncio.create_task(self._handle_persistent_request(call_id, resp.requestHandling))
@@ -173,7 +173,7 @@ class ControlClient:
                 msg = await self._pending_messages.get()
                 await write_pbmsg(writer, msg)
 
-    async def _handle_persistent_request(self, call_id: uuid.UUID, request: p2pd_pb.CallUnaryRequest):
+    async def _handle_persistent_request(self, call_id: UUID, request: p2pd_pb.CallUnaryRequest):
         if request.proto not in self.unary_handlers:
             logger.warning(f"Protocol {request.proto} not supported")
             return
@@ -194,7 +194,7 @@ class ControlClient:
         )
         self._handler_tasks.pop(call_id)
 
-    async def _cancel_unary_call(self, call_id: uuid.UUID):
+    async def _cancel_unary_call(self, call_id: UUID):
         await self._pending_messages.put(
             p2pd_pb.PersistentConnectionRequest(
                 callId=call_id.bytes,
@@ -211,7 +211,7 @@ class ControlClient:
         self._is_persistent_conn_open = True
 
     async def add_unary_handler(self, proto: str, handler: TUnaryHandler):
-        call_id = uuid.uuid4()
+        call_id = uuid4()
 
         add_unary_handler_req = p2pd_pb.AddUnaryHandlerRequest(proto=proto)
         req = p2pd_pb.PersistentConnectionRequest(callId=call_id.bytes, addUnaryHandler=add_unary_handler_req)
