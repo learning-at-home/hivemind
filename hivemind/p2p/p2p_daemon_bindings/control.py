@@ -5,9 +5,9 @@ Author: Kevin Mai-Husan Chia
 """
 
 import asyncio
-from uuid import UUID, uuid4
 from contextlib import asynccontextmanager, closing
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterable, Optional, Sequence, Tuple
+from uuid import UUID, uuid4
 
 from multiaddr import Multiaddr, protocols
 
