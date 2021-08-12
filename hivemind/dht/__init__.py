@@ -86,7 +86,7 @@ class DHT(mp.Process):
         self._record_validator = CompositeValidator(record_validators)
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)
         self.shutdown_timeout = shutdown_timeout
-        self.ready = mp.Event()
+        self._ready = MPFuture()
         self.daemon = daemon
 
         # These values will be fetched from the child process when requested
@@ -104,13 +104,19 @@ class DHT(mp.Process):
         with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
 
             async def _run():
-                self._node = await DHTNode.create(
-                    initial_peers=self.initial_peers,
-                    num_workers=self.num_workers,
-                    record_validator=self._record_validator,
-                    **self.kwargs,
-                )
-                self.ready.set()
+                try:
+                    self._node = await DHTNode.create(
+                        initial_peers=self.initial_peers,
+                        num_workers=self.num_workers,
+                        record_validator=self._record_validator,
+                        **self.kwargs,
+                    )
+                except Exception as e:
+                    # Loglevel is DEBUG since normally the exception is propagated to the caller
+                    logger.debug(e, exc_info=True)
+                    self._ready.set_exception(e)
+                    return
+                self._ready.set_result(None)
 
                 while True:
                     method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._inner_pipe.recv)
@@ -122,14 +128,17 @@ class DHT(mp.Process):
             coro = _run()
             loop.run_until_complete(coro)
 
-    def run_in_background(self, await_ready=True, timeout=None):
+    def run_in_background(self, await_ready: bool = True, timeout: Optional[float] = None) -> None:
         """
         Starts DHT in a background process. if await_ready, this method will wait until background dht
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()
-        if await_ready and not self.ready.wait(timeout=timeout):
-            raise TimeoutError(f"DHT didn't notify .ready in {timeout} seconds")
+        if await_ready:
+            self.wait_until_ready(timeout)
+
+    def wait_until_ready(self, timeout: Optional[float] = None) -> None:
+        self._ready.result(timeout=timeout)
 
     def shutdown(self) -> None:
         """Shut down a running dht process"""
@@ -252,7 +261,7 @@ class DHT(mp.Process):
                 future.set_exception(e)
 
     def add_validators(self, record_validators: Iterable[RecordValidatorBase]) -> None:
-        if not self.ready.is_set():
+        if not self._ready.done():
             raise RuntimeError(
                 "Can't append new validators before the DHT process has started. "
                 "Consider adding them to the initial list via DHT.__init__(record_validators=...)"
