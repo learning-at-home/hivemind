@@ -223,7 +223,7 @@ class ControlClient:
         await self._pending_messages.put(req)
 
     async def call_unary_handler(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
-        call_id = uuid.uuid4()
+        call_id = uuid4()
         call_unary_req = p2pd_pb.CallUnaryRequest(
             peer=peer_id.to_bytes(),
             proto=proto,
