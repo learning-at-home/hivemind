@@ -86,7 +86,6 @@ class ControlClient:
         self.daemon_connector = daemon_connector
         self.handlers: Dict[str, StreamHandler] = {}
 
-        self._is_persistent_conn_open: bool = False
         self.unary_handlers: Dict[str, TUnaryHandler] = {}
 
         self._pending_messages: asyncio.Queue[p2pd_pb.PersistentConnectionRequest] = asyncio.Queue()
@@ -215,8 +214,6 @@ class ControlClient:
 
         self._read_task = asyncio.create_task(self._read_from_persistent_conn(reader))
         self._write_task = asyncio.create_task(self._write_to_persistent_conn(writer))
-
-        self._is_persistent_conn_open = True
 
     async def add_unary_handler(self, proto: str, handler: TUnaryHandler):
         call_id = uuid4()
