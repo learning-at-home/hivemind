@@ -66,6 +66,7 @@ class P2P:
 
     def __init__(self):
         self.peer_id = None
+        self._client = None
         self._child = None
         self._alive = False
         self._reader_task = None
@@ -500,6 +501,8 @@ class P2P:
             await self._child.wait()
 
     def _terminate(self) -> None:
+        if self._client is not None:
+            self._client.close()
         if self._listen_task is not None:
             self._listen_task.cancel()
         if self._reader_task is not None:

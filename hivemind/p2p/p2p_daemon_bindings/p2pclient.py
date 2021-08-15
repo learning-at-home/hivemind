@@ -29,6 +29,12 @@ class Client:
 
         return client
 
+    def close(self) -> None:
+        self.control.close()
+
+    def __del__(self):
+        self.close()
+
     @asynccontextmanager
     async def listen(self) -> AsyncIterator["Client"]:
         """
