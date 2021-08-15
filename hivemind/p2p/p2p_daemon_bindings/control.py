@@ -173,7 +173,12 @@ class ControlClient:
     async def _write_to_persistent_conn(self, writer: asyncio.StreamWriter):
         with closing(writer):
             while True:
-                msg = await self._pending_messages.get()
+                try:
+                    msg = await self._pending_messages.get()
+                except ValueError:
+                    # Ignore "ValueError: I/O operation on closed file" because it is normal behavior
+                    # if the connection is closed by the other party
+                    break
                 await write_pbmsg(writer, msg)
 
     async def _handle_persistent_request(self, call_id: UUID, request: p2pd_pb.CallUnaryRequest):
