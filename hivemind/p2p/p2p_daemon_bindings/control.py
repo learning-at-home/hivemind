@@ -147,7 +147,10 @@ class ControlClient:
     async def _read_from_persistent_conn(self, reader: asyncio.StreamReader):
         while True:
             resp = p2pd_pb.PersistentConnectionResponse()
-            await read_pbmsg_safe(reader, resp)
+            try:
+                await read_pbmsg_safe(reader, resp)
+            except asyncio.IncompleteReadError:
+                break
 
             call_id = UUID(bytes=resp.callId)
 
