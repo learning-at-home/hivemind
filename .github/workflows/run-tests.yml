@@ -11,8 +11,7 @@ jobs:
       matrix:
         attempt: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 ]
         python-version: [ 3.7, 3.8, 3.9 ]
-      fail-fast: false    timeout-minutes: 10
-
+      fail-fast: false
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -36,7 +35,6 @@ jobs:
         run: |
           cd tests
           pytest --durations=0 --durations-min=1.0 -v
-
   build_and_test_p2pd:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -63,7 +61,6 @@ jobs:
         run: |
           cd tests
           pytest -k "p2p" -v
-
   codecov_in_develop_mode:
 
     runs-on: ubuntu-latest
