@@ -76,7 +76,7 @@ class PeerID:
 
     def __less__(self, other: object) -> bool:
         if not isinstance(other, PeerID):
-            raise ValueError(f"Can't order PeerID and {type(other)}")
+            raise TypeError(f"'<' not supported between instances of 'PeerID' and '{type(other)}'")
 
         return self.to_base58() < other.to_base58()
 
