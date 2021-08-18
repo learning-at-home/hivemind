@@ -17,12 +17,13 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, St
 class Client:
     control: ControlClient
 
-    def __init__(self) -> None:
+    def __init__(self, *, _initialized_with_create=False) -> None:
+        assert _initialized_with_create, "Please use Client.create coroutine to spawn new client instances"
         self.control = None
 
     @classmethod
     async def create(cls, control_maddr: Multiaddr = None, listen_maddr: Multiaddr = None) -> "Client":
-        client = cls()
+        client = cls(_initialized_with_create=True)
 
         daemon_connector = DaemonConnector(control_maddr=control_maddr)
         client.control = await ControlClient.create(daemon_connector=daemon_connector, listen_maddr=listen_maddr)
