@@ -4,7 +4,7 @@ import os
 import subprocess
 import time
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import NamedTuple
 
 from multiaddr import Multiaddr, protocols
@@ -57,7 +57,7 @@ class Daemon:
 
     def _run(self):
         cmd_list = [P2PD_PATH, f"-listen={str(self.control_maddr)}"]
-        cmd_list += [f"-hostAddrs=/ip4/127.0.0.1/tcp/{get_free_port()}"]
+        cmd_list += ["-hostAddrs=/ip4/127.0.0.1/tcp/0"]
         if self.enable_connmgr:
             cmd_list += ["-connManager=true", "-connLo=1", "-connHi=2", "-connGrace=0"]
         if self.enable_dht:
@@ -107,24 +107,21 @@ async def make_p2pd_pair_unix(enable_control, enable_connmgr, enable_dht, enable
     name = str(uuid.uuid4())[:8]
     control_maddr = Multiaddr(f"/unix/tmp/test_p2pd_control_{name}.sock")
     listen_maddr = Multiaddr(f"/unix/tmp/test_p2pd_listen_{name}.sock")
-    # Remove the existing unix socket files if they are existing
     try:
-        os.unlink(control_maddr.value_for_protocol(protocols.P_UNIX))
-    except FileNotFoundError:
-        pass
-    try:
-        os.unlink(listen_maddr.value_for_protocol(protocols.P_UNIX))
-    except FileNotFoundError:
-        pass
-    async with _make_p2pd_pair(
-        control_maddr=control_maddr,
-        listen_maddr=listen_maddr,
-        enable_control=enable_control,
-        enable_connmgr=enable_connmgr,
-        enable_dht=enable_dht,
-        enable_pubsub=enable_pubsub,
-    ) as pair:
-        yield pair
+        async with _make_p2pd_pair(
+            control_maddr=control_maddr,
+            listen_maddr=listen_maddr,
+            enable_control=enable_control,
+            enable_connmgr=enable_connmgr,
+            enable_dht=enable_dht,
+            enable_pubsub=enable_pubsub,
+        ) as pair:
+            yield pair
+    finally:
+        with suppress(FileNotFoundError):
+            os.unlink(control_maddr.value_for_protocol(protocols.P_UNIX))
+        with suppress(FileNotFoundError):
+            os.unlink(listen_maddr.value_for_protocol(protocols.P_UNIX))
 
 
 @asynccontextmanager
