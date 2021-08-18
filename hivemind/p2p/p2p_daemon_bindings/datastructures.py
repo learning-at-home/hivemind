@@ -74,8 +74,11 @@ class PeerID:
         else:
             return False
 
-    def __less__(self, other: "PeerID") -> bool:
-        return self._bytes < other._bytes
+    def __less__(self, other: object) -> bool:
+        if not isinstance(other, PeerID):
+            raise ValueError(f"Can't order PeerID and {type(other)}")
+
+        return self.to_base58() < other.to_base58()
 
     def __hash__(self) -> int:
         return hash(self._bytes)
