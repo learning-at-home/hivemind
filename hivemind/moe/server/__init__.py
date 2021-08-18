@@ -71,7 +71,7 @@ class Server(threading.Thread):
             listen_on = replace_port(listen_on, new_port=get_free_port())
         self.listen_on, self.port = listen_on, get_port(listen_on)
 
-        self.conn_handlers = [ConnectionHandler(listen_on, self.experts) for _ in range(num_connection_handlers)]
+        self.conn_handlers = [ConnectionHandler(dht, self.experts) for _ in range(1)]
         if checkpoint_dir is not None:
             self.checkpoint_saver = CheckpointSaver(expert_backends, checkpoint_dir, update_period)
         else:
@@ -253,7 +253,7 @@ class Server(threading.Thread):
         for process in self.conn_handlers:
             if not process.is_alive():
                 process.start()
-            process.ready.wait()
+            process.ready.result()
 
         try:
             self.runtime.run()
