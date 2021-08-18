@@ -74,7 +74,7 @@ class PeerID:
         else:
             return False
 
-    def __less__(self, other: object) -> bool:
+    def __lt__(self, other: object) -> bool:
         if not isinstance(other, PeerID):
             raise TypeError(f"'<' not supported between instances of 'PeerID' and '{type(other)}'")
 
