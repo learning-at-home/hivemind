@@ -106,6 +106,7 @@ class ControlClient:
 
         if use_persistent_conn:
             await control._ensure_persistent_conn()
+            await asyncio.sleep(0.4)
 
         return control
 
