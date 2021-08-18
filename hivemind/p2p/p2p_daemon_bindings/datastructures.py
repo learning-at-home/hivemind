@@ -74,6 +74,9 @@ class PeerID:
         else:
             return False
 
+    def __less__(self, other: "PeerID") -> bool:
+        return self._bytes < other._bytes
+
     def __hash__(self) -> int:
         return hash(self._bytes)
 
