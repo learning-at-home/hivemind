@@ -18,7 +18,7 @@ from hivemind.p2p.p2p_daemon_bindings.utils import (
 )
 from hivemind.proto import p2pd_pb2 as p2pd_pb
 
-from test_utils.p2p_daemon import connect_safe, make_p2pd_pair_ip4
+from test_utils.p2p_daemon import connect_safe, make_p2pd_pair_unix
 
 
 def test_raise_if_failed_raises():
@@ -61,7 +61,7 @@ ENABLE_CONTROL = True
 ENABLE_CONNMGR = False
 ENABLE_DHT = False
 ENABLE_PUBSUB = False
-FUNC_MAKE_P2PD_PAIR = make_p2pd_pair_ip4
+FUNC_MAKE_P2PD_PAIR = make_p2pd_pair_unix
 
 
 class MockReader(io.BytesIO):
