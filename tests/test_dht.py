@@ -22,7 +22,7 @@ async def test_startup_error():
 
     dht = hivemind.DHT(start=True, await_ready=False)
     with pytest.raises(concurrent.futures.TimeoutError):
-        dht.wait_until_ready(timeout=0.1)
+        dht.wait_until_ready(timeout=0.01)
     dht.shutdown()
 
 
