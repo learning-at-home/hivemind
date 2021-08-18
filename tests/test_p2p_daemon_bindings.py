@@ -377,11 +377,6 @@ async def p2pcs():
 
 
 @pytest.mark.asyncio
-async def test_client_identify_unix_socket(p2pcs):
-    await p2pcs[0].identify()
-
-
-@pytest.mark.asyncio
 async def test_client_identify(p2pcs):
     await p2pcs[0].identify()
 
