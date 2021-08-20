@@ -230,7 +230,7 @@ class ControlClient:
         req = p2pd_pb.PersistentConnectionRequest(callId=call_id.bytes, addUnaryHandler=add_unary_handler_req)
 
         if self.unary_handlers.get(proto):
-            raise HandlerSetException(proto)
+            raise P2PDaemonError(f"Handler for protocol {proto} already registered")
         self.unary_handlers[proto] = handler
 
         self._pending_calls[call_id] = asyncio.Future()
@@ -347,11 +347,6 @@ class ControlClient:
 
         # if success, add the handler to the dict
         self.handlers[proto] = handler_cb
-
-
-class HandlerSetException(ValueError):
-    def __init__(self, handler_name):
-        super().__init__(f"Handler for {handler_name} already set")
 
 
 class P2PHandlerError(Exception):

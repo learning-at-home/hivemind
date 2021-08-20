@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from multiaddr import Multiaddr
 
-from hivemind.p2p import P2P, P2PDaemonError, P2PHandlerError, HandlerSetException
+from hivemind.p2p import P2P, P2PDaemonError, P2PHandlerError
 from hivemind.proto import dht_pb2, test_pb2
 from hivemind.utils.networking import get_free_port
 from hivemind.utils.serializer import MSGPackSerializer
@@ -93,15 +93,11 @@ async def test_single_handler_per_protocol():
 
     await p2p_daemon.add_protobuf_handler("square", square_handler, test_pb2.TestRequest)
 
-    try:
+    with pytest.raises(P2PDaemonError):
         await p2p_daemon.add_protobuf_handler("square", square_handler, test_pb2.TestRequest)
-    except HandlerSetException:
-        pass
 
-    try:
+    with pytest.raises(P2PDaemonError):
         await p2p_replica.add_protobuf_handler("square", square_handler, test_pb2.TestRequest)
-    except P2PDaemonError:
-        pass
 
 
 @pytest.mark.parametrize(
