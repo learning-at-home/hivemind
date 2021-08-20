@@ -74,9 +74,12 @@ class PeerID:
         else:
             return False
 
-    def __lt__(self, value):
-        return self._bytes < value._bytes
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, PeerID):
+            raise TypeError(f"'<' not supported between instances of 'PeerID' and '{type(other)}'")
 
+        return self.to_base58() < other.to_base58()
+      
     def __hash__(self) -> int:
         return hash(self._bytes)
 

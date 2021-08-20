@@ -144,6 +144,12 @@ def test_peer_id():
     peer_id_3 = PeerID.from_base58("QmbmfNDEth7Ucvjuxiw3SP3E4PoJzbk7g4Ge6ZDigbCsNp")
     assert PEER_ID != peer_id_3
 
+    a = PeerID.from_base58("bob")
+    b = PeerID.from_base58("eve")
+    assert a < b and b > a and not (b < a) and not (a > b)
+    with pytest.raises(TypeError):
+        assert a < object()
+
 
 def test_stream_info():
     proto = "123"
