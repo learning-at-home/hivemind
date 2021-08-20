@@ -61,6 +61,7 @@ class DHT(mp.Process):
         initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
         *,
         start: bool,
+        p2p: P2P,
         daemon: bool = True,
         num_workers: int = DEFAULT_NUM_WORKERS,
         record_validators: Iterable[RecordValidatorBase] = (),
@@ -94,8 +95,7 @@ class DHT(mp.Process):
         self._client_mode = None
         self._p2p_replica = None
 
-        if "p2p" in self.kwargs:
-            self._daemon_listen_maddr = self.kwargs.pop("p2p").daemon_listen_maddr
+        self._daemon_listen_maddr = p2p.daemon_listen_maddr if p2p is not None else None
 
         if start:
             self.run_in_background(await_ready=await_ready)
