@@ -59,7 +59,7 @@ async def aenumerate(aiterable: AsyncIterable[T]) -> AsyncIterable[Tuple[int, T]
 
 
 async def asingle(aiter: AsyncIterable[T]) -> T:
-    """If ``aiter`` has exactly one item, returns this item. Otherwise, raises `ValueError`."""
+    """If ``aiter`` has exactly one item, returns this item. Otherwise, raises ``ValueError``."""
     count = 0
     async for item in aiter:
         count += 1
@@ -68,6 +68,13 @@ async def asingle(aiter: AsyncIterable[T]) -> T:
     if count == 0:
         raise ValueError("asingle() expected an iterable with exactly one item, but got an empty iterable")
     return item
+
+
+async def afirst(aiter: AsyncIterable[T], default: Optional[T] = None) -> Optional[T]:
+    """Returns the first item of ``aiter`` or ``default`` if ``aiter`` is empty."""
+    async for item in aiter:
+        return item
+    return default
 
 
 async def await_cancelled(awaitable: Awaitable) -> bool:
