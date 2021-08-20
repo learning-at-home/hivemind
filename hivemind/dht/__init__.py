@@ -94,6 +94,9 @@ class DHT(mp.Process):
         self._client_mode = None
         self._p2p_replica = None
 
+        if "p2p" in self.kwargs:
+            self._daemon_listen_maddr = self.kwargs.pop("p2p").daemon_listen_maddr
+
         if start:
             self.run_in_background(await_ready=await_ready)
 
@@ -105,9 +108,8 @@ class DHT(mp.Process):
 
             async def _run():
                 try:
-                    if "p2p" in self.kwargs:
-                        p2p = self.kwargs.pop("p2p")
-                        replicated_p2p = await P2P.replicate(p2p.daemon_listen_maddr)
+                    if hasattr(self, "_daemon_listen_maddr"):
+                        replicated_p2p = await P2P.replicate(self._daemon_listen_maddr)
                     else:
                         replicated_p2p = None
 
