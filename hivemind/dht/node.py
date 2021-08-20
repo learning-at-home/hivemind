@@ -237,7 +237,7 @@ class DHTNode:
             if not finished_pings or all(ping.result() is None for ping in finished_pings):
                 message = "DHTNode bootstrap failed: none of the initial_peers responded to a ping."
                 if validate:
-                    raise ValueError(f"{message} (set validate=False to ignore)")
+                    raise RuntimeError(f"{message} (set validate=False to ignore)")
                 else:
                     logger.warning(message)
 
