@@ -235,7 +235,11 @@ class DHTNode:
                 finished_pings |= finished_in_time
 
             if not finished_pings or all(ping.result() is None for ping in finished_pings):
-                logger.warning("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
+                message = "DHTNode bootstrap failed: none of the initial_peers responded to a ping."
+                if validate:
+                    raise ValueError(f"{message} (set validate=False to ignore)")
+                else:
+                    logger.warning(message)
 
             if strict:
                 for task in asyncio.as_completed(finished_pings):
