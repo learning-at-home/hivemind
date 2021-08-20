@@ -173,6 +173,16 @@ class ControlClient:
             elif call_id in self._handler_tasks and resp.HasField("cancel"):
                 self._handler_tasks[call_id].cancel()
 
+            elif call_id in self._pending_calls and resp.HasField("daemonError"):
+                daemon_exc = DaemonError(resp.daemonError.message)
+                self._pending_calls[call_id].set_exception(daemon_exc)
+
+            elif call_id in self._pending_calls:
+                self._pending_calls[call_id].set_result(None)
+
+            else:
+                logger.warn("Received unexpected response from daemon:", resp)
+
     async def _write_to_persistent_conn(self, writer: asyncio.StreamWriter):
         with closing(writer):
             while True:
@@ -224,7 +234,9 @@ class ControlClient:
             raise ValueError(f"Handler for protocol {proto} already assigned")
         self.unary_handlers[proto] = handler
 
+        self._pending_calls[call_id] = asyncio.Future()
         await self._pending_messages.put(req)
+        await self._pending_calls[call_id]
 
     async def call_unary_handler(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
         call_id = uuid4()
@@ -341,4 +353,10 @@ class ControlClient:
 class P2PHandlerError(Exception):
     """
     Raised if remote handled a request with an exception
+    """
+
+
+class DaemonError(Exception):
+    """
+    Raised if daemon failed to handle request
     """
