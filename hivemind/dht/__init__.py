@@ -108,7 +108,7 @@ class DHT(mp.Process):
 
             async def _run():
                 try:
-                    if hasattr(self, "_daemon_listen_maddr"):
+                    if self._daemon_listen_maddr is not None:
                         replicated_p2p = await P2P.replicate(self._daemon_listen_maddr)
                     else:
                         replicated_p2p = None
