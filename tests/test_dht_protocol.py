@@ -23,7 +23,8 @@ def maddrs_to_peer_ids(maddrs: List[Multiaddr]) -> List[PeerID]:
 def run_protocol_listener(
     dhtid: DHTID, maddr_conn: mp.connection.Connection, initial_peers: Sequence[Multiaddr]
 ) -> None:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
     p2p = loop.run_until_complete(P2P.create(initial_peers=initial_peers))
     visible_maddrs = loop.run_until_complete(p2p.get_visible_maddrs())
