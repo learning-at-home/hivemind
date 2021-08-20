@@ -181,7 +181,7 @@ class ControlClient:
                 self._pending_calls[call_id].set_result(None)
 
             else:
-                logger.warn("Received unexpected response from daemon:", resp)
+                logger.warning("Received unexpected response from daemon:", resp)
 
     async def _write_to_persistent_conn(self, writer: asyncio.StreamWriter):
         with closing(writer):
