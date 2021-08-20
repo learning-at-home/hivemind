@@ -62,8 +62,8 @@ async def test_dht_node(
         query_id = DHTID.generate()
         k_nearest = random.randint(1, 10)
         exclude_self = random.random() > 0.5
-        nearest = (await me.find_nearest_nodes([query_id], k_nearest=k_nearest, exclude_self=exclude_self))[query_id]
-        nearest_nodes = list(nearest)  # keys from ordered dict
+        find_result = await me.find_nearest_nodes([query_id], k_nearest=k_nearest, exclude_self=exclude_self)
+        nearest_nodes = list(find_result[query_id])  # keys from ordered dict
 
         assert len(nearest_nodes) == k_nearest, "beam search must return exactly k_nearest results"
         assert me.node_id not in nearest_nodes or not exclude_self, "if exclude, results shouldn't contain self"
@@ -118,7 +118,7 @@ async def test_dht_node(
         assert val == ["Value", 10], "Wrong value"
         assert expiration_time == true_time, f"Wrong time"
 
-    assert (await detached_node.get("mykey")) is None
+    assert not await detached_node.get("mykey")
 
     # test 7: bulk store and bulk get
     keys = "foo", "bar", "baz", "zzz"

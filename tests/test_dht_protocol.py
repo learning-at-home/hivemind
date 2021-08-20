@@ -75,7 +75,7 @@ async def test_dht_protocol():
         )
         logger.info(f"Self id={protocol.node_id}")
 
-        assert (await protocol.call_ping(peer1_id)) == peer1_node_id
+        assert peer1_node_id == await protocol.call_ping(peer1_id)
 
         key, value, expiration = DHTID.generate(), [random.random(), {"ololo": "pyshpysh"}], get_dht_time() + 1e3
         store_ok = await protocol.call_store(peer1_id, [key], [hivemind.MSGPackSerializer.dumps(value)], expiration)
@@ -104,7 +104,7 @@ async def test_dht_protocol():
         ), f"expected id={peer1_node_id}, peer={peer1_id} but got {recv_id}, {recv_peer_id}"
 
         # cause a non-response by querying a nonexistent peer
-        assert (await protocol.call_find(PeerID.from_base58("fakeid"), [key])) is None
+        assert not await protocol.call_find(PeerID.from_base58("fakeid"), [key])
 
         # store/get a dictionary with sub-keys
         nested_key, subkey1, subkey2 = DHTID.generate(), "foo", "bar"
@@ -158,6 +158,6 @@ async def test_empty_table():
     assert len(nodes_found) == 0
     assert recv_value == value and recv_expiration == expiration
 
-    assert (await protocol.call_ping(peer_peer_id)) == peer_id
-    assert (await protocol.call_ping(PeerID.from_base58("fakeid"))) is None
+    assert peer_id == await protocol.call_ping(peer_peer_id)
+    assert not await protocol.call_ping(PeerID.from_base58("fakeid"))
     peer_proc.terminate()
