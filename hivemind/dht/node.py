@@ -121,7 +121,7 @@ class DHTNode:
         client_mode: bool = False,
         record_validator: Optional[RecordValidatorBase] = None,
         authorizer: Optional[AuthorizerBase] = None,
-        validate: bool = True,
+        ensure_bootstrap_success: bool = True,
         strict: bool = True,
         **kwargs,
     ) -> DHTNode:
@@ -156,7 +156,8 @@ class DHTNode:
         :param chunk_size: maximum number of concurrent calls in get_many and cache refresh queue
         :param blacklist_time: excludes non-responsive peers from search for this many seconds (set 0 to disable)
         :param backoff_rate: blacklist time will be multiplied by :backoff_rate: for each successive non-response
-        :param validate: if True, use initial peers to validate that this node is accessible and synchronized
+        :param ensure_bootstrap_success: raise an error if node could not connect to initial peers (or vice versa)
+           If False, print a warning instead. It is recommended to keep this flag unless you know what you're doing.
         :param strict: if True, any error encountered in validation will interrupt the creation of DHTNode
         :param client_mode: if False (default), this node will accept incoming requests as a full DHT "citizen"
           if True, this node will refuse any incoming requests, effectively being only a client
@@ -220,7 +221,7 @@ class DHTNode:
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
             start_time = get_dht_time()
             ping_tasks = set(
-                asyncio.create_task(self.protocol.call_ping(peer, validate=validate, strict=strict))
+                asyncio.create_task(self.protocol.call_ping(peer, validate=ensure_bootstrap_success, strict=strict))
                 for peer in initial_peers
             )
             finished_pings, unfinished_pings = await asyncio.wait(ping_tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -236,8 +237,8 @@ class DHTNode:
 
             if not finished_pings or all(ping.result() is None for ping in finished_pings):
                 message = "DHTNode bootstrap failed: none of the initial_peers responded to a ping."
-                if validate:
-                    raise RuntimeError(f"{message} (set validate=False to ignore)")
+                if ensure_bootstrap_success:
+                    raise RuntimeError(f"{message} (set ensure_bootstrap_success=False to ignore)")
                 else:
                     logger.warning(message)
 
