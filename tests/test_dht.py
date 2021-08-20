@@ -106,7 +106,6 @@ def test_run_coroutine():
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="This test blocks the execution of other tests")
 async def test_dht_get_visible_maddrs():
     # test 1: IPv4 localhost multiaddr is visible by default
 

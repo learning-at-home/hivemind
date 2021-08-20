@@ -105,10 +105,17 @@ class DHT(mp.Process):
 
             async def _run():
                 try:
+                    if "p2p" in self.kwargs:
+                        p2p = self.kwargs.pop("p2p")
+                        replicated_p2p = await P2P.replicate(p2p.daemon_listen_maddr)
+                    else:
+                        replicated_p2p = None
+
                     self._node = await DHTNode.create(
                         initial_peers=self.initial_peers,
                         num_workers=self.num_workers,
                         record_validator=self._record_validator,
+                        p2p=replicated_p2p,
                         **self.kwargs,
                     )
                 except Exception as e:
