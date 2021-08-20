@@ -20,8 +20,8 @@ logger = get_logger(__name__)
 
 
 @pytest.mark.forked
-@pytest
-def test_dht_node(
+@pytest.mark.asyncio
+async def test_dht_node(
     n_peers: int = 20, n_sequential_peers: int = 5, parallel_rpc: int = 10, bucket_size: int = 5, num_replicas: int = 3
 ):
     # step A: create a swarm of 50 dht nodes in separate processes
@@ -32,26 +32,23 @@ def test_dht_node(
     )
 
     # step B: run 51-st node in this process
-    loop = asyncio.get_event_loop()
     initial_peers = random.choice(swarm_maddrs)
-    me = loop.run_until_complete(
-        DHTNode.create(
-            initial_peers=initial_peers,
-            parallel_rpc=parallel_rpc,
-            bucket_size=bucket_size,
-            num_replicas=num_replicas,
-            cache_refresh_before_expiry=False,
-        )
+    me = await DHTNode.create(
+        initial_peers=initial_peers,
+        parallel_rpc=parallel_rpc,
+        bucket_size=bucket_size,
+        num_replicas=num_replicas,
+        cache_refresh_before_expiry=False,
     )
 
     # test 1: find self
-    nearest = loop.run_until_complete(me.find_nearest_nodes([me.node_id], k_nearest=1))[me.node_id]
+    nearest = (await me.find_nearest_nodes([me.node_id], k_nearest=1))[me.node_id]
     assert len(nearest) == 1 and nearest[me.node_id] == me.peer_id
 
     # test 2: find others
     for _ in range(10):
         ref_peer_id, query_id = random.choice(list(dht.items()))
-        nearest = loop.run_until_complete(me.find_nearest_nodes([query_id], k_nearest=1))[query_id]
+        nearest = (await me.find_nearest_nodes([query_id], k_nearest=1))[query_id]
         assert len(nearest) == 1
         found_node_id, found_peer_id = next(iter(nearest.items()))
         assert found_node_id == query_id and found_peer_id == ref_peer_id
@@ -65,9 +62,7 @@ def test_dht_node(
         query_id = DHTID.generate()
         k_nearest = random.randint(1, 10)
         exclude_self = random.random() > 0.5
-        nearest = loop.run_until_complete(
-            me.find_nearest_nodes([query_id], k_nearest=k_nearest, exclude_self=exclude_self)
-        )[query_id]
+        nearest = (await me.find_nearest_nodes([query_id], k_nearest=k_nearest, exclude_self=exclude_self))[query_id]
         nearest_nodes = list(nearest)  # keys from ordered dict
 
         assert len(nearest_nodes) == k_nearest, "beam search must return exactly k_nearest results"
@@ -95,65 +90,63 @@ def test_dht_node(
 
     # test 4: find all nodes
     dummy = DHTID.generate()
-    nearest = loop.run_until_complete(me.find_nearest_nodes([dummy], k_nearest=len(dht) + 100))[dummy]
+    nearest = (await me.find_nearest_nodes([dummy], k_nearest=len(dht) + 100))[dummy]
     assert len(nearest) == len(dht) + 1
     assert len(set.difference(set(nearest.keys()), set(all_node_ids) | {me.node_id})) == 0
 
     # test 5: node without peers
-    detached_node = loop.run_until_complete(DHTNode.create())
-    nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy]))[dummy]
+    detached_node = await DHTNode.create()
+    nearest = (await detached_node.find_nearest_nodes([dummy]))[dummy]
     assert len(nearest) == 1 and nearest[detached_node.node_id] == detached_node.peer_id
-    nearest = loop.run_until_complete(detached_node.find_nearest_nodes([dummy], exclude_self=True))[dummy]
+    nearest = (await detached_node.find_nearest_nodes([dummy], exclude_self=True))[dummy]
     assert len(nearest) == 0
 
     # test 6: store and get value
     true_time = get_dht_time() + 1200
-    assert loop.run_until_complete(me.store("mykey", ["Value", 10], true_time))
+    assert await me.store("mykey", ["Value", 10], true_time)
 
     initial_peers = random.choice(swarm_maddrs)
-    that_guy = loop.run_until_complete(
-        DHTNode.create(
-            initial_peers=initial_peers,
-            parallel_rpc=parallel_rpc,
-            cache_refresh_before_expiry=False,
-            cache_locally=False,
-        )
+    that_guy = await DHTNode.create(
+        initial_peers=initial_peers,
+        parallel_rpc=parallel_rpc,
+        cache_refresh_before_expiry=False,
+        cache_locally=False,
     )
 
     for node in [me, that_guy]:
-        val, expiration_time = loop.run_until_complete(node.get("mykey"))
+        val, expiration_time = await node.get("mykey")
         assert val == ["Value", 10], "Wrong value"
         assert expiration_time == true_time, f"Wrong time"
 
-    assert loop.run_until_complete(detached_node.get("mykey")) is None
+    assert (await detached_node.get("mykey")) is None
 
     # test 7: bulk store and bulk get
     keys = "foo", "bar", "baz", "zzz"
     values = 3, 2, "batman", [1, 2, 3]
-    store_ok = loop.run_until_complete(me.store_many(keys, values, expiration_time=get_dht_time() + 999))
+    store_ok = await me.store_many(keys, values, expiration_time=get_dht_time() + 999)
     assert all(store_ok.values()), "failed to store one or more keys"
-    response = loop.run_until_complete(me.get_many(keys[::-1]))
+    response = await me.get_many(keys[::-1])
     for key, value in zip(keys, values):
         assert key in response and response[key][0] == value
 
     # test 8: store dictionaries as values (with sub-keys)
     upper_key, subkey1, subkey2, subkey3 = "ololo", "k1", "k2", "k3"
     now = get_dht_time()
-    assert loop.run_until_complete(me.store(upper_key, subkey=subkey1, value=123, expiration_time=now + 10))
-    assert loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=456, expiration_time=now + 20))
+    assert await me.store(upper_key, subkey=subkey1, value=123, expiration_time=now + 10)
+    assert await me.store(upper_key, subkey=subkey2, value=456, expiration_time=now + 20)
     for node in [that_guy, me]:
-        value, time = loop.run_until_complete(node.get(upper_key))
+        value, time = await node.get(upper_key)
         assert isinstance(value, dict) and time == now + 20
         assert value[subkey1] == (123, now + 10)
         assert value[subkey2] == (456, now + 20)
         assert len(value) == 2
 
-    assert not loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=345, expiration_time=now + 10))
-    assert loop.run_until_complete(me.store(upper_key, subkey=subkey2, value=567, expiration_time=now + 30))
-    assert loop.run_until_complete(me.store(upper_key, subkey=subkey3, value=890, expiration_time=now + 50))
+    assert not await me.store(upper_key, subkey=subkey2, value=345, expiration_time=now + 10)
+    assert await me.store(upper_key, subkey=subkey2, value=567, expiration_time=now + 30)
+    assert await me.store(upper_key, subkey=subkey3, value=890, expiration_time=now + 50)
 
     for node in [that_guy, me]:
-        value, time = loop.run_until_complete(node.get(upper_key, latest=True))
+        value, time = await node.get(upper_key, latest=True)
         assert isinstance(value, dict) and time == now + 50, (value, time)
         assert value[subkey1] == (123, now + 10)
         assert value[subkey2] == (567, now + 30)
@@ -163,7 +156,7 @@ def test_dht_node(
     for proc in processes:
         proc.terminate()
     # The nodes don't own their hivemind.p2p.P2P instances, so we shutdown them separately
-    loop.run_until_complete(asyncio.wait([node.shutdown() for node in [me, detached_node, that_guy]]))
+    await asyncio.gather(me.shutdown(), that_guy.shutdown(), detached_node.shutdown())
 
 
 @pytest.mark.forked
