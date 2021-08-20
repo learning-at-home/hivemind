@@ -136,8 +136,8 @@ async def test_dht_protocol():
 
 
 @pytest.mark.forked
-@pytest.mark.forked
-def test_empty_table():
+@pytest.mark.asyncio
+async def test_empty_table():
     """Test RPC methods with empty routing table"""
     peer_id, peer_proc, peer_peer_id, peer_maddrs = launch_protocol_listener()
 
