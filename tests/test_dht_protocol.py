@@ -2,7 +2,7 @@ import asyncio
 import multiprocessing as mp
 import random
 import signal
-from typing import Sequence, Tuple, List
+from typing import List, Sequence, Tuple
 
 import pytest
 from multiaddr import Multiaddr
@@ -12,7 +12,6 @@ from hivemind import P2P, PeerID, get_dht_time, get_logger
 from hivemind.dht import DHTID
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.storage import DictionaryDHTValue
-
 
 logger = get_logger(__name__)
 
