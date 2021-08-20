@@ -173,7 +173,7 @@ class ControlClient:
                 self._handler_tasks[call_id].cancel()
 
             elif call_id in self._pending_calls and resp.HasField("daemonError"):
-                daemon_exc = DaemonError(resp.daemonError.message)
+                daemon_exc = P2PDaemonError(resp.daemonError.message)
                 self._pending_calls[call_id].set_exception(daemon_exc)
 
             elif call_id in self._pending_calls:
@@ -230,7 +230,7 @@ class ControlClient:
         req = p2pd_pb.PersistentConnectionRequest(callId=call_id.bytes, addUnaryHandler=add_unary_handler_req)
 
         if self.unary_handlers.get(proto):
-            raise ValueError(f"Handler for protocol {proto} already assigned")
+            raise HandlerSetException(proto)
         self.unary_handlers[proto] = handler
 
         self._pending_calls[call_id] = asyncio.Future()
@@ -349,13 +349,18 @@ class ControlClient:
         self.handlers[proto] = handler_cb
 
 
+class HandlerSetException(ValueError):
+    def __init__(self, handler_name):
+        super().__init__(f"Handler for {handler_name} already set")
+
+
 class P2PHandlerError(Exception):
     """
     Raised if remote handled a request with an exception
     """
 
 
-class DaemonError(Exception):
+class P2PDaemonError(Exception):
     """
     Raised if daemon failed to handle request
     """
