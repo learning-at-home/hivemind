@@ -189,7 +189,7 @@ class Matchmaking:
                         gather=self.data_for_gather,
                         group_key=self.group_key_manager.current_key,
                     )
-                ).__aiter__()
+                )
                 message = await asyncio.wait_for(anext(stream), timeout=self.request_timeout)
 
                 if message.code == averaging_pb2.ACCEPTED:

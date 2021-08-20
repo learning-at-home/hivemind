@@ -5,6 +5,7 @@ import pytest
 
 from hivemind.p2p import P2P, P2PContext, ServicerBase
 from hivemind.proto import test_pb2
+from hivemind.utils.asyncio import anext
 
 
 @pytest.fixture
@@ -139,9 +140,9 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
         writer.close()
     elif cancel_reason == "close_generator":
         stub = ExampleServicer.get_stub(client, server.peer_id)
-        iter = stub.rpc_wait(test_pb2.TestRequest(number=10)).__aiter__()
+        iter = stub.rpc_wait(test_pb2.TestRequest(number=10))
 
-        assert await iter.__anext__() == test_pb2.TestResponse(number=11)
+        assert await anext(iter) == test_pb2.TestResponse(number=11)
         await asyncio.sleep(0.25)
 
         await iter.aclose()
