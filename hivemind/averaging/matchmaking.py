@@ -127,10 +127,8 @@ class Matchmaking:
                 raise
 
             finally:
-                if not request_leaders_task.done():
-                    request_leaders_task.cancel()
-                if not self.assembled_group.done():
-                    self.assembled_group.cancel()
+                request_leaders_task.cancel()
+                self.assembled_group.cancel()
                 while len(self.current_followers) > 0:
                     await self.follower_was_discarded.wait()
                     self.follower_was_discarded.clear()
@@ -160,8 +158,6 @@ class Matchmaking:
                         elif len(self.current_followers) > 0:
                             await self.leader_disband_group()
                         continue
-                except (concurrent.futures.CancelledError, asyncio.CancelledError):
-                    break  # note: this is a compatibility layer for python3.7
                 except Exception as e:
                     if not self.assembled_group.done():
                         self.assembled_group.set_exception(e)
@@ -296,8 +292,6 @@ class Matchmaking:
                 ordered_peer_ids=[item.to_bytes() for item in group_info.peer_ids],
                 gathered=group_info.gathered,
             )
-        except (concurrent.futures.CancelledError, asyncio.CancelledError):
-            return  # note: this is a compatibility layer for python3.7
         except Exception as e:
             logger.exception(e)
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
@@ -413,9 +407,8 @@ class PotentialLeaders:
             try:
                 yield self
             finally:
-                if not update_queue_task.done():
-                    update_queue_task.cancel()
-                if declare and not declare_averager_task.done():
+                update_queue_task.cancel()
+                if declare:
                     declare_averager_task.cancel()
 
                 for field in (
@@ -501,8 +494,6 @@ class PotentialLeaders:
                     timeout=self.search_end_time - get_dht_time() if isfinite(self.search_end_time) else None,
                 )
                 self.update_triggered.clear()
-        except (concurrent.futures.CancelledError, asyncio.CancelledError):
-            return  # note: this is a compatibility layer for python3.7
         except Exception as e:
             logger.error(f"{self.peer_id} - caught {type(e)}: {e}")
             raise
@@ -521,8 +512,6 @@ class PotentialLeaders:
                     await asyncio.sleep(self.declared_expiration_time - get_dht_time())
                     if self.running.is_set() and len(self.leader_queue) == 0:
                         await key_manager.update_key_on_not_enough_peers()
-            except (concurrent.futures.CancelledError, asyncio.CancelledError):
-                pass  # note: this is a compatibility layer for python3.7
             except Exception as e:  # note: we catch exceptions here because otherwise they are never printed
                 logger.error(f"{self.peer_id} - caught {type(e)}: {e}")
             finally:
