@@ -121,7 +121,7 @@ class DHT(mp.Process):
                 while True:
                     try:
                         method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._inner_pipe.recv)
-                    except (OSError, BrokenPipeError) as e:
+                    except (OSError, ConnectionError) as e:
                         logger.exception(e)
                         await asyncio.sleep(self._node.protocol.wait_timeout)
                         continue

@@ -243,7 +243,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 while True:
                     try:
                         method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._inner_pipe.recv)
-                    except (OSError, BrokenPipeError) as e:
+                    except (OSError, ConnectionError) as e:
                         logger.exception(e)
                         await asyncio.sleep(self._matchmaking.request_timeout)
                         continue
