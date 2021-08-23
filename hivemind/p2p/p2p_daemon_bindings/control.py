@@ -63,6 +63,12 @@ class DaemonConnector:
         req = p2pd_pb.Request(type=p2pd_pb.Request.PERSISTENT_CONN_UPGRADE)
         await write_pbmsg(writer, req)
 
+        response = p2pd_pb.Response()
+        await read_pbmsg_safe(reader, response)
+
+        if response.type == "ERROR":
+            raise P2PDaemonError(response.error.msg)
+
         return reader, writer
 
 

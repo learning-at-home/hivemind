@@ -84,20 +84,26 @@ async def test_daemon_replica_does_not_affect_primary():
 
 
 @pytest.mark.asyncio
-async def test_single_handler_per_protocol():
-    p2p_daemon = await P2P.create()
-    p2p_replica = await P2P.replicate(p2p_daemon.daemon_listen_maddr)
+async def test_unary_handler_edge_cases():
+    p2p = await P2P.create()
+    p2p_replica = await P2P.replicate(p2p.daemon_listen_maddr)
 
     async def square_handler(data: test_pb2.TestRequest, context):
         return test_pb2.TestResponse(number=data.number ** 2)
 
-    await p2p_daemon.add_protobuf_handler("square", square_handler, test_pb2.TestRequest)
+    await p2p.add_protobuf_handler("square", square_handler, test_pb2.TestRequest)
 
+    # try adding a duplicate handler
     with pytest.raises(P2PDaemonError):
-        await p2p_daemon.add_protobuf_handler("square", square_handler, test_pb2.TestRequest)
+        await p2p.add_protobuf_handler("square", square_handler, test_pb2.TestRequest)
 
+    # try adding a duplicate handler from replicated p2p
     with pytest.raises(P2PDaemonError):
         await p2p_replica.add_protobuf_handler("square", square_handler, test_pb2.TestRequest)
+
+    # try dialing yourself
+    with pytest.raises(P2PDaemonError):
+        await p2p_replica.call_protobuf_handler(p2p.peer_id, "square", test_pb2.TestRequest(number=41), test_pb2.TestResponse)
 
 
 @pytest.mark.parametrize(
