@@ -103,7 +103,9 @@ async def test_unary_handler_edge_cases():
 
     # try dialing yourself
     with pytest.raises(P2PDaemonError):
-        await p2p_replica.call_protobuf_handler(p2p.peer_id, "square", test_pb2.TestRequest(number=41), test_pb2.TestResponse)
+        await p2p_replica.call_protobuf_handler(
+            p2p.peer_id, "square", test_pb2.TestRequest(number=41), test_pb2.TestResponse
+        )
 
 
 @pytest.mark.parametrize(
