@@ -309,5 +309,9 @@ def main():
         trainer.train(model_path=latest_checkpoint_dir)
 
 
+def _mp_fn(index):
+    # For xla_spawn (TPUs)
+    main()
+
 if __name__ == "__main__":
     main()
