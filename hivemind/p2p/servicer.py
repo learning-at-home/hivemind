@@ -126,6 +126,7 @@ class ServicerBase:
 
         servicer = self if wrapper is None else wrapper
         for handler in self._rpc_handlers:
+            print("handler:", self._get_handle_name(namespace, handler.method_name))
             await p2p.add_protobuf_handler(
                 self._get_handle_name(namespace, handler.method_name),
                 getattr(servicer, handler.method_name),

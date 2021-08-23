@@ -18,15 +18,17 @@ def _get_expert_stub(endpoint: Endpoint, *extra_options: Tuple[str, Any]):
     channel_options = (("grpc.max_send_message_length", -1), ("grpc.max_receive_message_length", -1)) + extra_options
     return ChannelCache.get_stub(endpoint, runtime_grpc.ConnectionHandlerStub, aio=False, options=channel_options)
 
+def _get_p2p_expert_stub(p2p: P2P, server_peer_info: PeerInfo) -> StubBase:
+    return ConnectionHandler.get_stub(p2p, server_peer_info.peer_id)
+
+
 
 class RemoteExpert(nn.Module):
     """
     A simple module that runs forward/backward of an expert hosted on a remote machine.
     Works seamlessly with pytorch autograd. (this is essentially a simple RPC function)
-
     Warning: RemoteExpert currently assumes that you provide it with correct input shapes.
     Sending wrong input shapes can cause RemoteExpert to freeze indefinitely due to error in runtime.
-
     :param uid: unique expert identifier
     :param endpoint: network endpoint of a server that services that expert, e.g. "201.123.321.99:1337" or "[::]:8080"
     """
