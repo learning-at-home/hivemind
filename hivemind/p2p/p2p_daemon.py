@@ -155,7 +155,7 @@ class P2P:
             relayDiscovery=use_relay_discovery,
             autoRelay=use_auto_relay,
             relayHopLimit=relay_hop_limit,
-            # idleTimeout=f"{idle_timeout}s",
+            idleTimeout=f"{idle_timeout}s",
             b=need_bootstrap,
             **process_kwargs,
         )
