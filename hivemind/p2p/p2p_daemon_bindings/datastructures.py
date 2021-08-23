@@ -132,7 +132,7 @@ class PeerInfo:
         return f"{self.peer_id.pretty()} {','.join(str(a) for a in self.addrs)}"
 
     def __repr__(self):
-        return f"PeerID({self.peer_id}),Addrs({self.addrs})"
+        return str(self)
 
 
 class InvalidAddrError(ValueError):
