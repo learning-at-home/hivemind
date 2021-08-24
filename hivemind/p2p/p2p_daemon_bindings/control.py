@@ -169,7 +169,7 @@ class ControlClient:
                     remote_exc = P2PHandlerError(resp.callUnaryResponse.error.decode(errors="ignore"))
                     self._pending_calls[call_id].set_exception(remote_exc)
                 else:
-                    logger.debug("received unexpected unary call:", resp)
+                    logger.debug(f"Received unexpected unary call: {resp}")
 
             elif resp.HasField("requestHandling"):
                 handler_task = asyncio.create_task(self._handle_persistent_request(call_id, resp.requestHandling))
