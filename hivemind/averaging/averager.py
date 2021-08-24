@@ -593,7 +593,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         future.set_result((metadata, tensors))
                         self.last_updated = get_dht_time()
                         return
-                    except BaseException as e:
+                    except Exception as e:
                         logger.exception(f"Failed to download state from {peer} - {repr(e)}")
 
         finally:
