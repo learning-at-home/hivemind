@@ -79,7 +79,7 @@ class P2P:
         use_ipfs: bool = False,
         host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ("/ip4/127.0.0.1/tcp/0",),
         announce_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = None,
-        quic: bool = True,
+        quic: bool = False,
         tls: bool = True,
         conn_manager: bool = True,
         dht_mode: str = "dht_server",

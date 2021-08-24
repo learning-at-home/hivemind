@@ -13,7 +13,7 @@ class BaseTrainingArguments:
         default_factory=list,
         metadata={
             "help": "Multiaddrs of the peers that will welcome you into the existing collaboration. "
-            "Example: /ip4/203.0.113.1/tcp/31337/p2p/XXXX /ip4/203.0.113.2/udp/7777/quic/p2p/YYYY"
+            "Example: /ip4/203.0.113.1/tcp/31337/p2p/XXXX /ip4/203.0.113.2/tcp/7777/p2p/YYYY"
         },
     )
     use_ipfs: bool = field(
@@ -24,11 +24,10 @@ class BaseTrainingArguments:
         },
     )
     host_maddrs: List[str] = field(
-        default_factory=lambda: ["/ip4/0.0.0.0/tcp/0", "/ip4/0.0.0.0/udp/0/quic"],
+        default_factory=lambda: ["/ip4/0.0.0.0/tcp/0"],
         metadata={
             "help": "Multiaddrs to listen for external connections from other p2p instances. "
-            "Defaults to all IPv4 interfaces with TCP and QUIC (over UDP) protocols: "
-            "/ip4/0.0.0.0/tcp/0 /ip4/0.0.0.0/udp/0/quic"
+            "Defaults to all IPv4 interfaces and the TCP protocol: /ip4/0.0.0.0/tcp/0"
         },
     )
     announce_maddrs: List[str] = field(
