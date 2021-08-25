@@ -264,7 +264,7 @@ class DHT(mp.Process):
         try:
             future.set_result(await coro(self, self._node))
         except BaseException as e:
-            logger.exception("Caught an exception when running a coroutine:", exc_info=True)
+            logger.exception("Caught an exception when running a coroutine:")
             future.set_exception(e)
 
     def add_validators(self, record_validators: Iterable[RecordValidatorBase]) -> None:
