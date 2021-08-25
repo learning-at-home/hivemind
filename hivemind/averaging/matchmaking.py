@@ -45,7 +45,7 @@ class Matchmaking:
         min_group_size: int,
         request_timeout: float,
         client_mode: bool,
-        initial_group_bits: Optional[str] = None,
+        initial_group_bits: str = "",
         averaging_expiration: float = 15,
     ):
         assert "." not in prefix, "group prefix must be a string without ."
