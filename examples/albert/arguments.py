@@ -24,7 +24,7 @@ class BaseTrainingArguments:
         },
     )
     host_maddrs: List[str] = field(
-        default_factory=lambda: ["/ip4/0.0.0.0/tcp/0"],
+        default_factory=lambda: ["/ip4/0.0.0.0/udp/0/quic"],
         metadata={
             "help": "Multiaddrs to listen for external connections from other p2p instances. "
             "Defaults to all IPv4 interfaces and the TCP protocol: /ip4/0.0.0.0/tcp/0"

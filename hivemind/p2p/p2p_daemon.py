@@ -86,7 +86,7 @@ class P2P:
         identity_path: Optional[str] = None,
         idle_timeout: float = 30,
         nat_port_map: bool = True,
-        quic: bool = False,
+        quic: bool = True,
         relay_hop_limit: int = 0,
         startup_timeout: float = 15,
         tls: bool = True,
