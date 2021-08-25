@@ -79,13 +79,13 @@ class GroupKeyManager:
             logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
             return []
         averagers = []
-        for key, entry in result.value.items():
+        for key, looking_for_group in result.value.items():
             try:
-                if only_active and not entry.value:
+                if only_active and not looking_for_group.value:
                     continue
-                averagers.append((PeerID(key), entry.expiration_time))
+                averagers.append((PeerID(key), looking_for_group.expiration_time))
             except Exception as e:
-                logger.warning(f"Could not parse group key {key} ({entry}, exc={e})")
+                logger.warning(f"Could not parse group key {key} ({looking_for_group}, exc={e})")
         return averagers
 
     async def update_key_on_group_assembled(self, group_info: GroupInfo, is_leader: bool = True):
