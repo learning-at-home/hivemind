@@ -1,6 +1,7 @@
 import asyncio
+import multiprocessing as mp
 import pickle
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, Dict, Optional, Tuple
 from threading import Thread
 
 import torch
@@ -9,7 +10,7 @@ from torch.autograd.function import once_differentiable
 
 
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
-from hivemind.utils import nested_compare, nested_flatten, nested_pack
+from hivemind.utils import nested_compare, nested_flatten, nested_pack, switch_to_uvloop
 from hivemind.p2p import P2P, PeerInfo, StubBase
 from hivemind.proto import runtime_pb2
 from hivemind.moe.server import ConnectionHandler
@@ -32,7 +33,6 @@ class RemoteExpert(nn.Module):
     Warning: RemoteExpert currently assumes that you provide it with correct input shapes.
     Sending wrong input shapes can cause RemoteExpert to freeze indefinitely due to error in runtime.
     :param uid: unique expert identifier
-    :param endpoint: network endpoint of a server that services that expert, e.g. "201.123.321.99:1337" or "[::]:8080"
     """
 
     def __init__(self, uid, p2p: P2P, server_peer_info: PeerInfo):
@@ -40,13 +40,11 @@ class RemoteExpert(nn.Module):
         self.uid, self.p2p, self.server_peer_info = uid, p2p, server_peer_info
         self._info = None
 
-        self.loop = asyncio.new_event_loop()
+        def _run():
+            self.loop = switch_to_uvloop()
+            self.loop.run_forever()
 
-        def _run(loop):
-            asyncio.set_event_loop(loop)
-            loop.run_forever()
-
-        Thread(target=_run, args=(self.loop,)).start()
+        Thread(target=_run).start()
 
     @property
     def stub(self) -> StubBase:
@@ -63,7 +61,6 @@ class RemoteExpert(nn.Module):
 
         if not nested_compare(forward_inputs, self.info["forward_schema"]):
             raise TypeError(f"Inputs do not match expert input schema. Did you pass the right number of parameters?")
-
         flat_outputs = _RemoteModuleCall.apply(
             DUMMY,
             self.uid,
@@ -87,7 +84,7 @@ class RemoteExpert(nn.Module):
         return self._info
 
     def extra_repr(self):
-        return f"uid={self.uid}, endpoint={self.endpoint}"
+        return f"uid={self.uid}, server_peer_info={self.server_peer_info}"
 
 
 class _RemoteModuleCall(torch.autograd.Function):

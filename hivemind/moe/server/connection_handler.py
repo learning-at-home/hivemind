@@ -40,9 +40,6 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
                 self._p2p = await self.dht.replicate_p2p()
                 await self.add_p2p_handlers(self._p2p)
 
-                logger.info(f"Connection handler started. Info: {await self._p2p._client.identify()}")
-
-                # TODO: await p2p death
                 await asyncio.Future()
 
             except Exception as e:
