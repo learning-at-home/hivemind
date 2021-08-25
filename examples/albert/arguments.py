@@ -37,7 +37,7 @@ class BaseTrainingArguments:
     identity_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Path to a pre-defined private key file. If defined, makes the peer ID deterministic. "
+            "help": "Path to a pre-generated private key file. If defined, makes the peer ID deterministic. "
             "May be generated using ``./p2p-keygen`` from ``go-libp2p-daemon``."
         },
     )

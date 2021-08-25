@@ -106,7 +106,7 @@ class P2P:
         :param dht_mode: DHT mode (dht_client/dht_server/dht)
         :param force_reachability: Force reachability mode (public/private)
         :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
-        :param identity_path: Path to a pre-defined private key file. If defined, makes the peer ID deterministic.
+        :param identity_path: Path to a pre-generated private key file. If defined, makes the peer ID deterministic.
                               May be generated using ``./p2p-keygen`` from ``go-libp2p-daemon``.
         :param idle_timeout: kill daemon if client has been idle for a given number of
                              seconds before opening persistent streams
