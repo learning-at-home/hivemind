@@ -1,4 +1,3 @@
-import asyncio
 import random
 import re
 from typing import List, Optional, Tuple
@@ -29,7 +28,7 @@ class GroupKeyManager:
         self,
         dht: DHT,
         prefix: str,
-        initial_group_bits: Optional[str],
+        initial_group_bits: str,
         target_group_size: int,
     ):
         assert all(bit in "01" for bit in initial_group_bits)
