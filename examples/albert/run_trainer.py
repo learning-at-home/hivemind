@@ -10,7 +10,7 @@ import torch
 import transformers
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
-from torch_optimizer import Lamb
+from optim import Lamb
 from transformers import DataCollatorForLanguageModeling, HfArgumentParser, TrainingArguments, set_seed
 from transformers.models.albert import AlbertConfig, AlbertForPreTraining, AlbertTokenizerFast
 from transformers.optimization import get_linear_schedule_with_warmup
