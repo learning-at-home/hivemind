@@ -11,11 +11,13 @@ import transformers
 from datasets import load_from_disk
 from torch.utils.data import DataLoader
 from torch_optimizer import Lamb
-from transformers import DataCollatorForLanguageModeling, HfArgumentParser, TrainingArguments, set_seed, Adafactor, AdafactorSchedule
+from transformers import DataCollatorForLanguageModeling, HfArgumentParser, TrainingArguments, set_seed
 from transformers.models.albert import AlbertConfig, AlbertForPreTraining, AlbertTokenizerFast
 from transformers.optimization import get_linear_schedule_with_warmup
 from transformers.trainer import Trainer
 from transformers.trainer_utils import is_main_process
+from transformers.optimization import Adafactor, AdafactorSchedule
+
 
 import hivemind
 from hivemind.utils.compression import CompressionType
