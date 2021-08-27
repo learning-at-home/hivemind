@@ -43,12 +43,12 @@ branch = "master"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    "sphinx.ext.napoleon",  # alternative to numpydoc
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.doctest",
     "sphinx.ext.mathjax",
     "sphinx.ext.linkcode",  # link to github, see linkcode_resolve() below
-    "sphinx.ext.napoleon",  # alternative to numpydoc
 ]
 
 # see http://stackoverflow.com/q/12206334/562769
