@@ -123,6 +123,7 @@ class DatasetArguments:
 
 @dataclass
 class AlbertTrainingArguments(TrainingArguments):
+    report_to: str = "wandb"
     dataloader_num_workers: int = 4
     per_device_train_batch_size: int = 4
     per_device_eval_batch_size: int = 4
