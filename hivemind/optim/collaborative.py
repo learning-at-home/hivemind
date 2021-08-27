@@ -400,7 +400,10 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         current_time = get_dht_time()
 
         if not isinstance(response, dict) or len(response) == 0:
-            logger.log(self.status_loglevel, f"Found no active peers: {response}")
+            logger.log(
+                self.status_loglevel,
+                f"Collaboration {self.prefix} found no active peers {f': {response}' if response else ''}",
+            )
             local_eta_next_step = (
                 max(0, self.target_batch_size - self.local_steps_accumulated) / self.performance_ema.samples_per_second
             )

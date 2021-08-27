@@ -38,6 +38,13 @@ def main():
                         help='Minimum required batch size for all expert operations')
     parser.add_argument('--max_batch_size', type=int, default=16384,
                         help='The total number of examples in the same batch will not exceed this value')
+    parser.add_argument('--use_averaging', action='store_true', help='Whether to use decentralized parameter and '
+                                                                     'gradient averaging by wrapping the optimizer '
+                                                                     'with CollaborativeOptimizer')
+    parser.add_argument('--averaging_target_batch_size', type=int, required=False,
+                        help='Number of examples to accumulate across all peers before averaging')
+    parser.add_argument('--averaging_target_group_size', type=int, required=False,
+                        help='Target group size for decentralized averaging')
     parser.add_argument('--device', type=str, default=None, required=False,
                         help='all experts will use this device in torch notation; default: cuda if available else cpu')
 

@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, Sequence, Tuple, Union
 import torch
 from torch import nn
 
+import hivemind
 from hivemind.moe.server.task_pool import TaskPool
 from hivemind.utils.logging import get_logger
 from hivemind.utils.nested import nested_compare, nested_flatten, nested_map, nested_pack
@@ -176,12 +177,16 @@ class ExpertBackend:
         if self.clip_grad_norm is not None:
             torch.nn.utils.clip_grad_norm_(self.expert.parameters(), self.clip_grad_norm)
 
-        self.optimizer.step()
-        self.optimizer.zero_grad()
+        if isinstance(self.optimizer, hivemind.CollaborativeOptimizer):
+            self.optimizer.step(batch_size)
+        else:
+            self.optimizer.step()
+            self.optimizer.zero_grad()
 
-        if self.scheduler is not None:
-            self.scheduler.step()
+            if self.scheduler is not None:
+                self.scheduler.step()
 
+        # TODO update_count is not always incremented if CollaborativeOptimizer is used
         self.update_count += 1
         self.examples_processed += batch_size
 

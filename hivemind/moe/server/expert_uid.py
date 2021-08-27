@@ -14,6 +14,8 @@ UID_DELIMITER = "."  # when declaring experts, DHT store all prefixes of that ex
 FLAT_EXPERT = -1  # grid prefix reserved for storing 1d expert uids. Used to speed up find_best_experts in 1d case.
 UID_PATTERN = re.compile("^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))+$")  # e.g. ffn_expert.98.76.54 - prefix + some dims
 PREFIX_PATTERN = re.compile("^(([^.])+)([.](?:[0]|([1-9]([0-9]*))))*[.]$")  # e.g. expert. or ffn.45. (ends with ".")
+
+
 #  formally, prefixes = {uid.split(UID_DELIMITER)[:length] for length in range(1, uid.count(UID_DELIMITER) + 2)}
 
 
@@ -35,17 +37,23 @@ def split_uid(uid_or_prefix: Union[ExpertUID, ExpertPrefix]) -> Tuple[ExpertPref
 
 
 def generate_uids_from_pattern(
-    num_experts: int, expert_pattern: Optional[str], dht: Optional[DHT] = None, attempts_per_expert=10
+    num_experts: int,
+    expert_pattern: Optional[str],
+    dht: Optional[DHT] = None,
+    attempts_per_expert=10,
+    remove_duplicates=True,
 ) -> List[str]:
     """
-    Sample experts from a given pattern, remove duplicates.
+    Sample experts from a given pattern, optionally remove duplicates.
     :param num_experts: sample this many unique expert uids
     :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]\
-     means "sample random experts between myprefix.0.0 and myprefix.255.255;
+        means "sample random experts between myprefix.0.0 and myprefix.255.255"
     :param dht: if specified, uses this DHT to check that expert uids are not yet occupied by other peers
+    :param dht: whether to exclude expert uids that are already present in the DHT
+        (you may disable it if you want to have the same expert on multiple peers)
     :param attempts_per_expert: give up if unable to generate a new expert uid after this many attempts per uid
     :note: this method is not strictly process-safe. If several servers run it concurrently, they have
-     a small chance of sampling duplicate expert uids.
+        a small chance of sampling duplicate expert uids.
     """
     remaining_attempts = attempts_per_expert * num_experts
     found_uids, attempted_uids = list(), set()
@@ -72,7 +80,7 @@ def generate_uids_from_pattern(
 
     while remaining_attempts > 0 and len(found_uids) < num_experts:
 
-        # 1. sample new expert uids at random
+        # sample new expert uids at random
         new_uids = []
         while len(new_uids) + len(found_uids) < num_experts and remaining_attempts > 0:
             new_uid = _generate_uid()
@@ -81,8 +89,7 @@ def generate_uids_from_pattern(
                 attempted_uids.add(new_uid)
                 new_uids.append(new_uid)
 
-        # 2. look into DHT (if given) and remove duplicates
-        if dht:
+        if dht and remove_duplicates:
             existing_expert_uids = {
                 found_expert.uid
                 for found_expert in hivemind.moe.server.get_experts(dht, new_uids)
