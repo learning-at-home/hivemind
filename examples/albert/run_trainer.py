@@ -83,7 +83,6 @@ def get_optimizer_and_scheduler(training_args, model):
         betas=(training_args.adam_beta1, training_args.adam_beta2),
         eps=training_args.adam_epsilon,
         weight_decay=training_args.weight_decay,
-        clamp_value=training_args.clamp_value,
         debias=True,
     )
 
