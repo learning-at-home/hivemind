@@ -108,7 +108,7 @@ class Lamb(Optimizer):
 
                 if self.adam:
                     trust_ratio = 1
-
+                logger.info("222")
                 p.data.add_(adam_step, alpha=-step_size * trust_ratio)
 
         return loss
