@@ -77,10 +77,9 @@ def get_optimizer_and_scheduler(training_args, model):
         },
     ]
 
-    opt = AdamW(
+    opt = Adafactor(
         optimizer_grouped_parameters,
         lr=training_args.learning_rate,
-        betas=(training_args.adam_beta1, training_args.adam_beta2),
         eps=training_args.adam_epsilon,
         weight_decay=training_args.weight_decay,
     )
