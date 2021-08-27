@@ -81,8 +81,7 @@ def get_optimizer_and_scheduler(training_args, model):
 
     opt = Adafactor(
         optimizer_grouped_parameters,
-        eps=training_args.adam_epsilon,
-        weight_decay=training_args.weight_decay,
+        scale_parameter=True, relative_step=True, warmup_init=True, lr=None
     )
 
     scheduler = AdafactorSchedule(
