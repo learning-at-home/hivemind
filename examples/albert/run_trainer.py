@@ -83,7 +83,6 @@ def get_optimizer_and_scheduler(training_args, model):
         betas=(training_args.adam_beta1, training_args.adam_beta2),
         eps=training_args.adam_epsilon,
         weight_decay=training_args.weight_decay,
-        debias=True,
     )
 
     scheduler = get_linear_schedule_with_warmup(
