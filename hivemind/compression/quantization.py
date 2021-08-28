@@ -76,7 +76,7 @@ class Quantile8BitQuantization(Quantization):
 
 
 def average_buckets(tensor: torch.Tensor, quant_weight: torch.Tensor, n_bins: int):
-    """ Return the average value in each bucket """
+    """Return the average value in each bucket"""
     bin_sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten().long(), tensor.flatten())
     bin_counts = torch.clamp_min_(torch.bincount(quant_weight.flatten(), minlength=n_bins), 1)
     lookup = bin_sums / bin_counts

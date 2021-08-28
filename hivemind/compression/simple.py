@@ -9,6 +9,7 @@ from hivemind.proto import runtime_pb2
 
 class NoCompression(Compression):
     """A dummy compression strategy that preserves the original tensor as is."""
+
     compression_type = runtime_pb2.CompressionType.NONE
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
@@ -57,6 +58,7 @@ class Float16Compression(Compression):
 
 class ScaledFloat16Compression(Float16Compression):
     """A compression strategy that applies mean-std scaling over last axis before casting to float16"""
+
     compression_type = runtime_pb2.CompressionType.MEANSTD_16BIT
     FP32_BYTES = torch.finfo(torch.float32).bits // 8
     FP32_EPS = torch.finfo(torch.float32).eps
@@ -95,7 +97,9 @@ class ScaledFloat16Compression(Float16Compression):
 
         means = torch.as_tensor(means).reshape(stats_shape)
         stds = torch.as_tensor(stds).reshape(stats_shape)
-        tensor = torch.as_tensor(np.asarray(array, dtype=serialized_tensor.dtype)).reshape(list(serialized_tensor.size))
+        tensor = torch.as_tensor(np.asarray(array, dtype=serialized_tensor.dtype)).reshape(
+            list(serialized_tensor.size)
+        )
         return tensor.mul_(stds).add_(means)
 
 

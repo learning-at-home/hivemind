@@ -17,21 +17,28 @@ warnings.filterwarnings("ignore", message="The given NumPy array is not writeabl
 
 
 BASE_COMPRESSION_TYPES: Dict[str, Compression] = dict(
-    NONE=NoCompression(), FLOAT16=Float16Compression(), MEANSTD_16BIT=ScaledFloat16Compression(),
-    QUANTILE_8BIT=Quantile8BitQuantization(), UNIFORM_8BIT=Uniform8BitQuantization()
+    NONE=NoCompression(),
+    FLOAT16=Float16Compression(),
+    MEANSTD_16BIT=ScaledFloat16Compression(),
+    QUANTILE_8BIT=Quantile8BitQuantization(),
+    UNIFORM_8BIT=Uniform8BitQuantization(),
 )
 
 for key in CompressionType.keys():
     assert key in BASE_COMPRESSION_TYPES, f"Compression type {key} does not have a registered deserializer."
     actual_compression_type = BASE_COMPRESSION_TYPES[key].compression_type
-    assert CompressionType.Name(actual_compression_type) == key, f"Compression strategy for {key} has inconsistent type"
+    assert (
+        CompressionType.Name(actual_compression_type) == key
+    ), f"Compression strategy for {key} has inconsistent type"
 
 
-def serialize_torch_tensor(tensor: torch.Tensor,
-                           compression_type: CompressionType = CompressionType.NONE,
-                           info: Optional[CompressionInfo] = None,
-                           allow_inplace: bool = False,
-                           **kwargs) -> runtime_pb2.Tensor:
+def serialize_torch_tensor(
+    tensor: torch.Tensor,
+    compression_type: CompressionType = CompressionType.NONE,
+    info: Optional[CompressionInfo] = None,
+    allow_inplace: bool = False,
+    **kwargs,
+) -> runtime_pb2.Tensor:
     """Serialize a given tensor into a protobuf message using the specified compression strategy"""
     assert tensor.device == torch.device("cpu")
     compression = BASE_COMPRESSION_TYPES[CompressionType.Name(compression_type)]

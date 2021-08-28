@@ -40,7 +40,11 @@ class TensorPartContainer:
             compression_infos = tuple(map(CompressionInfo.from_tensor, tensors))
         assert len(compression_infos) == len(tensors), "compression types do not match the number of tensors"
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
-        self.compression, self.part_size_bytes, self.compression_infos = compression, part_size_bytes, compression_infos
+        self.compression, self.part_size_bytes, self.compression_infos = (
+            compression,
+            part_size_bytes,
+            compression_infos,
+        )
         self.total_size = sum(tensor.numel() for tensor in tensors)
         self.prefetch = prefetch
 

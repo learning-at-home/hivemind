@@ -19,6 +19,7 @@ class TensorRole(Enum):
 @dataclasses.dataclass(frozen=True)
 class CompressionInfo:
     """Auxiliary data structure that contains information about the tensor that determines how it is compressed"""
+
     key: Union[int, str]  # name or index of the tensor from named parameters, optimizer state dict or i/o structure
     descriptor: TensorDescriptor  # data structure that defines shape, dtype, layout and device information
     role: TensorRole = TensorRole.UNSPECIFIED  # which role does the tensor play with respect to the model
@@ -31,7 +32,8 @@ class CompressionInfo:
 
 
 class Compression:
-    """ A base class that applies compression algorithm to a pytorch tensor """
+    """A base class that applies compression algorithm to a pytorch tensor"""
+
     compression_type: runtime_pb2.CompressionType
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
@@ -46,7 +48,7 @@ class Compression:
         raise NotImplementedError()
 
     def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
-        """ Create a pytorch tensor from the serialized outputs of .compress """
+        """Create a pytorch tensor from the serialized outputs of .compress"""
         raise NotImplementedError()
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
