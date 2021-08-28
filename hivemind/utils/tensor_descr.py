@@ -1,6 +1,9 @@
+from __future__ import annotations
 import warnings
 from dataclasses import asdict, dataclass
+from typing import Tuple
 
+import numpy as np
 import torch
 
 from hivemind.proto.runtime_pb2 import CompressionType
@@ -29,11 +32,14 @@ class TensorDescriptor(DescriptorBase):
     compression: CompressionType = CompressionType.NONE
 
     @property
-    def shape(self):
+    def shape(self) -> Tuple[int, ...]:
         return self.size
 
+    def numel(self) -> int:
+        return int(np.prod(self.size))
+
     @classmethod
-    def from_tensor(cls, tensor: torch.Tensor):
+    def from_tensor(cls, tensor: torch.Tensor) -> TensorDescriptor:
         return cls(
             tensor.shape, tensor.dtype, tensor.layout, tensor.device, tensor.requires_grad, _safe_check_pinned(tensor)
         )
@@ -55,7 +61,7 @@ class BatchTensorDescriptor(TensorDescriptor):
         super().__init__((None, *instance_size), **kwargs)
 
     @classmethod
-    def from_tensor(cls, tensor: torch.Tensor, compression=CompressionType.NONE):
+    def from_tensor(cls, tensor: torch.Tensor, compression=CompressionType.NONE) -> BatchTensorDescriptor:
         return cls(
             *tensor.shape[1:],
             dtype=tensor.dtype,
@@ -66,7 +72,7 @@ class BatchTensorDescriptor(TensorDescriptor):
             compression=compression if tensor.is_floating_point() else CompressionType.NONE
         )
 
-    def make_empty(self, *batch_size, **kwargs):
+    def make_empty(self, *batch_size: int, **kwargs) -> torch.Tensor:
         assert self.shape[0] is None, "Make sure 0-th dimension is not specified (set to None)"
         return super().make_empty(size=(*batch_size, *self.shape[1:]), **kwargs)
 
