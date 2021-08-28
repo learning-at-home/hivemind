@@ -5,7 +5,7 @@ from typing import Tuple
 import numpy as np
 import torch
 
-from hivemind.compression.base import Compression
+from hivemind.compression.base import Compression, CompressionInfo
 from hivemind.proto import runtime_pb2
 
 EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("QUANTIZATION_THREADS", 128)))
@@ -36,6 +36,9 @@ class Quantization(Compression):
         quantized = torch.as_tensor(quantized, dtype=torch.int64).reshape(serialized_tensor.size)
         codebook = torch.as_tensor(codebook, dtype=serialized_tensor.dtype)
         return codebook[quantized]
+
+    def estimate_compression_ratio(self, info: CompressionInfo) -> float:
+        return self.n_bits / torch.finfo(info.descriptor.dtype).bits
 
     @property
     def n_bits(self):

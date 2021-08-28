@@ -28,10 +28,6 @@ class CompressionInfo:
 class Compression:
     """ A base class that applies compression algorithm to a pytorch tensor """
 
-    def estimate_compression_ratio(self, info: CompressionInfo) -> float:
-        """Estimate the compression ratio of a given tensor without doing the actual compression"""
-        raise NotImplementedError()
-
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
         """
         Applies compression algorithm to a tensor based on their meta-parameters
@@ -45,4 +41,8 @@ class Compression:
 
     def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         """ Create a pytorch tensor from the serialized outputs of .compress """
+        raise NotImplementedError()
+
+    def estimate_compression_ratio(self, info: CompressionInfo) -> float:
+        """Estimate the compression ratio without doing the actual compression; lower ratio = better compression"""
         raise NotImplementedError()
