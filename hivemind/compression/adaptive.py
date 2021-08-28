@@ -14,7 +14,8 @@ class SizeAdaptiveCompressionStrategy(Compression):
         self.threshold, self.compression1, self.compression2 = threshold, compression1, compression2
 
     def __call__(
-            self, tensor: torch.Tensor, tensor_descr: Optional[TensorDescriptor] = None, **kwargs) -> runtime_pb2.Tensor:
+        self, tensor: torch.Tensor, tensor_descr: Optional[TensorDescriptor] = None, **kwargs
+    ) -> runtime_pb2.Tensor:
         numel = tensor_descr.numel() if tensor_descr is not None else tensor.numel()
         compression = self.compression1 if numel > self.threshold else self.compression2
         return compression(tensor, tensor_descr=tensor_descr, **kwargs)
