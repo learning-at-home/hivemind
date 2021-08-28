@@ -1,0 +1,107 @@
+import os
+from concurrent.futures import ThreadPoolExecutor
+from typing import Tuple
+
+import numpy as np
+import torch
+
+from hivemind.compression.base import Compression
+from hivemind.proto import runtime_pb2
+
+EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("QUANTIZATION_THREADS", 128)))
+
+
+class Quantization(Compression):
+    compression_type: runtime_pb2.CompressionType
+    codebook_dtype, indices_dtype = np.float32, np.uint8
+
+    def quantize(self, tensor: torch.Tensor) -> Tuple[np.ndarray, np.ndarray]:
+        """Convert tensor into a pair of (indices, codebook)"""
+        raise NotImplementedError()
+
+    def compress(self, tensor: torch.Tensor, allow_inplace: bool = False, **kwargs):
+        quantized, codebook = self.quantize(tensor.detach())
+        return runtime_pb2.Tensor(
+            compression=self.compression_type,
+            buffer=b"".join((len(codebook), quantized.tobytes(), codebook.tobytes())),
+            size=tensor.shape,
+            dtype=tensor.dtype,
+            requires_grad=tensor.requires_grad,
+        )
+
+    def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+        codebook_size = int(np.frombuffer(serialized_tensor.buffer, count=1, dtype=np.int64))
+        codebook = np.frombuffer(serialized_tensor.buffer, offset=8, count=codebook_size, dtype=self.codebook_dtype)
+        quantized = np.frombuffer(serialized_tensor.buffer, offset=8 + codebook.nbytes, dtype=self.indices_dtype)
+        quantized = torch.as_tensor(quantized, dtype=torch.int64).reshape(serialized_tensor.size)
+        codebook = torch.as_tensor(codebook, dtype=serialized_tensor.dtype)
+        return codebook[quantized]
+
+    @property
+    def n_bits(self):
+        return torch.finfo(self.indices_dtype).bits
+
+    @property
+    def n_bins(self):
+        return 2 ** self.n_bits
+
+
+class Uniform8BitQuantization(Quantization):
+    range_in_sigmas: int = 6
+    compression_type = runtime_pb2.UNIFORM_8BIT
+
+    def quantize(self, tensor: torch.Tensor) -> Tuple[np.ndarray, np.ndarray]:
+        offset = self.n_bins // 2
+        shift = tensor.mean()
+        scale = self.range_in_sigmas * tensor.std() / self.n_bins
+        quantized = torch.quantize_per_tensor(tensor - shift, scale, offset, torch.quint8).int_repr()
+        lookup = average_buckets(tensor, quantized, self.n_bins)
+        return quantized.numpy().astype(np.uint8), lookup.numpy()
+
+
+class Quantile8BitQuantization(Quantization):
+    compression_type = runtime_pb2.QUANTILE_8BIT
+
+    def quantize(self, tensor: torch.Tensor):
+        tensor = tensor.detach().float()
+        borders = torch.as_tensor(quantile_qq_approximation(tensor.numpy(), self.n_bins + 1)[1:-1])
+        quantized = torch.clamp_(torch.bucketize(tensor, borders), 0, self.n_bins - 1)
+        codebook = average_buckets(tensor, quantized, self.n_bins)
+        return quantized, codebook
+
+
+def average_buckets(tensor: torch.Tensor, quant_weight: torch.Tensor, n_bins: int):
+    """ Return the average value in each bucket """
+    bin_sums = torch.zeros(n_bins).scatter_add_(0, quant_weight.flatten().long(), tensor.flatten())
+    bin_counts = torch.clamp_min_(torch.bincount(quant_weight.flatten(), minlength=n_bins), 1)
+    lookup = bin_sums / bin_counts
+    return lookup
+
+
+def get_chunk_size(num_elements: int, min_chunk_size: int) -> int:
+    """Adjust chunk_size to minimize imbalance between chunk sizes"""
+    if min_chunk_size >= num_elements:
+        return min_chunk_size
+    leftover_elements = num_elements % min_chunk_size
+    num_chunks = num_elements // min_chunk_size
+    return min_chunk_size + (leftover_elements - 1) // num_chunks + 1
+
+
+def quantile_qq_approximation(array: np.array, n_quantiles: int, min_chunk_size: int = 10 ** 5) -> np.ndarray:
+    """Estimate uniform quantiles of data using quantile-of-quantiles. Runs in parallel."""
+    if not array.data.c_contiguous and array.data.f_contiguous:
+        array = array.T
+    array = np.ascontiguousarray(array.reshape(-1))
+    quantiles = np.linspace(0.0, 1.0, num=n_quantiles, dtype=array.dtype)
+    chunk_size = get_chunk_size(len(array), min_chunk_size)
+    num_chunks = (len(array) - 1) // chunk_size + 1
+    partition_quantiles = np.empty((num_chunks, len(quantiles)), dtype=array.dtype)
+
+    jobs = []
+    for i in range(num_chunks):
+        chunk = slice(chunk_size * i, chunk_size * (i + 1))
+        jobs.append(EXECUTOR.submit(np.quantile, array[chunk], quantiles, out=partition_quantiles[i]))
+
+    for job in jobs:
+        job.result()
+    return np.quantile(partition_quantiles, quantiles)
