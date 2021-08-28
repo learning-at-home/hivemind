@@ -20,7 +20,7 @@ class TensorRole(Enum):
 class CompressionInfo:
     """Auxiliary data structure that contains information about the tensor that determines how it is compressed"""
 
-    key: Union[int, str]  # name or index of the tensor from named parameters, optimizer state dict or i/o structure
+    uid: Union[int, str]  # name or index of the tensor from named parameters, optimizer state dict or i/o structure
     descriptor: TensorDescriptor  # data structure that defines shape, dtype, layout and device information
     role: TensorRole = TensorRole.UNSPECIFIED  # which role does the tensor play with respect to the model
     part_index: int = 0  # if tensor is sliced into parts, this represents the index within one tensor

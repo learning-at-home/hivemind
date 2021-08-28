@@ -9,8 +9,8 @@ import numpy as np
 import torch
 
 from hivemind.compression import Compression, CompressionInfo, NoCompression
-from hivemind.proto.runtime_pb2 import CompressionType, Tensor
 from hivemind.utils.asyncio import amap_in_executor
+from hivemind.proto import runtime_pb2
 
 T = TypeVar("T")
 DEFAULT_PART_SIZE_BYTES = 2 ** 19
@@ -31,13 +31,13 @@ class TensorPartContainer:
         self,
         tensors: Sequence[torch.Tensor],
         peer_fractions: Sequence[float],
-        compression: Compression = NoCompression,
+        compression: Compression = NoCompression(),
         part_size_bytes: int = DEFAULT_PART_SIZE_BYTES,
         compression_infos: Optional[Sequence[CompressionInfo]] = None,
         prefetch: int = 1,
     ):
         if compression_infos is None:
-            compression_infos = tuple(map(CompressionInfo.from_tensor, tensors))
+            compression_infos = tuple(CompressionInfo.from_tensor(x, uid=i) for i, x in enumerate(tensors))
         assert len(compression_infos) == len(tensors), "compression types do not match the number of tensors"
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
         self.compression, self.part_size_bytes, self.compression_infos = (
@@ -97,7 +97,7 @@ class TensorPartContainer:
         return input_parts
 
     @torch.no_grad()
-    async def iterate_input_parts_for(self, peer_index: int) -> AsyncIterator[Tensor]:
+    async def iterate_input_parts_for(self, peer_index: int) -> AsyncIterator[runtime_pb2.Tensor]:
         """iterate serialized tensor parts for a peer at a given index. Run serialization in background."""
         assert not self._inputs_consumed_by_peer[peer_index], "input parts of a given peer are already deallocated."
         self._inputs_consumed_by_peer[peer_index] = True
