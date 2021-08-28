@@ -1,7 +1,7 @@
 import math
 
-import torch
 import numpy as np
+import torch
 
 from hivemind.compression.base import Compression, CompressionInfo
 from hivemind.proto import runtime_pb2

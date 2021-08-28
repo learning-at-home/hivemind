@@ -5,11 +5,11 @@ from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Type
 import torch
 
 from hivemind.averaging.partition import AllreduceException, TensorPartContainer, TensorPartReducer
+from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase, StubBase
 from hivemind.proto import averaging_pb2
 from hivemind.utils import get_logger
 from hivemind.utils.asyncio import achain, aenumerate, afirst, aiter, amap_in_executor, anext
-from hivemind.compression import serialize_torch_tensor, deserialize_torch_tensor
 
 # flavour types
 GroupID = bytes

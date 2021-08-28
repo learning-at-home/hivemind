@@ -1,11 +1,11 @@
 import dataclasses
-from typing import Union, Optional
+from enum import Enum, auto
+from typing import Optional, Union
 
 import torch
-from enum import Enum, auto
 
-from hivemind.utils.tensor_descr import TensorDescriptor
 from hivemind.proto import runtime_pb2
+from hivemind.utils.tensor_descr import TensorDescriptor
 
 
 class TensorRole(Enum):

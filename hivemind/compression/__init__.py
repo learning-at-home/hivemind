@@ -3,16 +3,15 @@ Compression strategies that reduce the network communication in .averaging, .opt
 """
 
 import warnings
-from typing import Optional, Dict, Union
+from typing import Dict, Optional, Union
 
 import torch
 
+from hivemind.compression.base import Compression, CompressionInfo
+from hivemind.compression.quantization import Quantile8BitQuantization, Uniform8BitQuantization
+from hivemind.compression.simple import Float16Compression, NoCompression, ScaledFloat16Compression
 from hivemind.proto import runtime_pb2
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.compression.base import Compression, CompressionInfo
-from hivemind.compression.simple import NoCompression, Float16Compression, ScaledFloat16Compression
-from hivemind.compression.quantization import Uniform8BitQuantization, Quantile8BitQuantization
-
 
 warnings.filterwarnings("ignore", message="The given NumPy array is not writeable", category=UserWarning)
 

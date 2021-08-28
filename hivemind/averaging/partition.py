@@ -8,9 +8,9 @@ from typing import AsyncIterable, AsyncIterator, Optional, Sequence, Tuple, Type
 import numpy as np
 import torch
 
-from hivemind.utils.asyncio import amap_in_executor
-from hivemind.compression import Compression, NoCompression, CompressionInfo
+from hivemind.compression import Compression, CompressionInfo, NoCompression
 from hivemind.proto.runtime_pb2 import CompressionType, Tensor
+from hivemind.utils.asyncio import amap_in_executor
 
 T = TypeVar("T")
 DEFAULT_PART_SIZE_BYTES = 2 ** 19
