@@ -4,7 +4,7 @@ import time
 import torch
 
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.compression import serialize_torch_tensor, deserialize_torch_tensor
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)

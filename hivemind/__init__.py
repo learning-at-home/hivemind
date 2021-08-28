@@ -17,6 +17,7 @@ from hivemind.optim import (
     DecentralizedSGD,
 )
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, PeerInfo
+from hivemind.compression import *
 from hivemind.utils import *
 
 __version__ = "0.10.0"

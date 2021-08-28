@@ -24,7 +24,7 @@ from hivemind.utils.asyncio import (
     azip,
     cancel_and_wait,
 )
-from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.utils.mpfuture import InvalidStateError
 
 

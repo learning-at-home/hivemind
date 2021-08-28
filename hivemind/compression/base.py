@@ -22,8 +22,8 @@ class CompressionInfo:
     key: Union[int, str]  # name or index of the tensor from named parameters, optimizer state dict or i/o structure
     descriptor: TensorDescriptor  # data structure that defines shape, dtype, layout and device information
     role: TensorRole = TensorRole.UNSPECIFIED  # which role does the tensor play with respect to the model
-    chunk_index: int = 0  # if tensor is sliced into chunks, this represents the index within one tensor
-    chunk_size: Optional[int] = None  # if tensor is sliced into chunks, this is the number of values per chunk
+    part_index: int = 0  # if tensor is sliced into parts, this represents the index within one tensor
+    part_size: Optional[int] = None  # if tensor is sliced into parts, this is the _maximum_ number of values per part
 
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor, descriptor: Optional[TensorDescriptor] = None, **kwargs):
@@ -38,8 +38,8 @@ class Compression:
         """
         Applies compression algorithm to a tensor based on their meta-parameters
 
-        :param tensor: a pytorch tensor to compress; depending on the applicaiton, x is either a full tensor or a chunk
-        :param info: meta-information about the tensor; if chunking is used, this must still describe the full tensor
+        :param tensor: a pytorch tensor to compress; depending on the applicaiton, x is either a full tensor or part
+        :param info: meta-information about the tensor; if partitioning is used, this still describes the full tensor
         :param allow_inplace: if True, compression can (but doesn't have to) to modify tensor in-place for efficiency
         :returns: a protobuf message that encodes the tensor
         """
