@@ -25,6 +25,10 @@ class CompressionInfo:
     chunk_index: int = 0  # if tensor is sliced into chunks, this represents the index within one tensor
     chunk_size: Optional[int] = None  # if tensor is sliced into chunks, this is the number of values per chunk
 
+    @classmethod
+    def from_tensor(cls, tensor: torch.Tensor, descriptor: Optional[TensorDescriptor] = None, **kwargs):
+        return cls(tensor, descriptor or TensorDescriptor.from_tensor(tensor), **kwargs)
+
 
 class Compression:
     """ A base class that applies compression algorithm to a pytorch tensor """
