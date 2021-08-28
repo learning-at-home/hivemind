@@ -1,3 +1,4 @@
+import math
 import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple
@@ -12,15 +13,14 @@ EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("QUANTIZATION_THREA
 
 
 class Quantization(Compression):
-    compression_type: runtime_pb2.CompressionType
     codebook_dtype, indices_dtype = np.float32, np.uint8
 
-    def quantize(self, tensor: torch.Tensor) -> Tuple[np.ndarray, np.ndarray]:
+    def quantize(self, tensor: torch.Tensor, allow_inplace: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """Convert tensor into a pair of (indices, codebook)"""
         raise NotImplementedError()
 
-    def compress(self, tensor: torch.Tensor, allow_inplace: bool = False, **kwargs):
-        quantized, codebook = self.quantize(tensor.detach())
+    def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
+        quantized, codebook = self.quantize(tensor.detach(), allow_inplace=allow_inplace)
         return runtime_pb2.Tensor(
             compression=self.compression_type,
             buffer=b"".join((len(codebook), quantized.tobytes(), codebook.tobytes())),
@@ -42,7 +42,7 @@ class Quantization(Compression):
 
     @property
     def n_bits(self):
-        return torch.finfo(self.indices_dtype).bits
+        return self.indices_dtype.nbytes * 8
 
     @property
     def n_bins(self):
@@ -53,24 +53,26 @@ class Uniform8BitQuantization(Quantization):
     range_in_sigmas: int = 6
     compression_type = runtime_pb2.UNIFORM_8BIT
 
-    def quantize(self, tensor: torch.Tensor) -> Tuple[np.ndarray, np.ndarray]:
+    def quantize(self, tensor: torch.Tensor, allow_inplace: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         offset = self.n_bins // 2
         shift = tensor.mean()
-        scale = self.range_in_sigmas * tensor.std() / self.n_bins
-        quantized = torch.quantize_per_tensor(tensor - shift, scale, offset, torch.quint8).int_repr()
+        centered_tensor = tensor.sub_(shift) if allow_inplace else tensor - shift
+        std_unbiased = centered_tensor.norm() / math.sqrt(centered_tensor.numel() - 1)
+        scale = self.range_in_sigmas * std_unbiased / self.n_bins
+        quantized = torch.quantize_per_tensor(centered_tensor, scale, offset, torch.quint8).int_repr()
         lookup = average_buckets(tensor, quantized, self.n_bins)
-        return quantized.numpy().astype(np.uint8), lookup.numpy()
+        return np.asarray(quantized, dtype=self.indices_dtype), np.asarray(lookup, dtype=self.codebook_dtype)
 
 
 class Quantile8BitQuantization(Quantization):
     compression_type = runtime_pb2.QUANTILE_8BIT
 
-    def quantize(self, tensor: torch.Tensor):
+    def quantize(self, tensor: torch.Tensor, allow_inplace: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         tensor = tensor.detach().float()
         borders = torch.as_tensor(quantile_qq_approximation(tensor.numpy(), self.n_bins + 1)[1:-1])
         quantized = torch.clamp_(torch.bucketize(tensor, borders), 0, self.n_bins - 1)
         codebook = average_buckets(tensor, quantized, self.n_bins)
-        return quantized, codebook
+        return quantized.numpy().astype(np.uint8), codebook.numpy()
 
 
 def average_buckets(tensor: torch.Tensor, quant_weight: torch.Tensor, n_bins: int):

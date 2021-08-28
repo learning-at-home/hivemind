@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Union
+from typing import Union, Optional
 
 import torch
 from enum import Enum, auto
@@ -18,15 +18,17 @@ class TensorRole(Enum):
 
 @dataclasses.dataclass(frozen=True)
 class CompressionInfo:
-    """Auxuliary data structure that contains information about the tensor that determines how it is compressed"""
+    """Auxiliary data structure that contains information about the tensor that determines how it is compressed"""
     key: Union[int, str]  # name or index of the tensor from named parameters, optimizer state dict or i/o structure
     descriptor: TensorDescriptor  # data structure that defines shape, dtype, layout and device information
     role: TensorRole = TensorRole.UNSPECIFIED  # which role does the tensor play with respect to the model
     chunk_index: int = 0  # if tensor is sliced into chunks, this represents the index within one tensor
+    chunk_size: Optional[int] = None  # if tensor is sliced into chunks, this is the number of values per chunk
 
 
 class Compression:
     """ A base class that applies compression algorithm to a pytorch tensor """
+    compression_type: runtime_pb2.CompressionType
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
         """
