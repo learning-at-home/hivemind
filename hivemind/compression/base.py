@@ -1,6 +1,6 @@
 import dataclasses
 from enum import Enum, auto
-from typing import Optional, Union
+from typing import Optional, Union, Any
 
 import torch
 
@@ -27,8 +27,8 @@ class CompressionInfo:
     part_size: Optional[int] = None  # if tensor is sliced into parts, this is the _maximum_ number of values per part
 
     @classmethod
-    def from_tensor(cls, tensor: torch.Tensor, descriptor: Optional[TensorDescriptor] = None, **kwargs):
-        return cls(tensor, descriptor or TensorDescriptor.from_tensor(tensor), **kwargs)
+    def from_tensor(cls, tensor: torch.Tensor, *, uid: Any, descriptor: Optional[TensorDescriptor] = None, **kwargs):
+        return cls(uid, descriptor or TensorDescriptor.from_tensor(tensor), **kwargs)
 
 
 class Compression:
