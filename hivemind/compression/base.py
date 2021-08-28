@@ -18,7 +18,7 @@ class TensorRole(Enum):
 
 @dataclasses.dataclass(frozen=True)
 class CompressionInfo:
-    """Auxuliary data structure that contains information about the tensor that determines it is compressed"""
+    """Auxuliary data structure that contains information about the tensor that determines how it is compressed"""
     key: Union[int, str]  # name or index of the tensor from named parameters, optimizer state dict or i/o structure
     descriptor: TensorDescriptor  # data structure that defines shape, dtype, layout and device information
     role: TensorRole = TensorRole.UNSPECIFIED  # which role does the tensor play with respect to the model
