@@ -23,7 +23,7 @@ class NoCompression(Compression):
 
     def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.dtype(serialized_tensor.dtype))
-        return torch.as_tensor(array).reshape(serialized_tensor.size)
+        return torch.as_tensor(array).reshape(tuple(serialized_tensor.size))
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
         return 1.0
@@ -49,7 +49,7 @@ class Float16Compression(Compression):
     def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         original_dtype = np.dtype(serialized_tensor.dtype)
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.float16)
-        return torch.as_tensor(np.asarray(array, dtype=original_dtype)).reshape(serialized_tensor.size)
+        return torch.as_tensor(np.asarray(array, dtype=original_dtype)).reshape(tuple(serialized_tensor.size))
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
         return 16.0 / get_num_bits(info.descriptor.dtype)
@@ -58,6 +58,7 @@ class Float16Compression(Compression):
 class ScaledFloat16Compression(Float16Compression):
     """A compression strategy that applies mean-std scaling over last axis before casting to float16"""
     compression_type = runtime_pb2.CompressionType.MEANSTD_16BIT
+    FP32_BYTES = torch.finfo(torch.float32).bits // 8
     FP32_EPS = torch.finfo(torch.float32).eps
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
@@ -71,7 +72,7 @@ class ScaledFloat16Compression(Float16Compression):
         tensor.div_(stds)
         tensor = tensor.clamp_(self.FP16_MIN, self.FP16_MAX).to(torch.float16)
 
-        data = b"".join((tensor.numpy().tobytes(), means.numpy().tobytes(), stds.numpy().tobytes()))
+        data = b"".join((tensor.numpy().tobytes(), means.float().numpy().tobytes(), stds.float().numpy().tobytes()))
 
         return runtime_pb2.Tensor(
             compression=self.compression_type,
@@ -80,6 +81,22 @@ class ScaledFloat16Compression(Float16Compression):
             dtype=dtype_name,
             requires_grad=tensor.requires_grad,
         )
+
+    def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+        stats_shape = list(serialized_tensor.size)
+        stats_shape[-1] = 1
+        stats_count = np.prod(stats_shape)
+        means_offset = len(serialized_tensor.buffer) - 2 * stats_count * self.FP32_BYTES
+        stds_offset = len(serialized_tensor.buffer) - stats_count * self.FP32_BYTES
+
+        array = np.frombuffer(serialized_tensor.buffer, dtype=np.float16, count=np.prod(serialized_tensor.size))
+        means = np.frombuffer(serialized_tensor.buffer, dtype=np.float32, offset=means_offset, count=stats_count)
+        stds = np.frombuffer(serialized_tensor.buffer, dtype=np.float32, offset=stds_offset, count=stats_count)
+
+        means = torch.as_tensor(means).reshape(stats_shape)
+        stds = torch.as_tensor(stds).reshape(stats_shape)
+        tensor = torch.as_tensor(np.asarray(array, dtype=serialized_tensor.dtype)).reshape(list(serialized_tensor.size))
+        return tensor.mul_(stds).add_(means)
 
 
 def get_num_bits(dtype: torch.dtype) -> int:

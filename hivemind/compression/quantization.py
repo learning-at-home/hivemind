@@ -23,9 +23,9 @@ class Quantization(Compression):
         quantized, codebook = self.quantize(tensor.detach(), allow_inplace=allow_inplace)
         return runtime_pb2.Tensor(
             compression=self.compression_type,
-            buffer=b"".join((len(codebook), quantized.tobytes(), codebook.tobytes())),
+            buffer=b"".join((np.int64(len(codebook)).tobytes(), codebook.tobytes(), quantized.tobytes())),
             size=tensor.shape,
-            dtype=tensor.dtype,
+            dtype=tensor.numpy().dtype.name,
             requires_grad=tensor.requires_grad,
         )
 
@@ -33,8 +33,8 @@ class Quantization(Compression):
         codebook_size = int(np.frombuffer(serialized_tensor.buffer, count=1, dtype=np.int64))
         codebook = np.frombuffer(serialized_tensor.buffer, offset=8, count=codebook_size, dtype=self.codebook_dtype)
         quantized = np.frombuffer(serialized_tensor.buffer, offset=8 + codebook.nbytes, dtype=self.indices_dtype)
-        quantized = torch.as_tensor(quantized, dtype=torch.int64).reshape(serialized_tensor.size)
-        codebook = torch.as_tensor(codebook, dtype=serialized_tensor.dtype)
+        quantized = torch.as_tensor(quantized, dtype=torch.int64).reshape(tuple(serialized_tensor.size))
+        codebook = torch.as_tensor(np.asarray(codebook, dtype=serialized_tensor.dtype))
         return codebook[quantized]
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
@@ -42,7 +42,7 @@ class Quantization(Compression):
 
     @property
     def n_bits(self):
-        return self.indices_dtype.nbytes * 8
+        return self.indices_dtype(1).itemsize * 8
 
     @property
     def n_bins(self):
