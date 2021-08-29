@@ -261,7 +261,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     await task
                     break
 
-            loop.run_until_complete(_run())
+        loop.run_until_complete(_run())
 
     def run_in_background(self, await_ready: bool = True, timeout: Optional[float] = None) -> None:
         """
