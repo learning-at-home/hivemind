@@ -70,7 +70,7 @@ class DHT(mp.Process):
         **kwargs,
     ):
         self._parent_pid = os.getpid()
-        super().__init__()
+        super().__init__(name="DHT")
 
         if not (
             initial_peers is None

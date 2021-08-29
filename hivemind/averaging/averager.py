@@ -120,7 +120,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         assert all(bit in "01" for bit in initial_group_bits)
         assert not client_mode or not auxiliary, "auxiliary peers must accept incoming connections"
 
-        super().__init__()
+        super().__init__(name='DecentralizedAverager')
         self.dht = dht
         self.prefix = prefix
 
