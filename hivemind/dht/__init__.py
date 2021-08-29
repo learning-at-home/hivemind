@@ -102,6 +102,7 @@ class DHT(mp.Process):
 
     def run(self) -> None:
         """Serve DHT forever. This function will not return until DHT node is shut down"""
+        print(f"RUNNING DHT WITH PID={self.pid}")
         loop = switch_to_uvloop()
 
         with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
