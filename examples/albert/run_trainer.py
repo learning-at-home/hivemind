@@ -35,14 +35,20 @@ def analyze_openfiles_periodically():
         logger.info(f"Scanning open files for process {psutil.Process().pid}")
         children = [psutil.Process()] + psutil.Process().children(recursive=True)
         for child in children:
-            open_files = child.open_files()
-            logger.info(f"proc: '{child.name()}' pid={child.pid} parent={child.parent().pid} files: {len(open_files)}")
+            try:
+                num_open_files = len(child.open_files())
+            except:
+                num_open_files = "FAILED"
+            logger.info(f"proc: '{child.name()}' pid={child.pid} parent={child.parent().pid} files: {num_open_files}")
         for child in children:
-            open_files = child.open_files()
-            if len(open_files) > 100:
-                logger.info(f"proc: {child.name()} has {len(open_files)} open files: {repr(open_files)}")
+            try:
+                open_files = child.open_files()
+                if len(open_files) > 100:
+                    logger.info(f"proc: {child.name()} has {len(open_files)} open files: {repr(open_files)}")
+            except:
+                pass
         logger.info("DONE scanning")
-        time.sleep(30)
+        time.sleep(300)
 
 
 analyzer = threading.Thread(target=analyze_openfiles_periodically)
