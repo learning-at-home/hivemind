@@ -3,9 +3,12 @@
 import logging
 import os
 import pickle
+import threading
+import time
 from dataclasses import asdict
 from pathlib import Path
 
+import psutil
 import torch
 import transformers
 from datasets import load_from_disk
@@ -25,6 +28,25 @@ from arguments import AlbertTrainingArguments, AveragerArguments, CollaborationA
 
 logger = logging.getLogger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
+
+
+def analyze_openfiles_periodically():
+    children = [psutil.Process()] + psutil.Process().children(recursive=True)
+    while True:
+        logger.info("Scanning open files")
+        for child in children:
+            open_files = child.open_files()
+            logger.info(f"proc: '{child.name()}' files: {len(open_files)}")
+        for child in children:
+            open_files = child.open_files()
+            if len(open_files) > 100:
+                logger.info(f"proc: {child.name()} has {len(open_files)} open files: {repr(open_files)}")
+        logger.info("DONE scanning")
+        time.sleep(30)
+
+
+analyzer = threading.Thread(target=analyze_openfiles_periodically)
+analyzer.start()
 
 
 def setup_logging(training_args):

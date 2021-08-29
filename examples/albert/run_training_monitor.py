@@ -20,6 +20,7 @@ from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOpt
 
 logger = logging.getLogger(__name__)
 
+from run_trainer import analyze_openfiles_periodically
 
 @dataclass
 class TrainingMonitorArguments(BaseTrainingArguments):
