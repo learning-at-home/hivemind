@@ -31,12 +31,12 @@ LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
 
 
 def analyze_openfiles_periodically():
-    children = [psutil.Process()] + psutil.Process().children(recursive=True)
     while True:
-        logger.info("Scanning open files")
+        logger.info(f"Scanning open files for process {psutil.Process().pid}")
+        children = [psutil.Process()] + psutil.Process().children(recursive=True)
         for child in children:
             open_files = child.open_files()
-            logger.info(f"proc: '{child.name()}' files: {len(open_files)}")
+            logger.info(f"proc: '{child.name()}' pid={child.pid} parent={child.parent().pid} files: {len(open_files)}")
         for child in children:
             open_files = child.open_files()
             if len(open_files) > 100:
