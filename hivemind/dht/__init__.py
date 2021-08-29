@@ -103,45 +103,52 @@ class DHT(mp.Process):
     def run(self) -> None:
         """Serve DHT forever. This function will not return until DHT node is shut down"""
         print(f"RUNNING DHT WITH PID={self.pid}")
+
         loop = switch_to_uvloop()
+        pipe_semaphore = asyncio.Semaphore(value=0)
+        loop.add_reader(self._inner_pipe.fileno(), pipe_semaphore.release)
 
-        with ThreadPoolExecutor(max_workers=1) as pipe_awaiter:
+        async def _run():
+            try:
+                if self._daemon_listen_maddr is not None:
+                    replicated_p2p = await P2P.replicate(self._daemon_listen_maddr)
+                else:
+                    replicated_p2p = None
 
-            async def _run():
+                self._node = await DHTNode.create(
+                    initial_peers=self.initial_peers,
+                    num_workers=self.num_workers,
+                    record_validator=self._record_validator,
+                    p2p=replicated_p2p,
+                    **self.kwargs,
+                )
+            except Exception as e:
+                # Loglevel is DEBUG since normally the exception is propagated to the caller
+                logger.debug(e, exc_info=True)
+                self._ready.set_exception(e)
+                return
+            self._ready.set_result(None)
+
+            while True:
                 try:
-                    if self._daemon_listen_maddr is not None:
-                        replicated_p2p = await P2P.replicate(self._daemon_listen_maddr)
-                    else:
-                        replicated_p2p = None
+                    await asyncio.wait_for(pipe_semaphore.acquire(), timeout=self._node.protocol.wait_timeout)
+                except asyncio.TimeoutError:
+                    pass
+                try:
 
-                    self._node = await DHTNode.create(
-                        initial_peers=self.initial_peers,
-                        num_workers=self.num_workers,
-                        record_validator=self._record_validator,
-                        p2p=replicated_p2p,
-                        **self.kwargs,
-                    )
-                except Exception as e:
-                    # Loglevel is DEBUG since normally the exception is propagated to the caller
-                    logger.debug(e, exc_info=True)
-                    self._ready.set_exception(e)
-                    return
-                self._ready.set_result(None)
-
-                while True:
-                    try:
-                        method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._inner_pipe.recv)
-                    except (OSError, ConnectionError) as e:
-                        logger.exception(e)
-                        await asyncio.sleep(self._node.protocol.wait_timeout)
+                    if not self._inner_pipe.poll():
                         continue
-                    task = asyncio.create_task(getattr(self, method)(*args, **kwargs))
-                    if method == "_shutdown":
-                        await task
-                        break
+                    method, args, kwargs = self._inner_pipe.recv()
+                except (OSError, ConnectionError, RuntimeError) as e:
+                    logger.exception(e)
+                    await asyncio.sleep(self._node.protocol.wait_timeout)
+                    continue
+                task = asyncio.create_task(getattr(self, method)(*args, **kwargs))
+                if method == "_shutdown":
+                    await task
+                    break
 
-            coro = _run()
-            loop.run_until_complete(coro)
+        loop.run_until_complete(_run())
 
     def run_in_background(self, await_ready: bool = True, timeout: Optional[float] = None) -> None:
         """
