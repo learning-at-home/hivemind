@@ -137,10 +137,7 @@ def benchmark_throughput(
         can_start.set()
 
         for client in clients:
-            print("joining clients")
-            print(client.is_alive())
             client.join()
-            print("i'm here")
 
         timestamps["clients_finished"] = time.perf_counter()
 
