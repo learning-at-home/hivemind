@@ -192,7 +192,10 @@ class ControlClient:
         with closing(writer):
             while True:
                 msg = await self._pending_messages.get()
-                await write_pbmsg(writer, msg)
+                try:
+                    await write_pbmsg(writer, msg)
+                except BaseException as e:
+                    logger.error(f"Failed to write to persistent connection, caught {e}.")
 
     async def _handle_persistent_request(self, call_id: UUID, request: p2pd_pb.CallUnaryRequest):
         if request.proto not in self.unary_handlers:
