@@ -248,10 +248,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     await asyncio.wait_for(pipe_semaphore.acquire(), timeout=self._matchmaking.request_timeout)
                 except asyncio.TimeoutError:
                     pass
-
+                if not self._inner_pipe.poll():
+                    continue
                 try:
-                    if not self._inner_pipe.poll():
-                        continue
                     method, args, kwargs = self._inner_pipe.recv()
                 except (OSError, ConnectionError, RuntimeError) as e:
                     logger.exception(e)
