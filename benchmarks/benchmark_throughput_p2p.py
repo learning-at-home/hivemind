@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import multiprocessing as mp
 import random
 import sys
@@ -40,8 +41,12 @@ def client_process(
 ) -> None:
     torch.set_num_threads(1)
     can_start.wait()
+
+    p2p = hivemind.moe.client.expert._RemoteModuleCall.run_coroutine(
+        hivemind.P2P.create()
+    )
     experts = [
-        hivemind.RemoteExpert(f"expert.{i}", server_peer_info=server_peer_info) for i in range(num_experts)
+        hivemind.RemoteExpert(f"expert.{i}", server_peer_info=server_peer_info, p2p=p2p) for i in range(num_experts)
     ]
 
     try:
