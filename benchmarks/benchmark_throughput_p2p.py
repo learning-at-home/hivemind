@@ -7,7 +7,7 @@ import time
 import torch
 
 import hivemind
-from hivemind import get_free_port
+from hivemind.dht import DHT
 from hivemind.moe.server import layers
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger
@@ -28,11 +28,20 @@ def print_device_info(device=None):
         logger.info(f"Cached:   {round(torch.cuda.memory_cached(0) / 1024 ** 3, 1)} GB")
 
 
-def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
+def client_process(
+    can_start,
+    benchmarking_failed,
+    server_peer_info,
+    num_experts,
+    batch_size,
+    hid_dim,
+    num_batches,
+    backprop=True,
+) -> None:
     torch.set_num_threads(1)
     can_start.wait()
     experts = [
-        hivemind.RemoteExpert(f"expert{i}", endpoint=f"{hivemind.LOCALHOST}:{port}") for i in range(num_experts)
+        hivemind.RemoteExpert(f"expert.{i}", server_peer_info=server_peer_info) for i in range(num_experts)
     ]
 
     try:
@@ -48,17 +57,16 @@ def client_process(can_start, benchmarking_failed, port, num_experts, batch_size
 
 
 def benchmark_throughput(
-    num_experts=16,
+    num_experts=1,
     num_handlers=None,
-    num_clients=128,
+    num_clients=1,
     num_batches_per_client=16,
     expert_cls="ffn",
     hid_dim=1024,
-    batch_size=2048,
+    batch_size=16,
     max_batch_size=None,
     backprop=True,
     device=None,
-    port=None,
 ):
     assert (
         not hasattr(torch.cuda, "is_initialized")
@@ -66,7 +74,6 @@ def benchmark_throughput(
         or torch.device(device) == torch.device("cpu")
     )
     assert expert_cls in layers.name_to_block
-    port = port or get_free_port()
     max_batch_size = max_batch_size or batch_size * 4
     num_handlers = max(1, num_handlers or num_clients // 2)
     benchmarking_failed = mp.Event()
@@ -74,8 +81,12 @@ def benchmark_throughput(
     timestamps = dict(started=time.perf_counter())
 
     try:
-        # start clients and await server
-        # Note: client processes must be launched BEFORE touching gpu, even torch.cuda.is_available can cause trouble
+        server_dht = DHT(start=True)
+        server_dht_peer_info = hivemind.PeerInfo(
+            peer_id=server_dht.peer_id,
+            addrs=[addr.decapsulate("/p2p/" + addr.get("p2p")) for addr in server_dht.get_visible_maddrs()],
+        )
+
         clients = [
             mp.Process(
                 target=client_process,
@@ -83,30 +94,29 @@ def benchmark_throughput(
                 args=(
                     can_start,
                     benchmarking_failed,
-                    port,
+                    server_dht_peer_info,
                     num_experts,
                     batch_size,
                     hid_dim,
                     num_batches_per_client,
                     backprop,
                 ),
+                daemon=True,
             )
             for i in range(num_clients)
         ]
 
         for client in clients:
-            client.daemon = True
             client.start()
 
         timestamps["launched_clients"] = timestamps["began_launching_server"] = time.perf_counter()
 
-        # start server
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         experts = {}
         for i in range(num_experts):
             expert = torch.jit.script(layers.name_to_block[expert_cls](hid_dim))
-            experts[f"expert{i}"] = hivemind.ExpertBackend(
-                name=f"expert{i}",
+            experts[f"expert.{i}"] = hivemind.ExpertBackend(
+                name=f"expert.{i}",
                 expert=expert,
                 optimizer=torch.optim.Adam(expert.parameters()),
                 args_schema=(hivemind.BatchTensorDescriptor(hid_dim),),
@@ -114,11 +124,11 @@ def benchmark_throughput(
                 max_batch_size=max_batch_size,
             )
         timestamps["created_experts"] = time.perf_counter()
+
         server = hivemind.moe.Server(
-            None,
-            experts,
-            listen_on=f"{hivemind.LOCALHOST}:{port}",
-            num_connection_handlers=num_handlers,
+            dht=server_dht,
+            expert_backends=experts,
+            num_connection_handlers=1,  # TODO: support greater number
             device=device,
         )
         server.start()
@@ -127,8 +137,13 @@ def benchmark_throughput(
         can_start.set()
 
         for client in clients:
+            print("joining clients")
+            print(client.is_alive())
             client.join()
+            print("i'm here")
+
         timestamps["clients_finished"] = time.perf_counter()
+
     except BaseException as e:
         benchmarking_failed.set()
         raise e

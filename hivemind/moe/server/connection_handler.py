@@ -5,11 +5,11 @@ from typing import Dict
 
 import torch
 
-from hivemind.p2p import P2PContext, ServicerBase
 from hivemind.dht import DHT
 from hivemind.moe.server.expert_backend import ExpertBackend
+from hivemind.p2p import P2PContext, ServicerBase
 from hivemind.proto import runtime_pb2
-from hivemind.utils import get_logger, nested_flatten, MPFuture
+from hivemind.utils import MPFuture, get_logger, nested_flatten
 from hivemind.utils.asyncio import switch_to_uvloop
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 
@@ -45,6 +45,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             except Exception as e:
                 self.ready.set_exception(e)
                 return
+
         self.ready.set_result(None)
 
         try:
@@ -65,7 +66,9 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
 
         return runtime_pb2.ExpertResponse(tensors=serialized_response)
 
-    async def rpc_backward(self, request: runtime_pb2.ExpertRequest, context: P2PContext) -> runtime_pb2.ExpertResponse:
+    async def rpc_backward(
+        self, request: runtime_pb2.ExpertRequest, context: P2PContext
+    ) -> runtime_pb2.ExpertResponse:
         inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
         serialized_response = [

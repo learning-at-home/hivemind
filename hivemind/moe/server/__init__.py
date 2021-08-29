@@ -58,7 +58,6 @@ class Server(threading.Thread):
         self,
         dht: Optional[DHT],
         expert_backends: Dict[str, ExpertBackend],
-        listen_on: Endpoint = "0.0.0.0:*",
         num_connection_handlers: int = 1,
         update_period: int = 30,
         start=False,
@@ -67,9 +66,6 @@ class Server(threading.Thread):
     ):
         super().__init__()
         self.dht, self.experts, self.update_period = dht, expert_backends, update_period
-        if get_port(listen_on) is None:
-            listen_on = replace_port(listen_on, new_port=get_free_port())
-        self.listen_on, self.port = listen_on, get_port(listen_on)
 
         self.conn_handlers = [ConnectionHandler(dht, self.experts) for _ in range(1)]
         if checkpoint_dir is not None:
@@ -82,7 +78,7 @@ class Server(threading.Thread):
             self.dht_handler_thread = DHTHandlerThread(
                 experts=self.experts,
                 dht=self.dht,
-                endpoint=self.listen_on,
+                peer_id=self.dht.peer_id,
                 update_period=self.update_period,
                 daemon=True,
             )
@@ -93,7 +89,6 @@ class Server(threading.Thread):
     @classmethod
     def create(
         cls,
-        listen_on="0.0.0.0:*",
         num_experts: int = None,
         expert_uids: str = None,
         expert_pattern: str = None,
@@ -222,7 +217,6 @@ class Server(threading.Thread):
         return cls(
             dht,
             experts,
-            listen_on=listen_on,
             num_connection_handlers=num_handlers,
             device=device,
             checkpoint_dir=checkpoint_dir,
@@ -235,8 +229,7 @@ class Server(threading.Thread):
         Starts Server in the current thread. Initializes dht if necessary, starts connection handlers,
         runs Runtime (self.runtime) to process incoming requests.
         """
-        logger.info(f"Server started at {self.listen_on}")
-        logger.info(f"Got {len(self.experts)} experts:")
+        logger.info(f"Server started with {len(self.experts)} experts:")
         for expert_name, backend in self.experts.items():
             num_parameters = sum(p.numel() for p in backend.expert.parameters() if p.requires_grad)
             logger.info(f"{expert_name}: {backend.expert.__class__.__name__}, {num_parameters} parameters")

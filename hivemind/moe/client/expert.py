@@ -1,32 +1,23 @@
-import asyncio
-from concurrent.futures import Future
-import multiprocessing as mp
 import pickle
-from typing import Any, Dict, Optional, Tuple, Awaitable
-from threading import Thread
+from concurrent.futures import Future
 from queue import Queue
+from threading import Thread
+from typing import Any, Awaitable, Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-
-#from hivemind.moe.server.connection_handler import ConnectionHandler
-from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
-from hivemind.utils import nested_compare, nested_flatten, nested_pack, switch_to_uvloop
+import hivemind
 from hivemind.p2p import P2P, PeerInfo, StubBase
 from hivemind.proto import runtime_pb2
-
+from hivemind.utils import nested_compare, nested_flatten, nested_pack, switch_to_uvloop
+from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 
 
-import hivemind
-
-#ConnectionHandlerStub = hivemind.moe.server.connection_handler.ConnectionHandler._stub_type
-
-
-def _get_expert_stub(p2p: P2P, server_peer_info: PeerInfo): # -> ConnectionHandlerStub:
+def _get_expert_stub(p2p: P2P, server_peer_info: PeerInfo):  # -> ConnectionHandlerStub:
     return hivemind.moe.server.connection_handler.ConnectionHandler.get_stub(p2p, server_peer_info.peer_id)
 
 
@@ -39,7 +30,7 @@ class RemoteExpert(nn.Module):
     :param uid: unique expert identifier
     """
 
-    def __init__(self, uid, server_peer_info: PeerInfo, p2p: Optional[P2P] = None):
+    def __init__(self, uid, server_peer_info: PeerInfo, p2p: Optional[P2P] = None, connect: bool = True):
         super().__init__()
         self.uid, self.server_peer_info = uid, server_peer_info
         self._info = None
@@ -49,7 +40,8 @@ class RemoteExpert(nn.Module):
         else:
             self.p2p = p2p
 
-        _RemoteModuleCall.run_coroutine(self.p2p._client.connect(server_peer_info.peer_id, server_peer_info.addrs))
+        if connect:
+            _RemoteModuleCall.run_coroutine(self.p2p._client.connect(server_peer_info.peer_id, server_peer_info.addrs))
 
     @property
     def stub(self) -> StubBase:
@@ -66,6 +58,7 @@ class RemoteExpert(nn.Module):
 
         if not nested_compare(forward_inputs, self.info["forward_schema"]):
             raise TypeError(f"Inputs do not match expert input schema. Did you pass the right number of parameters?")
+
         flat_outputs = _RemoteModuleCall.apply(DUMMY, self.uid, self.stub, self.info, *nested_flatten(forward_inputs))
 
         # Note: we send DUMMY to prevent torch from excluding expert from backward if no other inputs require grad
@@ -100,7 +93,6 @@ class _RemoteModuleCall(torch.autograd.Function):
                 except Exception as e:
                     future.set_exception(e)
                     continue
-
                 future.set_result(result)
 
         loop.run_until_complete(receive_tasks())
@@ -108,7 +100,7 @@ class _RemoteModuleCall(torch.autograd.Function):
     @classmethod
     def run_coroutine(cls, coro: Awaitable, return_future: bool = False):
         if cls._event_thread is None:
-            cls._event_thread = Thread(target=cls._run)
+            cls._event_thread = Thread(target=cls._run, daemon=True)
             cls._event_thread.start()
 
         future = Future()
@@ -117,7 +109,8 @@ class _RemoteModuleCall(torch.autograd.Function):
         if return_future:
             return future
 
-        return future.result()
+        result = future.result()
+        return result
 
     @classmethod
     def forward(
@@ -125,7 +118,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         ctx,
         dummy: torch.Tensor,
         uid: str,
-        stub,#: ConnectionHandlerStub,
+        stub,  #: ConnectionHandlerStub,
         info: Dict[str, Any],
         *inputs: torch.Tensor,
     ) -> Tuple[torch.Tensor, ...]:
