@@ -1,6 +1,7 @@
 name_to_block = {}
 name_to_input = {}
 
+import hivemind.moe.server.layers.albert
 import hivemind.moe.server.layers.common
 import hivemind.moe.server.layers.dropout
 from hivemind.moe.server.layers.custom_experts import add_custom_models_from_file, register_expert_class
