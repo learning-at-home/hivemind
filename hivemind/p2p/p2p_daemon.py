@@ -336,6 +336,8 @@ class P2P:
                         await P2P.send_protobuf(RPCError(message=str(e)), writer)
 
             with closing(writer):
+                writer.transport.set_write_buffer_limits(high=2 ** 20)
+
                 processing_task = asyncio.create_task(_process_stream())
                 try:
                     while True:
@@ -370,6 +372,8 @@ class P2P:
             await P2P.send_protobuf(P2P.END_OF_STREAM, writer)
 
         with closing(writer):
+            writer.transport.set_write_buffer_limits(high=2 ** 20)
+
             writing_task = asyncio.create_task(_write_to_stream())
             try:
                 while True:
