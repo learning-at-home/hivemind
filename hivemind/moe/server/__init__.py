@@ -111,15 +111,25 @@ class Server(threading.Thread):
         use_averaging: bool = False,
         averaging_target_batch_size: Optional[int] = None,
         averaging_target_group_size: Optional[int] = None,
+        averaging_min_refresh_period=1,
+        averaging_max_refresh_period=60,
+        averaging_default_refresh_period=5,
+        averaging_expiration=30,
+        metadata_expiration=120,
+        averaging_timeout=30,
+        reuse_grad_buffers=True,
         device=None,
         no_dht=False,
         initial_peers=(),
         checkpoint_dir: Optional[Path] = None,
         compression=CompressionType.NONE,
+        averaging_compression=CompressionType.FLOAT16,
         stats_report_interval: Optional[int] = None,
         custom_module_path=None,
+        identity_path=None,
         *,
         start: bool,
+        **kwargs,
     ) -> Server:
         """
         Instantiate a server with several identical experts. See argparse comments below for details
@@ -153,6 +163,7 @@ class Server(threading.Thread):
         :param compression: if specified, use this compression to pack all inputs, outputs and gradients by all experts
             hosted on this server. For a more fine-grained compression, start server in python and specify compression
             for each BatchTensorProto in ExpertBackend for the respective experts.
+        :param averaging_compression: averaging compression
 
         :param start: if True, starts server right away and returns when server is ready for requests
         :param stats_report_interval: interval between two reports of batch processing performance statistics
@@ -164,7 +175,7 @@ class Server(threading.Thread):
         if no_dht:
             dht = None
         else:
-            dht = hivemind.DHT(initial_peers=initial_peers, start=True)
+            dht = hivemind.DHT(initial_peers=initial_peers, start=True, identity_path=identity_path)
             visible_maddrs_str = [str(a) for a in dht.get_visible_maddrs()]
             logger.info(f"Running DHT node on {visible_maddrs_str}, initial peers = {initial_peers}")
 
@@ -192,16 +203,11 @@ class Server(threading.Thread):
             uids_to_generate = num_experts - len(expert_uids)
             if uids_to_generate > 0:
                 logger.info(f"Generating {uids_to_generate} expert uids from pattern {expert_pattern}")
-                expert_uids.extend(
-                    generate_uids_from_pattern(
-                        uids_to_generate, expert_pattern, dht, remove_duplicates=not use_averaging
-                    )
-                )
+                expert_uids.extend(generate_uids_from_pattern(uids_to_generate, expert_pattern, dht))
 
         num_experts = len(expert_uids)
         num_handlers = num_handlers if num_handlers is not None else num_experts * 8
         optim_cls = optim_cls if optim_cls is not None else partial(torch.optim.SGD, lr=0.0)
-        device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
         sample_input = name_to_input[expert_cls](3, hidden_dim)
         if isinstance(sample_input, tuple):
@@ -210,11 +216,13 @@ class Server(threading.Thread):
             args_schema = (BatchTensorDescriptor.from_tensor(sample_input, compression),)
 
         scheduler = schedule_name_to_scheduler[scheduler]
+        device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
         # initialize experts
         experts = {}
         for expert_uid in expert_uids:
             expert = name_to_block[expert_cls](hidden_dim)
+            expert.to(device)
 
             optim = optim_cls(expert.parameters())
             if use_averaging:
@@ -223,19 +231,27 @@ class Server(threading.Thread):
                 optim = CollaborativeOptimizer(
                     optim,
                     dht=dht,
-                    prefix=expert_uid.replace(".", ""),
-                    compression_type=compression,
+                    prefix=expert_uid.split(UID_DELIMITER)[0],
+                    compression_type=CompressionType.Value(averaging_compression),
                     target_batch_size=averaging_target_batch_size,
                     target_group_size=averaging_target_group_size,
-                    reuse_grad_buffers=True,
+                    min_refresh_period=averaging_min_refresh_period,
+                    max_refresh_period=averaging_max_refresh_period,
+                    default_refresh_period=averaging_default_refresh_period,
+                    averaging_expiration=averaging_expiration,
+                    metadata_expiration=metadata_expiration,
+                    averaging_timeout=averaging_timeout,
+                    reuse_grad_buffers=reuse_grad_buffers,
+                    verbose=True,
                     start=True,
                 )
 
-            experts[expert_uid] = hivemind.ExpertBackend(
+            experts[expert_uid] = ExpertBackend(
                 name=expert_uid,
                 expert=expert,
                 args_schema=args_schema,
                 optimizer=optim,
+                device=device,
                 scheduler=scheduler,
                 num_warmup_steps=num_warmup_steps,
                 num_total_steps=num_total_steps,
@@ -256,6 +272,7 @@ class Server(threading.Thread):
             checkpoint_dir=checkpoint_dir,
             stats_report_interval=stats_report_interval,
             start=start,
+            **kwargs,
         )
 
     def run(self):

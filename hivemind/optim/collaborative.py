@@ -399,7 +399,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         response, _expiration = self.dht.get(self.training_progress_key, latest=True) or (None, -float("inf"))
         current_time = get_dht_time()
 
-        if not isinstance(response, dict) or len(response) == 0:
+        if not isinstance(response, dict) or not response:
             logger.log(
                 self.status_loglevel,
                 f"Collaboration {self.prefix} found no active peers {f': {response}' if response else ''}",

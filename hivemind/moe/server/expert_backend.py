@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
 
 import torch
 from torch import nn
@@ -47,6 +47,7 @@ class ExpertBackend:
         expert: nn.Module,
         optimizer: torch.optim.Optimizer,
         *,
+        device: torch.device,
         scheduler: Callable = None,
         args_schema: Tuple[BatchTensorDescriptor, ...] = None,
         kwargs_schema: Dict[str, BatchTensorDescriptor] = None,
@@ -57,7 +58,9 @@ class ExpertBackend:
         **kwargs,
     ):
         super().__init__()
-        self.expert, self.optimizer, self.name = expert, optimizer, name
+        self.expert = expert.to(device)
+        self.optimizer, self.name = optimizer, name
+        self.device = device
 
         if scheduler is None:
             self.scheduler = None
@@ -75,8 +78,10 @@ class ExpertBackend:
 
         if outputs_schema is None:
             # run expert once to get outputs schema
-            dummy_args = tuple(sample.make_empty(DUMMY_BATCH_SIZE) for sample in args_schema)
-            dummy_kwargs = {key: sample.make_empty(DUMMY_BATCH_SIZE) for key, sample in kwargs_schema.items()}
+            dummy_args = tuple(sample.make_empty(DUMMY_BATCH_SIZE, device=device) for sample in args_schema)
+            dummy_kwargs = {
+                key: sample.make_empty(DUMMY_BATCH_SIZE, device=device) for key, sample in kwargs_schema.items()
+            }
             dummy_outputs = self.expert(*dummy_args, **dummy_kwargs)
             outputs_schema = nested_map(BatchTensorDescriptor.from_tensor, dummy_outputs)
 

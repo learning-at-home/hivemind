@@ -41,7 +41,6 @@ def generate_uids_from_pattern(
     expert_pattern: Optional[str],
     dht: Optional[DHT] = None,
     attempts_per_expert=10,
-    remove_duplicates=True,
 ) -> List[str]:
     """
     Sample experts from a given pattern, optionally remove duplicates.
@@ -89,7 +88,7 @@ def generate_uids_from_pattern(
                 attempted_uids.add(new_uid)
                 new_uids.append(new_uid)
 
-        if dht and remove_duplicates:
+        if dht:
             existing_expert_uids = {
                 found_expert.uid
                 for found_expert in hivemind.moe.server.get_experts(dht, new_uids)

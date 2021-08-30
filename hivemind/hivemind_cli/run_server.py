@@ -63,12 +63,23 @@ def main():
                         help='On *nix, this will increase the max number of processes '
                              'a server can spawn before hitting "Too many open files"; Use at your own risk.')
     parser.add_argument('--compression', type=str, default='NONE', required=False, help='Tensor compression for gRPC')
+    parser.add_argument('--averaging_compression', type=str, default='FLOAT16', required=False, help='Averaging compression')
     parser.add_argument('--checkpoint_dir', type=Path, required=False, help='Directory to store expert checkpoints')
     parser.add_argument('--stats_report_interval', type=int, required=False,
                         help='Interval between two reports of batch processing performance statistics')
 
     parser.add_argument('--custom_module_path', type=str, required=False,
                         help='Path of a file with custom nn.modules, wrapped into special decorator')
+    parser.add_argument('--identity_path', type=str, required=False,
+                        help='Path of a libp2p identity file')
+
+    parser.add_argument('--averaging_min_refresh_period',type=float,default=1)
+    parser.add_argument('--averaging_max_refresh_period',type=float,default=60)
+    parser.add_argument('--averaging_default_refresh_period',type=float,default=5)
+    parser.add_argument('--averaging_expiration',type=float,default=30)
+    parser.add_argument('--metadata_expiration',type=float,default=120)
+    parser.add_argument('--averaging_timeout',type=float,default=30)
+    parser.add_argument('--reuse_grad_buffers',type=bool,default=True)
 
     # fmt:on
     args = vars(parser.parse_args())
