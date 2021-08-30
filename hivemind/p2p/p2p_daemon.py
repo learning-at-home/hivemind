@@ -336,7 +336,8 @@ class P2P:
                         await P2P.send_protobuf(RPCError(message=str(e)), writer)
 
             with closing(writer):
-                writer.transport.set_write_buffer_limits(high=2 ** 20)
+                writer.transport.set_write_buffer_limits(low=2 ** 21 - 2 ** 16, high=2 ** 21)
+                logger.warning(f"Set watermarks to: {writer.transport.get_write_buffer_limits()}")
 
                 processing_task = asyncio.create_task(_process_stream())
                 try:
