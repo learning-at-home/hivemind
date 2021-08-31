@@ -22,7 +22,8 @@ from hivemind.utils.asyncio import (
     anext,
     asingle,
     azip,
-    cancel_and_wait, aiter_with_timeout,
+    cancel_and_wait,
+    aiter_with_timeout,
 )
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.utils.mpfuture import InvalidStateError
@@ -487,7 +488,10 @@ async def test_asyncio_utils():
         num_steps += 1
     assert num_steps == 100
 
-    ours = [elem async for elem in amap_in_executor(max, as_aiter(*range(7)), as_aiter(*range(-50, 50, 10)), max_prefetch=1)]
+    ours = [
+        elem
+        async for elem in amap_in_executor(max, as_aiter(*range(7)), as_aiter(*range(-50, 50, 10)), max_prefetch=1)
+    ]
     ref = list(map(max, range(7), range(-50, 50, 10)))
     assert ours == ref
 
