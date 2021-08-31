@@ -17,13 +17,13 @@ from hivemind.utils.asyncio import (
     achain,
     aenumerate,
     afirst,
-    as_aiter,
+    aiter_with_timeout,
     amap_in_executor,
     anext,
+    as_aiter,
     asingle,
     azip,
     cancel_and_wait,
-    aiter_with_timeout,
 )
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.utils.mpfuture import InvalidStateError
