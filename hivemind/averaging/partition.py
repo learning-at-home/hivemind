@@ -13,7 +13,7 @@ from hivemind.utils.asyncio import amap_in_executor
 from hivemind.utils.compression import get_nbytes_per_value, serialize_torch_tensor
 
 T = TypeVar("T")
-DEFAULT_PART_SIZE_BYTES = 2 ** 19
+DEFAULT_PART_SIZE_BYTES = 2 ** 16
 
 
 class TensorPartContainer:
