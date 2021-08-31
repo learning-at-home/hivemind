@@ -120,7 +120,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         assert all(bit in "01" for bit in initial_group_bits)
         assert not client_mode or not auxiliary, "auxiliary peers must accept incoming connections"
 
-        super().__init__(name='DecentralizedAverager')
+        super().__init__()
         self.dht = dht
         self.prefix = prefix
 
@@ -207,7 +207,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         Turns out, using a non-main thread creates a separate OMP pool that works even if the original pool is corrupted
         Read more: https://github.com/pytorch/pytorch/issues/17199
         """
-        print(f"RUNNING AVERAGER WITH PID={self.pid}")
         thread = threading.Thread(target=self._run_internal, daemon=True)
         thread.start()
         thread.join()

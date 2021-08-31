@@ -70,7 +70,7 @@ class DHT(mp.Process):
         **kwargs,
     ):
         self._parent_pid = os.getpid()
-        super().__init__(name="DHT")
+        super().__init__()
 
         if not (
             initial_peers is None
@@ -102,7 +102,6 @@ class DHT(mp.Process):
 
     def run(self) -> None:
         """Serve DHT forever. This function will not return until DHT node is shut down"""
-        print(f"RUNNING DHT WITH PID={self.pid}")
 
         loop = switch_to_uvloop()
         pipe_semaphore = asyncio.Semaphore(value=0)
