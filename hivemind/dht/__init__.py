@@ -136,7 +136,6 @@ class DHT(mp.Process):
                 if not self._inner_pipe.poll():
                     continue
                 try:
-
                     method, args, kwargs = self._inner_pipe.recv()
                 except (OSError, ConnectionError, RuntimeError) as e:
                     logger.exception(e)
