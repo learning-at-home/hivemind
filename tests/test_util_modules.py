@@ -17,7 +17,7 @@ from hivemind.utils.asyncio import (
     achain,
     aenumerate,
     afirst,
-    aiter,
+    as_aiter,
     amap_in_executor,
     anext,
     asingle,
@@ -478,20 +478,20 @@ def test_generic_data_classes():
 
 @pytest.mark.asyncio
 async def test_asyncio_utils():
-    res = [i async for i, item in aenumerate(aiter("a", "b", "c"))]
+    res = [i async for i, item in aenumerate(as_aiter("a", "b", "c"))]
     assert res == list(range(len(res)))
 
     num_steps = 0
-    async for elem in amap_in_executor(lambda x: x ** 2, aiter(*range(100)), max_prefetch=5):
+    async for elem in amap_in_executor(lambda x: x ** 2, as_aiter(*range(100)), max_prefetch=5):
         assert elem == num_steps ** 2
         num_steps += 1
     assert num_steps == 100
 
-    ours = [elem async for elem in amap_in_executor(max, aiter(*range(7)), aiter(*range(-50, 50, 10)), max_prefetch=1)]
+    ours = [elem async for elem in amap_in_executor(max, as_aiter(*range(7)), as_aiter(*range(-50, 50, 10)), max_prefetch=1)]
     ref = list(map(max, range(7), range(-50, 50, 10)))
     assert ours == ref
 
-    ours = [row async for row in azip(aiter("a", "b", "c"), aiter(1, 2, 3))]
+    ours = [row async for row in azip(as_aiter("a", "b", "c"), as_aiter(1, 2, 3))]
     ref = list(zip(["a", "b", "c"], [1, 2, 3]))
     assert ours == ref
 
@@ -507,18 +507,18 @@ async def test_asyncio_utils():
     with pytest.raises(StopAsyncIteration):
         await anext(iterator)
 
-    assert [item async for item in achain(_aiterate(), aiter(*range(5)))] == ["foo", "bar", "baz"] + list(range(5))
+    assert [item async for item in achain(_aiterate(), as_aiter(*range(5)))] == ["foo", "bar", "baz"] + list(range(5))
 
-    assert await asingle(aiter(1)) == 1
+    assert await asingle(as_aiter(1)) == 1
     with pytest.raises(ValueError):
-        await asingle(aiter())
+        await asingle(as_aiter())
     with pytest.raises(ValueError):
-        await asingle(aiter(1, 2, 3))
+        await asingle(as_aiter(1, 2, 3))
 
-    assert await afirst(aiter(1)) == 1
-    assert await afirst(aiter()) is None
-    assert await afirst(aiter(), -1) == -1
-    assert await afirst(aiter(1, 2, 3)) == 1
+    assert await afirst(as_aiter(1)) == 1
+    assert await afirst(as_aiter()) is None
+    assert await afirst(as_aiter(), -1) == -1
+    assert await afirst(as_aiter(1, 2, 3)) == 1
 
 
 @pytest.mark.asyncio
