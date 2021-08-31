@@ -127,3 +127,14 @@ async def amap_in_executor(
     finally:
         if not task.done():
             task.cancel()
+
+
+async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: float) -> AsyncIterator[T]:
+    """ Iterate over an async iterable, raise TimeoutError if another portion of data does not arrive within timeout """
+    # based on https://stackoverflow.com/a/50245879
+    iterator = iterable.__aiter__()
+    while True:
+        try:
+            yield await asyncio.wait_for(iterator.__anext__(), timeout=timeout)
+        except StopAsyncIteration:
+            break

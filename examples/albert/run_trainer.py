@@ -30,31 +30,6 @@ logger = logging.getLogger(__name__)
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
 
 
-def analyze_openfiles_periodically():
-    while True:
-        logger.info(f"Scanning open files for process {psutil.Process().pid}")
-        children = [psutil.Process()] + psutil.Process().children(recursive=True)
-        for child in children:
-            try:
-                num_open_files = len(child.open_files())
-            except:
-                num_open_files = "FAILED"
-            logger.info(f"proc: '{child.name()}' pid={child.pid} parent={child.parent().pid} files: {num_open_files}")
-        for child in children:
-            try:
-                open_files = child.open_files()
-                if len(open_files) > 100:
-                    logger.info(f"proc: {child.name()} has {len(open_files)} open files: {repr(open_files)}")
-            except:
-                pass
-        logger.info("DONE scanning")
-        time.sleep(300)
-
-
-analyzer = threading.Thread(target=analyze_openfiles_periodically)
-analyzer.start()
-
-
 def setup_logging(training_args):
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
