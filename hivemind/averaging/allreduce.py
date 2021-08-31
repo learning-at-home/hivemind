@@ -153,13 +153,17 @@ class AllReduceRunner(ServicerBase):
                 self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part - tensor_part)
 
         else:
-            loop = asyncio.get_event_loop()
             code = None
             stream = self._get_peer_stub(peer_id).rpc_aggregate_part(self._generate_input_for_peer(peer_index))
-            async for part_index, msg in aenumerate(stream):
+            async for part_index, (averaged_part_delta, msg) in aenumerate(
+                amap_in_executor(
+                    lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg),
+                    stream,
+                    max_prefetch=self.tensor_part_container.prefetch,
+                )
+            ):
                 if code is None:
                     code = msg.code
-                averaged_part_delta = await loop.run_in_executor(None, deserialize_torch_tensor, msg.tensor_part)
                 self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part_delta)
 
             if code != averaging_pb2.AVERAGED_PART:
