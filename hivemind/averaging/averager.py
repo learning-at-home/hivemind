@@ -555,7 +555,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         return await future
 
     def load_state_from_peers(
-        self, wait=True, timeout: Optional[float] = None
+        self, wait: bool = True, timeout: Optional[float] = None
     ) -> Optional[Tuple[Any, Sequence[torch.Tensor]]]:
         """
         Try to download the latest optimizer state one of the existing peer.
