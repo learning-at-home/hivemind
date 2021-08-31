@@ -139,11 +139,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             default_refresh_period,
         )
         self.expected_drift_peers, self.expected_drift_rate = expected_drift_peers, expected_drift_rate
-        self.averaging_timeout, self.load_state_timeout, self.metadata_expiration = (
-            averaging_timeout,
-            load_state_timeout,
-            metadata_expiration,
-        )
+        self.averaging_timeout = averaging_timeout
+        self.load_state_timeout = load_state_timeout
+        self.metadata_expiration = metadata_expiration
         self._grads, self.reuse_grad_buffers, self.accumulate_grads_on = None, reuse_grad_buffers, accumulate_grads_on
         self.client_mode, self.step_tolerance = client_mode, step_tolerance
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
