@@ -191,8 +191,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             while True:
                 try:
                     self.averager.load_state_from_peers(timeout=self.load_state_timeout, **kwargs)
+                    break
                 except BaseException as e:
-                    logger.exception(f"Failed to load state from peers: {e}, will retry now")
+                    logger.exception(f"Failed to load state from peers: {e}, retrying ...")
                     continue
 
             self.local_samples_accumulated = self.local_steps_accumulated = 0

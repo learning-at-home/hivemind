@@ -616,7 +616,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         finally:
             if not future.done():
-                logger.warning("Averager could not load state from peers: all requests have failed.")
+                logger.warning("Averager could not load state from peers: none of the requests succeeded.")
                 future.set_result(None)
 
     def get_group_bits(self, wait: bool = True):
