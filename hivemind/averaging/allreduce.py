@@ -153,22 +153,22 @@ class AllReduceRunner(ServicerBase):
                 self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part - tensor_part)
 
         else:
-            last_code = None
+            code = None
             stream = self._get_peer_stub(peer_id).rpc_aggregate_part(self._generate_input_for_peer(peer_index))
-            async for part_index, (averaged_part_delta, part_code) in aenumerate(
+            async for part_index, (averaged_part_delta, msg) in aenumerate(
                 amap_in_executor(
-                    lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg.code),
+                    lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg),
                     stream,
                     max_prefetch=self.tensor_part_container.prefetch,
                 )
             ):
-                if last_code is None:
-                    last_code = part_code
+                if code is None:
+                    code = msg.code
                 self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part_delta)
 
-            if last_code != averaging_pb2.AVERAGED_PART:
+            if code != averaging_pb2.AVERAGED_PART:
                 raise AllreduceException(
-                    f"peer {peer_id} returned {averaging_pb2.MessageCode.Name(last_code)} "
+                    f"peer {peer_id} returned {averaging_pb2.MessageCode.Name(code)} "
                     f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}"
                     f", allreduce failed"
                 )
