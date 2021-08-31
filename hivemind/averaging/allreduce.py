@@ -8,7 +8,7 @@ from hivemind.averaging.partition import AllreduceException, TensorPartContainer
 from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase, StubBase
 from hivemind.proto import averaging_pb2
 from hivemind.utils import get_logger
-from hivemind.utils.asyncio import achain, aenumerate, afirst, aiter, amap_in_executor, anext
+from hivemind.utils.asyncio import achain, aenumerate, afirst, amap_in_executor, anext, as_aiter
 from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 
 # flavour types
@@ -193,7 +193,7 @@ class AllReduceRunner(ServicerBase):
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
                 sender_index = self.sender_peer_ids.index(context.remote_id)
-                async for msg in self._accumulate_parts_streaming(achain(aiter(request), stream), sender_index):
+                async for msg in self._accumulate_parts_streaming(achain(as_aiter(request), stream), sender_index):
                     yield msg
 
             except Exception as e:
@@ -232,7 +232,7 @@ class AllReduceRunner(ServicerBase):
     async def _send_error_to_peer(self, peer_id: PeerID, code: averaging_pb2.MessageCode):
         error = averaging_pb2.AveragingData(group_id=self.group_id, code=code)
         # Coroutines are lazy, so we take the first item to start the couroutine's execution
-        await afirst(self._get_peer_stub(peer_id).rpc_aggregate_part(aiter(error)))
+        await afirst(self._get_peer_stub(peer_id).rpc_aggregate_part(as_aiter(error)))
 
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):
         """finish or terminate AllReduceRunner, propagate any errors / cancellations to peers."""
