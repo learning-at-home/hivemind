@@ -575,9 +575,6 @@ class P2P:
         if not ready.done():
             ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
 
-    # These Go loggers are excessively verbose, so we downgrade their message severity to DEBUG unless it is >= ERROR
-    _DOWNGRADED_LOGGERS = ["basic/natmgr.go", "rtrefresh/rt_refresh_manager.go"]
-
     @staticmethod
     def _log_p2pd_message(line: str) -> None:
         if '"logger"' not in line:  # User-friendly info from p2pd stdout
@@ -589,7 +586,11 @@ class P2P:
             caller = record["caller"]
 
             level = golog_level_to_python(record["level"])
-            if level < logging.ERROR and any(caller.startswith(name) for name in P2P._DOWNGRADED_LOGGERS):
+            if level <= logging.WARNING:
+                # Many Go loggers are excessively verbose (e.g. show warnings for unreachable peers),
+                # so we downgrade INFO and WARNING messages to DEBUG.
+                # The Go verbosity can still be controlled via the GOLOG_LOG_LEVEL env variable.
+                # Details: https://github.com/ipfs/go-log#golog_log_level
                 level = logging.DEBUG
 
             message = record["msg"]
