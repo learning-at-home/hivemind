@@ -162,6 +162,7 @@ def make_params():
     ]
 
 
+@pytest.mark.forked
 def test_adaptive_compression():
     UINT8 = TestCompression(Uniform8BitQuantization())
     FLOAT16 = TestCompression(Float16Compression())
