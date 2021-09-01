@@ -13,7 +13,7 @@ from hivemind.utils.asyncio import amap_in_executor
 from hivemind.utils.compression import get_nbytes_per_value, serialize_torch_tensor
 
 T = TypeVar("T")
-DEFAULT_PART_SIZE_BYTES = 2 ** 19
+DEFAULT_PART_SIZE_BYTES = 2 ** 16
 
 
 class TensorPartContainer:
@@ -33,7 +33,7 @@ class TensorPartContainer:
         peer_fractions: Sequence[float],
         compression_type: Union["CompressionType", Sequence["CompressionType"]] = CompressionType.NONE,
         part_size_bytes: int = DEFAULT_PART_SIZE_BYTES,
-        prefetch: int = 1,
+        prefetch: int = 5,
     ):
         if not isinstance(compression_type, Sequence):
             compression_type = [compression_type] * len(tensors)
