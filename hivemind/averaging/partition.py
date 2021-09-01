@@ -8,7 +8,8 @@ from typing import AsyncIterable, AsyncIterator, Optional, Sequence, Tuple, Type
 import numpy as np
 import torch
 
-from hivemind.compression import Compression, CompressionInfo, NoCompression
+from hivemind.compression import CompressionBase, CompressionInfo
+from hivemind import NoCompression
 from hivemind.utils.asyncio import amap_in_executor
 from hivemind.proto import runtime_pb2
 
@@ -24,6 +25,7 @@ class TensorPartContainer:
     :param peer_fractions: for each peer, a target fraction of vector elements that this peer should average
     :param compression: optionally compress tensors with this compression algorithm before sending them to peers
     :param part_size_bytes: greedily split tensors into parts of up to this many bytes (after compression)
+    :param tensor_infos: CompressionInfo for each respective tensor; this determines how the tensor will be comressed
     :param prefetch: when compressing, pre-compute this many compressed tensors in background
     """
 
@@ -31,20 +33,16 @@ class TensorPartContainer:
         self,
         tensors: Sequence[torch.Tensor],
         peer_fractions: Sequence[float],
-        compression: Compression = NoCompression(),
+        compression: CompressionBase = NoCompression(),
         part_size_bytes: int = DEFAULT_PART_SIZE_BYTES,
-        compression_infos: Optional[Sequence[CompressionInfo]] = None,
+        tensor_infos: Optional[Sequence[CompressionInfo]] = None,
         prefetch: int = 1,
     ):
-        if compression_infos is None:
-            compression_infos = tuple(CompressionInfo.from_tensor(x, uid=i) for i, x in enumerate(tensors))
-        assert len(compression_infos) == len(tensors), "compression types do not match the number of tensors"
+        if tensor_infos is None:
+            tensor_infos = tuple(CompressionInfo.from_tensor(x, uid=i) for i, x in enumerate(tensors))
+        assert len(tensor_infos) == len(tensors), "compression types do not match the number of tensors"
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
-        self.compression, self.part_size_bytes, self.compression_infos = (
-            compression,
-            part_size_bytes,
-            compression_infos,
-        )
+        self.compression, self.part_size_bytes, self.tensor_infos = compression, part_size_bytes, tensor_infos
         self.total_size = sum(tensor.numel() for tensor in tensors)
         self.prefetch = prefetch
 
@@ -63,7 +61,7 @@ class TensorPartContainer:
         pivots = (np.cumsum(peer_fractions) / np.sum(peer_fractions) * self.total_size).astype(np.int64)
         pivots[-1] = self.total_size
 
-        for tensor, info in zip(self.local_tensors, self.compression_infos):
+        for tensor, info in zip(self.local_tensors, self.tensor_infos):
             bytes_per_value = tensor.element_size() * compression.estimate_compression_ratio(info)
             part_size_values = int(part_size_bytes / bytes_per_value)
             tensor_parts = tensor.detach().view(-1).split(part_size_values)

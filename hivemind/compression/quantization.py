@@ -6,13 +6,13 @@ from typing import Tuple
 import numpy as np
 import torch
 
-from hivemind.compression.base import Compression, CompressionInfo
+from hivemind.compression.base import CompressionBase, CompressionInfo
 from hivemind.proto import runtime_pb2
 
 EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("QUANTIZATION_THREADS", 128)))
 
 
-class Quantization(Compression):
+class Quantization(CompressionBase):
     codebook_dtype, indices_dtype = np.float32, np.uint8
 
     def quantize(self, tensor: torch.Tensor, allow_inplace: bool = False) -> Tuple[np.ndarray, np.ndarray]:

@@ -7,10 +7,12 @@ import torch
 
 import hivemind
 import hivemind.averaging.averager
+from hivemind import Float16Compression, Uniform8BitQuantization
 from hivemind.averaging.allreduce import AveragingMode
 from hivemind.averaging.key_manager import GroupKeyManager
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.partition import AllreduceException
+from hivemind.compression.adaptive import PerTensorCompression
 from hivemind.p2p import PeerID
 from hivemind.proto.runtime_pb2 import CompressionType
 
@@ -177,14 +179,14 @@ def test_allreduce_compression():
     tensors2 = [torch.linspace(300, 800, 1000) ** 0.5, torch.randn(1000)]
     results = {}
 
-    FLOAT16, UINT8 = CompressionType.FLOAT16, CompressionType.UNIFORM_8BIT
+    FLOAT16, UINT8 = Float16Compression(), Uniform8BitQuantization()
 
     for compression_type_pair in [(FLOAT16, FLOAT16), (FLOAT16, UINT8), (UINT8, FLOAT16), (UINT8, UINT8)]:
         dht_instances = launch_dht_instances(2)
         averager1 = hivemind.averaging.DecentralizedAverager(
             [x.clone() for x in tensors1],
             dht=dht_instances[0],
-            compression_type=compression_type_pair,
+            compression=PerTensorCompression(compression_type_pair),
             client_mode=True,
             target_group_size=2,
             prefix="mygroup",
@@ -193,7 +195,7 @@ def test_allreduce_compression():
         averager2 = hivemind.averaging.DecentralizedAverager(
             [x.clone() for x in tensors2],
             dht=dht_instances[1],
-            compression_type=compression_type_pair,
+            compression=PerTensorCompression(compression_type_pair),
             target_group_size=2,
             prefix="mygroup",
             start=True,

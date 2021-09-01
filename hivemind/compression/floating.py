@@ -3,34 +3,11 @@ import math
 import numpy as np
 import torch
 
-from hivemind.compression.base import Compression, CompressionInfo
+from hivemind.compression.base import CompressionBase, CompressionInfo
 from hivemind.proto import runtime_pb2
 
 
-class NoCompression(Compression):
-    """A dummy compression strategy that preserves the original tensor as is."""
-
-    compression_type = runtime_pb2.CompressionType.NONE
-
-    def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        array = tensor.numpy()
-        return runtime_pb2.Tensor(
-            compression=self.compression_type,
-            buffer=array.tobytes(),
-            size=array.shape,
-            dtype=array.dtype.name,
-            requires_grad=tensor.requires_grad,
-        )
-
-    def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
-        array = np.frombuffer(serialized_tensor.buffer, dtype=np.dtype(serialized_tensor.dtype))
-        return torch.as_tensor(array).reshape(tuple(serialized_tensor.size))
-
-    def estimate_compression_ratio(self, info: CompressionInfo) -> float:
-        return 1.0
-
-
-class Float16Compression(Compression):
+class Float16Compression(CompressionBase):
     compression_type = runtime_pb2.CompressionType.FLOAT16
     FP16_MIN, FP16_MAX = torch.finfo(torch.float16).min, torch.finfo(torch.float16).max
 
