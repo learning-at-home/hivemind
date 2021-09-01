@@ -54,26 +54,17 @@ def test_serialize_tensor():
         restored = hivemind.combine_from_streaming(chunks)
         assert torch.allclose(deserialize_torch_tensor(restored), tensor)
 
-    chunk_size = 30 * 1024
-    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.FLOAT16)
-    chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
-    assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-    restored = hivemind.combine_from_streaming(chunks)
-    assert torch.allclose(deserialize_torch_tensor(restored), tensor, rtol=0, atol=1e-2)
+    def _check(tensor, compression, rtol=1e-5, atol=1e-8, chunk_size=30 * 1024):
+        serialized_tensor = serialize_torch_tensor(tensor, compression)
+        chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
+        assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
+        restored = hivemind.combine_from_streaming(chunks)
+        assert torch.allclose(deserialize_torch_tensor(restored), tensor, rtol=rtol, atol=atol)
 
-    tensor = torch.randint(0, 100, (512, 1, 1))
-    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.NONE)
-    chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
-    assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-    restored = hivemind.combine_from_streaming(chunks)
-    assert torch.allclose(deserialize_torch_tensor(restored), tensor)
-
-    scalar = torch.tensor(1.0)
-    serialized_scalar = serialize_torch_tensor(scalar, CompressionType.NONE)
-    assert torch.allclose(deserialize_torch_tensor(serialized_scalar), scalar)
-
-    serialized_scalar = serialize_torch_tensor(scalar, CompressionType.FLOAT16)
-    assert torch.allclose(deserialize_torch_tensor(serialized_scalar), scalar)
+    _check(tensor, CompressionType.FLOAT16, rtol=0.0, atol=1e-2)
+    _check(torch.randint(0, 100, (512, 1, 1)), CompressionType.NONE)
+    _check(torch.tensor(1.0), CompressionType.NONE)
+    _check(torch.tensor(1.0), CompressionType.FLOAT16)
 
 
 @pytest.mark.forked
