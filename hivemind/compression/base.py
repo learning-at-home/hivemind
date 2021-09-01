@@ -34,6 +34,9 @@ class CompressionInfo:
     def from_tensor(cls, tensor: torch.Tensor, key: Key = None, descriptor: TensorDescriptor = None, **kwargs):
         return cls(key, descriptor or TensorDescriptor.from_tensor(tensor), **kwargs)
 
+    def get_part(self, part_index: int, part_size: Optional[int]):
+        return CompressionInfo(self.key, self.descriptor, self.role, part_index=part_index, part_size=part_size)
+
 
 class CompressionBase(ABC):
     """A base class that applies compression algorithm to a pytorch tensor"""

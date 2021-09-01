@@ -65,7 +65,8 @@ class TensorPartContainer:
             part_size_values = int(part_size_bytes / bytes_per_value)
             tensor_parts = tensor.detach().view(-1).split(part_size_values)
             self.num_parts_by_tensor.append(len(tensor_parts))
-            for part in tensor_parts:
+            for part_index, part in enumerate(tensor_parts):
+                part_info = info.get_part(part_index, part_size_values)
                 if current_length + len(part) > pivots[current_peer_index]:
                     # switch to next peer; if a part lands between parts of two or
                     # more peers, assign that part to the peer with highest intersection
@@ -76,9 +77,9 @@ class TensorPartContainer:
                         current_peer_part_end = min(current_length + len(part), pivots[current_peer_index])
                         peer_intersections.append(current_peer_part_end - pivots[current_peer_index - 1])
                     assigned_peer_index = prev_peer_index + np.argmax(peer_intersections)
-                    self._input_parts_by_peer[assigned_peer_index].append((part, info))
+                    self._input_parts_by_peer[assigned_peer_index].append((part, part_info))
                 else:
-                    self._input_parts_by_peer[current_peer_index].append((part, info))
+                    self._input_parts_by_peer[current_peer_index].append((part, part_info))
                 current_length += len(part)
 
         assert current_length == self.total_size
