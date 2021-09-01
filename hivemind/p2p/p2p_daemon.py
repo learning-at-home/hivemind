@@ -576,7 +576,7 @@ class P2P:
             ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
 
     # These Go loggers are excessively verbose, so we downgrade their message severity to DEBUG unless it is >= ERROR
-    _DOWNGRADED_LOGGERS = ["rtrefresh/rt_refresh_manager.go"]
+    _DOWNGRADED_LOGGERS = ["basic/natmgr.go", "rtrefresh/rt_refresh_manager.go"]
 
     @staticmethod
     def _log_p2pd_message(line: str) -> None:
