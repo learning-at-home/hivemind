@@ -54,9 +54,9 @@ class P2P:
     END_OF_STREAM = RPCError()
 
     DHT_MODE_MAPPING = {
-        "dht": {"dht": 1},
-        "dht_server": {"dhtServer": 1},
-        "dht_client": {"dhtClient": 1},
+        "auto": {"dht": 1},
+        "server": {"dhtServer": 1},
+        "client": {"dhtClient": 1},
     }
     FORCE_REACHABILITY_MAPPING = {
         "public": {"forceReachabilityPublic": 1},
@@ -80,7 +80,7 @@ class P2P:
         announce_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = None,
         auto_nat: bool = True,
         conn_manager: bool = True,
-        dht_mode: str = "dht",
+        dht_mode: str = "server",
         force_reachability: Optional[str] = None,
         host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ("/ip4/127.0.0.1/tcp/0",),
         identity_path: Optional[str] = None,
@@ -103,7 +103,9 @@ class P2P:
         :param announce_maddrs: Visible multiaddrs that the peer will announce
                                 for external connections from other p2p instances
         :param conn_manager: Enables the Connection Manager
-        :param dht_mode: DHT mode (dht_client/dht_server/dht)
+        :param dht_mode: libp2p DHT mode (auto/client/server).
+                         Defaults to "server" to make collaborations work in local networks.
+                         Details: https://pkg.go.dev/github.com/libp2p/go-libp2p-kad-dht#ModeOpt
         :param force_reachability: Force reachability mode (public/private)
         :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
         :param identity_path: Path to a pre-generated private key file. If defined, makes the peer ID deterministic.
