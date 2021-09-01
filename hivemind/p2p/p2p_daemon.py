@@ -3,6 +3,7 @@ import logging
 import json
 import os
 import secrets
+import shlex
 from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
@@ -173,6 +174,7 @@ class P2P:
         env.setdefault("GOLOG_LOG_LEVEL", python_level_to_golog(loglevel))
         env["GOLOG_LOG_FMT"] = "json"
 
+        logger.debug(f"Launching {shlex.join(proc_args)}")
         self._child = await asyncio.subprocess.create_subprocess_exec(
             *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env
         )
