@@ -542,9 +542,11 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         if not self.allow_state_sharing:
             return  # deny request and direct peer to the next prospective averager
         metadata, tensors, infos = await self._get_current_state_from_host_process()
+        if infos is None:
+            infos = [CompressionInfo.from_tensor(tensor, key=i) for i, tensor in enumerate(tensors)]
         assert len(tensors) == len(infos)
 
-        for tensor, info in tensors:
+        for tensor, info in zip(tensors, infos):
             for part in split_for_streaming(self.state_compression.compress(tensor, info, allow_inplace=False)):
                 if metadata is not None:
                     yield averaging_pb2.DownloadData(tensor_part=part, metadata=metadata)
@@ -631,7 +633,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         finally:
             if not future.done():
-                logger.warning("Averager could not load state from peers: none of the requests succeeded.")
                 future.set_result(None)
 
     def get_group_bits(self, wait: bool = True):
@@ -694,7 +695,11 @@ def _background_thread_fetch_current_state(
             get_current_state = get_current_state_ref()
             if get_current_state is None:
                 break
-            state_metadata, state_tensors = get_current_state()
+            state = get_current_state()
+            assert 0 < len(state) <= 3
+            if len(state) != 3:
+                state = tuple(state[:3] + (None,) * (3 - len(state)))
+            state_metadata, state_tensors, tensor_infos = state
             del get_current_state
 
             state_metadata = serializer.dumps(state_metadata)
@@ -702,7 +707,7 @@ def _background_thread_fetch_current_state(
                 tensor.cpu().detach().requires_grad_(tensor.requires_grad) for tensor in state_tensors
             )
             # note: we cast tensors to CPU on host side to avoid initializing cuda in the guest process
-            future.set_result((state_metadata, state_tensors))
+            future.set_result((state_metadata, state_tensors, tensor_infos))
         except BaseException as e:
             future.set_exception(e)
             logger.warning(e)
