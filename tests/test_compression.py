@@ -182,8 +182,6 @@ def test_adaptive_compression():
         greater_equal=STATE_FP16,
     )
 
-    import hivemind
-
     averager1 = hivemind.TrainingAverager(
         opt=torch.optim.Adam(make_params()),
         average_parameters=True,
