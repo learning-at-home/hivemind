@@ -52,7 +52,7 @@ class Quantization(CompressionBase, ABC):
 
 
 class Uniform8BitQuantization(Quantization):
-    range_in_sigmas: int = 6
+    RANGE_IN_SIGMAS: int = 6
     compression_type = runtime_pb2.UNIFORM_8BIT
 
     def quantize(self, tensor: torch.Tensor, allow_inplace: bool = False) -> Tuple[np.ndarray, np.ndarray]:
@@ -60,7 +60,7 @@ class Uniform8BitQuantization(Quantization):
         shift = tensor.mean()
         centered_tensor = tensor.sub_(shift) if allow_inplace else tensor - shift
         std_unbiased = centered_tensor.norm() / math.sqrt(centered_tensor.numel() - 1)
-        scale = self.range_in_sigmas * std_unbiased / self.n_bins
+        scale = self.RANGE_IN_SIGMAS * std_unbiased / self.n_bins
         quantized = torch.quantize_per_tensor(centered_tensor, scale, offset, torch.quint8).int_repr()
         lookup = average_buckets(tensor, quantized, self.n_bins)
         return np.asarray(quantized, dtype=self.indices_dtype), np.asarray(lookup, dtype=self.codebook_dtype)
