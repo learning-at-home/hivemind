@@ -11,7 +11,6 @@ from hivemind.compression.base import CompressionBase, CompressionInfo, NoCompre
 from hivemind.compression.quantization import Quantile8BitQuantization, Uniform8BitQuantization
 from hivemind.compression.floating import Float16Compression, ScaledFloat16Compression
 from hivemind.proto import runtime_pb2
-from hivemind.proto.runtime_pb2 import CompressionType
 
 warnings.filterwarnings("ignore", message="The given NumPy array is not writeable", category=UserWarning)
 
@@ -24,29 +23,29 @@ BASE_COMPRESSION_TYPES: Dict[str, CompressionBase] = dict(
     UNIFORM_8BIT=Uniform8BitQuantization(),
 )
 
-for key in CompressionType.keys():
+for key in runtime_pb2.CompressionType.keys():
     assert key in BASE_COMPRESSION_TYPES, f"Compression type {key} does not have a registered deserializer."
     actual_compression_type = BASE_COMPRESSION_TYPES[key].compression_type
     assert (
-        CompressionType.Name(actual_compression_type) == key
+        runtime_pb2.CompressionType.Name(actual_compression_type) == key
     ), f"Compression strategy for {key} has inconsistent type"
 
 
 def serialize_torch_tensor(
     tensor: torch.Tensor,
-    compression_type: CompressionType = CompressionType.NONE,
+    compression_type: runtime_pb2.CompressionType = runtime_pb2.CompressionType.NONE,
     info: Optional[CompressionInfo] = None,
     allow_inplace: bool = False,
     **kwargs,
 ) -> runtime_pb2.Tensor:
     """Serialize a given tensor into a protobuf message using the specified compression strategy"""
     assert tensor.device == torch.device("cpu")
-    compression = BASE_COMPRESSION_TYPES[CompressionType.Name(compression_type)]
+    compression = BASE_COMPRESSION_TYPES[runtime_pb2.CompressionType.Name(compression_type)]
     info = info or CompressionInfo.from_tensor(tensor, **kwargs)
     return compression.compress(tensor, info, allow_inplace)
 
 
 def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
     """Restore a pytorch tensor from a protobuf message"""
-    compression = BASE_COMPRESSION_TYPES[CompressionType.Name(serialized_tensor.compression)]
+    compression = BASE_COMPRESSION_TYPES[runtime_pb2.CompressionType.Name(serialized_tensor.compression)]
     return compression.restore(serialized_tensor).requires_grad_(serialized_tensor.requires_grad)

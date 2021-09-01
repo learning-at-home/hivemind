@@ -3,13 +3,12 @@ Auxiliary data structures for AllReduceRunner
 """
 import asyncio
 from collections import deque
-from typing import AsyncIterable, AsyncIterator, Optional, Sequence, Tuple, TypeVar, Union
+from typing import AsyncIterable, AsyncIterator, Optional, Sequence, Tuple, TypeVar
 
 import numpy as np
 import torch
 
-from hivemind.compression import CompressionBase, CompressionInfo
-from hivemind import NoCompression
+from hivemind.compression import CompressionBase, CompressionInfo, NoCompression
 from hivemind.utils.asyncio import amap_in_executor
 from hivemind.proto import runtime_pb2
 

@@ -5,7 +5,6 @@ from typing import Optional, Union, Any
 import numpy as np
 import torch
 
-import runtime_pb2
 from hivemind.proto import runtime_pb2
 from hivemind.utils.tensor_descr import TensorDescriptor
 

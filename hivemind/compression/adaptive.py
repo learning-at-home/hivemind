@@ -1,4 +1,4 @@
-from typing import Optional, Mapping, Union, Sequence
+from typing import Mapping, Union, Sequence
 
 import torch
 
