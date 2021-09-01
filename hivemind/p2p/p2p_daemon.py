@@ -80,7 +80,7 @@ class P2P:
         announce_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = None,
         auto_nat: bool = True,
         conn_manager: bool = True,
-        dht_mode: str = "dht_server",
+        dht_mode: str = "dht",
         force_reachability: Optional[str] = None,
         host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ("/ip4/127.0.0.1/tcp/0",),
         identity_path: Optional[str] = None,
