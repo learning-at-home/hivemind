@@ -180,8 +180,10 @@ class MPFuture(base.Future, Generic[ResultType]):
                     future = future_ref()
 
                 if future is None:
-                    logger.debug(f"Ignoring update to future with uid={uid}: the future is already done or destroyed")
-                elif update_type == UpdateType.RESULT:
+                    # The MPFuture instance is already destroyed in this process
+                    # (the caller is not interested in the result)
+                    continue
+                if update_type == UpdateType.RESULT:
                     future.set_result(payload)
                 elif update_type == UpdateType.EXCEPTION:
                     future.set_exception(payload)
