@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import secrets
 from collections.abc import AsyncIterable as AsyncIterableABC
@@ -16,7 +17,7 @@ from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError, P2PHandlerE
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto.p2pd_pb2 import RPCError
 from hivemind.utils.asyncio import as_aiter, asingle
-from hivemind.utils.logging import get_logger
+from hivemind.utils.logging import get_logger, golog_level_to_python, loglevel, python_level_to_golog
 
 logger = get_logger(__name__)
 
@@ -166,8 +167,12 @@ class P2P:
             **process_kwargs,
         )
 
+        env = os.environ.copy()
+        env.setdefault('GOLOG_LOG_LEVEL', python_level_to_golog(loglevel))
+        env['GOLOG_LOG_FMT'] = 'json'
+
         self._child = await asyncio.subprocess.create_subprocess_exec(
-            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env
         )
         self._alive = True
 
@@ -558,8 +563,28 @@ class P2P:
                 break
             last_line = line.rstrip().decode(errors="ignore")
 
+            self._log_p2pd_message(last_line)
             if last_line.startswith("Peer ID:"):
                 ready.set_result(None)
 
         if not ready.done():
             ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
+
+    @staticmethod
+    def _log_p2pd_message(line: str) -> None:
+        if '"logger"' not in line:  # User-friendly info from p2pd stdout
+            logger.debug(line, extra={"caller": "p2pd"})
+            return
+
+        try:
+            record = json.loads(line)
+
+            level = golog_level_to_python(record["level"])
+            message = record["msg"]
+            if "error" in record:
+                message += f": {record['error']}"
+
+            # TODO: override time
+            logger.log(level, message, extra={"caller": record["caller"]})
+        except (ValueError, KeyError):  # `message` seems to be a JSON but is failed to be parsed
+            logger.warning(line, extra={"caller": "p2pd"})
