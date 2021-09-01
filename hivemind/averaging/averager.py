@@ -345,11 +345,16 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         try:
             while not future.done():
                 try:
+                    logger.warning(f"be 1")
                     self._pending_group_assembled.clear()
+                    logger.warning(f"be 2")
+
                     data_for_gather = self.serializer.dumps([weight, self.bandwidth, self.mode.value, gather_binary])
+                    logger.warning(f"be 1")
                     group_info = await self._matchmaking.look_for_group(
                         timeout=timeout, data_for_gather=data_for_gather
                     )
+                    logger.warning(f"be 3")
                     if group_info is None:
                         raise AllreduceException("Averaging step failed: could not find a group.")
 
