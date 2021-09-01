@@ -700,7 +700,7 @@ def _background_thread_fetch_current_state(
             state = get_current_state()
             assert 0 < len(state) <= 3
             if len(state) != 3:
-                state = tuple(state[:3] + (None,) * (3 - len(state)))
+                state = tuple(state + (None,) * (3 - len(state)))
             state_metadata, state_tensors, tensor_infos = state
             del get_current_state
 
