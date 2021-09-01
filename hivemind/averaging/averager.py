@@ -228,25 +228,25 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         client_mode=self.client_mode,
                         **self.matchmaking_kwargs,
                     )
-                    logger.debug(f"The 1")
+                    print(f"The 1")
                     if not self.client_mode:
                         asyncio.create_task(self._declare_for_download_periodically())
 
                     self._pending_group_assembled = asyncio.Event()
                     self._pending_group_assembled.set()
-                    logger.debug(f"The 2")
+                    print(f"The 2")
                 except Exception as e:
                     # Loglevel is DEBUG since normally the exception is propagated to the caller
                     logger.debug(e, exc_info=True)
                     self._ready.set_exception(e)
                     return
                 self._ready.set_result(None)
-                logger.debug(f"The 3")
+                print(f"The 3")
 
                 while True:
                     try:
                         method, args, kwargs = await loop.run_in_executor(pipe_awaiter, self._inner_pipe.recv)
-                        logger.debug(f"The 4")
+                        print(f"The 4")
                     except (OSError, ConnectionError) as e:
                         logger.exception(e)
                         await asyncio.sleep(self._matchmaking.request_timeout)
