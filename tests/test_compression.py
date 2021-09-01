@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 
 import hivemind
-from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.compression import (
     CompressionBase,
     CompressionInfo,
@@ -19,6 +18,7 @@ from hivemind.compression import (
     deserialize_torch_tensor,
     serialize_torch_tensor,
 )
+from hivemind.proto.runtime_pb2 import CompressionType
 
 from test_utils.dht_swarms import launch_dht_instances
 
