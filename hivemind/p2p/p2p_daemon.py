@@ -575,6 +575,9 @@ class P2P:
         if not ready.done():
             ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
 
+    # These Go loggers are excessively verbose, so we downgrade their message severity to DEBUG unless it is >= ERROR
+    _DOWNGRADED_LOGGERS = ["rtrefresh/rt_refresh_manager.go"]
+
     @staticmethod
     def _log_p2pd_message(line: str) -> None:
         if '"logger"' not in line:  # User-friendly info from p2pd stdout
@@ -583,8 +586,12 @@ class P2P:
 
         try:
             record = json.loads(line)
+            caller = record["caller"]
 
             level = golog_level_to_python(record["level"])
+            if level < logging.ERROR and any(caller.startswith(name) for name in P2P._DOWNGRADED_LOGGERS):
+                level = logging.DEBUG
+
             message = record["msg"]
             if "error" in record:
                 message += f": {record['error']}"
@@ -594,7 +601,7 @@ class P2P:
                 message,
                 extra={
                     "origin_created": datetime.strptime(record["ts"], "%Y-%m-%dT%H:%M:%S.%f%z").timestamp(),
-                    "caller": record["caller"],
+                    "caller": caller,
                 },
             )
         except Exception:
