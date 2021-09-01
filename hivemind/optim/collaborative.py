@@ -244,7 +244,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
             if self.collaboration_state.num_peers > 1:
                 weight = self.local_samples_accumulated / self.target_batch_size
-            logger.log(self.status_loglevel, f"-1")
+                logger.log(self.status_loglevel, f"-1")
                 try:
                     group_info = self.averager.step(weight=weight, timeout=self.averaging_timeout, **kwargs)
                     if group_info:
