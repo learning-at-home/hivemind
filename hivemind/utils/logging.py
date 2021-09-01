@@ -1,7 +1,6 @@
 import logging
 import os
 
-
 loglevel = os.getenv("LOGLEVEL", "INFO")
 
 
