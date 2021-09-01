@@ -122,7 +122,7 @@ def test_allreduce_compression():
         assert 1e-5 < torch.mean(torch.square(results[UINT8, UINT8][i] - reference[i])).item() <= 1e-2
 
 
-class TestCompression(AdaptiveCompressionBase):
+class TrackedCompression(AdaptiveCompressionBase):
     def __init__(self, compression: CompressionBase):
         self.compression = compression
         self.mp_counter, self.mp_part_size = mp.Value(c_int32, 0), mp.Value(c_int32, 0)
@@ -154,11 +154,11 @@ def make_params():
 
 @pytest.mark.forked
 def test_adaptive_compression():
-    UINT8 = TestCompression(Uniform8BitQuantization())
-    FLOAT16 = TestCompression(Float16Compression())
-    FLOAT32 = TestCompression(NoCompression())
-    STATE_FP16 = TestCompression(Float16Compression())
-    STATE_FP32 = TestCompression(NoCompression())
+    UINT8 = TrackedCompression(Uniform8BitQuantization())
+    FLOAT16 = TrackedCompression(Float16Compression())
+    FLOAT32 = TrackedCompression(NoCompression())
+    STATE_FP16 = TrackedCompression(Float16Compression())
+    STATE_FP32 = TrackedCompression(NoCompression())
 
     averaging_compression_adaptive = RoleAdaptiveCompression(
         parameter=FLOAT16,
