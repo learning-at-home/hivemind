@@ -24,6 +24,7 @@ from hivemind.proto.runtime_pb2 import CompressionType
 from test_utils.dht_swarms import launch_dht_instances
 
 
+@pytest.mark.forked
 def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
     torch.manual_seed(0)
     X = torch.randn(*size)
@@ -42,6 +43,7 @@ def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
         assert deserialize_torch_tensor(serialize_torch_tensor(zeros, compression_type)).isfinite().all()
 
 
+@pytest.mark.forked
 def test_serialize_tensor():
     tensor = torch.randn(512, 12288)
 
