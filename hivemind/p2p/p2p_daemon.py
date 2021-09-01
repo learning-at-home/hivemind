@@ -95,6 +95,7 @@ class P2P:
         use_relay: bool = True,
         use_relay_hop: bool = False,
         use_relay_discovery: bool = False,
+        persistent_conn_max_msg_size: int = 2 << 22,
     ) -> "P2P":
         """
         Start a new p2pd process and connect to it.
@@ -163,6 +164,7 @@ class P2P:
             relayHop=use_relay_hop,
             relayHopLimit=relay_hop_limit,
             tls=tls,
+            persistentConnMaxMsgSize=persistent_conn_max_msg_size,
             **process_kwargs,
         )
 
@@ -179,7 +181,12 @@ class P2P:
             await self.shutdown()
             raise P2PDaemonError(f"Daemon failed to start in {startup_timeout:.1f} seconds")
 
-        self._client = await p2pclient.Client.create(self._daemon_listen_maddr, self._client_listen_maddr)
+        self._client = await p2pclient.Client.create(
+            control_maddr=self._daemon_listen_maddr,
+            listen_maddr=self._client_listen_maddr,
+            persistent_conn_max_msg_size=persistent_conn_max_msg_size,
+        )
+
         await self._ping_daemon()
         return self
 

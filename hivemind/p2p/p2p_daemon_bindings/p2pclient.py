@@ -22,11 +22,21 @@ class Client:
         self.control = None
 
     @classmethod
-    async def create(cls, control_maddr: Multiaddr = None, listen_maddr: Multiaddr = None) -> "Client":
+    async def create(
+        cls,
+        control_maddr: Multiaddr = None,
+        listen_maddr: Multiaddr = None,
+        *,
+        persistent_conn_max_msg_size: int = 2 << 22,
+    ) -> "Client":
         client = cls(_initialized_with_create=True)
 
         daemon_connector = DaemonConnector(control_maddr=control_maddr)
-        client.control = await ControlClient.create(daemon_connector=daemon_connector, listen_maddr=listen_maddr)
+        client.control = await ControlClient.create(
+            daemon_connector=daemon_connector,
+            listen_maddr=listen_maddr,
+            persistent_conn_max_msg_size=persistent_conn_max_msg_size,
+        )
 
         return client
 
