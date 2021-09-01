@@ -56,7 +56,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
     :param initial_group_bits: a string of bits ('0' and '1') that define the initial group key (bucket index)
     :param averaging_expiration: attempt to find a group for this many seconds, otherwise try again
       note - this expiration time only applies to looking for group, passing tensors in allreduce may take more time
-    :param compression: optionally compress tensors with this compression algorithm before runnin all-reduce
+    :param compression: optionally compress tensors with this compression algorithm before running all-reduce
     :param state_compression: a separate compression strategy for load_state_from_peers (default = no compression)
     :param tensor_infos: CompressionInfo for each respective tensor; this determines how the tensor will be comressed
     :param allreduce_timeout: spend at most this many seconds for allreduce (after group is formed)
