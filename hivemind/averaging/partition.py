@@ -9,8 +9,8 @@ import numpy as np
 import torch
 
 from hivemind.compression import CompressionBase, CompressionInfo, NoCompression
-from hivemind.utils.asyncio import amap_in_executor
 from hivemind.proto import runtime_pb2
+from hivemind.utils.asyncio import amap_in_executor
 
 T = TypeVar("T")
 DEFAULT_PART_SIZE_BYTES = 2 ** 16

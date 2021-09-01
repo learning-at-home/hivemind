@@ -1,10 +1,10 @@
 from abc import ABC
-from typing import Mapping, Union, Sequence
+from typing import Mapping, Sequence, Union
 
 import torch
 
 import hivemind
-from hivemind.compression.base import CompressionBase, UID, CompressionInfo, NoCompression, TensorRole
+from hivemind.compression.base import UID, CompressionBase, CompressionInfo, NoCompression, TensorRole
 from hivemind.proto import runtime_pb2
 
 
@@ -31,12 +31,15 @@ class SizeAdaptiveCompression(AdaptiveCompressionBase):
 class RoleAdaptiveCompression(AdaptiveCompressionBase):
     """Compress a tensor based on its role in training. Any non-specified compressions will use the "default" option"""
 
-    def __init__(self, *,
-                 activation: CompressionBase = None,
-                 parameter: CompressionBase = None,
-                 gradient: CompressionBase = None,
-                 optimizer: CompressionBase = None,
-                 default: CompressionBase = NoCompression()):
+    def __init__(
+        self,
+        *,
+        activation: CompressionBase = None,
+        parameter: CompressionBase = None,
+        gradient: CompressionBase = None,
+        optimizer: CompressionBase = None,
+        default: CompressionBase = NoCompression()
+    ):
         self.role_compressions = {
             TensorRole.ACTIVATION: activation or default,
             TensorRole.PARAMETER: parameter or default,

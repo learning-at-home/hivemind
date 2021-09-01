@@ -11,7 +11,6 @@ from hivemind.proto import averaging_pb2
 from hivemind.utils import get_logger
 from hivemind.utils.asyncio import achain, aenumerate, afirst, amap_in_executor, anext, as_aiter
 
-
 # flavour types
 GroupID = bytes
 logger = get_logger(__name__)

@@ -1,7 +1,7 @@
 import dataclasses
 from abc import ABC
 from enum import Enum, auto
-from typing import Optional, Union, Any
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch

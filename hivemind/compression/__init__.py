@@ -8,8 +8,8 @@ from typing import Dict, Optional
 import torch
 
 from hivemind.compression.base import CompressionBase, CompressionInfo, NoCompression
-from hivemind.compression.quantization import Quantile8BitQuantization, Uniform8BitQuantization
 from hivemind.compression.floating import Float16Compression, ScaledFloat16Compression
+from hivemind.compression.quantization import Quantile8BitQuantization, Uniform8BitQuantization
 from hivemind.proto import runtime_pb2
 
 warnings.filterwarnings("ignore", message="The given NumPy array is not writeable", category=UserWarning)
