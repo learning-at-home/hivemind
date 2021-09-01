@@ -266,6 +266,7 @@ def main():
         client_mode=collaboration_args.client_mode,
         verbose=True,
         start=True,
+        reuse_grad_buffers=True,
         **asdict(averager_args),
     )
 
