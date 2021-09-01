@@ -187,6 +187,8 @@ class DHTNode:
         if p2p is None:
             if not kwargs.get("use_ipfs"):
                 kwargs["initial_peers"] = initial_peers
+            if client_mode:
+                kwargs.setdefault("dht_mode", "client")
             p2p = await P2P.create(**kwargs)
             self._should_shutdown_p2p = True
         else:
