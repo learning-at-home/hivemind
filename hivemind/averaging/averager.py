@@ -9,7 +9,6 @@ import multiprocessing as mp
 import os
 import threading
 import weakref
-from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import asdict
 from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Union
 
