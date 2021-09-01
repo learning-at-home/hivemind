@@ -47,7 +47,7 @@ class CompressionBase(ABC):
         """
         Applies compression algorithm to a tensor based on their meta-parameters
 
-        :param tensor: a pytorch tensor to compress; depending on the applicaiton, x is either a full tensor or part
+        :param tensor: a pytorch tensor to compress; depending on the applicaiton, it is a full tensor or a part
         :param info: meta-information about the tensor; if partitioning is used, this still describes the full tensor
         :param allow_inplace: if True, compression can (but doesn't have to) to modify tensor in-place for efficiency
         :returns: a protobuf message that encodes the tensor
