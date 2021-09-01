@@ -4,7 +4,7 @@ from typing import Mapping, Sequence, Union
 import torch
 
 import hivemind
-from hivemind.compression.base import UID, CompressionBase, CompressionInfo, NoCompression, TensorRole
+from hivemind.compression.base import Key, CompressionBase, CompressionInfo, NoCompression, TensorRole
 from hivemind.proto import runtime_pb2
 
 
@@ -56,13 +56,13 @@ class RoleAdaptiveCompression(AdaptiveCompressionBase):
 
 
 class PerTensorCompression(AdaptiveCompressionBase):
-    """Manually specify the compression strategy depending on tensor's uid"""
+    """Manually specify the compression strategy depending on tensor key"""
 
-    def __init__(self, tensor_compressions: Union[Sequence[CompressionBase], Mapping[UID, CompressionBase]]):
+    def __init__(self, tensor_compressions: Union[Sequence[CompressionBase], Mapping[Key, CompressionBase]]):
         self.tensor_compressions = tensor_compressions
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
-        return self.tensor_compressions[info.uid].estimate_compression_ratio(info)
+        return self.tensor_compressions[info.key].estimate_compression_ratio(info)
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        return self.tensor_compressions[info.uid].compress(tensor, info=info, allow_inplace=allow_inplace)
+        return self.tensor_compressions[info.key].compress(tensor, info=info, allow_inplace=allow_inplace)

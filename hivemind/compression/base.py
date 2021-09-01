@@ -9,7 +9,7 @@ import torch
 from hivemind.proto import runtime_pb2
 from hivemind.utils.tensor_descr import TensorDescriptor
 
-UID = Any
+Key = Any
 
 
 class TensorRole(Enum):
@@ -24,15 +24,15 @@ class TensorRole(Enum):
 class CompressionInfo:
     """Auxiliary data structure that contains information about the tensor that determines how it is compressed"""
 
-    uid: UID  # name or index of the tensor from named parameters, optimizer state dict or i/o structure
+    key: Key  # name or index of the tensor from named parameters, optimizer state dict or i/o structure
     descriptor: TensorDescriptor  # data structure that defines shape, dtype, layout and device information
     role: TensorRole = TensorRole.UNSPECIFIED  # which role does the tensor play with respect to the model
     part_index: int = 0  # if tensor is sliced into parts, this represents the index within one tensor
     part_size: Optional[int] = None  # if tensor is sliced into parts, this is the _maximum_ number of values per part
 
     @classmethod
-    def from_tensor(cls, tensor: torch.Tensor, uid: UID = None, descriptor: TensorDescriptor = None, **kwargs):
-        return cls(uid, descriptor or TensorDescriptor.from_tensor(tensor), **kwargs)
+    def from_tensor(cls, tensor: torch.Tensor, key: Key = None, descriptor: TensorDescriptor = None, **kwargs):
+        return cls(key, descriptor or TensorDescriptor.from_tensor(tensor), **kwargs)
 
 
 class CompressionBase(ABC):

@@ -7,6 +7,7 @@ from typing import Dict, Iterator, Optional, Sequence
 
 import torch
 
+from hivemind.compression import CompressionInfo, TensorRole
 from hivemind.averaging import DecentralizedAverager
 from hivemind.utils import get_logger, nested_flatten, nested_pack
 
@@ -41,23 +42,28 @@ class TrainingAverager(DecentralizedAverager):
         average_gradients: bool,
         average_opt_statistics: Sequence[str] = (),
         extra_tensors: Sequence[torch.Tensor] = (),
+        parameter_names: Optional[Sequence[str]] = None,
         initialize_optimizer: bool = True,
         **kwargs
     ):
+        if initialize_optimizer:
+            initialize_optimizer_state(opt)  # note: this will run one optimizer step!
+        if parameter_names is None:
+            parameter_names = tuple(i for group in opt.param_groups for i in range(len(group["params"])))
 
         self.opt, self.extra_tensors, self.local_step = opt, tuple(extra_tensors), 0
         self.opt_statistics = tuple(average_opt_statistics)
         self.average_parameters, self.average_gradients = average_parameters, average_gradients
+        self.parameter_names = parameter_names
         self.step_executor = ThreadPoolExecutor(max_workers=1)
         self.lock_averager_step = Lock()
         self.pending_updates_done = Event()
         self.pending_updates_done.set()
-        if initialize_optimizer:
-            initialize_optimizer_state(opt)  # note: this will run one optimizer step!
 
         with torch.no_grad():
             averaged_tensors = [tensor.detach().cpu().float().clone() for tensor in self.local_tensors()]
-        super().__init__(averaged_tensors=averaged_tensors, **kwargs)
+
+        super().__init__(averaged_tensors=averaged_tensors, tensor_infos=list(self.tensor_infos()), **kwargs)
 
     def step(self, data_lock: Optional[Lock] = None, wait: bool = True, **kwargs):
         """
@@ -119,13 +125,8 @@ class TrainingAverager(DecentralizedAverager):
             self.local_step += 1
             return gathered
 
-    def local_tensors(self, replace_none: bool = True) -> Iterator[torch.Tensor]:
-        """
-        Iterate local trainer's tensors that should be averaged with peers
-
-        :param replace_none: if True and average_gradients is True, None grads will be replaced with a zero tensors
-          Otherwise, such gradients will be skipped. (this may cause inconsistencies with averaged_tensors)
-        """
+    def local_tensors(self) -> Iterator[torch.Tensor]:
+        """Iterate local trainer's tensors that should be averaged with peers"""
         if self.average_parameters:
             for param_group in self.opt.param_groups:
                 yield from param_group["params"]
@@ -134,13 +135,32 @@ class TrainingAverager(DecentralizedAverager):
                 for param in param_group["params"]:
                     if param.grad is not None:
                         yield param.grad
-                    elif replace_none:
+                    else:
                         yield torch.zeros_like(param)
         for stats in self.opt_statistics:
             for param_group in self.opt.param_groups:
                 for param in param_group["params"]:
                     yield self.opt.state[param][stats]
         yield from iter(self.extra_tensors)
+
+    def tensor_infos(self):
+        """Get CompressionInfo for each tensor, accounting for its role and specification"""
+        params = tuple(param for param_group in self.opt.param_groups for param in param_group["params"])
+        assert len(params) == len(self.parameter_names)
+        if self.average_parameters:
+            for param, key in zip(params, self.parameter_names):
+                yield CompressionInfo.from_tensor(param, key=key, role=TensorRole.PARAMETER)
+        if self.average_gradients:
+            for param, key in zip(params, self.parameter_names):
+                if param.grad is not None:
+                    grad = param.grad if param.grad is not None else torch.zeros_like(param)
+                    yield CompressionInfo.from_tensor(grad, key=key, role=TensorRole.GRADIENT)
+        for stats in self.opt_statistics:
+            for param, key in zip(params, self.parameter_names):
+                yield CompressionInfo.from_tensor(
+                    self.opt.state[param][stats], key=(key, stats), role=TensorRole.OPTIMIZER)
+        for i, extra_tensor in enumerate(self.extra_tensors):
+            yield CompressionInfo.from_tensor(extra_tensor, key=i, role=TensorRole.UNSPECIFIED)
 
     def get_current_state(self):
         """
