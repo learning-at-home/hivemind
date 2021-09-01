@@ -91,7 +91,7 @@ class TrainingAverager(DecentralizedAverager):
                     averaged_tensor[...] = local_tensor.cpu().float()
             logger.debug(f"AAAAA 5")
             self.pending_updates_done.set()
-        logger.debug(f"AAAAA 84")
+            logger.debug(f"AAAAA 84")
 
             # find a group and hopefully average tensors with peers, use batch sizes as weights
             gathered = super().step(**kwargs)
