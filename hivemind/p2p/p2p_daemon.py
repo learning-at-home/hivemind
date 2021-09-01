@@ -7,10 +7,10 @@ import shlex
 from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
+from datetime import datetime
 from importlib.resources import path
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union
 
-import dateutil.parser
 from google.protobuf.message import Message
 from multiaddr import Multiaddr
 
@@ -592,7 +592,7 @@ class P2P:
                 level,
                 message,
                 extra={
-                    "origin_created": dateutil.parser.isoparse(record["ts"]).timestamp(),
+                    "origin_created": datetime.strptime(record["ts"], "%Y-%m-%dT%H:%M:%S.%f%z").timestamp(),
                     "caller": record["caller"],
                 },
             )
