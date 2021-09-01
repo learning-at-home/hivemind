@@ -265,14 +265,20 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                     self.status_loglevel,
                     f"Skipped averaging: collaboration consists of " f"{self.collaboration_state.num_peers} peer(s).",
                 )
-
+            logger.log(self.status_loglevel, f"0")
             self.opt.step()
+            logger.log(self.status_loglevel, f"1")
+
             self.reset_accumulated_grads_()
+            logger.log(self.status_loglevel, f"2")
             self.local_samples_accumulated = self.local_steps_accumulated = 0
             self.collaboration_state.register_step(current_step + 1)
+            logger.log(self.status_loglevel, f"3")
             self.averager.local_step = current_step + 1
             self.collaboration_state_updated.set()
+            logger.log(self.status_loglevel, f"4")
             self.update_scheduler()
+            logger.log(self.status_loglevel, f"5")
 
         logger.log(self.status_loglevel, f"Optimizer step: done!")
 
