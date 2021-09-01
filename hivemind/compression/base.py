@@ -1,4 +1,5 @@
 import dataclasses
+from abc import ABC
 from enum import Enum, auto
 from typing import Optional, Union, Any
 
@@ -34,7 +35,7 @@ class CompressionInfo:
         return cls(uid, descriptor or TensorDescriptor.from_tensor(tensor), **kwargs)
 
 
-class CompressionBase:
+class CompressionBase(ABC):
     """A base class that applies compression algorithm to a pytorch tensor"""
 
     compression_type: runtime_pb2.CompressionType

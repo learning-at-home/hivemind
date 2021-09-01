@@ -1,5 +1,6 @@
 import math
 import os
+from abc import ABC
 from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple
 
@@ -12,7 +13,7 @@ from hivemind.proto import runtime_pb2
 EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("QUANTIZATION_THREADS", 128)))
 
 
-class Quantization(CompressionBase):
+class Quantization(CompressionBase, ABC):
     codebook_dtype, indices_dtype = np.float32, np.uint8
 
     def quantize(self, tensor: torch.Tensor, allow_inplace: bool = False) -> Tuple[np.ndarray, np.ndarray]:
