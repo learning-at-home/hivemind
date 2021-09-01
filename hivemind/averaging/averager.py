@@ -56,7 +56,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
     :param initial_group_bits: a string of bits ('0' and '1') that define the initial group key (bucket index)
     :param averaging_expiration: attempt to find a group for this many seconds, otherwise try again
       note - this expiration time only applies to looking for group, passing tensors in allreduce may take more time
-    :param compression: optionally compress tensors with this compression algorithm before sending them to peers
+    :param compression: optionally compress tensors with this compression algorithm before runnin all-reduce
+    :param state_compression: a separate compression strategy for load_state_from_peers (default = no compression)
     :param tensor_infos: CompressionInfo for each respective tensor; this determines how the tensor will be comressed
     :param allreduce_timeout: spend at most this many seconds for allreduce (after group is formed)
     :param averaging_alpha: optional "learning rate" for averaging. If specified, local parameters will be shifted
@@ -109,6 +110,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         part_size_bytes: int = DEFAULT_PART_SIZE_BYTES,
         allreduce_timeout: Optional[float] = None,
         compression: CompressionBase = NoCompression(),
+        state_compression: CompressionBase = NoCompression(),
         tensor_infos: Optional[Sequence[CompressionInfo]] = None,
         bandwidth: Optional[float] = None,
         min_vector_size: int = 0,
@@ -165,10 +167,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             request_timeout=request_timeout,
         )
         self.allreduce_kwargs = dict(
-            compression=compression,
-            tensor_infos=tensor_infos,
-            part_size_bytes=part_size_bytes,
-            min_vector_size=min_vector_size,
+            compression=compression, part_size_bytes=part_size_bytes, min_vector_size=min_vector_size,
         )
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
@@ -179,6 +178,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         if allow_state_sharing is None:
             allow_state_sharing = not client_mode and not auxiliary
         self.allow_state_sharing = allow_state_sharing
+        self.state_compression = state_compression
+        self.tensor_infos = tensor_infos
 
         self._ready = MPFuture()
         # note: we create a background thread weakref and with daemon=True to ensure garbage collection
@@ -373,7 +374,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
                     future.set_result(
                         await asyncio.wait_for(
-                            self._run_allreduce(group_info, **self.allreduce_kwargs), self._allreduce_timeout
+                            self._run_allreduce(group_info, tensor_infos=self.tensor_infos, **self.allreduce_kwargs),
+                            timeout=self._allreduce_timeout
                         )
                     )
                     # averaging is finished, loop will now exit
@@ -539,24 +541,25 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         """
         if not self.allow_state_sharing:
             return  # deny request and direct peer to the next prospective averager
-        metadata, tensors = await self._get_current_state_from_host_process()
+        metadata, tensors, infos = await self._get_current_state_from_host_process()
+        assert len(tensors) == len(infos)
 
-        for tensor in tensors:
-            for part in split_for_streaming(serialize_torch_tensor(tensor)):
+        for tensor, info in tensors:
+            for part in split_for_streaming(self.state_compression.compress(tensor, info, allow_inplace=False)):
                 if metadata is not None:
                     yield averaging_pb2.DownloadData(tensor_part=part, metadata=metadata)
                     metadata = None
                 else:
                     yield averaging_pb2.DownloadData(tensor_part=part)
 
-    def get_current_state(self) -> Tuple[Any, Sequence[torch.Tensor]]:
+    def get_current_state(self) -> Tuple[Any, Sequence[torch.Tensor], Sequence[CompressionInfo]]:
         """
         Get current state and send it to a peer. executed in the host process. Meant to be overriden.
         :returns: a tuple of (small metadata, sequence of torch tensors)
         :note: metadata must be seriablizable with self.serializer (default = MSGPackSerializer)
         """
         with self.get_tensors() as tensors:
-            return dict(group_key=self.get_group_bits()), tensors
+            return dict(group_key=self.get_group_bits()), tensors, self.tensor_infos
 
     async def _get_current_state_from_host_process(self):
         """Executed in the averager process inside rpc_download_state"""
