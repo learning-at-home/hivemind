@@ -4,9 +4,9 @@ from ctypes import c_int32
 import pytest
 import torch
 import torch.nn as nn
-from runtime_pb2 import CompressionType
 
 import hivemind
+from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.compression import (
     CompressionBase,
     CompressionInfo,
