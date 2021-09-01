@@ -140,9 +140,6 @@ class TestCompression(AdaptiveCompressionBase):
     def choose_compression(self, info: CompressionInfo) -> CompressionBase:
         return self.compression
 
-    def estimate_compression_ratio(self, info: CompressionInfo):
-        return self.compression.estimate_compression_ratio(info)
-
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False):
         self.mp_counter.value += 1
         if info.part_size is not None:
