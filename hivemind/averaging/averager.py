@@ -167,7 +167,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             request_timeout=request_timeout,
         )
         self.allreduce_kwargs = dict(
-            compression=compression, part_size_bytes=part_size_bytes, min_vector_size=min_vector_size,
+            compression=compression,
+            part_size_bytes=part_size_bytes,
+            min_vector_size=min_vector_size,
         )
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
@@ -375,7 +377,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     future.set_result(
                         await asyncio.wait_for(
                             self._run_allreduce(group_info, tensor_infos=self.tensor_infos, **self.allreduce_kwargs),
-                            timeout=self._allreduce_timeout
+                            timeout=self._allreduce_timeout,
                         )
                     )
                     # averaging is finished, loop will now exit

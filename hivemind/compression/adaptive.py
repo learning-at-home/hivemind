@@ -4,7 +4,7 @@ from typing import Mapping, Sequence, Union
 import torch
 
 import hivemind
-from hivemind.compression.base import Key, CompressionBase, CompressionInfo, NoCompression, TensorRole
+from hivemind.compression.base import CompressionBase, CompressionInfo, Key, NoCompression, TensorRole
 from hivemind.proto import runtime_pb2
 
 
@@ -16,15 +16,15 @@ class AdaptiveCompressionBase(CompressionBase, ABC):
 class SizeAdaptiveCompression(AdaptiveCompressionBase):
     """Apply compression strategy 1 if tensor has more than :threshold: elements and strategy 2 otherwise"""
 
-    def __init__(self, threshold: int, small: CompressionBase, large: CompressionBase):
-        self.threshold, self.small, self.large = threshold, small, large
+    def __init__(self, threshold: int, less: CompressionBase, greater_equal: CompressionBase):
+        self.threshold, self.less, self.greater_equal = threshold, less, greater_equal
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
-        compression = self.small if info.descriptor.numel() > self.threshold else self.large
+        compression = self.greater_equal if info.descriptor.numel() >= self.threshold else self.less
         return compression.estimate_compression_ratio(info)
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        compression = self.small if info.descriptor.numel() > self.threshold else self.large
+        compression = self.greater_equal if info.descriptor.numel() >= self.threshold else self.less
         return compression.compress(tensor, info=info, allow_inplace=allow_inplace)
 
 

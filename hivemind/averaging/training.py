@@ -7,8 +7,8 @@ from typing import Dict, Iterator, Optional, Sequence
 
 import torch
 
-from hivemind.compression import CompressionInfo, TensorRole
 from hivemind.averaging import DecentralizedAverager
+from hivemind.compression import CompressionInfo, TensorRole
 from hivemind.utils import get_logger, nested_flatten, nested_pack
 
 logger = get_logger(__name__)
@@ -158,7 +158,8 @@ class TrainingAverager(DecentralizedAverager):
         for stats in self.opt_statistics:
             for param, key in zip(params, self.parameter_names):
                 yield CompressionInfo.from_tensor(
-                    self.opt.state[param][stats], key=(key, stats), role=TensorRole.OPTIMIZER)
+                    self.opt.state[param][stats], key=(key, stats), role=TensorRole.OPTIMIZER
+                )
         for i, extra_tensor in enumerate(self.extra_tensors):
             yield CompressionInfo.from_tensor(extra_tensor, key=i, role=TensorRole.UNSPECIFIED)
 
@@ -171,11 +172,25 @@ class TrainingAverager(DecentralizedAverager):
             optimized_parameters = tuple(
                 param.detach().cpu() for param_group in self.opt.param_groups for param in param_group["params"]
             )
+            parameter_infos = [
+                CompressionInfo.from_tensor(param, key=key, role=TensorRole.PARAMETER)
+                for param, key in zip(optimized_parameters, self.parameter_names)
+            ]
             extra_tensors = tuple(tensor.detach().cpu() for tensor in self.extra_tensors)
+            extra_infos = [
+                CompressionInfo.from_tensor(extra_tensor, key=i, role=TensorRole.UNSPECIFIED)
+                for i, extra_tensor in enumerate(extra_tensors)
+            ]
             optimizer_metadata, optimizer_tensors = dump_optimizer_state(self.opt)
+            optimizer_infos = [
+                CompressionInfo.from_tensor(opt_tensor, key=i, role=TensorRole.OPTIMIZER)
+                for i, opt_tensor in enumerate(optimizer_tensors)
+            ]
 
         metadata = dict(step=self.local_step, group_bits=self.get_group_bits(), optimizer_metadata=optimizer_metadata)
-        return metadata, list(chain(optimized_parameters, extra_tensors, optimizer_tensors))
+        all_tensors = list(chain(optimized_parameters, extra_tensors, optimizer_tensors))
+        all_tensor_infos = list(chain(parameter_infos, extra_infos, optimizer_infos))
+        return metadata, all_tensors, all_tensor_infos
 
     def load_state_from_peers(self, **kwargs):
         """
