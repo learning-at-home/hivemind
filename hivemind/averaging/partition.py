@@ -38,7 +38,7 @@ class TensorPartContainer:
         prefetch: int = 5,
     ):
         if tensor_infos is None:
-            tensor_infos = tuple(CompressionInfo.from_tensor(x, uid=i) for i, x in enumerate(tensors))
+            tensor_infos = tuple(CompressionInfo.from_tensor(x, key=i) for i, x in enumerate(tensors))
         assert len(tensor_infos) == len(tensors), "compression types do not match the number of tensors"
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
         self.compression, self.part_size_bytes, self.tensor_infos = compression, part_size_bytes, tensor_infos
