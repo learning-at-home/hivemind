@@ -204,7 +204,6 @@ class NoOpScheduler(LRSchedulerBase):
             return self.optimizer.scheduler.print_lr(*args, **kwargs)
 
     def step(self):
-        logger.debug("Called NoOpScheduler.step")
         self._last_lr = self.get_lr()
 
     def state_dict(self):
