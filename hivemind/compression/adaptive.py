@@ -9,7 +9,7 @@ from hivemind.proto import runtime_pb2
 
 
 class AdaptiveCompressionBase(CompressionBase, ABC):
-    def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+    def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         return hivemind.compression.deserialize_torch_tensor(serialized_tensor)
 
 

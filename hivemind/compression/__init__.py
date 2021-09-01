@@ -48,4 +48,4 @@ def serialize_torch_tensor(
 def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
     """Restore a pytorch tensor from a protobuf message"""
     compression = BASE_COMPRESSION_TYPES[runtime_pb2.CompressionType.Name(serialized_tensor.compression)]
-    return compression.restore(serialized_tensor).requires_grad_(serialized_tensor.requires_grad)
+    return compression.extract(serialized_tensor).requires_grad_(serialized_tensor.requires_grad)

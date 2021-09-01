@@ -24,7 +24,7 @@ class Float16Compression(CompressionBase):
             requires_grad=tensor.requires_grad,
         )
 
-    def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+    def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         original_dtype = np.dtype(serialized_tensor.dtype)
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.float16)
         return torch.as_tensor(np.asarray(array, dtype=original_dtype)).reshape(tuple(serialized_tensor.size))
@@ -61,7 +61,7 @@ class ScaledFloat16Compression(Float16Compression):
             requires_grad=tensor.requires_grad,
         )
 
-    def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+    def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         stats_shape = list(serialized_tensor.size)
         stats_shape[-1] = 1
         stats_count = np.prod(stats_shape)

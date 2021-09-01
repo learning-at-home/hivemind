@@ -30,7 +30,7 @@ class Quantization(CompressionBase, ABC):
             requires_grad=tensor.requires_grad,
         )
 
-    def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+    def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         codebook_size = int(np.frombuffer(serialized_tensor.buffer, count=1, dtype=np.int64))
         codebook = np.frombuffer(serialized_tensor.buffer, offset=8, count=codebook_size, dtype=self.codebook_dtype)
         quantized = np.frombuffer(serialized_tensor.buffer, offset=8 + codebook.nbytes, dtype=self.indices_dtype)

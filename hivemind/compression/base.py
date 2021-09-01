@@ -51,7 +51,7 @@ class CompressionBase(ABC):
         """
         raise NotImplementedError()
 
-    def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+    def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         """Create a pytorch tensor from the serialized outputs of .compress"""
         raise NotImplementedError()
 
@@ -75,7 +75,7 @@ class NoCompression(CompressionBase):
             requires_grad=tensor.requires_grad,
         )
 
-    def restore(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+    def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.dtype(serialized_tensor.dtype))
         return torch.as_tensor(array).reshape(tuple(serialized_tensor.size))
 
