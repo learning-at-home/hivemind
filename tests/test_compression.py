@@ -45,21 +45,16 @@ def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
 
 @pytest.mark.forked
 def test_serialize_tensor():
-    tensor = torch.randn(512, 12288)
-
-    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.NONE)
-    for chunk_size in [1024, 64 * 1024, 64 * 1024 + 1, 10 ** 9]:
-        chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
-        assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-        restored = hivemind.combine_from_streaming(chunks)
-        assert torch.allclose(deserialize_torch_tensor(restored), tensor)
-
     def _check(tensor, compression, rtol=1e-5, atol=1e-8, chunk_size=30 * 1024):
         serialized_tensor = serialize_torch_tensor(tensor, compression)
         chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
         assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
         restored = hivemind.combine_from_streaming(chunks)
         assert torch.allclose(deserialize_torch_tensor(restored), tensor, rtol=rtol, atol=atol)
+
+    tensor = torch.randn(512, 12288)
+    for chunk_size in [1024, 64 * 1024, 64 * 1024 + 1, 10 ** 9]:
+        _check(tensor, CompressionType.NONE, chunk_size=chunk_size)
 
     _check(tensor, CompressionType.FLOAT16, rtol=0.0, atol=1e-2)
     _check(torch.randint(0, 100, (512, 1, 1)), CompressionType.NONE)
