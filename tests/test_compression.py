@@ -18,6 +18,7 @@ from hivemind.compression import (
     deserialize_torch_tensor,
     serialize_torch_tensor,
 )
+from hivemind.compression.adaptive import AdaptiveCompressionBase
 from hivemind.proto.runtime_pb2 import CompressionType
 
 from test_utils.dht_swarms import launch_dht_instances
@@ -128,11 +129,14 @@ def test_allreduce_compression():
         assert 1e-5 < torch.mean(torch.square(results[UINT8, UINT8][i] - reference[i])).item() <= 1e-2
 
 
-class TestCompression(CompressionBase):
+class TestCompression(AdaptiveCompressionBase):
     def __init__(self, compression: CompressionBase):
         self.compression = compression
         self.mp_counter, self.mp_part_size = mp.Value(c_int32, 0), mp.Value(c_int32, 0)
         super().__init__()
+
+    def choose_compression(self, info: CompressionInfo) -> CompressionBase:
+        return self.compression
 
     def estimate_compression_ratio(self, info: CompressionInfo):
         return self.compression.estimate_compression_ratio(info)
