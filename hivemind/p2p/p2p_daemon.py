@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import json
 import os
 import secrets
 from collections.abc import AsyncIterable as AsyncIterableABC
@@ -8,6 +9,7 @@ from dataclasses import dataclass
 from importlib.resources import path
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union
 
+import dateutil.parser
 from google.protobuf.message import Message
 from multiaddr import Multiaddr
 
@@ -168,8 +170,8 @@ class P2P:
         )
 
         env = os.environ.copy()
-        env.setdefault('GOLOG_LOG_LEVEL', python_level_to_golog(loglevel))
-        env['GOLOG_LOG_FMT'] = 'json'
+        env.setdefault("GOLOG_LOG_LEVEL", python_level_to_golog(loglevel))
+        env["GOLOG_LOG_FMT"] = "json"
 
         self._child = await asyncio.subprocess.create_subprocess_exec(
             *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env
@@ -584,7 +586,15 @@ class P2P:
             if "error" in record:
                 message += f": {record['error']}"
 
-            # TODO: override time
-            logger.log(level, message, extra={"caller": record["caller"]})
-        except (ValueError, KeyError):  # `message` seems to be a JSON but is failed to be parsed
+            logger.log(
+                level,
+                message,
+                extra={
+                    "origin_created": dateutil.parser.isoparse(record["ts"]).timestamp(),
+                    "caller": record["caller"],
+                },
+            )
+        except Exception:
+            # Parsing errors are unlikely, but we don't want to lose these messages anyway
             logger.warning(line, extra={"caller": "p2pd"})
+            logger.exception("Failed to parse go-log message:")
