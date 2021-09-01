@@ -1,6 +1,6 @@
 import math
 import os
-from abc import ABC
+from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple
 
@@ -16,9 +16,10 @@ EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("QUANTIZATION_THREA
 class Quantization(CompressionBase, ABC):
     codebook_dtype, indices_dtype = np.float32, np.uint8
 
+    @abstractmethod
     def quantize(self, tensor: torch.Tensor, allow_inplace: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """Convert tensor into a pair of (indices, codebook)"""
-        raise NotImplementedError()
+        ...
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
         quantized, codebook = self.quantize(tensor.detach(), allow_inplace=allow_inplace)

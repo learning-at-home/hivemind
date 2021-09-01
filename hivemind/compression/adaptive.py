@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Mapping, Sequence, Union
 
 import torch
@@ -9,6 +9,16 @@ from hivemind.proto import runtime_pb2
 
 
 class AdaptiveCompressionBase(CompressionBase, ABC):
+    @abstractmethod
+    def choose_compression(self, info: CompressionInfo) -> CompressionBase:
+        ...
+
+    def estimate_compression_ratio(self, info: CompressionInfo) -> float:
+        return self.choose_compression(info).estimate_compression_ratio(info)
+
+    def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
+        return self.choose_compression(info).compress(tensor, info=info, allow_inplace=allow_inplace)
+
     def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         return hivemind.compression.deserialize_torch_tensor(serialized_tensor)
 
@@ -19,13 +29,8 @@ class SizeAdaptiveCompression(AdaptiveCompressionBase):
     def __init__(self, threshold: int, less: CompressionBase, greater_equal: CompressionBase):
         self.threshold, self.less, self.greater_equal = threshold, less, greater_equal
 
-    def estimate_compression_ratio(self, info: CompressionInfo) -> float:
-        compression = self.greater_equal if info.descriptor.numel() >= self.threshold else self.less
-        return compression.estimate_compression_ratio(info)
-
-    def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        compression = self.greater_equal if info.descriptor.numel() >= self.threshold else self.less
-        return compression.compress(tensor, info=info, allow_inplace=allow_inplace)
+    def choose_compression(self, info: CompressionInfo) -> CompressionBase:
+        return self.greater_equal if info.descriptor.numel() >= self.threshold else self.less
 
 
 class RoleAdaptiveCompression(AdaptiveCompressionBase):
@@ -48,11 +53,8 @@ class RoleAdaptiveCompression(AdaptiveCompressionBase):
             TensorRole.UNSPECIFIED: default,
         }
 
-    def estimate_compression_ratio(self, info: CompressionInfo) -> float:
-        return self.role_compressions[info.role].estimate_compression_ratio(info)
-
-    def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        return self.role_compressions[info.role].compress(tensor, info=info, allow_inplace=allow_inplace)
+    def choose_compression(self, info: CompressionInfo) -> CompressionBase:
+        return self.role_compressions[info.role]
 
 
 class PerTensorCompression(AdaptiveCompressionBase):
@@ -61,8 +63,5 @@ class PerTensorCompression(AdaptiveCompressionBase):
     def __init__(self, tensor_compressions: Union[Sequence[CompressionBase], Mapping[Key, CompressionBase]]):
         self.tensor_compressions = tensor_compressions
 
-    def estimate_compression_ratio(self, info: CompressionInfo) -> float:
-        return self.tensor_compressions[info.key].estimate_compression_ratio(info)
-
-    def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        return self.tensor_compressions[info.key].compress(tensor, info=info, allow_inplace=allow_inplace)
+    def choose_compression(self, info: CompressionInfo) -> CompressionBase:
+        return self.tensor_compressions[info.key]

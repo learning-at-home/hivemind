@@ -1,7 +1,7 @@
 import dataclasses
-from abc import ABC
+from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -43,6 +43,7 @@ class CompressionBase(ABC):
 
     compression_type: runtime_pb2.CompressionType
 
+    @abstractmethod
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
         """
         Applies compression algorithm to a tensor based on their meta-parameters
@@ -52,15 +53,17 @@ class CompressionBase(ABC):
         :param allow_inplace: if True, compression can (but doesn't have to) to modify tensor in-place for efficiency
         :returns: a protobuf message that encodes the tensor
         """
-        raise NotImplementedError()
+        ...
 
+    @abstractmethod
     def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         """Create a pytorch tensor from the serialized outputs of .compress"""
-        raise NotImplementedError()
+        ...
 
+    @abstractmethod
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
         """Estimate the compression ratio without doing the actual compression; lower ratio = better compression"""
-        raise NotImplementedError()
+        ...
 
 
 class NoCompression(CompressionBase):
