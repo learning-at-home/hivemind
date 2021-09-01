@@ -14,7 +14,7 @@ from hivemind.utils.asyncio import amap_in_executor
 from hivemind.proto import runtime_pb2
 
 T = TypeVar("T")
-DEFAULT_PART_SIZE_BYTES = 2 ** 19
+DEFAULT_PART_SIZE_BYTES = 2 ** 16
 
 
 class TensorPartContainer:
@@ -36,7 +36,7 @@ class TensorPartContainer:
         compression: CompressionBase = NoCompression(),
         part_size_bytes: int = DEFAULT_PART_SIZE_BYTES,
         tensor_infos: Optional[Sequence[CompressionInfo]] = None,
-        prefetch: int = 1,
+        prefetch: int = 5,
     ):
         if tensor_infos is None:
             tensor_infos = tuple(CompressionInfo.from_tensor(x, uid=i) for i, x in enumerate(tensors))
