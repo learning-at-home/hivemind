@@ -11,6 +11,24 @@ else:
     use_colors = sys.stderr.isatty()
 
 
+class TextStyle:
+    """
+    ANSI escape codes. Details: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+    """
+
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    RED = "\033[31m"
+    BLUE = "\033[34m"
+    PURPLE = "\033[35m"
+    ORANGE = "\033[38;5;208m"  # From 8-bit palette
+
+    if not use_colors:
+        # Set the constants above to empty strings
+        _codes = locals()
+        _codes.update({_name: "" for _name in list(_codes) if _name.isupper()})
+
+
 class CustomFormatter(logging.Formatter):
     """
     A formatter that allows a log time and caller info to be overridden via
@@ -19,11 +37,11 @@ class CustomFormatter(logging.Formatter):
 
     # Details: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
     _LEVEL_TO_COLOR = {
-        logging.DEBUG: "35",  # Purple
-        logging.INFO: "34",  # Blue
-        logging.WARNING: "38;5;208",  # Orange (8-bit palette)
-        logging.ERROR: "31",  # Red
-        logging.CRITICAL: "31",  # Red
+        logging.DEBUG: TextStyle.PURPLE,
+        logging.INFO: TextStyle.BLUE,
+        logging.WARNING: TextStyle.ORANGE,
+        logging.ERROR: TextStyle.RED,
+        logging.CRITICAL: TextStyle.RED,
     }
 
     def format(self, record: logging.LogRecord) -> str:
@@ -34,13 +52,10 @@ class CustomFormatter(logging.Formatter):
         if not hasattr(record, "caller"):
             record.caller = f"{record.name}.{record.funcName}:{record.lineno}"
 
-        color_code = self._LEVEL_TO_COLOR[record.levelno]
-        if use_colors:
-            record.bold_color = f"\033[{color_code};1m"
-            record.end_color = "\033[39m"
-            record.end_bold = "\033[0m"
-        else:
-            record.bold_color = record.end_color = record.end_bold = ""
+        # Aliases for the format argument
+        record.levelcolor = self._LEVEL_TO_COLOR[record.levelno]
+        record.bold = TextStyle.BOLD
+        record.reset = TextStyle.RESET
 
         return super().format(record)
 
@@ -51,7 +66,7 @@ def get_logger(module_name: str) -> logging.Logger:
 
     logging.addLevelName(logging.WARNING, "WARN")
     formatter = CustomFormatter(
-        fmt="{asctime}.{msecs:03.0f}  {bold_color}{levelname}{end_color} {caller}{end_bold}  {message}",
+        fmt="{asctime}.{msecs:03.0f}  {bold}{levelcolor}{levelname}{reset} {bold}{caller}{reset}  {message}",
         style="{",
         datefmt="%b %d %H:%M:%S",
     )
