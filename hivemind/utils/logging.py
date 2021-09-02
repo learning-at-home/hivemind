@@ -6,7 +6,7 @@ loglevel = os.getenv("LOGLEVEL", "INFO")
 
 _env_colors = os.getenv("HIVEMIND_COLORS")
 if _env_colors is not None:
-    use_colors = (_env_colors.lower() == "true")
+    use_colors = _env_colors.lower() == "true"
 else:
     use_colors = sys.stderr.isatty()
 
@@ -18,11 +18,11 @@ class CustomFormatter(logging.Formatter):
     """
 
     _LEVEL_TO_COLOR = {
-        logging.DEBUG: '35',  # Purple
-        logging.INFO: '34',  # Blue
-        logging.WARNING: '38;5;208',  # Orange (8-bit palette)
-        logging.ERROR: '31',  # Red
-        logging.CRITICAL: '31',  # Red
+        logging.DEBUG: "35",  # Purple
+        logging.INFO: "34",  # Blue
+        logging.WARNING: "38;5;208",  # Orange (8-bit palette)
+        logging.ERROR: "31",  # Red
+        logging.CRITICAL: "31",  # Red
     }
 
     def format(self, record: logging.LogRecord) -> str:
