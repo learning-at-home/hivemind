@@ -2,6 +2,7 @@ import logging
 import os
 
 loglevel = os.getenv("LOGLEVEL", "INFO")
+use_colors = os.getenv("HIVEMIND_COLORS", "true").lower() != "false"
 
 
 class CustomFormatter(logging.Formatter):
@@ -10,6 +11,14 @@ class CustomFormatter(logging.Formatter):
     ``logger.log(level, message, extra={"origin_created": ..., "caller": ...})``.
     """
 
+    _LEVEL_TO_COLOR = {
+        logging.DEBUG: '35',  # Purple
+        logging.INFO: '34',  # Blue
+        logging.WARNING: '38;5;208',  # Orange (8-bit palette)
+        logging.ERROR: '31',  # Red
+        logging.CRITICAL: '31',  # Red
+    }
+
     def format(self, record: logging.LogRecord) -> str:
         if hasattr(record, "origin_created"):
             record.created = record.origin_created
@@ -17,6 +26,14 @@ class CustomFormatter(logging.Formatter):
 
         if not hasattr(record, "caller"):
             record.caller = f"{record.name}.{record.funcName}:{record.lineno}"
+
+        color_code = self._LEVEL_TO_COLOR[record.levelno]
+        if use_colors:
+            record.bold_color = f"\033[{color_code};1m"
+            record.end_color = "\033[39m"
+            record.end_bold = "\033[0m"
+        else:
+            record.bold_color = record.end_color = record.end_bold = ""
 
         return super().format(record)
 
@@ -27,9 +44,9 @@ def get_logger(module_name: str) -> logging.Logger:
 
     logging.addLevelName(logging.WARNING, "WARN")
     formatter = CustomFormatter(
-        fmt="[{asctime}.{msecs:03.0f}][{levelname}][{caller}] {message}",
+        fmt="{asctime}.{msecs:03.0f}  {bold_color}{levelname}{end_color} {caller}{end_bold}  {message}",
         style="{",
-        datefmt="%Y/%m/%d %H:%M:%S",
+        datefmt="%b %d %H:%M:%S",
     )
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
