@@ -273,7 +273,7 @@ class ControlClient:
         )
 
         if req.ByteSize() > self.persistent_conn_max_msg_size:
-            raise P2PHandlerError(f"Message size exceeds set limit {self.persistent_conn_max_msg_size}")
+            raise P2PDaemonError(f"Message size exceeds set limit {self.persistent_conn_max_msg_size}")
 
         try:
             self._pending_calls[call_id] = asyncio.Future()
