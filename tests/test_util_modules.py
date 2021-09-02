@@ -9,6 +9,7 @@ import pytest
 import torch
 
 import hivemind
+from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
@@ -25,7 +26,6 @@ from hivemind.utils.asyncio import (
     azip,
     cancel_and_wait,
 )
-from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.utils.mpfuture import InvalidStateError
 
 
@@ -323,24 +323,6 @@ def test_many_futures():
     p.join()
 
 
-def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
-    torch.manual_seed(0)
-    X = torch.randn(*size)
-    assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_16BIT)) - X
-    assert error.square().mean() < alpha
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.FLOAT16)) - X
-    assert error.square().mean() < alpha
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.QUANTILE_8BIT)) - X
-    assert error.square().mean() < beta
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.UNIFORM_8BIT)) - X
-    assert error.square().mean() < beta
-
-    zeros = torch.zeros(5, 5)
-    for compression_type in CompressionType.values():
-        assert deserialize_torch_tensor(serialize_torch_tensor(zeros, compression_type)).isfinite().all()
-
-
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_channel_cache():
@@ -383,38 +365,6 @@ async def test_channel_cache():
         for j in range(i + 1, len(all_channels)):
             ci, cj = all_channels[i], all_channels[j]
             assert (ci is cj) == ((ci, cj) in duplicates), (i, j)
-
-
-def test_serialize_tensor():
-    tensor = torch.randn(512, 12288)
-
-    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.NONE)
-    for chunk_size in [1024, 64 * 1024, 64 * 1024 + 1, 10 ** 9]:
-        chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
-        assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-        restored = hivemind.combine_from_streaming(chunks)
-        assert torch.allclose(deserialize_torch_tensor(restored), tensor)
-
-    chunk_size = 30 * 1024
-    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.FLOAT16)
-    chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
-    assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-    restored = hivemind.combine_from_streaming(chunks)
-    assert torch.allclose(deserialize_torch_tensor(restored), tensor, rtol=0, atol=1e-2)
-
-    tensor = torch.randint(0, 100, (512, 1, 1))
-    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.NONE)
-    chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
-    assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-    restored = hivemind.combine_from_streaming(chunks)
-    assert torch.allclose(deserialize_torch_tensor(restored), tensor)
-
-    scalar = torch.tensor(1.0)
-    serialized_scalar = serialize_torch_tensor(scalar, CompressionType.NONE)
-    assert torch.allclose(deserialize_torch_tensor(serialized_scalar), scalar)
-
-    serialized_scalar = serialize_torch_tensor(scalar, CompressionType.FLOAT16)
-    assert torch.allclose(deserialize_torch_tensor(serialized_scalar), scalar)
 
 
 def test_serialize_tuple():

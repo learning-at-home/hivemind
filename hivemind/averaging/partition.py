@@ -3,14 +3,14 @@ Auxiliary data structures for AllReduceRunner
 """
 import asyncio
 from collections import deque
-from typing import AsyncIterable, AsyncIterator, Optional, Sequence, Tuple, TypeVar, Union
+from typing import AsyncIterable, AsyncIterator, Optional, Sequence, Tuple, TypeVar
 
 import numpy as np
 import torch
 
-from hivemind.proto.runtime_pb2 import CompressionType, Tensor
+from hivemind.compression import CompressionBase, CompressionInfo, NoCompression
+from hivemind.proto import runtime_pb2
 from hivemind.utils.asyncio import amap_in_executor
-from hivemind.utils.compression import get_nbytes_per_value, serialize_torch_tensor
 
 T = TypeVar("T")
 DEFAULT_PART_SIZE_BYTES = 2 ** 16
@@ -22,8 +22,9 @@ class TensorPartContainer:
     The class is designed to avoid excessive memory allocation and run all heavy computation in background
     :param tensors: local tensors to be split and aggregated
     :param peer_fractions: for each peer, a target fraction of vector elements that this peer should average
-    :param compression_type: optionally compress tensors with this compression algorithm before sending them to peers
+    :param compression: optionally compress tensors with this compression algorithm before sending them to peers
     :param part_size_bytes: greedily split tensors into parts of up to this many bytes (after compression)
+    :param tensor_infos: CompressionInfo for each respective tensor; this determines how the tensor will be comressed
     :param prefetch: when compressing, pre-compute this many compressed tensors in background
     """
 
@@ -31,16 +32,19 @@ class TensorPartContainer:
         self,
         tensors: Sequence[torch.Tensor],
         peer_fractions: Sequence[float],
-        compression_type: Union["CompressionType", Sequence["CompressionType"]] = CompressionType.NONE,
+        compression: CompressionBase = NoCompression(),
         part_size_bytes: int = DEFAULT_PART_SIZE_BYTES,
+        tensor_infos: Optional[Sequence[CompressionInfo]] = None,
         prefetch: int = 5,
     ):
-        if not isinstance(compression_type, Sequence):
-            compression_type = [compression_type] * len(tensors)
-        assert len(compression_type) == len(tensors), "compression types do not match the number of tensors"
+        if tensor_infos is None:
+            tensor_infos = tuple(CompressionInfo.from_tensor(x, key=i) for i, x in enumerate(tensors))
+        assert len(tensor_infos) == len(tensors), "compression types do not match the number of tensors"
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
-        self.compression_type, self.part_size_bytes, self.prefetch = compression_type, part_size_bytes, prefetch
+        self.compression, self.part_size_bytes, self.tensor_infos = compression, part_size_bytes, tensor_infos
         self.total_size = sum(tensor.numel() for tensor in tensors)
+        self.prefetch = prefetch
+
         self._input_parts_by_peer = [deque() for _ in range(self.group_size)]
         self._output_parts_by_peer = [deque() for _ in range(self.group_size)]
         self._inputs_consumed_by_peer = [False for _ in range(self.group_size)]
@@ -56,11 +60,13 @@ class TensorPartContainer:
         pivots = (np.cumsum(peer_fractions) / np.sum(peer_fractions) * self.total_size).astype(np.int64)
         pivots[-1] = self.total_size
 
-        for tensor, tensor_compression in zip(self.local_tensors, compression_type):
-            part_size_values = int(part_size_bytes / get_nbytes_per_value(tensor.dtype, tensor_compression))
+        for tensor, info in zip(self.local_tensors, self.tensor_infos):
+            bytes_per_value = tensor.element_size() * compression.estimate_compression_ratio(info)
+            part_size_values = int(part_size_bytes / bytes_per_value)
             tensor_parts = tensor.detach().view(-1).split(part_size_values)
             self.num_parts_by_tensor.append(len(tensor_parts))
-            for part in tensor_parts:
+            for part_index, part in enumerate(tensor_parts):
+                part_info = info.get_part(part_index, part_size_values)
                 if current_length + len(part) > pivots[current_peer_index]:
                     # switch to next peer; if a part lands between parts of two or
                     # more peers, assign that part to the peer with highest intersection
@@ -71,9 +77,9 @@ class TensorPartContainer:
                         current_peer_part_end = min(current_length + len(part), pivots[current_peer_index])
                         peer_intersections.append(current_peer_part_end - pivots[current_peer_index - 1])
                     assigned_peer_index = prev_peer_index + np.argmax(peer_intersections)
-                    self._input_parts_by_peer[assigned_peer_index].append((part, tensor_compression))
+                    self._input_parts_by_peer[assigned_peer_index].append((part, part_info))
                 else:
-                    self._input_parts_by_peer[current_peer_index].append((part, tensor_compression))
+                    self._input_parts_by_peer[current_peer_index].append((part, part_info))
                 current_length += len(part)
 
         assert current_length == self.total_size
@@ -89,7 +95,7 @@ class TensorPartContainer:
         return input_parts
 
     @torch.no_grad()
-    async def iterate_input_parts_for(self, peer_index: int) -> AsyncIterator[Tensor]:
+    async def iterate_input_parts_for(self, peer_index: int) -> AsyncIterator[runtime_pb2.Tensor]:
         """iterate serialized tensor parts for a peer at a given index. Run serialization in background."""
         assert not self._inputs_consumed_by_peer[peer_index], "input parts of a given peer are already deallocated."
         self._inputs_consumed_by_peer[peer_index] = True
@@ -99,7 +105,7 @@ class TensorPartContainer:
                 yield self._input_parts_by_peer[peer_index].popleft()
 
         async for serialized_part in amap_in_executor(
-            lambda x_and_compr: serialize_torch_tensor(*x_and_compr), _aiterate_parts(), max_prefetch=self.prefetch
+            lambda x_and_info: self.compression.compress(*x_and_info), _aiterate_parts(), max_prefetch=self.prefetch
         ):
             yield serialized_part
 
