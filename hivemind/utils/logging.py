@@ -1,8 +1,14 @@
 import logging
 import os
+import sys
 
 loglevel = os.getenv("LOGLEVEL", "INFO")
-use_colors = os.getenv("HIVEMIND_COLORS", "true").lower() != "false"
+
+_env_colors = os.getenv("HIVEMIND_COLORS")
+if _env_colors is not None:
+    use_colors = (_env_colors.lower() == "true")
+else:
+    use_colors = sys.stderr.isatty()
 
 
 class CustomFormatter(logging.Formatter):
