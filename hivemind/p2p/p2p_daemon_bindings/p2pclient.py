@@ -10,7 +10,13 @@ from typing import AsyncIterator, Iterable, Sequence, Tuple
 
 from multiaddr import Multiaddr
 
-from hivemind.p2p.p2p_daemon_bindings.control import ControlClient, DaemonConnector, StreamHandler, TUnaryHandler
+from hivemind.p2p.p2p_daemon_bindings.control import (
+    DEFAULT_MAX_MSG_SIZE,
+    ControlClient,
+    DaemonConnector,
+    StreamHandler,
+    TUnaryHandler,
+)
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 
 
@@ -27,7 +33,7 @@ class Client:
         control_maddr: Multiaddr = None,
         listen_maddr: Multiaddr = None,
         *,
-        persistent_conn_max_msg_size: int = 2 << 22,
+        persistent_conn_max_msg_size: int = DEFAULT_MAX_MSG_SIZE,
     ) -> "Client":
         client = cls(_initialized_with_create=True)
 

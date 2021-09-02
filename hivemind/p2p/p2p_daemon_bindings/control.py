@@ -26,6 +26,8 @@ SUPPORT_CONN_PROTOCOLS = (
 SUPPORTED_PROTOS = (protocols.protocol_with_code(proto) for proto in SUPPORT_CONN_PROTOCOLS)
 logger = get_logger(__name__)
 
+DEFAULT_MAX_MSG_SIZE = 4 * 1024 ** 2
+
 
 def parse_conn_protocol(maddr: Multiaddr) -> int:
     proto_codes = set(proto.code for proto in maddr.protocols())
@@ -85,7 +87,7 @@ class ControlClient:
         listen_maddr: Multiaddr = Multiaddr(DEFAULT_LISTEN_MADDR),
         *,
         _initialized_with_create: bool = False,
-        persistent_conn_max_msg_size: int = 2 << 22,
+        persistent_conn_max_msg_size: int = DEFAULT_MAX_MSG_SIZE,
     ) -> None:
         assert _initialized_with_create, "Please use ControlClient.create coroutine to spawn new control instances"
 
