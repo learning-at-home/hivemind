@@ -17,6 +17,7 @@ class CustomFormatter(logging.Formatter):
     ``logger.log(level, message, extra={"origin_created": ..., "caller": ...})``.
     """
 
+    # Details: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
     _LEVEL_TO_COLOR = {
         logging.DEBUG: "35",  # Purple
         logging.INFO: "34",  # Blue
