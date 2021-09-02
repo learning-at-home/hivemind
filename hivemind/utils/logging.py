@@ -66,7 +66,7 @@ def get_logger(module_name: str) -> logging.Logger:
 
     logging.addLevelName(logging.WARNING, "WARN")
     formatter = CustomFormatter(
-        fmt="{asctime}.{msecs:03.0f} [{bold}{levelcolor}{levelname}{reset} {bold}{caller}{reset}] {message}",
+        fmt="{asctime}.{msecs:03.0f} [{bold}{levelcolor}{levelname}{reset}] [{bold}{caller}{reset}] {message}",
         style="{",
         datefmt="%b %d %H:%M:%S",
     )
