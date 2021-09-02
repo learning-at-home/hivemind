@@ -1,4 +1,6 @@
 """ utility functions that help you process nested dicts, tuples, lists and namedtuples """
+import torch
+from hivemind.utils.tensor_descr import TensorDescriptor, BatchTensorDescriptor
 
 
 def nested_compare(t, u):
@@ -24,6 +26,22 @@ def nested_compare(t, u):
             if not nested_compare(t[k], u[k]):
                 return False
         return True
+
+    # if isinstance(t, torch.Tensor):
+    #     if isinstance(u, torch.Tensor) and t.size() != u.size():
+    #         return False
+    #     if isinstance(u, TensorDescriptor) and t.size() != u.size:
+    #         return False
+    #     if isinstance(u, BatchTensorDescriptor) and t.size()[1:] != u.size[1:]:
+    #         return False
+
+    # if hasattr(t, '__iter__'):
+    #     print(t, u)
+    #     if not hasattr(u, '__iter__'):
+    #         return False
+    #     for a, b in zip(t, u):
+    #         if not nested_compare(a, b):
+    #             return False
 
     else:
         return True

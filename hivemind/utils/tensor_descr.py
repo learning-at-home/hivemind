@@ -49,6 +49,9 @@ class TensorDescriptor(DescriptorBase):
         properties = asdict(self)
         properties.update(kwargs)
         properties.pop("compression")
+        if self.dtype == torch.long:
+            return torch.zeros(**properties)
+
         return torch.empty(**properties)
 
 

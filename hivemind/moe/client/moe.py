@@ -15,7 +15,7 @@ from hivemind.moe.client.beam_search import MoEBeamSearcher
 from hivemind.moe.client.expert import DUMMY, RemoteExpert, _get_expert_stub
 from hivemind.moe.server.expert_uid import UID_DELIMITER
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
-from hivemind.utils import nested_flatten, nested_map, nested_pack
+from hivemind.utils import nested_flatten, nested_map, nested_pack, nested_compare
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -84,13 +84,9 @@ class RemoteMixtureOfExperts(nn.Module):
         :param kwargs: extra keyword parameters that will be passed to each expert, batch-first
         :returns: averaged predictions of all experts that delivered result on time, nested structure of batch-first
         """
-        if input.ndim != 2:
-            input_for_gating = input.mean(dim=tuple(range(1, input.ndim - 1)))
-        else:
-            input_for_gating = input
 
         # 1. compute scores and find most appropriate experts with beam search
-        grid_scores = self.proj(input_for_gating).split_with_sizes(self.beam_search.grid_size, dim=-1)
+        grid_scores = [torch.randn(input.size(0), dim) for dim in self.beam_search.grid_size]
 
         chosen_experts: List[List[RemoteExpert]] = self.beam_search.batch_find_best_experts(
             [scores.detach().cpu().numpy() for scores in grid_scores], self.k_best
@@ -107,6 +103,8 @@ class RemoteMixtureOfExperts(nn.Module):
             except grpc.RpcError as e:
                 logger.warning(f"Failed to get RemoteMixtureOfExperts.output_shape: {e}")
 
+        flat_inputs = nested_flatten(((input, *args), kwargs))
+
         expert_mask, *expert_outputs = _RemoteCallMany.apply(
             DUMMY,
             chosen_experts,
@@ -118,7 +116,7 @@ class RemoteMixtureOfExperts(nn.Module):
             self.detect_anomalies,
             self.allow_zero_outputs,
             self.info,
-            *nested_flatten(((input, *args), kwargs)),
+            *flat_inputs,
         )
         # ^-- multiple tensors of shape [batch_size, max_experts, ...output_shape]
 
