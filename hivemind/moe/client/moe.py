@@ -15,7 +15,7 @@ from hivemind.moe.client.beam_search import MoEBeamSearcher
 from hivemind.moe.client.expert import DUMMY, RemoteExpert, _get_expert_stub
 from hivemind.moe.server.expert_uid import UID_DELIMITER
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
-from hivemind.utils import nested_flatten, nested_map, nested_pack, nested_compare
+from hivemind.utils import nested_compare, nested_flatten, nested_map, nested_pack
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)

@@ -120,6 +120,8 @@ class Server(threading.Thread):
         reuse_grad_buffers=True,
         device=None,
         no_dht=False,
+        dht_port=None,
+        dht_listen_on=None,
         initial_peers=(),
         checkpoint_dir: Optional[Path] = None,
         compression=CompressionType.NONE,
@@ -175,7 +177,22 @@ class Server(threading.Thread):
         if no_dht:
             dht = None
         else:
-            dht = hivemind.DHT(initial_peers=initial_peers, start=True, identity_path=identity_path)
+            dht_port = dht_port or hivemind.get_free_port()
+            host_maddrs = [f"/ip4/0.0.0.0/tcp/{dht_port}"]
+            announce_maddrs = []
+
+            if dht_listen_on is not None:
+                dht_maddr = f"/ip6/{dht_listen_on}/tcp/{dht_port}"
+                host_maddrs.append(dht_maddr)
+                announce_maddrs.append(dht_maddr)
+
+            dht = hivemind.DHT(
+                initial_peers=initial_peers,
+                start=True,
+                identity_path=identity_path,
+                host_maddrs=host_maddrs,
+                announce_maddrs=announce_maddrs,
+            )
             visible_maddrs_str = [str(a) for a in dht.get_visible_maddrs()]
             logger.info(f"Running DHT node on {visible_maddrs_str}, initial peers = {initial_peers}")
 
