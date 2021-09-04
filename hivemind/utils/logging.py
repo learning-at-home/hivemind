@@ -3,7 +3,7 @@ import os
 import sys
 import threading
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 
 logging.addLevelName(logging.WARNING, "WARN")
 
@@ -89,8 +89,8 @@ def _initialize_if_necessary():
         _default_handler = logging.StreamHandler()
         _default_handler.setFormatter(formatter)
 
-        _current_mode = LoggingMode.PROPAGATE  # Corresponds to the initial logger state
-        set_logging_mode(LoggingMode.PACKAGE_WIDE)  # Overriding it to the desired default
+        _current_mode = StyleMode.NOWHERE  # Corresponds to the initial logger state
+        use_hivemind_log_style(StyleMode.AMONG_HIVEMIND)  # Overriding it to the desired default
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
@@ -112,25 +112,29 @@ def _disable_default_handler(name: str) -> None:
     logger.setLevel(logging.NOTSET)
 
 
-class LoggingMode(Enum):
-    PACKAGE_WIDE = 0
-    PROGRAM_WIDE = 1
-    PROPAGATE = 2
+class StyleMode(Enum):
+    NOWHERE = 0
+    AMONG_HIVEMIND = 1
+    EVERYWHERE = 2
 
 
-def set_logging_mode(mode: LoggingMode) -> None:
+def use_hivemind_log_style(where: Union[StyleMode, str]) -> None:
     global _current_mode
 
-    if _current_mode == LoggingMode.PACKAGE_WIDE:
+    if isinstance(where, str):
+        # We allow `where` to be a string, so a developer does not have to import the enum for one usage
+        where = StyleMode[where.upper()]
+
+    if _current_mode == StyleMode.AMONG_HIVEMIND:
         _disable_default_handler(_PACKAGE_NAME)
-    elif _current_mode == LoggingMode.PROGRAM_WIDE:
+    elif _current_mode == StyleMode.EVERYWHERE:
         _disable_default_handler(None)
 
-    _current_mode = mode
+    _current_mode = where
 
-    if _current_mode == LoggingMode.PACKAGE_WIDE:
+    if _current_mode == StyleMode.AMONG_HIVEMIND:
         _enable_default_handler(_PACKAGE_NAME)
-    elif _current_mode == LoggingMode.PROGRAM_WIDE:
+    elif _current_mode == StyleMode.EVERYWHERE:
         _enable_default_handler(None)
 
 

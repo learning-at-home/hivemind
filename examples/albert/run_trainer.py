@@ -17,12 +17,12 @@ from transformers.trainer import Trainer
 from transformers.trainer_utils import is_main_process
 
 import hivemind
-from hivemind.utils.logging import LoggingMode, get_logger, loglevel, set_logging_mode
+from hivemind.utils.logging import get_logger, use_hivemind_log_style
 
 import utils
 from arguments import AlbertTrainingArguments, AveragerArguments, CollaborationArguments, DatasetArguments
 
-set_logging_mode(LoggingMode.PROGRAM_WIDE)
+use_hivemind_log_style('everywhere')
 logger = get_logger()
 
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
