@@ -2,6 +2,8 @@ import logging
 import os
 import sys
 
+logging.addLevelName(logging.WARNING, "WARN")
+
 loglevel = os.getenv("LOGLEVEL", "INFO")
 
 _env_colors = os.getenv("HIVEMIND_COLORS")
@@ -50,7 +52,10 @@ class CustomFormatter(logging.Formatter):
             record.msecs = (record.created - int(record.created)) * 1000
 
         if not hasattr(record, "caller"):
-            record.caller = f"{record.name}.{record.funcName}:{record.lineno}"
+            module_path = record.name.split(".")
+            if module_path[0] == "hivemind":
+                module_path = module_path[1:]
+            record.caller = f"{'.'.join(module_path)}.{record.funcName}:{record.lineno}"
 
         # Aliases for the format argument
         record.levelcolor = self._LEVEL_TO_COLOR[record.levelno]
@@ -61,21 +66,20 @@ class CustomFormatter(logging.Formatter):
 
 
 def get_logger(module_name: str) -> logging.Logger:
-    # trim package name
-    name_without_prefix = ".".join(module_name.split(".")[1:])
-
-    logging.addLevelName(logging.WARNING, "WARN")
-    formatter = CustomFormatter(
-        fmt="{asctime}.{msecs:03.0f} [{bold}{levelcolor}{levelname}{reset}] [{bold}{caller}{reset}] {message}",
-        style="{",
-        datefmt="%b %d %H:%M:%S",
-    )
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-    logger = logging.getLogger(name_without_prefix)
+    logger = logging.getLogger(module_name)
     logger.setLevel(loglevel)
-    logger.addHandler(handler)
     logger.propagate = False
+
+    if not logger.hasHandlers():
+        formatter = CustomFormatter(
+            fmt="{asctime}.{msecs:03.0f} [{bold}{levelcolor}{levelname}{reset}] [{bold}{caller}{reset}] {message}",
+            style="{",
+            datefmt="%b %d %H:%M:%S",
+        )
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+
     return logger
 
 
