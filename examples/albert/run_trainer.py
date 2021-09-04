@@ -23,15 +23,15 @@ from hivemind.utils.logging import get_logger
 import utils
 from arguments import AlbertTrainingArguments, AveragerArguments, CollaborationArguments, DatasetArguments
 
-logger = get_logger(__name__)
+logger = get_logger()
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
 
 
 def setup_logging(training_args):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
-        transformers.utils.logging.enable_default_handler()
-        transformers.utils.logging.enable_explicit_format()
+        transformers.utils.logging.disable_default_handler()
+        transformers.utils.logging.enable_propagation()
 
 
 def get_model(training_args, config, tokenizer):

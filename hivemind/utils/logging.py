@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+from typing import Optional
 
 logging.addLevelName(logging.WARNING, "WARN")
 
@@ -65,8 +66,8 @@ class CustomFormatter(logging.Formatter):
         return super().format(record)
 
 
-def get_logger(module_name: str) -> logging.Logger:
-    logger = logging.getLogger(module_name)
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    logger = logging.getLogger(name)
     logger.setLevel(loglevel)
     logger.propagate = False
 

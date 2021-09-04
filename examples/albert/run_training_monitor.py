@@ -18,7 +18,7 @@ from hivemind.utils.logging import get_logger
 import utils
 from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOptimizerArguments
 
-logger = get_logger(__name__)
+logger = get_logger()
 
 
 @dataclass
