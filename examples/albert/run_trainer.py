@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import logging
 import os
 import pickle
 from dataclasses import asdict
@@ -18,16 +17,18 @@ from transformers.trainer import Trainer
 from transformers.trainer_utils import is_main_process
 
 import hivemind
-from hivemind.utils.logging import get_logger
+from hivemind.utils.logging import LoggingMode, get_logger, loglevel, set_logging_mode
 
 import utils
 from arguments import AlbertTrainingArguments, AveragerArguments, CollaborationArguments, DatasetArguments
 
+set_logging_mode(LoggingMode.PROGRAM_WIDE)
 logger = get_logger()
+
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
 
 
-def setup_logging(training_args):
+def setup_transformers_logging(training_args):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.disable_default_handler()
@@ -208,7 +209,7 @@ def main():
     if len(collaboration_args.initial_peers) == 0:
         raise ValueError("Please specify at least one network endpoint in initial peers.")
 
-    setup_logging(training_args)
+    setup_transformers_logging(training_args)
     logger.info(f"Training/evaluation parameters:\n{training_args}")
 
     # Set seed before initializing model.

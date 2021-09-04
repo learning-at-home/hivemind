@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import logging
 import time
 from dataclasses import asdict, dataclass, field
 from ipaddress import ip_address
@@ -13,11 +12,12 @@ from torch_optimizer import Lamb
 from transformers import AlbertConfig, AlbertForPreTraining, HfArgumentParser
 
 import hivemind
-from hivemind.utils.logging import get_logger
+from hivemind.utils.logging import LoggingMode, get_logger, set_logging_mode
 
 import utils
 from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOptimizerArguments
 
+set_logging_mode(LoggingMode.PROGRAM_WIDE)
 logger = get_logger()
 
 

@@ -1,6 +1,8 @@
 import logging
 import os
 import sys
+import threading
+from enum import Enum
 from typing import Optional
 
 logging.addLevelName(logging.WARNING, "WARN")
@@ -66,22 +68,70 @@ class CustomFormatter(logging.Formatter):
         return super().format(record)
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
-    logger = logging.getLogger(name)
-    logger.setLevel(loglevel)
-    logger.propagate = False
+_PACKAGE_NAME = __name__.split(".")[0]
 
-    if not logger.hasHandlers():
+_init_lock = threading.RLock()
+_default_handler = None
+
+
+def _initialize_if_necessary():
+    global _current_mode, _default_handler
+
+    with _init_lock:
+        if _default_handler is not None:
+            return
+
         formatter = CustomFormatter(
             fmt="{asctime}.{msecs:03.0f} [{bold}{levelcolor}{levelname}{reset}] [{bold}{caller}{reset}] {message}",
             style="{",
             datefmt="%b %d %H:%M:%S",
         )
-        handler = logging.StreamHandler()
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        _default_handler = logging.StreamHandler()
+        _default_handler.setFormatter(formatter)
 
-    return logger
+        _current_mode = LoggingMode.PROPAGATE  # Corresponds to the initial logger state
+        set_logging_mode(LoggingMode.PACKAGE_WIDE)  # Overriding it to the desired default
+
+
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    _initialize_if_necessary()
+    return logging.getLogger(name)
+
+
+def _enable_default_handler(name: str) -> None:
+    logger = get_logger(name)
+    logger.addHandler(_default_handler)
+    logger.propagate = False
+    logger.setLevel(loglevel)
+
+
+def _disable_default_handler(name: str) -> None:
+    logger = get_logger(name)
+    logger.removeHandler(_default_handler)
+    logger.propagate = True
+    logger.setLevel(logging.NOTSET)
+
+
+class LoggingMode(Enum):
+    PACKAGE_WIDE = 0
+    PROGRAM_WIDE = 1
+    PROPAGATE = 2
+
+
+def set_logging_mode(mode: LoggingMode) -> None:
+    global _current_mode
+
+    if _current_mode == LoggingMode.PACKAGE_WIDE:
+        _disable_default_handler(_PACKAGE_NAME)
+    elif _current_mode == LoggingMode.PROGRAM_WIDE:
+        _disable_default_handler(None)
+
+    _current_mode = mode
+
+    if _current_mode == LoggingMode.PACKAGE_WIDE:
+        _enable_default_handler(_PACKAGE_NAME)
+    elif _current_mode == LoggingMode.PROGRAM_WIDE:
+        _enable_default_handler(None)
 
 
 def golog_level_to_python(level: str) -> int:
