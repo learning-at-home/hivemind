@@ -44,6 +44,9 @@ class PerformanceEMA:
             self.timestamp = get_dht_time()
             self.paused = was_paused
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(ema={self.samples_per_second:.5f}, num_updates={self.num_updates})"
+
     @contextmanager
     def update_threadsafe(self, task_size: int):
         """measure the EMA throughout of the code that runs inside the context"""
