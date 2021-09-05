@@ -577,12 +577,12 @@ async def test_cancel_and_wait():
 
 @pytest.mark.parametrize("max_workers", [1, 2, 10])
 def test_performance_ema_threadsafe(
-    interval: float = 0.01,
     max_workers: int = 2,
+    interval: float = 0.01,
     num_updates: int = 100,
     alpha: float = 0.05,
-    min_scale_power: float = 0.7,
-    max_scale: float = 1.05,
+    bias_power: float = 0.7,
+    tolerance: float = 0.05,
 ):
 
     def run_task(ema):
@@ -598,5 +598,5 @@ def test_performance_ema_threadsafe(
         total_size = sum(future.result() for future in futures)
         end_time = time.perf_counter()
         target = total_size / (end_time - start_time)
-        assert ema.samples_per_second >= target * max_workers ** (min_scale_power - 1)
-        assert ema.samples_per_second <= target * max_scale
+        assert ema.samples_per_second >= (1 - tolerance) * target * max_workers ** (bias_power - 1)
+        assert ema.samples_per_second <= (1 + tolerance) * target
