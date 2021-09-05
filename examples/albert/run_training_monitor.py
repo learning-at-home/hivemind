@@ -13,7 +13,6 @@ from torch_optimizer import Lamb
 from transformers import AlbertConfig, AlbertForPreTraining, HfArgumentParser
 
 import hivemind
-from hivemind.utils.compression import CompressionType
 
 import utils
 from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOptimizerArguments
@@ -101,7 +100,7 @@ class CheckpointHandler:
             opt=opt,
             dht=dht,
             prefix=experiment_prefix,
-            compression_type=CompressionType.Value(collab_optimizer_args.compression),
+            compression_type=hivemind.Float16Compression(),
             bandwidth=collab_optimizer_args.bandwidth,
             target_batch_size=adjusted_target_batch_size,
             client_mode=collab_optimizer_args.client_mode,

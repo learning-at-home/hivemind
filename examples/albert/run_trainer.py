@@ -18,7 +18,6 @@ from transformers.trainer import Trainer
 from transformers.trainer_utils import is_main_process
 
 import hivemind
-from hivemind.utils.compression import CompressionType
 
 import utils
 from arguments import AlbertTrainingArguments, AveragerArguments, CollaborationArguments, DatasetArguments
@@ -204,7 +203,6 @@ class NoOpScheduler(LRSchedulerBase):
             return self.optimizer.scheduler.print_lr(*args, **kwargs)
 
     def step(self):
-        logger.debug("Called NoOpScheduler.step")
         self._last_lr = self.get_lr()
 
     def state_dict(self):
@@ -263,7 +261,7 @@ def main():
         dht=dht,
         scheduler=scheduler,
         prefix=collaboration_args.experiment_prefix,
-        compression_type=CompressionType.Value(collaboration_args.compression),
+        compression=hivemind.Float16Compression(),
         batch_size_per_step=total_batch_size_per_step,
         bandwidth=collaboration_args.bandwidth,
         target_batch_size=adjusted_target_batch_size,
