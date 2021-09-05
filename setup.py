@@ -89,7 +89,7 @@ def download_p2p_daemon():
         urllib.request.urlretrieve(P2PD_BINARY_URL, binary_path)
         os.chmod(binary_path, 0o777)
         if md5(binary_path) != P2PD_CHECKSUM:
-            raise RuntimeError(f"Downloaded p2pd binary from {url} does not match with md5 checksum")
+            raise RuntimeError(f"Downloaded p2pd binary from {P2PD_BINARY_URL} does not match with md5 checksum")
 
 
 class BuildPy(build_py):
