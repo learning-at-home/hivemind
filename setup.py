@@ -15,7 +15,7 @@ from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
 P2PD_VERSION = "v0.3.6"
-P2PD_CHECKSUM = "194dca06116fdd36bc4b681d18f3b9cb"
+P2PD_CHECKSUM = "627d0c3b475a29331fdfd1667e828f6d"
 LIBP2P_TAR_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz"
 P2PD_BINARY_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd"
 
