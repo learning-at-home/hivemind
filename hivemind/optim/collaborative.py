@@ -237,7 +237,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not self.collaboration_state.ready_for_step:
             return
 
-        logger.log(self.status_loglevel, f"Beginning global optimizer step {self.collaboration_state.optimizer_step}")
+        logger.log(self.status_loglevel, f"Beginning global optimizer step #{self.collaboration_state.optimizer_step}")
         self.collaboration_state = self._fetch_state()
         self.collaboration_state_updated.set()
 
@@ -288,7 +288,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not self.collaboration_state.ready_for_step:
             return
 
-        logger.log(self.status_loglevel, f"Beginning global optimizer step {self.collaboration_state.optimizer_step}")
+        logger.log(self.status_loglevel, f"Beginning global optimizer step #{self.collaboration_state.optimizer_step}")
         self.collaboration_state = self._fetch_state()
         self.collaboration_state_updated.set()
 
@@ -453,7 +453,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         logger.log(
             self.status_loglevel,
             f"{self.prefix} accumulated {total_samples_accumulated} samples from "
-            f"{num_peers} peers towards step {global_optimizer_step}. "
+            f"{num_peers} peers for step #{global_optimizer_step}. "
             f"ETA {estimated_time_to_next_step:.2f} sec (refresh in {time_to_next_fetch:.2f} sec)",
         )
         return CollaborationState(
