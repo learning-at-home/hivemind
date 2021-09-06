@@ -527,7 +527,7 @@ async def test_cancel_and_wait():
 
 @pytest.mark.parametrize("max_workers", [1, 2, 10])
 def test_performance_ema_threadsafe(
-    max_workers: int = 2,
+    max_workers: int,
     interval: float = 0.01,
     num_updates: int = 100,
     alpha: float = 0.05,
