@@ -179,11 +179,11 @@ class Server(threading.Thread):
             dht = None
         else:
             dht_port = dht_port or hivemind.get_free_port()
-            host_maddrs = [f"/ip4/0.0.0.0/tcp/{dht_port}"]
+            host_maddrs = []
             announce_maddrs = []
 
             if dht_listen_on is not None:
-                dht_maddr = f"/ip6/{dht_listen_on}/tcp/{dht_port}"
+                dht_maddr = f"/{dht_listen_on}/tcp/{dht_port}"
                 host_maddrs.append(dht_maddr)
                 announce_maddrs.append(dht_maddr)
 

@@ -62,6 +62,7 @@ class ExpertBalancer:
                 )
             if len(self.queue) == 0:
                 logger.warning("Update routine finished, but still no experts available.")
+                time.sleep()
 
             self.last_update = get_dht_time()
             self.update_finished.set()

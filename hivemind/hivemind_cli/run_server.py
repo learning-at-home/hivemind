@@ -80,7 +80,7 @@ def main():
     parser.add_argument('--averaging_min_refresh_period',type=float,default=1)
     parser.add_argument('--averaging_max_refresh_period',type=float,default=60)
     parser.add_argument('--averaging_default_refresh_period',type=float,default=10)
-    parser.add_argument('--averaging_expiration',type=float,default=30)
+    parser.add_argument('--averaging_expiration',type=float,default=10)
     parser.add_argument('--metadata_expiration',type=float,default=120)
     parser.add_argument('--averaging_timeout',type=float,default=30)
     parser.add_argument('--reuse_grad_buffers',type=bool,default=True)
