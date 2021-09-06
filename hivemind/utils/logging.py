@@ -5,6 +5,13 @@ import threading
 from enum import Enum
 from typing import Optional, Union
 
+
+class HandlerMode(Enum):
+    NOWHERE = 0
+    IN_HIVEMIND = 1
+    IN_ROOT_LOGGER = 2
+
+
 logging.addLevelName(logging.WARNING, "WARN")
 
 loglevel = os.getenv("LOGLEVEL", "INFO")
@@ -67,12 +74,6 @@ class CustomFormatter(logging.Formatter):
         record.reset = TextStyle.RESET
 
         return super().format(record)
-
-
-class HandlerMode(Enum):
-    NOWHERE = 0
-    IN_HIVEMIND = 1
-    IN_ROOT_LOGGER = 2
 
 
 def _initialize_if_necessary():
