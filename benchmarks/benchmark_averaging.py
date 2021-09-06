@@ -80,7 +80,7 @@ def benchmark_averaging(
             with lock_stats:
                 successful_steps += int(success)
                 total_steps += 1
-            logger.info(f"Averager {index}: {'finished' if success else 'failed'} step {step}")
+            logger.info(f"Averager {index}: {'finished' if success else 'failed'} step #{step}")
         logger.info(f"Averager {index}: done.")
 
     threads = []
