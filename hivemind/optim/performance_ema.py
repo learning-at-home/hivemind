@@ -17,14 +17,14 @@ class PerformanceEMA:
         self.paused = paused
         self.lock = Lock()
 
-    def update(self, task_size: int, interval: float) -> float:
+    def update(self, task_size: float, interval: float) -> float:
         """
         :param task_size: how many items were processed since last call
         :param interval: optionally provide the time delta it took to process this task
         :returns: current estimate of performance (samples per second), but at most
         """
-        assert not self.paused or interval is not None, "If PerformanceEMA is paused, one must specify time interval"
         assert task_size > 0, f"Can't register processing {task_size} samples"
+        assert not self.paused or interval is not None, "If PerformanceEMA is paused, one must specify time interval"
         if not self.paused:
             self.timestamp, old_timestamp = get_dht_time(), self.timestamp
             interval = interval if interval is not None else max(0.0, self.timestamp - old_timestamp)
@@ -48,7 +48,7 @@ class PerformanceEMA:
         return f"{self.__class__.__name__}(ema={self.samples_per_second:.5f}, num_updates={self.num_updates})"
 
     @contextmanager
-    def update_threadsafe(self, task_size: int):
+    def update_threadsafe(self, task_size: float):
         """measure the EMA throughout of the code that runs inside the context"""
         start_timestamp = get_dht_time()
         yield

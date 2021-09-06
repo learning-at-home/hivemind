@@ -2,14 +2,13 @@ import heapq
 import random
 import threading
 from contextlib import contextmanager
-from typing import Tuple, List, Dict
+from typing import Dict, List, Tuple
 
-from hivemind import TimedStorage, Endpoint, RemoteExpert
+from hivemind import Endpoint, RemoteExpert, TimedStorage
 from hivemind.dht import DHT
-from hivemind.moe.server.expert_uid import ExpertPrefix
-from hivemind.moe.server.expert_uid import ExpertUID
+from hivemind.moe.server.expert_uid import ExpertPrefix, ExpertUID
 from hivemind.optim.performance_ema import PerformanceEMA
-from hivemind.utils import DHTExpiration, ValueWithExpiration, get_logger, get_dht_time
+from hivemind.utils import DHTExpiration, ValueWithExpiration, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 
@@ -51,12 +50,15 @@ class ExpertBalancer:
                         maybe_banned = self.blacklist.get(uid)
                         if maybe_banned is None or expiration_time > maybe_banned.expiration_time:
                             self._add_expert(uid, endpoint, expiration_time)
-
+                        else:
+                            logger.debug(f"Not adding expert {uid} (blacklisted).")
                     except Exception as e:
                         logger.warning(f"Skipping malformed expert info {expert_info} (exc={e})")
             else:
                 logger.warning(f"Could not refresh experts, dht info key contains {response}, "
                                f"will retry in {time_to_next_update}s")
+            if len(self.queue) == 0:
+                logger.warning("Update routine finished, but still no experts available.")
 
             self.last_update = get_dht_time()
             self.update_finished.set()
@@ -65,11 +67,14 @@ class ExpertBalancer:
         with self.lock:
             self.experts.store(uid, endpoint, expiration_time)
             if uid not in self.uid_to_queue:
+                logger.debug(f"Adding new expert: {uid}, expiration time = {expiration_time:.3f}.")
                 self.throughputs[uid] = PerformanceEMA(*self.ema_kwargs, paused=True)
                 base_load = self.queue[0][0] if len(self.queue) > 0 else 0.0
                 heap_entry = (base_load, random.random(), uid)
                 heapq.heappush(self.queue, heap_entry)
                 self.uid_to_queue[uid] = heap_entry
+            else:
+                logger.debug(f"Refreshing existing expert: {uid}, new expiration time = {expiration_time:.3f}.")
 
     def _ban_expert(self, uid: ExpertUID):
         with self.lock:
@@ -79,9 +84,10 @@ class ExpertBalancer:
             self.uid_to_queue.pop(uid, None)
             self.throughputs.pop(uid, None)
             del self.experts[uid]
+            logger.debug(f"Banned expert {uid} with expiration time = {expiration_time:.2f}.")
 
     @contextmanager
-    def lend_expert(self, task_size: int):
+    def use_another_expert(self, task_size: float) -> RemoteExpert:
         while True:
             if len(self.queue) == 0:
                 self.update_finished.clear()
@@ -109,8 +115,9 @@ class ExpertBalancer:
                 break
         try:
             with self.throughputs[uid].update_threadsafe(task_size):
+                logger.debug(f"Using expert {uid}, throughput = {self.throughputs[uid].samples_per_second}.")
                 yield RemoteExpert(uid, maybe_endpoint.value)
-        except BaseException as e:
+        except BaseException:
             self._ban_expert(uid)
             raise
 
