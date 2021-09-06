@@ -15,6 +15,10 @@ if _env_colors is not None:
 else:
     use_colors = sys.stderr.isatty()
 
+_init_lock = threading.RLock()
+_current_mode = HandlerMode.NOWHERE  # This is the initial state before module initialization but not an actual default
+_default_handler = None
+
 
 class TextStyle:
     """
@@ -32,9 +36,6 @@ class TextStyle:
         # Set the constants above to empty strings
         _codes = locals()
         _codes.update({_name: "" for _name in list(_codes) if _name.isupper()})
-
-
-_PACKAGE_NAME = __name__.split(".")[0]
 
 
 class CustomFormatter(logging.Formatter):
@@ -72,11 +73,6 @@ class HandlerMode(Enum):
     NOWHERE = 0
     IN_HIVEMIND = 1
     IN_ROOT_LOGGER = 2
-
-
-_init_lock = threading.RLock()
-_current_mode = HandlerMode.NOWHERE  # This is the initial state before module initialization but not an actual default
-_default_handler = None
 
 
 def _initialize_if_necessary():
@@ -142,14 +138,14 @@ def use_hivemind_log_handler(where: Union[HandlerMode, str]) -> None:
         where = HandlerMode[where.upper()]
 
     if _current_mode == HandlerMode.IN_HIVEMIND:
-        _disable_default_handler(_PACKAGE_NAME)
+        _disable_default_handler("hivemind")
     elif _current_mode == HandlerMode.IN_ROOT_LOGGER:
         _disable_default_handler(None)
 
     _current_mode = where
 
     if _current_mode == HandlerMode.IN_HIVEMIND:
-        _enable_default_handler(_PACKAGE_NAME)
+        _enable_default_handler("hivemind")
     elif _current_mode == HandlerMode.IN_ROOT_LOGGER:
         _enable_default_handler(None)
 
