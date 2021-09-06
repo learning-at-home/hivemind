@@ -67,7 +67,6 @@ class BalancedRemoteExpert(nn.Module):
 
         # Note: we send DUMMY to prevent torch from excluding expert from backward if no other inputs require grad
         flat_outputs = _BalancedRemoteModuleCall.apply(DUMMY,
-                                                       self.uid,
                                                        self.expert_balancer,
                                                        self.info,
                                                        self.forward_timeout,
