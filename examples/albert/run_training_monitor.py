@@ -12,12 +12,12 @@ from torch_optimizer import Lamb
 from transformers import AlbertConfig, AlbertForPreTraining, HfArgumentParser
 
 import hivemind
-from hivemind.utils.logging import get_logger, use_hivemind_log_format
+from hivemind.utils.logging import get_logger, use_hivemind_log_handler
 
 import utils
 from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOptimizerArguments
 
-use_hivemind_log_format("in_root_logger")
+use_hivemind_log_handler("in_root_logger")
 logger = get_logger()
 
 
