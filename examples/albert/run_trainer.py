@@ -28,8 +28,8 @@ logger = get_logger()
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
 
 
-def setup_transformers_logging(training_args):
-    if is_main_process(training_args.local_rank):
+def setup_transformers_logging(process_rank: int):
+    if is_main_process(process_rank):
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.disable_default_handler()
         transformers.utils.logging.enable_propagation()
@@ -209,7 +209,7 @@ def main():
     if len(collaboration_args.initial_peers) == 0:
         raise ValueError("Please specify at least one network endpoint in initial peers.")
 
-    setup_transformers_logging(training_args)
+    setup_transformers_logging(training_args.local_rank)
     logger.info(f"Training/evaluation parameters:\n{training_args}")
 
     # Set seed before initializing model.

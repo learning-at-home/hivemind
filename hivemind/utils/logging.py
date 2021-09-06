@@ -5,13 +5,6 @@ import threading
 from enum import Enum
 from typing import Optional, Union
 
-
-class HandlerMode(Enum):
-    NOWHERE = 0
-    IN_HIVEMIND = 1
-    IN_ROOT_LOGGER = 2
-
-
 logging.addLevelName(logging.WARNING, "WARN")
 
 loglevel = os.getenv("LOGLEVEL", "INFO")
@@ -22,8 +15,15 @@ if _env_colors is not None:
 else:
     use_colors = sys.stderr.isatty()
 
+
+class HandlerMode(Enum):
+    NOWHERE = 0
+    IN_HIVEMIND = 1
+    IN_ROOT_LOGGER = 2
+
+
 _init_lock = threading.RLock()
-_current_mode = HandlerMode.NOWHERE  # This is the initial state before module initialization but not an actual default
+_current_mode = HandlerMode.IN_HIVEMIND
 _default_handler = None
 
 
@@ -91,7 +91,7 @@ def _initialize_if_necessary():
         _default_handler = logging.StreamHandler()
         _default_handler.setFormatter(formatter)
 
-        use_hivemind_log_handler(HandlerMode.IN_HIVEMIND)  # Overriding it to the desired default
+        _enable_default_handler("hivemind")
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
@@ -137,6 +137,9 @@ def use_hivemind_log_handler(where: Union[HandlerMode, str]) -> None:
     if isinstance(where, str):
         # We allow `where` to be a string, so a developer does not have to import the enum for one usage
         where = HandlerMode[where.upper()]
+
+    if where == _current_mode:
+        return
 
     if _current_mode == HandlerMode.IN_HIVEMIND:
         _disable_default_handler("hivemind")
