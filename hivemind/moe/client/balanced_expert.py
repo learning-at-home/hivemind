@@ -8,14 +8,8 @@ import hivemind
 from hivemind.moe.client.balancer import ExpertBalancer
 from hivemind.moe.client.expert import DUMMY
 from hivemind.proto import runtime_pb2
-from hivemind.utils import (
-    deserialize_torch_tensor,
-    get_logger,
-    nested_compare,
-    nested_flatten,
-    nested_pack,
-    serialize_torch_tensor,
-)
+from hivemind.compression import serialize_torch_tensor, deserialize_torch_tensor
+from hivemind.utils import get_logger, nested_compare, nested_flatten, nested_pack
 
 logger = get_logger(__name__)
 
