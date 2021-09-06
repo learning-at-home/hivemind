@@ -28,7 +28,9 @@ class PerformanceEMA:
         if not self.paused:
             self.timestamp, old_timestamp = get_dht_time(), self.timestamp
             interval = interval if interval is not None else max(0.0, self.timestamp - old_timestamp)
-        self.ema_seconds_per_sample = self.alpha * interval / task_size + (1 - self.alpha) * self.ema_seconds_per_sample
+        self.ema_seconds_per_sample = (
+            self.alpha * interval / task_size + (1 - self.alpha) * self.ema_seconds_per_sample
+        )
         self.num_updates += 1
         adjusted_seconds_per_sample = self.ema_seconds_per_sample / (1 - (1 - self.alpha) ** self.num_updates)
         self.samples_per_second = 1 / max(adjusted_seconds_per_sample, self.eps)

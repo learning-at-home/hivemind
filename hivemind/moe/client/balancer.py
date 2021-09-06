@@ -14,8 +14,9 @@ logger = get_logger(__name__)
 
 
 class ExpertBalancer:
-    def __init__(self, dht: DHT, key: ExpertPrefix, update_period: float = 30.0, initial_throughput: float = 1.0,
-                 **kwargs):
+    def __init__(
+        self, dht: DHT, key: ExpertPrefix, update_period: float = 30.0, initial_throughput: float = 1.0, **kwargs
+    ):
         self.dht, self.key = dht, key
         self.initial_throughput, self.ema_kwargs = initial_throughput, kwargs
         self.experts = TimedStorage[ExpertUID, Endpoint]()
@@ -55,8 +56,10 @@ class ExpertBalancer:
                     except Exception as e:
                         logger.warning(f"Skipping malformed expert info {expert_info} (exc={e})")
             else:
-                logger.warning(f"Could not refresh experts, dht info key contains {response}, "
-                               f"will retry in {time_to_next_update}s")
+                logger.warning(
+                    f"Could not refresh experts, dht info key contains {response}, "
+                    f"will retry in {time_to_next_update}s"
+                )
             if len(self.queue) == 0:
                 logger.warning("Update routine finished, but still no experts available.")
 

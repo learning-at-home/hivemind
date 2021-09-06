@@ -11,11 +11,11 @@ import torch
 
 import hivemind
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.optim.performance_ema import PerformanceEMA
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 from hivemind.utils import DHTExpiration, HeapEntry, MSGPackSerializer, ValueWithExpiration
-from hivemind.optim.performance_ema import PerformanceEMA
 from hivemind.utils.asyncio import (
     achain,
     aenumerate,
@@ -534,7 +534,6 @@ def test_performance_ema_threadsafe(
     bias_power: float = 0.7,
     tolerance: float = 0.05,
 ):
-
     def run_task(ema):
         task_size = random.randint(1, 4)
         with ema.update_threadsafe(task_size):
