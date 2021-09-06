@@ -113,6 +113,12 @@ class TimedStorage(Generic[KeyType, ValueType]):
         self.key_to_heap.clear()
         self.expiration_heap.clear()
 
+    def discard(self, key: KeyType):
+        """If storage contains key, drop the corresponding item, otherwise do nothing"""
+        if key in self.key_to_heap:
+            del self.data[key], self.key_to_heap[key]
+        # note: key may still be in self.expiration_heap, but it will not be used and eventually ._remove_outdated()
+
     def __contains__(self, key: KeyType):
         self._remove_outdated()
         return key in self.data
@@ -122,9 +128,7 @@ class TimedStorage(Generic[KeyType, ValueType]):
         return len(self.data)
 
     def __delitem__(self, key: KeyType):
-        if key in self.key_to_heap:
-            del self.data[key], self.key_to_heap[key]
-        # note: key may still be in self.expiration_heap, but it will not be used and eventually ._remove_outdated()
+        self.discard(key)
 
     def __bool__(self):
         return bool(self.data)
