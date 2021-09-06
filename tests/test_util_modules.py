@@ -3,6 +3,7 @@ import concurrent.futures
 import multiprocessing as mp
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -14,6 +15,7 @@ from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 from hivemind.utils import DHTExpiration, HeapEntry, MSGPackSerializer, ValueWithExpiration
+from hivemind.optim.performance_ema import PerformanceEMA
 from hivemind.utils.asyncio import (
     achain,
     aenumerate,
@@ -521,3 +523,30 @@ async def test_cancel_and_wait():
     await asyncio.sleep(0.05)
     assert not await cancel_and_wait(task_with_result)
     assert not await cancel_and_wait(task_with_error)
+
+
+@pytest.mark.parametrize("max_workers", [1, 2, 10])
+def test_performance_ema_threadsafe(
+    max_workers: int = 2,
+    interval: float = 0.01,
+    num_updates: int = 100,
+    alpha: float = 0.05,
+    bias_power: float = 0.7,
+    tolerance: float = 0.05,
+):
+
+    def run_task(ema):
+        task_size = random.randint(1, 4)
+        with ema.update_threadsafe(task_size):
+            time.sleep(task_size * interval * (0.9 + 0.2 * random.random()))
+            return task_size
+
+    with ThreadPoolExecutor(max_workers) as pool:
+        ema = PerformanceEMA(alpha=alpha)
+        start_time = time.perf_counter()
+        futures = [pool.submit(run_task, ema) for i in range(num_updates)]
+        total_size = sum(future.result() for future in futures)
+        end_time = time.perf_counter()
+        target = total_size / (end_time - start_time)
+        assert ema.samples_per_second >= (1 - tolerance) * target * max_workers ** (bias_power - 1)
+        assert ema.samples_per_second <= (1 + tolerance) * target
