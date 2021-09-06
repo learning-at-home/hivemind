@@ -71,6 +71,7 @@ class CustomFormatter(logging.Formatter):
 _PACKAGE_NAME = __name__.split(".")[0]
 
 _init_lock = threading.RLock()
+_current_mode = StyleMode.NOWHERE  # This is the initial state before module initialization but not an actual default
 _default_handler = None
 
 
@@ -89,8 +90,7 @@ def _initialize_if_necessary():
         _default_handler = logging.StreamHandler()
         _default_handler.setFormatter(formatter)
 
-        _current_mode = StyleMode.NOWHERE  # Corresponds to the initial logger state
-        use_hivemind_log_style(StyleMode.AMONG_HIVEMIND)  # Overriding it to the desired default
+        use_hivemind_log_format(StyleMode.IN_HIVEMIND)  # Overriding it to the desired default
 
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
@@ -114,27 +114,27 @@ def _disable_default_handler(name: str) -> None:
 
 class StyleMode(Enum):
     NOWHERE = 0
-    AMONG_HIVEMIND = 1
-    EVERYWHERE = 2
+    IN_HIVEMIND = 1
+    IN_ROOT_LOGGER = 2
 
 
-def use_hivemind_log_style(where: Union[StyleMode, str]) -> None:
+def use_hivemind_log_format(where: Union[StyleMode, str]) -> None:
     global _current_mode
 
     if isinstance(where, str):
         # We allow `where` to be a string, so a developer does not have to import the enum for one usage
         where = StyleMode[where.upper()]
 
-    if _current_mode == StyleMode.AMONG_HIVEMIND:
+    if _current_mode == StyleMode.IN_HIVEMIND:
         _disable_default_handler(_PACKAGE_NAME)
-    elif _current_mode == StyleMode.EVERYWHERE:
+    elif _current_mode == StyleMode.IN_ROOT_LOGGER:
         _disable_default_handler(None)
 
     _current_mode = where
 
-    if _current_mode == StyleMode.AMONG_HIVEMIND:
+    if _current_mode == StyleMode.IN_HIVEMIND:
         _enable_default_handler(_PACKAGE_NAME)
-    elif _current_mode == StyleMode.EVERYWHERE:
+    elif _current_mode == StyleMode.IN_ROOT_LOGGER:
         _enable_default_handler(None)
 
 
