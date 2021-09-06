@@ -34,6 +34,9 @@ class TextStyle:
         _codes.update({_name: "" for _name in list(_codes) if _name.isupper()})
 
 
+_PACKAGE_NAME = __name__.split(".")[0]
+
+
 class CustomFormatter(logging.Formatter):
     """
     A formatter that allows a log time and caller info to be overridden via
@@ -56,7 +59,7 @@ class CustomFormatter(logging.Formatter):
 
         if not hasattr(record, "caller"):
             module_path = record.name.split(".")
-            if module_path[0] == "hivemind":
+            if module_path[0] == _PACKAGE_NAME:
                 module_path = module_path[1:]
             record.caller = f"{'.'.join(module_path)}.{record.funcName}:{record.lineno}"
 
@@ -68,7 +71,11 @@ class CustomFormatter(logging.Formatter):
         return super().format(record)
 
 
-_PACKAGE_NAME = __name__.split(".")[0]
+class HandlerMode(Enum):
+    NOWHERE = 0
+    IN_HIVEMIND = 1
+    IN_ROOT_LOGGER = 2
+
 
 _init_lock = threading.RLock()
 _current_mode = HandlerMode.NOWHERE  # This is the initial state before module initialization but not an actual default
@@ -114,12 +121,6 @@ def _disable_default_handler(name: str) -> None:
     logger.removeHandler(_default_handler)
     logger.propagate = True
     logger.setLevel(logging.NOTSET)
-
-
-class HandlerMode(Enum):
-    NOWHERE = 0
-    IN_HIVEMIND = 1
-    IN_ROOT_LOGGER = 2
 
 
 def use_hivemind_log_handler(where: Union[HandlerMode, str]) -> None:
