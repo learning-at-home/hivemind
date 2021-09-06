@@ -153,7 +153,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         self.performance_ema = PerformanceEMA(alpha=performance_ema_alpha)
         self.last_step_time = None
 
-        self.collaboration_state = self.fetch_collaboration_state()
+        self.collaboration_state = self._fetch_state()
         self.lock_collaboration_state, self.collaboration_state_updated = Lock(), Event()
         self.lock_local_progress, self.should_report_progress = Lock(), Event()
         self.progress_reporter = Thread(target=self.report_training_progress, daemon=True, name=f"{self}.reporter")
@@ -238,7 +238,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             return
 
         logger.log(self.status_loglevel, f"Beginning global optimizer step {self.collaboration_state.optimizer_step}")
-        self.collaboration_state = self.fetch_collaboration_state()
+        self.collaboration_state = self._fetch_state()
         self.collaboration_state_updated.set()
 
         if not self.is_synchronized:
@@ -289,7 +289,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             return
 
         logger.log(self.status_loglevel, f"Beginning global optimizer step {self.collaboration_state.optimizer_step}")
-        self.collaboration_state = self.fetch_collaboration_state()
+        self.collaboration_state = self._fetch_state()
         self.collaboration_state_updated.set()
 
         with self.lock_collaboration_state:
@@ -392,9 +392,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                 continue  # if state was updated externally, reset timer
 
             with self.lock_collaboration_state:
-                self.collaboration_state = self.fetch_collaboration_state()
+                self.collaboration_state = self._fetch_state()
 
-    def fetch_collaboration_state(self) -> CollaborationState:
+    def _fetch_state(self) -> CollaborationState:
         """Read performance statistics reported by peers, estimate progress towards next batch"""
         response, _expiration = self.dht.get(self.training_progress_key, latest=True) or (None, -float("inf"))
         current_time = get_dht_time()
