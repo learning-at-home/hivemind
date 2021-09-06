@@ -452,7 +452,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         )
         logger.log(
             self.status_loglevel,
-            f"Collaboration accumulated {total_samples_accumulated} samples from "
+            f"{self.prefix} accumulated {total_samples_accumulated} samples from "
             f"{num_peers} peers; ETA {estimated_time_to_next_step:.2f} seconds "
             f"(refresh in {time_to_next_fetch:.2f}s.)",
         )
