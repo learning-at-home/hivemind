@@ -4,11 +4,11 @@ import threading
 from contextlib import contextmanager
 from typing import Dict, List, Tuple
 
-from hivemind import Endpoint, RemoteExpert, TimedStorage
 from hivemind.dht import DHT
+from hivemind.moe.client.expert import RemoteExpert
 from hivemind.moe.server.expert_uid import ExpertPrefix, ExpertUID
 from hivemind.optim.performance_ema import PerformanceEMA
-from hivemind.utils import DHTExpiration, ValueWithExpiration, get_dht_time, get_logger
+from hivemind.utils import Endpoint, TimedStorage, DHTExpiration, ValueWithExpiration, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 
@@ -71,7 +71,7 @@ class ExpertBalancer:
             self.experts.store(uid, endpoint, expiration_time)
             if uid not in self.uid_to_queue:
                 logger.debug(f"Adding new expert: {uid}, expiration time = {expiration_time:.3f}.")
-                self.throughputs[uid] = PerformanceEMA(*self.ema_kwargs, paused=True)
+                self.throughputs[uid] = PerformanceEMA(**self.ema_kwargs, paused=True)
                 base_load = self.queue[0][0] if len(self.queue) > 0 else 0.0
                 heap_entry = (base_load, random.random(), uid)
                 heapq.heappush(self.queue, heap_entry)

@@ -12,6 +12,7 @@ import torch
 from multiaddr import Multiaddr
 
 import hivemind
+from hivemind.compression import BASE_COMPRESSION_TYPES
 from hivemind.dht import DHT
 from hivemind.moe.server.checkpoints import CheckpointSaver, is_directory, load_experts
 from hivemind.moe.server.connection_handler import ConnectionHandler
@@ -113,7 +114,7 @@ class Server(threading.Thread):
         averaging_target_group_size: Optional[int] = None,
         averaging_min_refresh_period=1,
         averaging_max_refresh_period=60,
-        averaging_default_refresh_period=5,
+        averaging_default_refresh_period=10,
         averaging_expiration=30,
         metadata_expiration=120,
         averaging_timeout=30,
@@ -249,7 +250,8 @@ class Server(threading.Thread):
                     optim,
                     dht=dht,
                     prefix=expert_uid.split(UID_DELIMITER)[0],
-                    compression_type=CompressionType.Value(averaging_compression),
+                    compression=BASE_COMPRESSION_TYPES[averaging_compression],
+                    state_compression=BASE_COMPRESSION_TYPES[averaging_compression],
                     target_batch_size=averaging_target_batch_size,
                     target_group_size=averaging_target_group_size,
                     min_refresh_period=averaging_min_refresh_period,

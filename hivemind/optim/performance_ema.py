@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from threading import Lock
+from typing import Optional
 
 from hivemind.utils import get_dht_time
 
@@ -17,7 +18,7 @@ class PerformanceEMA:
         self.paused = paused
         self.lock = Lock()
 
-    def update(self, task_size: float, interval: float) -> float:
+    def update(self, task_size: float, interval: Optional[float] = None) -> float:
         """
         :param task_size: how many items were processed since last call
         :param interval: optionally provide the time delta it took to process this task
