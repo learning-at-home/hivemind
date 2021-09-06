@@ -58,10 +58,7 @@ class CustomFormatter(logging.Formatter):
             record.msecs = (record.created - int(record.created)) * 1000
 
         if not hasattr(record, "caller"):
-            module_path = record.name.split(".")
-            if module_path[0] == _PACKAGE_NAME:
-                module_path = module_path[1:]
-            record.caller = f"{'.'.join(module_path)}.{record.funcName}:{record.lineno}"
+            record.caller = f"{record.name}.{record.funcName}:{record.lineno}"
 
         # Aliases for the format argument
         record.levelcolor = self._LEVEL_TO_COLOR[record.levelno]
