@@ -4,6 +4,7 @@ from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Type
 
 import torch
 
+from hivemind.averaging.accumulators import AccumulatorFactory
 from hivemind.averaging.partition import AllreduceException, TensorPartContainer, TensorPartReducer
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase, StubBase
@@ -58,6 +59,7 @@ class AllReduceRunner(ServicerBase):
         tensors: Sequence[torch.Tensor],
         ordered_peer_ids: Sequence[PeerID],
         peer_fractions: Tuple[float, ...],
+        accumulator_factory: AccumulatorFactory,
         weights: Optional[Sequence[float]] = None,
         modes: Optional[Sequence[AveragingMode]] = None,
         gathered: Optional[Dict[PeerID, Any]] = None,
@@ -97,7 +99,8 @@ class AllReduceRunner(ServicerBase):
         self.tensor_part_reducer = TensorPartReducer(
             tuple(part.shape for part in self.parts_for_local_averaging),
             len(self.sender_peer_ids),
-            self.sender_weights,
+            weights=self.sender_weights,
+            accumulator_factory=accumulator_factory,
         )
 
     def __repr__(self):

@@ -7,6 +7,7 @@ import pytest
 import torch
 
 from hivemind import Quantile8BitQuantization, aenumerate
+from hivemind.averaging.accumulators import MeanAccumulator
 from hivemind.averaging.allreduce import AllReduceRunner, AveragingMode
 from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer
 from hivemind.compression import deserialize_torch_tensor
@@ -119,7 +120,7 @@ async def test_partitioning_asynchronous():
 @pytest.mark.asyncio
 async def test_reducer(num_senders: int, num_parts: int, synchronize_prob: float):
     tensor_part_shapes = [torch.Size([i]) for i in range(num_parts)]
-    reducer = TensorPartReducer(tensor_part_shapes, num_senders)
+    reducer = TensorPartReducer(tensor_part_shapes, num_senders, weights=None, accumulator_factory=MeanAccumulator)
 
     local_tensors_by_sender = [[torch.randn(i) for i in range(num_parts)] for j in range(num_senders)]
 
@@ -196,6 +197,7 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
             tensors=[x.clone() for x in tensors_by_peer[p2p.peer_id]],
             ordered_peer_ids=peers,
             peer_fractions=peer_fractions,
+            accumulator_factory=MeanAccumulator,
             modes=peer_modes,
             weights=averaging_weights,
             part_size_bytes=part_size_bytes,

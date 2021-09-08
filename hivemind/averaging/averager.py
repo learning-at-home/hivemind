@@ -15,6 +15,7 @@ from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Union
 import numpy as np
 import torch
 
+from hivemind.averaging.accumulators import AccumulatorFactory, MeanAccumulator
 from hivemind.averaging.allreduce import AllreduceException, AllReduceRunner, AveragingMode, GroupID
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
@@ -112,6 +113,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         compression: CompressionBase = NoCompression(),
         state_compression: CompressionBase = NoCompression(),
         tensor_infos: Optional[Sequence[CompressionInfo]] = None,
+        accumulator_factory: AccumulatorFactory = MeanAccumulator,
         bandwidth: Optional[float] = None,
         min_vector_size: int = 0,
         auxiliary: bool = False,
@@ -170,6 +172,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             compression=compression,
             part_size_bytes=part_size_bytes,
             min_vector_size=min_vector_size,
+            accumulator_factory=accumulator_factory,
         )
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
