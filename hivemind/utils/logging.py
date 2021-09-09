@@ -1,6 +1,11 @@
 import logging
 import os
 import sys
+import threading
+from enum import Enum
+from typing import Optional, Union
+
+logging.addLevelName(logging.WARNING, "WARN")
 
 loglevel = os.getenv("LOGLEVEL", "INFO")
 
@@ -9,6 +14,17 @@ if _env_colors is not None:
     use_colors = _env_colors.lower() == "true"
 else:
     use_colors = sys.stderr.isatty()
+
+
+class HandlerMode(Enum):
+    NOWHERE = 0
+    IN_HIVEMIND = 1
+    IN_ROOT_LOGGER = 2
+
+
+_init_lock = threading.RLock()
+_current_mode = HandlerMode.IN_HIVEMIND
+_default_handler = None
 
 
 class TextStyle:
@@ -60,23 +76,82 @@ class CustomFormatter(logging.Formatter):
         return super().format(record)
 
 
-def get_logger(module_name: str) -> logging.Logger:
-    # trim package name
-    name_without_prefix = ".".join(module_name.split(".")[1:])
+def _initialize_if_necessary():
+    global _current_mode, _default_handler
 
-    logging.addLevelName(logging.WARNING, "WARN")
-    formatter = CustomFormatter(
-        fmt="{asctime}.{msecs:03.0f} [{bold}{levelcolor}{levelname}{reset}] [{bold}{caller}{reset}] {message}",
-        style="{",
-        datefmt="%b %d %H:%M:%S",
-    )
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-    logger = logging.getLogger(name_without_prefix)
-    logger.setLevel(loglevel)
-    logger.addHandler(handler)
+    with _init_lock:
+        if _default_handler is not None:
+            return
+
+        formatter = CustomFormatter(
+            fmt="{asctime}.{msecs:03.0f} [{bold}{levelcolor}{levelname}{reset}] [{bold}{caller}{reset}] {message}",
+            style="{",
+            datefmt="%b %d %H:%M:%S",
+        )
+        _default_handler = logging.StreamHandler()
+        _default_handler.setFormatter(formatter)
+
+        _enable_default_handler("hivemind")
+
+
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    """
+    Same as ``logging.getLogger()`` but ensures that the default log handler is initialized.
+    """
+
+    _initialize_if_necessary()
+    return logging.getLogger(name)
+
+
+def _enable_default_handler(name: str) -> None:
+    logger = get_logger(name)
+    logger.addHandler(_default_handler)
     logger.propagate = False
-    return logger
+    logger.setLevel(loglevel)
+
+
+def _disable_default_handler(name: str) -> None:
+    logger = get_logger(name)
+    logger.removeHandler(_default_handler)
+    logger.propagate = True
+    logger.setLevel(logging.NOTSET)
+
+
+def use_hivemind_log_handler(where: Union[HandlerMode, str]) -> None:
+    """
+    Choose loggers where the default hivemind log handler is applied. Options for the ``where`` argument are:
+
+    * "in_hivemind" (default): Use the hivemind log handler in the loggers of the ``hivemind`` package.
+                               Don't propagate their messages to the root logger.
+    * "nowhere": Don't use the hivemind log handler anywhere.
+                 Propagate the ``hivemind`` messages to the root logger.
+    * "in_root_logger": Use the hivemind log handler in the root logger
+                        (that is, in all application loggers until they disable propagation to the root logger).
+                        Propagate the ``hivemind`` messages to the root logger.
+
+    The options may be defined as strings (case-insensitive) or values from the HandlerMode enum.
+    """
+
+    global _current_mode
+
+    if isinstance(where, str):
+        # We allow `where` to be a string, so a developer does not have to import the enum for one usage
+        where = HandlerMode[where.upper()]
+
+    if where == _current_mode:
+        return
+
+    if _current_mode == HandlerMode.IN_HIVEMIND:
+        _disable_default_handler("hivemind")
+    elif _current_mode == HandlerMode.IN_ROOT_LOGGER:
+        _disable_default_handler(None)
+
+    _current_mode = where
+
+    if _current_mode == HandlerMode.IN_HIVEMIND:
+        _enable_default_handler("hivemind")
+    elif _current_mode == HandlerMode.IN_ROOT_LOGGER:
+        _enable_default_handler(None)
 
 
 def golog_level_to_python(level: str) -> int:
