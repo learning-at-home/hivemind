@@ -138,16 +138,12 @@ def benchmark_throughput(
         )
         server.start()
         server.ready.wait()
-        print("Joining client")
 
         timestamps["server_ready"] = time.perf_counter()
         can_start.set()
 
         for client in clients:
-            print("client finished")
             client.join()
-
-        print("Clients joined")
 
         timestamps["clients_finished"] = time.perf_counter()
 
@@ -160,9 +156,7 @@ def benchmark_throughput(
                 client.terminate()
         server.shutdown()
         timestamps["server_shutdown_finished"] = time.perf_counter()
-        print("Joining server")
         server.join()
-        print("Joined server")
 
     sys.stdout.flush()
     sys.stderr.flush()
