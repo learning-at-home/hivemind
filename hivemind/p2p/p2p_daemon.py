@@ -1,9 +1,12 @@
 import asyncio
+import json
+import logging
 import os
 import secrets
 from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
+from datetime import datetime
 from importlib.resources import path
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union
 
@@ -12,11 +15,11 @@ from multiaddr import Multiaddr
 
 import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
-from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError, P2PHandlerError
+from hivemind.p2p.p2p_daemon_bindings.control import DEFAULT_MAX_MSG_SIZE, P2PDaemonError, P2PHandlerError
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto.p2pd_pb2 import RPCError
-from hivemind.utils.asyncio import aiter, asingle
-from hivemind.utils.logging import get_logger
+from hivemind.utils.asyncio import as_aiter, asingle
+from hivemind.utils.logging import get_logger, golog_level_to_python, loglevel, python_level_to_golog
 
 logger = get_logger(__name__)
 
@@ -54,9 +57,9 @@ class P2P:
     END_OF_STREAM = RPCError()
 
     DHT_MODE_MAPPING = {
-        "dht": {"dht": 1},
-        "dht_server": {"dhtServer": 1},
-        "dht_client": {"dhtClient": 1},
+        "auto": {"dht": 1},
+        "server": {"dhtServer": 1},
+        "client": {"dhtClient": 1},
     }
     FORCE_REACHABILITY_MAPPING = {
         "public": {"forceReachabilityPublic": 1},
@@ -80,7 +83,7 @@ class P2P:
         announce_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = None,
         auto_nat: bool = True,
         conn_manager: bool = True,
-        dht_mode: str = "dht_server",
+        dht_mode: str = "server",
         force_reachability: Optional[str] = None,
         host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ("/ip4/127.0.0.1/tcp/0",),
         identity_path: Optional[str] = None,
@@ -95,6 +98,7 @@ class P2P:
         use_relay: bool = True,
         use_relay_hop: bool = False,
         use_relay_discovery: bool = False,
+        persistent_conn_max_msg_size: int = DEFAULT_MAX_MSG_SIZE,
     ) -> "P2P":
         """
         Start a new p2pd process and connect to it.
@@ -103,7 +107,9 @@ class P2P:
         :param announce_maddrs: Visible multiaddrs that the peer will announce
                                 for external connections from other p2p instances
         :param conn_manager: Enables the Connection Manager
-        :param dht_mode: DHT mode (dht_client/dht_server/dht)
+        :param dht_mode: libp2p DHT mode (auto/client/server).
+                         Defaults to "server" to make collaborations work in local networks.
+                         Details: https://pkg.go.dev/github.com/libp2p/go-libp2p-kad-dht#ModeOpt
         :param force_reachability: Force reachability mode (public/private)
         :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
         :param identity_path: Path to a pre-generated private key file. If defined, makes the peer ID deterministic.
@@ -163,11 +169,17 @@ class P2P:
             relayHop=use_relay_hop,
             relayHopLimit=relay_hop_limit,
             tls=tls,
+            persistentConnMaxMsgSize=persistent_conn_max_msg_size,
             **process_kwargs,
         )
 
+        env = os.environ.copy()
+        env.setdefault("GOLOG_LOG_LEVEL", python_level_to_golog(loglevel))
+        env["GOLOG_LOG_FMT"] = "json"
+
+        logger.debug(f"Launching {proc_args}")
         self._child = await asyncio.subprocess.create_subprocess_exec(
-            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env
         )
         self._alive = True
 
@@ -179,7 +191,12 @@ class P2P:
             await self.shutdown()
             raise P2PDaemonError(f"Daemon failed to start in {startup_timeout:.1f} seconds")
 
-        self._client = await p2pclient.Client.create(self._daemon_listen_maddr, self._client_listen_maddr)
+        self._client = await p2pclient.Client.create(
+            control_maddr=self._daemon_listen_maddr,
+            listen_maddr=self._client_listen_maddr,
+            persistent_conn_max_msg_size=persistent_conn_max_msg_size,
+        )
+
         await self._ping_daemon()
         return self
 
@@ -480,7 +497,7 @@ class P2P:
         input: Union[TInputProtobuf, TInputStream],
         output_protobuf_type: Type[Message],
     ) -> TOutputStream:
-        requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
+        requests = input if isinstance(input, AsyncIterableABC) else as_aiter(input)
         return self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
 
     def _start_listening(self) -> None:
@@ -558,8 +575,44 @@ class P2P:
                 break
             last_line = line.rstrip().decode(errors="ignore")
 
+            self._log_p2pd_message(last_line)
             if last_line.startswith("Peer ID:"):
                 ready.set_result(None)
 
         if not ready.done():
             ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
+
+    @staticmethod
+    def _log_p2pd_message(line: str) -> None:
+        if '"logger"' not in line:  # User-friendly info from p2pd stdout
+            logger.debug(line, extra={"caller": "p2pd"})
+            return
+
+        try:
+            record = json.loads(line)
+            caller = record["caller"]
+
+            level = golog_level_to_python(record["level"])
+            if level <= logging.WARNING:
+                # Many Go loggers are excessively verbose (e.g. show warnings for unreachable peers),
+                # so we downgrade INFO and WARNING messages to DEBUG.
+                # The Go verbosity can still be controlled via the GOLOG_LOG_LEVEL env variable.
+                # Details: https://github.com/ipfs/go-log#golog_log_level
+                level = logging.DEBUG
+
+            message = record["msg"]
+            if "error" in record:
+                message += f": {record['error']}"
+
+            logger.log(
+                level,
+                message,
+                extra={
+                    "origin_created": datetime.strptime(record["ts"], "%Y-%m-%dT%H:%M:%S.%f%z").timestamp(),
+                    "caller": caller,
+                },
+            )
+        except Exception:
+            # Parsing errors are unlikely, but we don't want to lose these messages anyway
+            logger.warning(line, extra={"caller": "p2pd"})
+            logger.exception("Failed to parse go-log message:")

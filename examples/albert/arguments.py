@@ -93,9 +93,6 @@ class CollaborativeOptimizerArguments:
         default=100.0,
         metadata={"help": "Available network bandwidth, in mbps (used for load balancing in all-reduce)"},
     )
-    compression: str = field(
-        default="FLOAT16", metadata={"help": "Use this compression when averaging parameters/gradients"}
-    )
 
 
 @dataclass

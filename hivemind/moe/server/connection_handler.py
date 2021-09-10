@@ -6,12 +6,12 @@ from typing import AsyncIterator, Dict
 import torch
 
 from hivemind.dht import DHT
+from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.p2p import P2PContext, ServicerBase
 from hivemind.proto import runtime_pb2
 from hivemind.utils import MPFuture, get_logger, nested_flatten
 from hivemind.utils.asyncio import switch_to_uvloop
-from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 
 logger = get_logger(__name__)
 

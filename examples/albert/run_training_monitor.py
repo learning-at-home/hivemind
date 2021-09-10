@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import logging
 import time
 from dataclasses import asdict, dataclass, field
 from ipaddress import ip_address
@@ -13,12 +12,13 @@ from torch_optimizer import Lamb
 from transformers import AlbertConfig, AlbertForPreTraining, HfArgumentParser
 
 import hivemind
-from hivemind.utils.compression import CompressionType
+from hivemind.utils.logging import get_logger, use_hivemind_log_handler
 
 import utils
 from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOptimizerArguments
 
-logger = logging.getLogger(__name__)
+use_hivemind_log_handler("in_root_logger")
+logger = get_logger()
 
 
 @dataclass
@@ -101,7 +101,7 @@ class CheckpointHandler:
             opt=opt,
             dht=dht,
             prefix=experiment_prefix,
-            compression_type=CompressionType.Value(collab_optimizer_args.compression),
+            compression_type=hivemind.Float16Compression(),
             bandwidth=collab_optimizer_args.bandwidth,
             target_batch_size=adjusted_target_batch_size,
             client_mode=collab_optimizer_args.client_mode,
@@ -140,7 +140,7 @@ class CheckpointHandler:
         self.model.push_to_hub(
             repo_name=self.repo_path,
             repo_url=self.repo_url,
-            commit_message=f"Step {current_step}, loss {current_loss:.3f}",
+            commit_message=f"Step #{current_step}, loss {current_loss:.3f}",
         )
         logger.info("Finished uploading to Model Hub")
 

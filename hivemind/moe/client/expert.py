@@ -11,8 +11,9 @@ from torch.autograd.function import once_differentiable
 import hivemind
 from hivemind.p2p import P2P, PeerInfo, StubBase
 from hivemind.proto import runtime_pb2
-from hivemind.utils import nested_compare, nested_flatten, nested_pack, switch_to_uvloop
-from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.utils import switch_to_uvloop
+from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.utils import nested_compare, nested_flatten, nested_pack
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 

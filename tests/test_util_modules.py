@@ -9,6 +9,7 @@ import pytest
 import torch
 
 import hivemind
+from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
@@ -17,14 +18,14 @@ from hivemind.utils.asyncio import (
     achain,
     aenumerate,
     afirst,
-    aiter,
+    aiter_with_timeout,
     amap_in_executor,
     anext,
+    as_aiter,
     asingle,
     azip,
     cancel_and_wait,
 )
-from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.utils.mpfuture import InvalidStateError
 
 
@@ -322,24 +323,6 @@ def test_many_futures():
     p.join()
 
 
-def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
-    torch.manual_seed(0)
-    X = torch.randn(*size)
-    assert torch.allclose(deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.NONE)), X)
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.MEANSTD_16BIT)) - X
-    assert error.square().mean() < alpha
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.FLOAT16)) - X
-    assert error.square().mean() < alpha
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.QUANTILE_8BIT)) - X
-    assert error.square().mean() < beta
-    error = deserialize_torch_tensor(serialize_torch_tensor(X, CompressionType.UNIFORM_8BIT)) - X
-    assert error.square().mean() < beta
-
-    zeros = torch.zeros(5, 5)
-    for compression_type in CompressionType.values():
-        assert deserialize_torch_tensor(serialize_torch_tensor(zeros, compression_type)).isfinite().all()
-
-
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_channel_cache():
@@ -382,38 +365,6 @@ async def test_channel_cache():
         for j in range(i + 1, len(all_channels)):
             ci, cj = all_channels[i], all_channels[j]
             assert (ci is cj) == ((ci, cj) in duplicates), (i, j)
-
-
-def test_serialize_tensor():
-    tensor = torch.randn(512, 12288)
-
-    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.NONE)
-    for chunk_size in [1024, 64 * 1024, 64 * 1024 + 1, 10 ** 9]:
-        chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
-        assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-        restored = hivemind.combine_from_streaming(chunks)
-        assert torch.allclose(deserialize_torch_tensor(restored), tensor)
-
-    chunk_size = 30 * 1024
-    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.FLOAT16)
-    chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
-    assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-    restored = hivemind.combine_from_streaming(chunks)
-    assert torch.allclose(deserialize_torch_tensor(restored), tensor, rtol=0, atol=1e-2)
-
-    tensor = torch.randint(0, 100, (512, 1, 1))
-    serialized_tensor = serialize_torch_tensor(tensor, CompressionType.NONE)
-    chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
-    assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-    restored = hivemind.combine_from_streaming(chunks)
-    assert torch.allclose(deserialize_torch_tensor(restored), tensor)
-
-    scalar = torch.tensor(1.0)
-    serialized_scalar = serialize_torch_tensor(scalar, CompressionType.NONE)
-    assert torch.allclose(deserialize_torch_tensor(serialized_scalar), scalar)
-
-    serialized_scalar = serialize_torch_tensor(scalar, CompressionType.FLOAT16)
-    assert torch.allclose(deserialize_torch_tensor(serialized_scalar), scalar)
 
 
 def test_serialize_tuple():
@@ -478,20 +429,23 @@ def test_generic_data_classes():
 
 @pytest.mark.asyncio
 async def test_asyncio_utils():
-    res = [i async for i, item in aenumerate(aiter("a", "b", "c"))]
+    res = [i async for i, item in aenumerate(as_aiter("a", "b", "c"))]
     assert res == list(range(len(res)))
 
     num_steps = 0
-    async for elem in amap_in_executor(lambda x: x ** 2, aiter(*range(100)), max_prefetch=5):
+    async for elem in amap_in_executor(lambda x: x ** 2, as_aiter(*range(100)), max_prefetch=5):
         assert elem == num_steps ** 2
         num_steps += 1
     assert num_steps == 100
 
-    ours = [elem async for elem in amap_in_executor(max, aiter(*range(7)), aiter(*range(-50, 50, 10)), max_prefetch=1)]
+    ours = [
+        elem
+        async for elem in amap_in_executor(max, as_aiter(*range(7)), as_aiter(*range(-50, 50, 10)), max_prefetch=1)
+    ]
     ref = list(map(max, range(7), range(-50, 50, 10)))
     assert ours == ref
 
-    ours = [row async for row in azip(aiter("a", "b", "c"), aiter(1, 2, 3))]
+    ours = [row async for row in azip(as_aiter("a", "b", "c"), as_aiter(1, 2, 3))]
     ref = list(zip(["a", "b", "c"], [1, 2, 3]))
     assert ours == ref
 
@@ -507,18 +461,34 @@ async def test_asyncio_utils():
     with pytest.raises(StopAsyncIteration):
         await anext(iterator)
 
-    assert [item async for item in achain(_aiterate(), aiter(*range(5)))] == ["foo", "bar", "baz"] + list(range(5))
+    assert [item async for item in achain(_aiterate(), as_aiter(*range(5)))] == ["foo", "bar", "baz"] + list(range(5))
 
-    assert await asingle(aiter(1)) == 1
+    assert await asingle(as_aiter(1)) == 1
     with pytest.raises(ValueError):
-        await asingle(aiter())
+        await asingle(as_aiter())
     with pytest.raises(ValueError):
-        await asingle(aiter(1, 2, 3))
+        await asingle(as_aiter(1, 2, 3))
 
-    assert await afirst(aiter(1)) == 1
-    assert await afirst(aiter()) is None
-    assert await afirst(aiter(), -1) == -1
-    assert await afirst(aiter(1, 2, 3)) == 1
+    assert await afirst(as_aiter(1)) == 1
+    assert await afirst(as_aiter()) is None
+    assert await afirst(as_aiter(), -1) == -1
+    assert await afirst(as_aiter(1, 2, 3)) == 1
+
+    async def iterate_with_delays(delays):
+        for i, delay in enumerate(delays):
+            await asyncio.sleep(delay)
+            yield i
+
+    async for _ in aiter_with_timeout(iterate_with_delays([0.1] * 5), timeout=0.2):
+        pass
+
+    sleepy_aiter = iterate_with_delays([0.1, 0.1, 0.3, 0.1, 0.1])
+    num_steps = 0
+    with pytest.raises(asyncio.TimeoutError):
+        async for _ in aiter_with_timeout(sleepy_aiter, timeout=0.2):
+            num_steps += 1
+
+    assert num_steps == 2
 
 
 @pytest.mark.asyncio
