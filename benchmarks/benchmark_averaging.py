@@ -7,9 +7,9 @@ import torch
 
 import hivemind
 from hivemind.proto import runtime_pb2
-from hivemind.utils.networking import LOCALHOST
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
+from hivemind.utils.networking import LOCALHOST
 
 use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
