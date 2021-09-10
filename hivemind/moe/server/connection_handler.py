@@ -5,8 +5,8 @@ from typing import AsyncIterator, Dict
 
 import torch
 
-from hivemind.dht import DHT
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.dht import DHT
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.p2p import P2PContext, ServicerBase
 from hivemind.proto import runtime_pb2
