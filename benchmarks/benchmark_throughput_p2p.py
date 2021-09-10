@@ -11,8 +11,9 @@ from hivemind import P2P
 from hivemind.dht import DHT
 from hivemind.moe.server import layers
 from hivemind.utils.limits import increase_file_limit
-from hivemind.utils.logging import get_logger
+from hivemind.utils.logging import get_logger, use_hivemind_log_handler
 
+use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
 
 
