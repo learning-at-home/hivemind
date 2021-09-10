@@ -7,7 +7,7 @@ from typing import Optional, Union
 
 logging.addLevelName(logging.WARNING, "WARN")
 
-loglevel = os.getenv("LOGLEVEL", "INFO")
+loglevel = os.getenv("HIVEMIND_LOGLEVEL", "INFO")
 
 _env_colors = os.getenv("HIVEMIND_COLORS")
 if _env_colors is not None:
