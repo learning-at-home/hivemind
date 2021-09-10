@@ -10,7 +10,7 @@ from hivemind.dht import DHT
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.p2p import P2PContext, ServicerBase
 from hivemind.proto import runtime_pb2
-from hivemind.utils import MPFuture, get_logger, nested_flatten
+from hivemind.utils import MPFuture, asingle, get_logger, nested_flatten
 from hivemind.utils.asyncio import switch_to_uvloop
 
 logger = get_logger(__name__)
@@ -59,7 +59,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     async def rpc_forward(
         self, stream: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
     ) -> runtime_pb2.ExpertResponse:
-        request = await stream.__anext__()
+        request = await asingle(stream)
 
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].forward_pool.submit_task(*inputs)
@@ -73,7 +73,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     async def rpc_backward(
         self, stream: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
     ) -> runtime_pb2.ExpertResponse:
-        request = await stream.__anext__()
+        request = await asingle(stream)
 
         inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
