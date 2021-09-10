@@ -96,7 +96,7 @@ def _initialize_if_necessary():
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
-    Same as ``logging.getLogger()`` but ensures that the default log handler is initialized.
+    Same as ``logging.getLogger()`` but ensures that the default hivemind log handler is initialized.
 
     :note: By default, the hivemind log handler (that reads the ``HIVEMIND_LOGLEVEL`` env variable and uses
            the colored log formatter) is only applied to messages logged inside the hivemind package.
