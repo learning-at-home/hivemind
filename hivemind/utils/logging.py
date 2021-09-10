@@ -138,6 +138,8 @@ def use_hivemind_log_handler(where: Union[HandlerMode, str]) -> None:
         # We allow `where` to be a string, so a developer does not have to import the enum for one usage
         where = HandlerMode[where.upper()]
 
+    _initialize_if_necessary()
+
     if where == _current_mode:
         return
 
