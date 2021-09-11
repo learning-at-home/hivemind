@@ -8,6 +8,7 @@ import numpy as np
 import torch
 
 from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.utils.serializer import MSGPackSerializer
 
 DUMMY_BATCH_SIZE = 3  # used for dummy runs only
 
@@ -52,6 +53,18 @@ class TensorDescriptor(DescriptorBase):
         return torch.empty(**properties)
 
 
+def _str_to_torch_type(name: str, torch_type: type):
+    try:
+        value = getattr(torch, name.split(".")[-1])
+    except AttributeError:
+        raise ValueError("Invalid dtype")
+    if not isinstance(value, torch_type):
+        raise ValueError(f"Invalid dtype: expected {torch_type}, got: {type(value)}")
+
+    return value
+
+
+@MSGPackSerializer.ext_serializable(0x51)
 @dataclass(repr=True, frozen=True)
 class BatchTensorDescriptor(TensorDescriptor):
     """torch.Tensor with a variable 0-th dimension, used to describe batched data"""
@@ -70,12 +83,41 @@ class BatchTensorDescriptor(TensorDescriptor):
             device=tensor.device,
             requires_grad=tensor.requires_grad,
             pin_memory=_safe_check_pinned(tensor),
-            compression=compression if tensor.is_floating_point() else CompressionType.NONE
+            compression=compression if tensor.is_floating_point() else CompressionType.NONE,
         )
 
     def make_empty(self, *batch_size: int, **kwargs) -> torch.Tensor:
         assert self.shape[0] is None, "Make sure 0-th dimension is not specified (set to None)"
         return super().make_empty(size=(*batch_size, *self.shape[1:]), **kwargs)
+
+    def packb(self) -> bytes:
+        obj_dict = asdict(self)
+        obj_dict.pop("device")
+
+        obj_dict.update(
+            dtype=str(self.dtype),
+            layout=str(self.layout),
+            device_type=self.device.type,
+            device_index=self.device.index,
+        )
+
+        return MSGPackSerializer.dumps(obj_dict)
+
+    @classmethod
+    def unpackb(cls, raw: bytes) -> BatchTensorDescriptor:
+        obj_dict = MSGPackSerializer.loads(raw)
+
+        device = torch.device(obj_dict.pop("device_type"), obj_dict.pop("device_index"))
+
+        obj_dict.update(
+            dtype=_str_to_torch_type(obj_dict["dtype"], torch.dtype),
+            layout=_str_to_torch_type(obj_dict["layout"], torch.layout),
+            device=device,
+        )
+
+        size = obj_dict.pop("size")[1:]
+
+        return BatchTensorDescriptor(*size, **obj_dict)
 
 
 def _safe_check_pinned(tensor: torch.Tensor) -> bool:
