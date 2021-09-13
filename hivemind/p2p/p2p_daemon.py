@@ -286,7 +286,7 @@ class P2P:
         data = memoryview(protobuf.SerializeToString())
         writer.write(len(data).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER))
         for offset in range(0, len(data), chunk_size):
-            writer.write(data[offset : offset + chunk_size], writer, drain=True)
+            P2P.send_raw_data(data[offset : offset + chunk_size], writer, drain=True)
 
     @staticmethod
     async def receive_protobuf(
