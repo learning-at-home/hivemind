@@ -277,7 +277,7 @@ class P2P:
     TOutputProtobuf = TypeVar("TOutputProtobuf")
 
     @staticmethod
-    async def send_protobuf(protobuf: Union[TOutputProtobuf, RPCError], writer: asyncio.StreamWriter, *, chunk_size: int = 2 ** 16) -> None:
+    async def send_protobuf(protobuf: Union[TOutputProtobuf, RPCError], writer: asyncio.StreamWriter, *, chunk_size: int = 2 ** 15) -> None:
         if isinstance(protobuf, RPCError):
             writer.write(P2P.ERROR_MARKER)
         else:
