@@ -301,7 +301,7 @@ class P2P:
             offset = 0
             while offset < len(data):
                 chunk = await P2P.receive_raw_data(reader)
-                buf[offset : offset + len(chunk)] = chunk
+                data[offset : offset + len(chunk)] = chunk
                 offset += len(chunk)
             protobuf.ParseFromString(data)
             return protobuf, None
