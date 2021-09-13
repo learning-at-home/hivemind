@@ -278,7 +278,7 @@ class P2P:
 
     @staticmethod
     async def send_protobuf(protobuf: Union[TOutputProtobuf, RPCError],
-                            writer: asyncio.StreamWriter, *, chunk_size: int = 2 ** 14) -> None:
+                            writer: asyncio.StreamWriter, *, chunk_size: int = 2 ** 16) -> None:
         if isinstance(protobuf, RPCError):
             writer.write(P2P.ERROR_MARKER)
         else:
@@ -286,7 +286,8 @@ class P2P:
         data = memoryview(protobuf.SerializeToString())
         writer.write(len(data).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER))
         for offset in range(0, len(data), chunk_size):
-            await P2P.send_raw_data(data[offset : offset + chunk_size], writer, drain=True)
+            await P2P.send_raw_data(data[offset : offset + chunk_size], writer, drain=False)
+        await writer.drain()
 
     @staticmethod
     async def receive_protobuf(
