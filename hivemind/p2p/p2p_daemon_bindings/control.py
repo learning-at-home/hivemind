@@ -155,14 +155,14 @@ class ControlClient:
         if proto_code == protocols.P_UNIX:
             print("UNIX!")
             listen_path = self.listen_maddr.value_for_protocol(protocols.P_UNIX)
-            server = await asyncio.start_unix_server(self._handler, path=listen_path)
+            server = await asyncio.start_unix_server(self._handler, path=listen_path, limit=2**24)
         elif proto_code == protocols.P_IP4:
             print("IPV4!")
             host = self.listen_maddr.value_for_protocol(protocols.P_IP4)
             port = int(self.listen_maddr.value_for_protocol(protocols.P_TCP))
             server = await asyncio.start_server(self._handler, port=port, host=host)
         else:
-            raise ValueError(f"Protocol not supported: {protocols.protocol_with_code(proto_code)}")
+            raise ValueError(f"Protocol not supported: {protocols.protocol_with_code(proto_code)}", limit=2**24)
 
         async with server:
             yield self
