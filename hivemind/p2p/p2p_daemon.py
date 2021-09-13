@@ -137,9 +137,11 @@ class P2P:
         with path(cli, P2PD_FILENAME) as p:
             p2pd_path = p
 
-        socket_uid = secrets.token_urlsafe(8)
-        self._daemon_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pd-{socket_uid}.sock")
-        self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pclient-{socket_uid}.sock")
+        self._daemon_listen_port = get_free_port()
+        self._client_listen_port = get_free_port()
+
+        self._daemon_listen_maddr = Multiaddr(f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}')
+        self._client_listen_maddr = Multiaddr(f'/ip4/127.0.0.1/tcp/{self._client_listen_port}')
 
         need_bootstrap = bool(initial_peers) or use_ipfs
         process_kwargs = cls.DHT_MODE_MAPPING.get(dht_mode, {"dht": 0})
