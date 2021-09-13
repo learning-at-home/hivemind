@@ -286,13 +286,13 @@ class P2P:
         data = memoryview(protobuf.SerializeToString())
         writer.write(len(data).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER))
         for offset in range(0, len(data), chunk_size):
-            await P2P.send_raw_data(data[offset : offset + chunk_size], writer, drain=False)
-        await writer.drain()
+            await P2P.send_raw_data(data[offset : offset + chunk_size], writer, drain=True)
 
     @staticmethod
     async def receive_protobuf(
         input_protobuf_type: Type[Message], reader: asyncio.StreamReader
     ) -> Tuple[Optional[TInputProtobuf], Optional[RPCError]]:
+        t = time.time()
         msg_type = await reader.readexactly(1)
         if msg_type == P2P.MESSAGE_MARKER:
             protobuf = input_protobuf_type()
@@ -304,7 +304,11 @@ class P2P:
                 chunk = await P2P.receive_raw_data(reader)
                 data[offset : offset + len(chunk)] = chunk
                 offset += len(chunk)
+            print("RECV:", time.time() - t)
+            t = time.time()
             protobuf.ParseFromString(data)
+            print("DES:", time.time() - t)
+
             return protobuf, None
         elif msg_type == P2P.ERROR_MARKER:
             #TODO
