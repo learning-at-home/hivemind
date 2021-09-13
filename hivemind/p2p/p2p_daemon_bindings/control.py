@@ -54,7 +54,7 @@ class DaemonConnector:
             print('UNIX-CONNECTION')
             host = self.control_maddr.value_for_protocol(protocols.P_IP4)
             port = int(self.control_maddr.value_for_protocol(protocols.P_TCP))
-            return await asyncio.open_connection(host, port, limit=2 ** 20)
+            return await asyncio.open_connection(host, port, limit=2 ** 24)
         else:
             raise ValueError(f"Protocol not supported: {protocols.protocol_with_code(self.proto_code)}")
 
