@@ -265,13 +265,15 @@ class P2P:
         data = memoryview(data)
         for offset in range(0, len(data), chunk_size):
             writer.write(data[offset : offset + chunk_size])
-        await writer.drain()
+            await writer.drain()
 
     @staticmethod
-    async def receive_raw_data(reader: asyncio.StreamReader) -> bytes:
+    async def receive_raw_data(reader: asyncio.StreamReader, *, chunk_size: int = 2 ** 16) -> bytes:
         header = await reader.readexactly(P2P.HEADER_LEN)
         content_length = int.from_bytes(header, P2P.BYTEORDER)
-        data = await reader.readexactly(content_length)
+        data = bytearray(content_length)
+        for offset in range(0, content_length, chunk_size):
+            data[offset : offset + chunk_size] = await reader.readexactly(chunk_size)
         return data
 
     TInputProtobuf = TypeVar("TInputProtobuf")
