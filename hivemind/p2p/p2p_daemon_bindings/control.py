@@ -64,7 +64,6 @@ class DaemonConnector:
         Open connection to daemon and upgrade it to a persistent one
         """
         reader, writer = await self.open_connection()
-        reader.transport.set_write_buffer_limits(low=2 ** 22, high=2 ** 24)
         writer.transport.set_write_buffer_limits(low=2 ** 22, high=2 ** 24)
         req = p2pd_pb.Request(type=p2pd_pb.Request.PERSISTENT_CONN_UPGRADE)
         await write_pbmsg(writer, req)
