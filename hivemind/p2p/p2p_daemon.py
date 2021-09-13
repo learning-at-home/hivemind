@@ -20,6 +20,7 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, St
 from hivemind.proto.p2pd_pb2 import RPCError
 from hivemind.utils.asyncio import as_aiter, asingle
 from hivemind.utils.logging import get_logger, golog_level_to_python, loglevel, python_level_to_golog
+from hivemind.utils.networking import get_free_port
 
 logger = get_logger(__name__)
 
@@ -137,9 +138,10 @@ class P2P:
         with path(cli, P2PD_FILENAME) as p:
             p2pd_path = p
 
-        socket_uid = secrets.token_urlsafe(8)
-        self._daemon_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pd-{socket_uid}.sock")
-        self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pclient-{socket_uid}.sock")
+        self._daemon_listen_port = get_free_port()
+        self._client_listen_port = get_free_port()
+        self._daemon_listen_maddr = Multiaddr(f'/ip4/127.0.0.1/tcp/{self._daemon_listen_port}')
+        self._client_listen_maddr = Multiaddr(f'/ip4/127.0.0.1/tcp/{self._client_listen_port}')
 
         need_bootstrap = bool(initial_peers) or use_ipfs
         process_kwargs = cls.DHT_MODE_MAPPING.get(dht_mode, {"dht": 0})
