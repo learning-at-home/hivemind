@@ -48,6 +48,7 @@ class DaemonConnector:
 
     async def open_connection(self) -> (asyncio.StreamReader, asyncio.StreamWriter):
         if self.proto_code == protocols.P_UNIX:
+            print('UNIX-CONNECTION')
             control_path = self.control_maddr.value_for_protocol(protocols.P_UNIX)
             return await asyncio.open_unix_connection(control_path, limit=2 ** 24)
         elif self.proto_code == protocols.P_IP4:
