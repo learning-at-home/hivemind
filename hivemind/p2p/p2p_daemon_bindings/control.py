@@ -49,11 +49,11 @@ class DaemonConnector:
     async def open_connection(self) -> (asyncio.StreamReader, asyncio.StreamWriter):
         if self.proto_code == protocols.P_UNIX:
             control_path = self.control_maddr.value_for_protocol(protocols.P_UNIX)
-            return await asyncio.open_unix_connection(control_path)
+            return await asyncio.open_unix_connection(control_path, limit=2**30)
         elif self.proto_code == protocols.P_IP4:
             host = self.control_maddr.value_for_protocol(protocols.P_IP4)
             port = int(self.control_maddr.value_for_protocol(protocols.P_TCP))
-            return await asyncio.open_connection(host, port)
+            return await asyncio.open_connection(host, port, limit=2**30)
         else:
             raise ValueError(f"Protocol not supported: {protocols.protocol_with_code(self.proto_code)}")
 
