@@ -264,6 +264,7 @@ class P2P:
     async def send_raw_data(data: bytes, writer: asyncio.StreamWriter, *, chunk_size: int = 2 ** 16) -> None:
         writer.write(len(data).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER))
         data = memoryview(data)
+        n = 0
         for offset in range(0, len(data), chunk_size):
             writer.write(data[offset : offset + chunk_size])
         await writer.drain()
@@ -272,8 +273,12 @@ class P2P:
     async def receive_raw_data(reader: asyncio.StreamReader) -> bytes:
         header = await reader.readexactly(P2P.HEADER_LEN)
         content_length = int.from_bytes(header, P2P.BYTEORDER)
-        data = await reader.readexactly(content_length)
-        return data
+        buf = bytearray(content_length)
+        view = memoryview(buf)
+        for offset in range(0, content_length, 2 ** 16):
+            chunk_len = min(content_length - offset, 2 ** 16)
+            buf[offset : offset + chunk_len] = await reader.readexactly(chunk_len)
+        return buf
 
     TInputProtobuf = TypeVar("TInputProtobuf")
     TOutputProtobuf = TypeVar("TOutputProtobuf")
