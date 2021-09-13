@@ -20,6 +20,7 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, St
 from hivemind.proto.p2pd_pb2 import RPCError
 from hivemind.utils.asyncio import as_aiter, asingle
 from hivemind.utils.logging import get_logger, golog_level_to_python, loglevel, python_level_to_golog
+from hivemind.utils import get_free_port
 
 logger = get_logger(__name__)
 
