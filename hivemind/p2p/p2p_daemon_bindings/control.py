@@ -154,6 +154,7 @@ class ControlClient:
             listen_path = self.listen_maddr.value_for_protocol(protocols.P_UNIX)
             server = await asyncio.start_unix_server(self._handler, path=listen_path)
         elif proto_code == protocols.P_IP4:
+            print("IPV4!")
             host = self.listen_maddr.value_for_protocol(protocols.P_IP4)
             port = int(self.listen_maddr.value_for_protocol(protocols.P_TCP))
             server = await asyncio.start_server(self._handler, port=port, host=host)
