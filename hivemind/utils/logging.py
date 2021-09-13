@@ -7,7 +7,7 @@ from typing import Optional, Union
 
 logging.addLevelName(logging.WARNING, "WARN")
 
-loglevel = os.getenv("LOGLEVEL", "INFO")
+loglevel = os.getenv("HIVEMIND_LOGLEVEL", "INFO")
 
 _env_colors = os.getenv("HIVEMIND_COLORS")
 if _env_colors is not None:
@@ -96,7 +96,12 @@ def _initialize_if_necessary():
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
-    Same as ``logging.getLogger()`` but ensures that the default log handler is initialized.
+    Same as ``logging.getLogger()`` but ensures that the default hivemind log handler is initialized.
+
+    :note: By default, the hivemind log handler (that reads the ``HIVEMIND_LOGLEVEL`` env variable and uses
+           the colored log formatter) is only applied to messages logged inside the hivemind package.
+           If you want to extend this handler to other loggers in your application, call
+           ``use_hivemind_log_handler("in_root_logger")``.
     """
 
     _initialize_if_necessary()
@@ -137,6 +142,8 @@ def use_hivemind_log_handler(where: Union[HandlerMode, str]) -> None:
     if isinstance(where, str):
         # We allow `where` to be a string, so a developer does not have to import the enum for one usage
         where = HandlerMode[where.upper()]
+
+    _initialize_if_necessary()
 
     if where == _current_mode:
         return

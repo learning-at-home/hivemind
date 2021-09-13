@@ -23,7 +23,7 @@ import utils
 from arguments import AlbertTrainingArguments, AveragerArguments, CollaborationArguments, DatasetArguments
 
 use_hivemind_log_handler("in_root_logger")
-logger = get_logger()
+logger = get_logger(__name__)
 
 LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
 
