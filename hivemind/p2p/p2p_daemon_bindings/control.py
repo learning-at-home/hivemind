@@ -62,7 +62,7 @@ class DaemonConnector:
         Open connection to daemon and upgrade it to a persistent one
         """
         reader, writer = await self.open_connection()
-        writer.transport.set_write_buffer_limits(low=2 ** 16, high=2 ** 18)
+        writer.transport.set_write_buffer_limits(low=2 ** 20, high=2 ** 24)
         req = p2pd_pb.Request(type=p2pd_pb.Request.PERSISTENT_CONN_UPGRADE)
         await write_pbmsg(writer, req)
 
@@ -153,11 +153,11 @@ class ControlClient:
         proto_code = parse_conn_protocol(self.listen_maddr)
         if proto_code == protocols.P_UNIX:
             listen_path = self.listen_maddr.value_for_protocol(protocols.P_UNIX)
-            server = await asyncio.start_unix_server(self._handler, path=listen_path, limit=2 ** 20)
+            server = await asyncio.start_unix_server(self._handler, path=listen_path, limit=2 ** 30)
         elif proto_code == protocols.P_IP4:
             host = self.listen_maddr.value_for_protocol(protocols.P_IP4)
             port = int(self.listen_maddr.value_for_protocol(protocols.P_TCP))
-            server = await asyncio.start_server(self._handler, port=port, host=host, limit=2 ** 20)
+            server = await asyncio.start_server(self._handler, port=port, host=host, limit=2 ** 30)
         else:
             raise ValueError(f"Protocol not supported: {protocols.protocol_with_code(proto_code)}")
 
@@ -345,7 +345,7 @@ class ControlClient:
         self, peer_id: PeerID, protocols: Sequence[str]
     ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
         reader, writer = await self.daemon_connector.open_connection()
-        writer.transport.set_write_buffer_limits(low=2 ** 16, high=2 ** 18)
+        writer.transport.set_write_buffer_limits(low=2 ** 20, high=2 ** 24)
 
         stream_open_req = p2pd_pb.StreamOpenRequest(peer=peer_id.to_bytes(), proto=list(protocols))
         req = p2pd_pb.Request(type=p2pd_pb.Request.STREAM_OPEN, streamOpen=stream_open_req)
