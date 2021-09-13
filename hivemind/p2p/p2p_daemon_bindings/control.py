@@ -348,7 +348,6 @@ class ControlClient:
         self, peer_id: PeerID, protocols: Sequence[str]
     ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
         reader, writer = await self.daemon_connector.open_connection()
-        reader.transport.set_write_buffer_limits(low=2 ** 22, high=2 ** 24)
         writer.transport.set_write_buffer_limits(low=2 ** 22, high=2 ** 24)
 
         stream_open_req = p2pd_pb.StreamOpenRequest(peer=peer_id.to_bytes(), proto=list(protocols))
