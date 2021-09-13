@@ -283,16 +283,18 @@ class P2P:
             writer.write(P2P.ERROR_MARKER)
         else:
             writer.write(P2P.MESSAGE_MARKER)
+        t = time.time()
         data = memoryview(protobuf.SerializeToString())
+        print("SER:", time.time() - t)
         writer.write(len(data).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER))
         for offset in range(0, len(data), chunk_size):
-            await P2P.send_raw_data(data[offset : offset + chunk_size], writer, drain=True)
+            await P2P.send_raw_data(data[offset: offset + chunk_size], writer, drain=True)
+        print("FULL:", time.time() - t)
 
     @staticmethod
     async def receive_protobuf(
         input_protobuf_type: Type[Message], reader: asyncio.StreamReader
     ) -> Tuple[Optional[TInputProtobuf], Optional[RPCError]]:
-        t = time.time()
         msg_type = await reader.readexactly(1)
         if msg_type == P2P.MESSAGE_MARKER:
             protobuf = input_protobuf_type()
@@ -302,13 +304,9 @@ class P2P:
             offset = 0
             while offset < len(data):
                 chunk = await P2P.receive_raw_data(reader)
-                data[offset : offset + len(chunk)] = chunk
+                data[offset: offset + len(chunk)] = chunk
                 offset += len(chunk)
-            print("RECV:", time.time() - t)
-            t = time.time()
             protobuf.ParseFromString(data)
-            print("DES:", time.time() - t)
-
             return protobuf, None
         elif msg_type == P2P.ERROR_MARKER:
             #TODO
