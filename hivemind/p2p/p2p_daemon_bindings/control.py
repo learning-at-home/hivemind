@@ -62,7 +62,7 @@ class DaemonConnector:
         Open connection to daemon and upgrade it to a persistent one
         """
         reader, writer = await self.open_connection()
-        writer.transport.set_write_buffer_limits(low=2 ** 18, high=2 ** 20)
+        writer.transport.set_write_buffer_limits(low=2 ** 16, high=2 ** 18)
         req = p2pd_pb.Request(type=p2pd_pb.Request.PERSISTENT_CONN_UPGRADE)
         await write_pbmsg(writer, req)
 
@@ -345,7 +345,7 @@ class ControlClient:
         self, peer_id: PeerID, protocols: Sequence[str]
     ) -> Tuple[StreamInfo, asyncio.StreamReader, asyncio.StreamWriter]:
         reader, writer = await self.daemon_connector.open_connection()
-        writer.transport.set_write_buffer_limits(low=2 ** 18, high=2 ** 20)
+        writer.transport.set_write_buffer_limits(low=2 ** 16, high=2 ** 18)
 
         stream_open_req = p2pd_pb.StreamOpenRequest(peer=peer_id.to_bytes(), proto=list(protocols))
         req = p2pd_pb.Request(type=p2pd_pb.Request.STREAM_OPEN, streamOpen=stream_open_req)
