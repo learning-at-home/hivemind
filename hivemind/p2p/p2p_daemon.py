@@ -283,13 +283,10 @@ class P2P:
             writer.write(P2P.ERROR_MARKER)
         else:
             writer.write(P2P.MESSAGE_MARKER)
-        t = time.time()
         data = memoryview(protobuf.SerializeToString())
-        print("SER:", time.time() - t)
         writer.write(len(data).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER))
         for offset in range(0, len(data), chunk_size):
             await P2P.send_raw_data(data[offset: offset + chunk_size], writer, drain=True)
-        print("FULL:", time.time() - t)
 
     @staticmethod
     async def receive_protobuf(
