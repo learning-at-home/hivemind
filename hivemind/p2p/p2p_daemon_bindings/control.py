@@ -51,9 +51,10 @@ class DaemonConnector:
             control_path = self.control_maddr.value_for_protocol(protocols.P_UNIX)
             return await asyncio.open_unix_connection(control_path)
         elif self.proto_code == protocols.P_IP4:
+            print('UNIX-CONNECTION')
             host = self.control_maddr.value_for_protocol(protocols.P_IP4)
             port = int(self.control_maddr.value_for_protocol(protocols.P_TCP))
-            return await asyncio.open_connection(host, port)
+            return await asyncio.open_connection(host, port, limit=2 ** 20)
         else:
             raise ValueError(f"Protocol not supported: {protocols.protocol_with_code(self.proto_code)}")
 
@@ -151,6 +152,7 @@ class ControlClient:
     async def listen(self) -> AsyncIterator["ControlClient"]:
         proto_code = parse_conn_protocol(self.listen_maddr)
         if proto_code == protocols.P_UNIX:
+            print("UNIX!")
             listen_path = self.listen_maddr.value_for_protocol(protocols.P_UNIX)
             server = await asyncio.start_unix_server(self._handler, path=listen_path)
         elif proto_code == protocols.P_IP4:
