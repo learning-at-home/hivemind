@@ -27,7 +27,7 @@ from hivemind.moe.server.layers import (
     schedule_name_to_scheduler,
 )
 from hivemind.moe.server.runtime import Runtime
-from hivemind.optim import CollaborativeOptimizer
+from hivemind.optim import CollaborativeOptimizer, OffloadOptimizer, LambWithGradientClipping
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils import BatchTensorDescriptor, Endpoint, get_free_port, get_logger, get_port, replace_port
 
@@ -108,7 +108,7 @@ class Server(threading.Thread):
         clip_grad_norm=None,
         num_handlers=None,
         min_batch_size=1,
-        max_batch_size=4096,
+        max_batch_size=1,
         use_averaging: bool = False,
         averaging_target_batch_size: Optional[int] = None,
         averaging_target_group_size: Optional[int] = None,
@@ -225,7 +225,6 @@ class Server(threading.Thread):
 
         num_experts = len(expert_uids)
         num_handlers = num_handlers if num_handlers is not None else num_experts * 8
-        optim_cls = optim_cls if optim_cls is not None else partial(torch.optim.SGD, lr=0.0)
 
         sample_input = name_to_input[expert_cls](3, hidden_dim)
         if isinstance(sample_input, tuple):
@@ -240,12 +239,37 @@ class Server(threading.Thread):
         experts = {}
         for expert_uid in expert_uids:
             expert = name_to_block[expert_cls](hidden_dim)
+
+            no_decay = ["bias", "LayerNorm.weight"]
+            optimizer_grouped_parameters = [
+                {
+                    "params": [p for n, p in expert.named_parameters() if not any(nd in n for nd in no_decay)],
+                    "weight_decay": 0.01,
+                },
+                {
+                    "params": [p for n, p in expert.named_parameters() if any(nd in n for nd in no_decay)],
+                    "weight_decay": 0.0,
+                },
+            ]
+
+            optim = OffloadOptimizer(
+                optimizer_grouped_parameters,
+                optim_cls=LambWithGradientClipping,
+                lr=0.00176,
+                betas=(0.9, 0.999),
+                eps=1e-6,
+                weight_decay=0.01,
+                max_grad_norm=1,
+                clamp_value=10000.0,
+                debias=True,
+            )
+
             expert.to(device)
 
-            optim = optim_cls(expert.parameters())
             if use_averaging:
                 assert averaging_target_batch_size is not None
                 assert averaging_target_group_size is not None
+
                 optim = CollaborativeOptimizer(
                     optim,
                     dht=dht,
@@ -264,6 +288,7 @@ class Server(threading.Thread):
                     verbose=True,
                     start=True,
                 )
+                optim.load_state_from_peers()
 
             experts[expert_uid] = ExpertBackend(
                 name=expert_uid,

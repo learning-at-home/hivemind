@@ -10,11 +10,10 @@ import torch
 from hivemind.compression.adaptive import PerTensorCompression, RoleAdaptiveCompression, SizeAdaptiveCompression
 from hivemind.compression.base import CompressionBase, CompressionInfo, NoCompression, TensorRole
 from hivemind.compression.floating import Float16Compression, ScaledFloat16Compression
-from hivemind.compression.quantization import Quantile8BitQuantization, Uniform8BitQuantization
+from hivemind.compression.quantization import Quantile8BitQuantization, Uniform8BitQuantization, BlockwiseQuantization
 from hivemind.proto import runtime_pb2
 
 warnings.filterwarnings("ignore", message="The given NumPy array is not writeable", category=UserWarning)
-
 
 BASE_COMPRESSION_TYPES: Dict[str, CompressionBase] = dict(
     NONE=NoCompression(),
@@ -22,6 +21,7 @@ BASE_COMPRESSION_TYPES: Dict[str, CompressionBase] = dict(
     MEANSTD_16BIT=ScaledFloat16Compression(),
     QUANTILE_8BIT=Quantile8BitQuantization(),
     UNIFORM_8BIT=Uniform8BitQuantization(),
+    BLOCKWISE_8BIT=BlockwiseQuantization(),
 )
 
 for key in runtime_pb2.CompressionType.keys():

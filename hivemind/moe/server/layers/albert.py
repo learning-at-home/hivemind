@@ -212,7 +212,7 @@ class RotaryEmbeddings(nn.Module):
             self.register_buffer("cos", cos)
             self.register_buffer("sin", sin)
 
-        return rotate(x, cos[None, offset : seq_len + offset, None, :], sin[None, offset : seq_len + offset, None, :])
+        return rotate(x, cos[None, offset: seq_len + offset, None, :], sin[None, offset: seq_len + offset, None, :])
 
 
 @torch.no_grad()
@@ -311,7 +311,7 @@ class SimpleAttentionCore(nn.Module):
         attention_scores = attention_scores / math.sqrt(query.shape[-1])
 
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+        causal_mask = self.bias[:, :, key_length - query_length: key_length, :key_length].bool()
         attention_scores = torch.where(causal_mask, attention_scores, self.masked_bias.to(attention_scores.dtype))
 
         if attention_mask is not None:
@@ -413,7 +413,7 @@ class LeanAlbertEmbeddings(nn.Module):
 
         if self.position_embeddings is not None:
             if position_ids is None:
-                position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+                position_ids = self.position_ids[:, past_key_values_length: seq_length + past_key_values_length]
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
 
@@ -583,8 +583,10 @@ class LeanAlbertForPreTraining(AlbertForPreTraining, PreTrainedModel):
 
 from hivemind.moe.server.layers.custom_experts import register_expert_class
 
+SEQUENCE_LENGTH = 2048
+
 head_sample_input = lambda batch_size, hid_dim: (
-    torch.randint(low=0, high=1000, size=(batch_size, 512), dtype=torch.long),
+    torch.randint(low=0, high=1000, size=(batch_size, SEQUENCE_LENGTH), dtype=torch.long),
 )
 
 
@@ -594,7 +596,10 @@ class HeadExpert(nn.Module):
         super().__init__()
         config = LeanAlbertConfig.from_pretrained("albert-xxlarge-v2")
         config.hidden_size = hid_dim
+        config.intermediate_size = 4 * config.hidden_size
         config.num_hidden_layers = 12
+        config.vocab_size = 50304
+        config.max_position_embeddings = SEQUENCE_LENGTH
 
         self.encoder = LeanAlbertTransformer(config)
         self.embeddings = LeanAlbertEmbeddings(config)
@@ -606,7 +611,7 @@ class HeadExpert(nn.Module):
         return encoder_outputs
 
 
-body_sample_input = lambda batch_size, hid_dim: (torch.empty((batch_size, 512, hid_dim)),)
+body_sample_input = lambda batch_size, hid_dim: (torch.empty((batch_size, SEQUENCE_LENGTH, hid_dim)),)
 
 
 @register_expert_class("lm_body", body_sample_input)
@@ -615,7 +620,10 @@ class BodyExpert(nn.Module):
         super().__init__()
         config = LeanAlbertConfig.from_pretrained("albert-xxlarge-v2")
         config.hidden_size = hid_dim
+        config.intermediate_size = 4 * config.hidden_size
         config.num_hidden_layers = 12
+        config.vocab_size = 50304
+        config.max_position_embeddings = SEQUENCE_LENGTH
 
         self.config = config
         self.albert_layer_groups = nn.ModuleList(
@@ -643,8 +651,8 @@ class BodyExpert(nn.Module):
 
 
 tail_sample_input = lambda batch_size, hid_dim: (
-    torch.empty((batch_size, 512, hid_dim)),
-    torch.randint(0, 1000, (batch_size, 512), dtype=torch.long),
+    torch.empty((batch_size, SEQUENCE_LENGTH, hid_dim)),
+    torch.randint(0, 1000, (batch_size, SEQUENCE_LENGTH), dtype=torch.long),
 )
 
 
@@ -654,7 +662,10 @@ class TailExpert(nn.Module):
         super().__init__()
         config = LeanAlbertConfig.from_pretrained("albert-xxlarge-v2")
         config.hidden_size = hid_dim
+        config.intermediate_size = 4 * config.hidden_size
         config.num_hidden_layers = 12
+        config.vocab_size = 50304
+        config.max_position_embeddings = SEQUENCE_LENGTH
 
         self.config = config
         self.albert_layer_groups = nn.ModuleList(

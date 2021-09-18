@@ -6,6 +6,7 @@ from typing import Tuple
 
 import numpy as np
 import torch
+from bitsandbytes.functional import quantize_blockwise, dequantize_blockwise
 
 from hivemind.compression.base import CompressionBase, CompressionInfo
 from hivemind.proto import runtime_pb2
@@ -75,6 +76,46 @@ class Quantile8BitQuantization(Quantization):
         quantized = torch.clamp_(torch.bucketize(tensor, borders), 0, self.n_bins - 1)
         codebook = average_buckets(tensor, quantized, self.n_bins)
         return quantized.numpy().astype(np.uint8), codebook.numpy()
+
+
+class BlockwiseQuantization(Quantization):
+    compression_type = runtime_pb2.BLOCKWISE_8BIT
+    codebook_dtype, indices_dtype = np.float32, np.uint8
+
+    def quantize(self, tensor: torch.Tensor, allow_inplace: bool = False) -> Tuple[
+        np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        return quantize_blockwise(tensor)
+
+    def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
+        quantized, (absmax, codebook) = self.quantize(tensor.detach(), allow_inplace=allow_inplace)
+
+        serialized_data = (
+            np.int64(len(absmax)).tobytes(), np.int64(len(codebook)).tobytes(),
+            absmax.numpy().tobytes(),
+            codebook.numpy().tobytes(),
+            quantized.numpy().tobytes()
+        )
+
+        return runtime_pb2.Tensor(
+            compression=self.compression_type,
+            buffer=b"".join(serialized_data),
+            size=tensor.shape,
+            dtype=tensor.numpy().dtype.name,
+            requires_grad=tensor.requires_grad,
+        )
+
+    def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+        absmax_size = int(np.frombuffer(serialized_tensor.buffer, count=1, dtype=np.int64))
+        codebook_size = int(np.frombuffer(serialized_tensor.buffer, offset=8, count=1, dtype=np.int64))
+        absmax = np.frombuffer(serialized_tensor.buffer, offset=16, count=absmax_size, dtype=self.codebook_dtype)
+        codebook = np.frombuffer(serialized_tensor.buffer, offset=16 + absmax.nbytes, count=codebook_size,
+                                 dtype=self.codebook_dtype)
+        quantized = np.frombuffer(serialized_tensor.buffer, offset=16 + absmax.nbytes + codebook.nbytes,
+                                  dtype=self.indices_dtype)
+        quantized = torch.as_tensor(quantized, dtype=torch.uint8).reshape(tuple(serialized_tensor.size))
+        codebook = torch.as_tensor(codebook)
+        absmax = torch.as_tensor(absmax)
+        return dequantize_blockwise(quantized, (absmax, codebook))
 
 
 def average_buckets(tensor: torch.Tensor, quant_weight: torch.Tensor, n_bins: int):

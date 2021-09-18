@@ -3,6 +3,7 @@ import random
 import threading
 from contextlib import contextmanager
 from typing import Dict, List, Tuple
+import time
 
 from hivemind.dht import DHT
 from hivemind.moe.client.expert import RemoteExpert
@@ -15,7 +16,8 @@ logger = get_logger(__name__)
 
 class ExpertBalancer:
     def __init__(
-        self, dht: DHT, key: ExpertPrefix, update_period: float = 30.0, initial_throughput: float = 1.0, **kwargs
+        self, dht: DHT, key: ExpertPrefix, update_period: float = 30.0, initial_throughput: float = 1.0,
+        sleep_timeout: float = 5.0, **kwargs
     ):
         self.dht, self.key = dht, key
         self.initial_throughput, self.ema_kwargs = initial_throughput, kwargs
@@ -29,6 +31,7 @@ class ExpertBalancer:
         self.is_alive.set()
         self.update_trigger, self.update_finished = threading.Event(), threading.Event()
         self.update_period, self.last_update = update_period, get_dht_time()
+        self.sleep_timeout = sleep_timeout
         self.update_thread = threading.Thread(target=self.update_experts_in_background, daemon=True)
         self.update_thread.start()
 
@@ -62,7 +65,7 @@ class ExpertBalancer:
                 )
             if len(self.queue) == 0:
                 logger.warning("Update routine finished, but still no experts available.")
-                time.sleep()
+                time.sleep(self.sleep_timeout)
 
             self.last_update = get_dht_time()
             self.update_finished.set()
