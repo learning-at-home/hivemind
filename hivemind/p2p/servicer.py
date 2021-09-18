@@ -90,13 +90,13 @@ class ServicerBase:
         # This method will be added to a new Stub type (a subclass of StubBase)
         if handler.stream_output:
 
-            def caller(
+            async def caller(
                 self: StubBase, input: input_type, timeout: None = None
             ) -> AsyncIterator[handler.response_type]:
                 if timeout is not None:
                     raise ValueError("Timeouts for handlers returning streams are not supported")
 
-                return self._p2p.iterate_protobuf_handler(
+                return await self._p2p.iterate_protobuf_handler(
                     self._peer,
                     cls._get_handle_name(self._namespace, handler.method_name),
                     input,
