@@ -425,9 +425,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
         if not isinstance(response, dict) or len(response) == 0:
             logger.log(self.status_loglevel, f"Found no active peers: {response}")
-            local_eta_next_step = (
-                    max(0, self.target_batch_size - self.local_updates_accumulated) / self.performance_ema.samples_per_second
-            )
+            samples_left_to_target_batch_size = max(0, self.target_batch_size - self.local_samples_accumulated)
+            local_eta_next_step = samples_left_to_target_batch_size / self.performance_ema.samples_per_second
+
             return CollaborationState(
                 self.local_step,
                 self.local_samples_accumulated,
