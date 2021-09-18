@@ -182,7 +182,7 @@ class AllReduceRunner(ServicerBase):
             code=averaging_pb2.PART_FOR_AVERAGING,
             group_id=self.group_id,
             tensor_part=first_part,
-            metadata=self._weight_binary
+            metadata=self._weight_binary,
         )
         async for part in parts_aiter:
             yield averaging_pb2.AveragingData(tensor_part=part, metadata=self._weight_binary)
@@ -229,7 +229,7 @@ class AllReduceRunner(ServicerBase):
                 max_prefetch=self.tensor_part_container.prefetch,
             )
         ):
-            weight, = struct.unpack("d", part_metadata)
+            (weight,) = struct.unpack("d", part_metadata)
             averaged_part = await self.tensor_part_reducer.accumulate_part(
                 sender_index, part_index, tensor_part, weight=weight
             )

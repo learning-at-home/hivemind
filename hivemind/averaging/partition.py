@@ -194,7 +194,8 @@ class TensorPartReducer:
         self.denominator = 0.0
 
     async def accumulate_part(
-            self, sender_index: int, part_index: int, tensor_part: torch.Tensor, weight: float = 1.0) -> torch.Tensor:
+        self, sender_index: int, part_index: int, tensor_part: torch.Tensor, weight: float = 1.0
+    ) -> torch.Tensor:
         """Add vector part to accumulator, wait for all other vectors to be added, then return the average part"""
         assert 0 <= sender_index < self.num_senders, "invalid sender index"
         assert 0 <= part_index < self.num_parts, "invalid part index"
