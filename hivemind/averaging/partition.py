@@ -13,7 +13,7 @@ from hivemind.proto import runtime_pb2
 from hivemind.utils.asyncio import amap_in_executor
 
 T = TypeVar("T")
-DEFAULT_PART_SIZE_BYTES = 2 ** 16
+DEFAULT_PART_SIZE_BYTES = 2 ** 19
 
 
 class TensorPartContainer:
