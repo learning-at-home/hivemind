@@ -118,7 +118,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         metadata_expiration: float = 60.0,
         averaging_timeout: Optional[float] = None,
         load_state_timeout: float = 600.0,
-        staleness_timeout: float = 15.0,
+        staleness_timeout: float = 30.0,
         step_tolerance: int = 1,
         reuse_grad_buffers: bool = False,
         accumulate_grads_on: Optional[torch.device] = None,
