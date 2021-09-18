@@ -237,7 +237,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not self.collaboration_state.ready_for_step:
             return
 
-        logger.log(self.status_loglevel, f"Beginning global optimizer step #{self.collaboration_state.optimizer_step}")
+        logger.log(self.status_loglevel, f"{self.prefix} beginning global step #{self.collaboration_state.optimizer_step}")
         self.collaboration_state = self._fetch_state()
         self.collaboration_state_updated.set()
 
@@ -263,7 +263,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             else:
                 logger.log(
                     self.status_loglevel,
-                    f"Skipped averaging: collaboration consists of " f"{self.collaboration_state.num_peers} peer(s).",
+                    f"Skipped averaging: {self.prefix} consists of " f"{self.collaboration_state.num_peers} peer(s).",
                 )
 
             self.opt.step()
@@ -402,7 +402,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if not isinstance(response, dict) or not response:
             logger.log(
                 self.status_loglevel,
-                f"Collaboration {self.prefix} found no active peers {f': {response}' if response else ''}",
+                f"{self.prefix} found no active peers {f': {response}' if response else ''}",
             )
             local_eta_next_step = (
                 max(0, self.target_batch_size - self.local_steps_accumulated) / self.performance_ema.samples_per_second
