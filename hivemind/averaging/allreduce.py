@@ -110,7 +110,6 @@ class AllReduceRunner(ServicerBase):
         if bidirectional:
             self._can_receive_results.set()
 
-
     def __repr__(self):
         return f"{self.__class__.__name__}({self.peer_id}, group_size={self.group_size})"
 
