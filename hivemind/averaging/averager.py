@@ -375,8 +375,10 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         raise AllreduceException("Averaging step failed: could not find a group.")
 
                     future.set_result(
-                        await asyncio.wait_for(self._run_allreduce(
-                            group_info, tensor_infos=self.tensor_infos, weight=weight, **self.allreduce_kwargs),
+                        await asyncio.wait_for(
+                            self._run_allreduce(
+                                group_info, tensor_infos=self.tensor_infos, weight=weight, **self.allreduce_kwargs
+                            ),
                             timeout=self._allreduce_timeout,
                         )
                     )
