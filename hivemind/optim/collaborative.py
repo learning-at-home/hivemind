@@ -451,7 +451,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
         for state in valid_peer_states:
             if current_time - state.time > self.staleness_timeout:
-                logger.debug(f"Peer record {state} was discarded because it is too old: {current_time - state.time} s.")
+                logger.debug(f"Ignoring record {state} because it is too old: {current_time - state.time} seconds.")
                 continue
             total_samples_per_second += state.samples_per_second
             if state.step >= global_optimizer_step - self.step_tolerance:
