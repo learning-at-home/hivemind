@@ -450,8 +450,9 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         total_samples_accumulated = estimated_current_samples = total_samples_per_second = 0
 
         for state in valid_peer_states:
-            if current_time - state.time < self.staleness_timeout:
+            if current_time - state.time > self.staleness_timeout:
                 logger.debug(f"Peer record {state} was discarded because it is too old: {current_time - state.time} s.")
+                continue
             total_samples_per_second += state.samples_per_second
             if state.step >= global_optimizer_step - self.step_tolerance:
                 total_samples_accumulated += state.samples_accumulated
