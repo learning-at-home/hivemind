@@ -12,7 +12,7 @@ import hivemind
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.p2p import P2P, PeerInfo, StubBase
 from hivemind.proto import runtime_pb2
-from hivemind.utils import as_aiter, nested_compare, nested_flatten, nested_pack, switch_to_uvloop
+from hivemind.utils import asingle, nested_compare, nested_flatten, nested_pack, switch_to_uvloop
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 
@@ -133,9 +133,11 @@ class _RemoteModuleCall(torch.autograd.Function):
             for inp, proto in zip(inputs, nested_flatten(info["forward_schema"]))
         ]
 
-        outputs = cls.run_coroutine(
-            stub.rpc_forward(as_aiter(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))),
-        )
+        async def func():
+            stream = stub.rpc_forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
+            return await stream.__anext__()
+
+        outputs = cls.run_coroutine(func())
 
         deserialized_outputs = [deserialize_torch_tensor(tensor) for tensor in outputs.tensors]
 
@@ -152,9 +154,11 @@ class _RemoteModuleCall(torch.autograd.Function):
             for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)
         ]
 
-        grad_inputs = cls.run_coroutine(
-            ctx.stub.rpc_backward(as_aiter(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))),
-        )
+        async def func():
+            stream = ctx.stub.rpc_forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
+            return await asingle(stream)
+
+        grad_inputs = cls.run_coroutine(func())
 
         deserialized_grad_inputs = [deserialize_torch_tensor(tensor) for tensor in grad_inputs.tensors]
         return (DUMMY, None, None, None, *deserialized_grad_inputs)
