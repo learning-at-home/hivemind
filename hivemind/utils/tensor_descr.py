@@ -111,13 +111,16 @@ class BatchTensorDescriptor(TensorDescriptor):
     def unpackb(cls, raw: bytes) -> BatchTensorDescriptor:
         obj_dict = MSGPackSerializer.loads(raw)
 
-        device = torch.device(obj_dict.pop("device_type"), obj_dict.pop("device_index"))
-
         obj_dict.update(
             dtype=_str_to_torch_type(obj_dict["dtype"], torch.dtype),
             layout=_str_to_torch_type(obj_dict["layout"], torch.layout),
-            device=device,
         )
+
+        if "device_type" in obj_dict:
+            obj_dict["device"] = torch.device(
+                obj_dict.pop("device_type"),
+                obj_dict.pop("device_index"),
+            )
 
         size = obj_dict.pop("size")[1:]
 
