@@ -255,7 +255,7 @@ class Server(threading.Thread):
             optim = OffloadOptimizer(
                 optimizer_grouped_parameters,
                 optim_cls=LambWithGradientClipping,
-                lr=0.00176,
+                lr=0.0035355339059327377,
                 betas=(0.9, 0.999),
                 eps=1e-6,
                 weight_decay=0.01,
