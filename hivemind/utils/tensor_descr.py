@@ -57,7 +57,7 @@ def _str_to_torch_type(name: str, torch_type: type):
     try:
         value = getattr(torch, name.split(".")[-1])
     except AttributeError:
-        raise ValueError("Invalid dtype")
+        raise ValueError(f"Invalid dtype: torch has no attribute {name}")
     if not isinstance(value, torch_type):
         raise ValueError(f"Invalid dtype: expected {torch_type}, got: {type(value)}")
 
@@ -95,6 +95,7 @@ class BatchTensorDescriptor(TensorDescriptor):
         obj_dict.pop("device")
 
         obj_dict.update(
+            # TODO: don't stringify Nones
             dtype=str(self.dtype),
             layout=str(self.layout),
         )
@@ -111,10 +112,12 @@ class BatchTensorDescriptor(TensorDescriptor):
     def unpackb(cls, raw: bytes) -> BatchTensorDescriptor:
         obj_dict = MSGPackSerializer.loads(raw)
 
-        obj_dict.update(
-            dtype=_str_to_torch_type(obj_dict["dtype"], torch.dtype),
-            layout=_str_to_torch_type(obj_dict["layout"], torch.layout),
-        )
+        if "dtype" in obj_dict and obj_dict["dtype"] != "None":
+            obj_dict["dtype"] = _str_to_torch_type(obj_dict["dtype"], torch.dtype)
+
+        if "layout" in obj_dict and obj_dict["dtype"] != "None":
+            obj_dict["layout"] = _str_to_torch_type(obj_dict["layout"], torch.layout)
+
 
         if "device_type" in obj_dict:
             obj_dict["device"] = torch.device(
