@@ -97,9 +97,13 @@ class BatchTensorDescriptor(TensorDescriptor):
         obj_dict.update(
             dtype=str(self.dtype),
             layout=str(self.layout),
-            device_type=self.device.type,
-            device_index=self.device.index,
         )
+
+        if self.device is not None:
+            obj_dict.update(
+                device_type=self.device.type,
+                device_index=self.device.index,
+            )
 
         return MSGPackSerializer.dumps(obj_dict)
 
