@@ -110,8 +110,6 @@ class BatchTensorDescriptor(TensorDescriptor):
                 device_index=self.device.index,
             )
 
-        print("ODICT:", obj_dict)
-
         return MSGPackSerializer.dumps(obj_dict)
 
     @classmethod
