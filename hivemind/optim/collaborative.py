@@ -179,10 +179,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     def local_step(self) -> int:
         return self.averager.local_step
 
-    @local_step.setter
-    def local_step(self, new_value: int):
-        self.averager.local_step = new_value
-
     @property
     def is_synchronized(self) -> bool:
         return self.local_step >= self.collaboration_state.optimizer_step
