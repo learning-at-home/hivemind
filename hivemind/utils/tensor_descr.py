@@ -97,7 +97,7 @@ class BatchTensorDescriptor(TensorDescriptor):
         obj_dict["layout"] = str(self.layout) if self.layout is not None else None
 
         device = obj_dict.pop("device")
-        device_type, device_index = (device.index, device.type) if device is not None else (None, None)
+        device_type, device_index = (device.type, device.index) if device is not None else (None, None)
         obj_dict.update(
             device_type=device_type,
             device_index=device_index,
@@ -116,10 +116,11 @@ class BatchTensorDescriptor(TensorDescriptor):
             obj_dict["layout"] = _str_to_torch_type(obj_dict["layout"], torch.layout)
 
         if obj_dict["device_type"] is not None:
-            obj_dict["device"] = torch.device(
-                obj_dict.pop("device_type"),
-                obj_dict.pop("device_index"),
-            )
+            obj_dict["device"] = torch.device(obj_dict["device_type"], obj_dict["device_index"])
+        else:
+            obj_dict["device"] = None
+
+        del obj_dict["device_type"], obj_dict["device_index"]
 
         size = obj_dict.pop("size")[1:]
 
