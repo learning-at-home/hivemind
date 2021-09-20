@@ -126,6 +126,7 @@ class ExpertBalancer:
             with self.throughputs[uid].update_threadsafe(task_size):
                 logger.debug(f"Using expert {uid}, throughput = {self.throughputs[uid].samples_per_second}.")
                 yield RemoteExpert(uid, maybe_endpoint.value)
+                logger.debug(f"Finished using expert {uid}.")
         except BaseException:
             self._ban_expert(uid)
             raise
