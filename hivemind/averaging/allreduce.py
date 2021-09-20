@@ -163,9 +163,7 @@ class AllReduceRunner(ServicerBase):
             for part_index, tensor_part in enumerate(self.parts_for_local_averaging):
                 averaged_part = await self.tensor_part_reducer.accumulate_part(sender_index, part_index, tensor_part)
                 self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part - tensor_part)
-            self._remaining_streams -= 1
-            if self._remaining_streams == 0:
-                self._can_receive_results.set()
+            self._mark_stream_as_finished()
 
         else:
             code = None
@@ -199,7 +197,9 @@ class AllReduceRunner(ServicerBase):
         )
         async for part in parts_aiter:
             yield averaging_pb2.AveragingData(tensor_part=part)
+        self._mark_stream_as_finished()
 
+    def _mark_stream_as_finished(self):
         self._remaining_streams -= 1
         if self._remaining_streams == 0:
             self._can_receive_results.set()
