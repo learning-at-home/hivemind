@@ -110,6 +110,8 @@ class ExpertBalancer:
                     self.uid_to_queue.pop(uid, None)
                     self.throughputs.pop(uid, None)
                 if self.uid_to_queue.get(uid) != heap_entry:
+                    logger.debug(f"Skipping expert {uid} "
+                                 f"(uid_to_queue={self.uid_to_queue.get(uid)}, entry={heap_entry})")
                     continue  # skip uids that are banned or expired
 
                 if self.throughputs[uid].num_updates != 0:
