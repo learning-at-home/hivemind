@@ -94,15 +94,8 @@ class BatchTensorDescriptor(TensorDescriptor):
         obj_dict = asdict(self)
         obj_dict.pop("device")
 
-        if self.dtype is not None:
-            obj_dict["dtype"] = str(self.dtype)
-        else:
-            obj_dict.pop("dtype")
-
-        if self.layout is not None:
-            obj_dict["layout"] = str(self.layout)
-        else:
-            obj_dict.pop("layout")
+        obj_dict["dtype"] = str(self.dtype) if self.dtype is not None else None
+        obj_dict["layout"] = str(self.layout) if self.layout is not None else None
 
         if self.device is not None:
             obj_dict.update(
@@ -116,10 +109,10 @@ class BatchTensorDescriptor(TensorDescriptor):
     def unpackb(cls, raw: bytes) -> BatchTensorDescriptor:
         obj_dict = MSGPackSerializer.loads(raw)
 
-        if "dtype" in obj_dict:
+        if obj_dict["dtype"] is not None:
             obj_dict["dtype"] = _str_to_torch_type(obj_dict["dtype"], torch.dtype)
 
-        if "layout" in obj_dict:
+        if obj_dict["layout"] is not None:
             obj_dict["layout"] = _str_to_torch_type(obj_dict["layout"], torch.layout)
 
         if "device_type" in obj_dict:
