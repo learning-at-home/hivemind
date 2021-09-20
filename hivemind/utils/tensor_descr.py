@@ -92,12 +92,9 @@ class BatchTensorDescriptor(TensorDescriptor):
 
     def packb(self) -> bytes:
         obj_dict = asdict(self)
-        obj_dict.pop("device")
-
-        obj_dict["dtype"] = str(self.dtype) if self.dtype is not None else None
-        obj_dict["layout"] = str(self.layout) if self.layout is not None else None
 
         if self.device is not None:
+            obj_dict.pop("device")
             obj_dict.update(
                 device_type=self.device.type,
                 device_index=self.device.index,
