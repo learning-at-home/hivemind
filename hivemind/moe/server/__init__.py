@@ -263,6 +263,8 @@ class Server(threading.Thread):
                 debias=True,
             )
 
+            scheduler = scheduler(optim, num_warmup_steps=num_warmup_steps, num_training_steps=num_total_steps)
+
             # optim = OffloadOptimizer(
             #     optimizer_grouped_parameters,
             #     optim_cls=LambWithGradientClipping,
@@ -308,9 +310,6 @@ class Server(threading.Thread):
                 args_schema=args_schema,
                 optimizer=optim,
                 device=device,
-                scheduler=scheduler,
-                num_warmup_steps=num_warmup_steps,
-                num_total_steps=num_total_steps,
                 clip_grad_norm=clip_grad_norm,
                 min_batch_size=min_batch_size,
                 max_batch_size=max_batch_size,
