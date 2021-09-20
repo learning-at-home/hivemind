@@ -252,9 +252,8 @@ class Server(threading.Thread):
                 },
             ]
 
-            optim = OffloadOptimizer(
+            optim = LambWithGradientClipping(
                 optimizer_grouped_parameters,
-                optim_cls=LambWithGradientClipping,
                 lr=0.0035355339059327377,
                 betas=(0.9, 0.999),
                 eps=1e-6,
@@ -263,6 +262,18 @@ class Server(threading.Thread):
                 clamp_value=10000.0,
                 debias=True,
             )
+
+            # optim = OffloadOptimizer(
+            #     optimizer_grouped_parameters,
+            #     optim_cls=LambWithGradientClipping,
+            #     lr=0.0035355339059327377,
+            #     betas=(0.9, 0.999),
+            #     eps=1e-6,
+            #     weight_decay=0.01,
+            #     max_grad_norm=1,
+            #     clamp_value=10000.0,
+            #     debias=True,
+            # )
 
             expert.to(device)
 
@@ -274,6 +285,7 @@ class Server(threading.Thread):
                     optim,
                     dht=dht,
                     prefix=expert_uid.split(UID_DELIMITER)[0],
+                    scheduler=scheduler,
                     compression=BASE_COMPRESSION_TYPES[averaging_compression],
                     state_compression=BASE_COMPRESSION_TYPES[averaging_compression],
                     target_batch_size=averaging_target_batch_size,

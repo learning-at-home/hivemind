@@ -543,44 +543,6 @@ class LeanAlbertTransformer(AlbertTransformer):
         )
 
 
-@add_start_docstrings(
-    "The bare LeanALBERT Model transformer outputting raw hidden-states without any specific head on top.",
-    ALBERT_START_DOCSTRING,
-)
-class LeanAlbertModel(AlbertModel):
-    config_class = LeanAlbertConfig
-
-    def __init__(self, config: AlbertConfig, add_pooling_layer=True):
-        PreTrainedModel.__init__(self, config)
-
-        self.config = config
-        self.embeddings = LeanAlbertEmbeddings(config)
-        self.encoder = LeanAlbertTransformer(config)
-
-        if add_pooling_layer:
-            self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
-            self.pooler_activation = nn.Tanh()
-        else:
-            self.pooler = None
-            self.pooler_activation = None
-
-        self.init_weights()
-
-
-class LeanAlbertForPreTraining(AlbertForPreTraining, PreTrainedModel):
-    config_class = LeanAlbertConfig
-    base_model_prefix = "albert"
-
-    def __init__(self, config: AlbertConfig):
-        PreTrainedModel.__init__(self, config)
-
-        self.albert = LeanAlbertModel(config)
-        self.predictions = AlbertMLMHead(config)
-        self.sop_classifier = AlbertSOPHead(config)
-
-        self.init_weights()
-
-
 from hivemind.moe.server.layers.custom_experts import register_expert_class
 
 SEQUENCE_LENGTH = 2048
