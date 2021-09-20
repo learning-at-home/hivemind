@@ -45,9 +45,11 @@ class AllReduceRunner(ServicerBase):
     :param modes: AveragingMode for each peer in ordered_peer_ids (normal, client-only or auxiliary)
     :param weights: scaling coefficients for weighted averaging (default = equal weights for all non-aux peers)
     :param gathered: additional user-defined data collected from this group
-    :param bidirectional: if True, runner will send tensors and receive results concurrently in a streaming fashion,
-      if False, runner will only receive results when it has finished sending, which is less efficient, but fits better
-      for asymmetric high-latency connections to avoid missing ACKs. Default to bidirectional = (part size != 0)
+    :param bidirectional: If True, runner will send tensors and receive results concurrently.
+      If False, runner will only receive results when it has finished sending, which is less efficient but fits better
+      for asymmetric high-latency connections to avoid missing ACKs.
+      Defaults to ``bidirectional = (local_part_size != 0)``
+      because such connections are typical for the client-mode peers.
     :param kwargs: additional paramters (e.g. part_size_bytes) will be passed to TensorPartContainer
     """
 
