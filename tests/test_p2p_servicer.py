@@ -67,8 +67,8 @@ async def test_unary_stream(server_client):
     servicer = ExampleServicer()
     await servicer.add_p2p_handlers(server)
     stub = ExampleServicer.get_stub(client, server.peer_id)
-    stream = await stub.rpc_count(test_pb2.TestRequest(number=10))
 
+    stream = await stub.rpc_count(test_pb2.TestRequest(number=10))
     i = 0
     async for item in stream:
         assert item == test_pb2.TestResponse(number=i)
@@ -96,7 +96,6 @@ async def test_stream_stream(server_client):
             yield test_pb2.TestRequest(number=i)
 
     stream = await stub.rpc_powers(generate_requests())
-
     i = 0
     async for item in stream:
         if i % 2 == 0:
