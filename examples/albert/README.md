@@ -56,8 +56,8 @@ To join the collaboration with a GPU trainer,
 - Run:
   ```bash
   python run_trainer.py \
-  --experiment_prefix SAME_AS_IN_RUN_TRAINING_MONITOR --initial_peers ONE_OR_MORE_PEERS --seed 42 \
-  --logging_first_step --logging_steps 100  --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs
+  --experiment_prefix my-albert-v1 --initial_peers ONE_OR_MORE_PEERS \
+  --logging_first_step --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs
   ```
 
   Here, `ONE_OR_MORE_PEERS` stands for multiaddresses of one or multiple existing peers (training monitors or existing
@@ -169,10 +169,10 @@ Here's an example of a full trainer script for Google Colab:
 !git clone https://github.com/learning-at-home/hivemind && cd hivemind && pip install -e .
 !curl -L YOUR_HOSTED_DATA | tar xzf -
 !ulimit -n 4096 && python ./hivemind/examples/albert/run_trainer.py \
- --client_mode --initial_peers ONE_OR_MORE_PEERS  --averaging_expiration 10 \
- --batch_size_lead 300 --per_device_train_batch_size 4 --gradient_accumulation_steps 1 \
- --logging_first_step --logging_steps 100  --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs \
- --experiment_prefix EXPERIMENT_NAME_HERE --seed 42
+ --client_mode --initial_peers ONE_OR_MORE_PEERS --averaging_expiration 10 \
+ --batch_size_lead 300 --gradient_accumulation_steps 1 \
+ --logging_first_step --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs \
+ --experiment_prefix EXPERIMENT_NAME_HERE
 ```
 
 ### Using IPFS
