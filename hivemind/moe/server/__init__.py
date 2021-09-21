@@ -303,6 +303,7 @@ class Server(threading.Thread):
                     metadata_expiration=metadata_expiration,
                     averaging_timeout=averaging_timeout,
                     reuse_grad_buffers=reuse_grad_buffers,
+                    request_timeout=10,
                     verbose=True,
                     start=True,
                 )
