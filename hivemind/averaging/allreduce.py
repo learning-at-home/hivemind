@@ -1,5 +1,4 @@
 import asyncio
-import struct
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Type
 
@@ -83,7 +82,7 @@ class AllReduceRunner(ServicerBase):
 
         if weight is None:
             weight = float(modes[self.ordered_peer_ids.index(self.peer_id)] != AveragingMode.AUX)
-        self._weight, self._weight_binary = weight, struct.pack("d", weight)
+        self.weight = weight
 
         self._future = asyncio.Future()
 
@@ -150,7 +149,7 @@ class AllReduceRunner(ServicerBase):
             sender_index = self.sender_peer_ids.index(peer_id)
             for part_index, tensor_part in enumerate(self.parts_for_local_averaging):
                 averaged_part = await self.tensor_part_reducer.accumulate_part(
-                    sender_index, part_index, tensor_part, weight=self._weight
+                    sender_index, part_index, tensor_part, weight=self.weight
                 )
                 self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part - tensor_part)
 
@@ -182,10 +181,10 @@ class AllReduceRunner(ServicerBase):
             code=averaging_pb2.PART_FOR_AVERAGING,
             group_id=self.group_id,
             tensor_part=first_part,
-            metadata=self._weight_binary,
+            weight=self.weight,
         )
         async for part in parts_aiter:
-            yield averaging_pb2.AveragingData(tensor_part=part, metadata=self._weight_binary)
+            yield averaging_pb2.AveragingData(tensor_part=part, weight=self.weight)
 
     async def rpc_aggregate_part(
         self, stream: AsyncIterator[averaging_pb2.AveragingData], context: P2PContext
@@ -222,14 +221,13 @@ class AllReduceRunner(ServicerBase):
 
     async def _accumulate_parts_streaming(self, stream: AsyncIterator[averaging_pb2.AveragingData], sender_index: int):
         loop = asyncio.get_event_loop()
-        async for part_index, (tensor_part, part_metadata, part_compression) in aenumerate(
+        async for part_index, (tensor_part, weight, part_compression) in aenumerate(
             amap_in_executor(
-                lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg.metadata, msg.tensor_part.compression),
+                lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg.weight, msg.tensor_part.compression),
                 stream,
                 max_prefetch=self.tensor_part_container.prefetch,
             )
         ):
-            (weight,) = struct.unpack("d", part_metadata)
             averaged_part = await self.tensor_part_reducer.accumulate_part(
                 sender_index, part_index, tensor_part, weight=weight
             )
