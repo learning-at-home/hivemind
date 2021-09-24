@@ -20,15 +20,16 @@ Run the first DHT peer to welcome trainers and record training statistics (e.g.,
 
 - In this example, we use [wandb.ai](https://wandb.ai/site) to plot training metrics. If you're unfamiliar with Weights
   & Biases, here's a [quickstart tutorial](https://docs.wandb.ai/quickstart).
-- Run `python run_training_monitor.py --experiment_prefix NAME_YOUR_EXPERIMENT --wandb_project WANDB_PROJECT_HERE`
-- `NAME_YOUR_EXPERIMENT` must be a unique name of this training run, e.g. `my-first-albert`. It cannot contain `.`
-  due to naming conventions.
-- `WANDB_PROJECT_HERE` is a name of wandb project used to track training metrics. Multiple experiments can have the
-  same project name.
+- Run `python run_training_monitor.py --experiment_prefix YOUR_EXPERIMENT_NAME --wandb_project YOUR_WANDB_PROJECT`
+
+  - `YOUR_EXPERIMENT_NAME` must be a unique name of this training run, e.g. `my-first-albert`. It cannot contain `.`
+    due to naming conventions.
+  - `YOUR_WANDB_PROJECT` is a name of wandb project used to track training metrics. Multiple experiments can have the
+    same project name.
 
 ```
 $ python run_training_monitor.py --experiment_prefix my-albert-v1 --wandb_project Demo-run
-[2021/06/17 16:26:36.083][INFO][root.log_visible_maddrs:54] Running a DHT peer. To connect other peers to this one over the Internet, 
+[2021/06/17 16:26:36.083][INFO][root.log_visible_maddrs:54] Running a DHT peer. To connect other peers to this one over the Internet,
 use --initial_peers /ip4/1.2.3.4/tcp/1337/p2p/XXXX /ip4/1.2.3.4/udp/31337/quic/p2p/XXXX
 wandb: Currently logged in as: XXX (use `wandb login --relogin` to force relogin)
 wandb: Tracking run with wandb version 0.10.32
@@ -56,8 +57,8 @@ To join the collaboration with a GPU trainer,
 - Run:
   ```bash
   python run_trainer.py \
-  --experiment_prefix SAME_AS_IN_RUN_TRAINING_MONITOR --initial_peers ONE_OR_MORE_PEERS --seed 42 \
-  --logging_first_step --logging_steps 100  --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs
+      --experiment_prefix YOUR_EXPERIMENT_NAME --initial_peers ONE_OR_MORE_PEERS \
+      --logging_first_step --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs
   ```
 
   Here, `ONE_OR_MORE_PEERS` stands for multiaddresses of one or multiple existing peers (training monitors or existing
@@ -135,7 +136,7 @@ incoming connections (e.g. when in colab or behind a firewall), add `--client_mo
 below). In case of high network latency, you may want to increase `--averaging_expiration` by a few seconds or
 set `--batch_size_lead` to start averaging a bit earlier than the rest of the collaboration. GPU-wise, each peer should
 be able to process one local microbatch each 0.5–1 seconds (see trainer's progress bar). To achieve that, we
-recommend tuning `--per_device_train_batch_size` and `--gradient_accumulation_steps`. 
+recommend tuning `--per_device_train_batch_size` and `--gradient_accumulation_steps`.
 
 The example trainer supports
 multiple GPUs via DataParallel. However, using advanced distributed training strategies (
@@ -155,7 +156,7 @@ collaborative experiment. Here's how to best use them:
 - Most free GPUs are running behind a firewall, which requires you to run trainer with `--client_mode` (see example
   below). Such peers can only exchange gradients if there is at least one non-client-mode peer (GPU server or desktop
   with public IP). We recommend using a few preemptible instances with the cheapest GPU you can find. For example, we
-  tested this code on preemptible 
+  tested this code on preemptible
   [`g4dn.xlarge`](https://aws.amazon.com/blogs/aws/now-available-ec2-instances-g4-with-nvidia-t4-tensor-core-gpus/)
   nodes for around $0.15/h apiece with 8 AWS nodes and up to 61 Colab/Kaggle participants.
 - You can create starter notebooks to make it more convenient for collaborators to join your training
@@ -169,10 +170,9 @@ Here's an example of a full trainer script for Google Colab:
 !git clone https://github.com/learning-at-home/hivemind && cd hivemind && pip install -e .
 !curl -L YOUR_HOSTED_DATA | tar xzf -
 !ulimit -n 4096 && python ./hivemind/examples/albert/run_trainer.py \
- --client_mode --initial_peers ONE_OR_MORE_PEERS  --averaging_expiration 10 \
- --batch_size_lead 300 --per_device_train_batch_size 4 --gradient_accumulation_steps 1 \
- --logging_first_step --logging_steps 100  --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs \
- --experiment_prefix EXPERIMENT_NAME_HERE --seed 42
+    --experiment_prefix YOUR_EXPERIMENT_NAME --initial_peers ONE_OR_MORE_PEERS \
+    --logging_first_step --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs \
+    --client_mode --averaging_expiration 10 --batch_size_lead 300 --gradient_accumulation_steps 1
 ```
 
 ### Using IPFS

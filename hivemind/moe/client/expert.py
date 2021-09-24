@@ -1,4 +1,3 @@
-import pickle
 from typing import Any, Dict, Optional, Tuple
 
 import torch
@@ -7,7 +6,7 @@ from torch.autograd.function import once_differentiable
 
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
-from hivemind.utils import Endpoint, nested_compare, nested_flatten, nested_pack
+from hivemind.utils import Endpoint, MSGPackSerializer, nested_compare, nested_flatten, nested_pack
 from hivemind.utils.grpc import ChannelCache
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
@@ -60,7 +59,7 @@ class RemoteExpert(nn.Module):
     def info(self):
         if self._info is None:
             outputs = self.stub.info(runtime_pb2.ExpertUID(uid=self.uid))
-            self._info = pickle.loads(outputs.serialized_info)
+            self._info = MSGPackSerializer.loads(outputs.serialized_info)
         return self._info
 
     def extra_repr(self):
