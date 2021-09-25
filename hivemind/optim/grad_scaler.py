@@ -2,11 +2,11 @@ import contextlib
 from typing import Dict
 
 import torch
-from hivemind import DecentralizedOptimizerBase, get_logger
 from torch.cuda.amp import GradScaler as TorchGradScaler
 from torch.cuda.amp.grad_scaler import _refresh_per_optimizer_state
 from torch.optim import Optimizer
 
+from hivemind import DecentralizedOptimizerBase, get_logger
 
 logger = get_logger(__name__)
 
