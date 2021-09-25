@@ -13,6 +13,7 @@ logger = get_logger(__name__)
 
 class HivemindGradScaler(TorchGradScaler):
     """A thin wrapper over GradScaler that supports hivemind-style training with CollaborativeOptimizer and others"""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._is_running_global_step = False
