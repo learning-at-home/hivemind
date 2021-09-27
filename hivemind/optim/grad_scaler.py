@@ -51,7 +51,7 @@ class HivemindGradScaler(TorchGradScaler):
             self._optimizer_states_to_reset.add(id(optimizer))
             return False
 
-    def update(self, new_scale=None):
+    def update(self, new_scale: Optional[float] = None) -> bool:
         total_infs = 0
         for optimizer_state in self._per_optimizer_states.values():
             total_infs += sum(v.item() for v in optimizer_state["found_inf_per_device"].values())
