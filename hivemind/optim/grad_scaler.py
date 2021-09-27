@@ -38,7 +38,7 @@ class HivemindGradScaler(TorchGradScaler):
             self._optimizer_states_to_reset.add(id(optimizer))
             return False
 
-    def step(self, optimizer, *args, **kwargs):
+    def step(self, optimizer: Optimizer, *args, **kwargs) -> bool:
         assert isinstance(optimizer, DecentralizedOptimizerBase)
         if self._is_running_global_step:
             if self.are_grads_finite(optimizer):
@@ -48,7 +48,7 @@ class HivemindGradScaler(TorchGradScaler):
             return True
         else:
             super().step(optimizer)
-            self._optimizer_states_to_reset.add(optimizer)
+            self._optimizer_states_to_reset.add(id(optimizer))
             return False
 
     def update(self, new_scale=None):
@@ -72,6 +72,6 @@ class HivemindGradScaler(TorchGradScaler):
         # note: the code below sets allow_fp16=True to allow training with master weights (partially) in fp16
         return super()._unscale_grads_(optimizer, inv_scale, found_inf, allow_fp16=True)
 
-    def are_grads_finite(self, optimizer: DecentralizedOptimizerBase):
+    def are_grads_finite(self, optimizer: DecentralizedOptimizerBase) -> bool:
         assert isinstance(optimizer, DecentralizedOptimizerBase)
         return not sum(v.item() for v in self._check_inf_per_device(optimizer.opt).values())
