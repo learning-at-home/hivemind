@@ -298,7 +298,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                     f"Skipped averaging: collaboration consists of " f"{self.collaboration_state.num_peers} peer(s).",
                 )
 
-            if grad_scaler:
+            if grad_scaler is not None:
                 with grad_scaler.running_global_step():
                     assert grad_scaler.step(self)
             else:
