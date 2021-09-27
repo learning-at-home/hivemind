@@ -28,7 +28,7 @@ class HivemindGradScaler(TorchGradScaler):
         finally:
             self._is_running_global_step = was_running
 
-    def unscale_(self, optimizer, actually_unscale: bool = False):
+    def unscale_(self, optimizer: Optimizer) -> bool:
         assert isinstance(optimizer, DecentralizedOptimizerBase)
         if self._is_running_global_step:
             super().unscale_(optimizer.opt)
