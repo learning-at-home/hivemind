@@ -13,7 +13,12 @@ logger = get_logger(__name__)
 
 
 class HivemindGradScaler(TorchGradScaler):
-    """A thin wrapper over GradScaler that supports hivemind-style training with CollaborativeOptimizer and others"""
+    """
+    A thin wrapper over pytorch GradScaler that supports hivemind-style training with CollaborativeOptimizer, namely:
+    - bypass .unscale_ and .update calls in order to accumulate gradients over several steps
+    - limit increasing gradient scale to only immediately after global optimizer steps
+    - allow training with some or all master parameters in fp16
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
