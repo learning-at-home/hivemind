@@ -1,5 +1,5 @@
 import contextlib
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from torch.cuda.amp import GradScaler as TorchGradScaler
