@@ -70,6 +70,7 @@ class HivemindGradScaler(TorchGradScaler):
         self, optimizer: Optimizer, inv_scale: torch.Tensor, found_inf: torch.Tensor, allow_fp16: bool
     ) -> Dict[torch.device, torch.Tensor]:
         # note: the code below sets allow_fp16=True to allow training with master weights (partially) in fp16
+        # inspired by: https://github.com/facebookresearch/fairscale/blob/945b9666/fairscale/optim/grad_scaler.py
         return super()._unscale_grads_(optimizer, inv_scale, found_inf, allow_fp16=True)
 
     def are_grads_finite(self, optimizer: DecentralizedOptimizerBase) -> bool:
