@@ -38,7 +38,7 @@ class HivemindGradScaler(TorchGradScaler):
             self._optimizer_states_to_reset.add(id(optimizer))
             return False
 
-    def step(self, optimizer, *args, **kwargs):
+    def step(self, optimizer: Optimizer, *args, **kwargs) -> bool:
         assert isinstance(optimizer, DecentralizedOptimizerBase)
         if self._is_running_global_step:
             if self.are_grads_finite(optimizer):
