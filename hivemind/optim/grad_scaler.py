@@ -71,6 +71,6 @@ class HivemindGradScaler(TorchGradScaler):
     ) -> Dict[torch.device, torch.Tensor]:
         return super()._unscale_grads_(optimizer, inv_scale, found_inf, allow_fp16=True)
 
-    def are_grads_finite(self, optimizer: DecentralizedOptimizerBase):
+    def are_grads_finite(self, optimizer: DecentralizedOptimizerBase) -> bool:
         assert isinstance(optimizer, DecentralizedOptimizerBase)
         return not sum(v.item() for v in self._check_inf_per_device(optimizer.opt).values())
