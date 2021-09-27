@@ -310,7 +310,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.averager.local_step = current_step + 1
             self.collaboration_state_updated.set()
             self.update_scheduler()
-            if grad_scaler:
+            if grad_scaler is not None:
                 with grad_scaler.running_global_step():
                     assert grad_scaler.update()
 
