@@ -266,7 +266,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
             # divide accumulators by local steps to recover the true average grad w.r.t. local_samples_accumulated
             self.apply_accumulated_grads_(scale_by=1.0 / self.local_updates_accumulated)
-            if grad_scaler:
+            if grad_scaler is not None:
                 with grad_scaler.running_global_step():
                     assert grad_scaler.unscale_(self)
 
