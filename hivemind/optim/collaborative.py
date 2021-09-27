@@ -372,12 +372,12 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         if self.reuse_grad_buffers:
             yield from self._grad_buffers()
             return
-        else:
-            if self._grads is None:
-                self._grads = [
-                    torch.zeros_like(grad, device=self.accumulate_grads_on) for grad in self._grad_buffers()
-                ]
-            yield from self._grads
+
+        if self._grads is None:
+            self._grads = [
+                torch.zeros_like(grad, device=self.accumulate_grads_on) for grad in self._grad_buffers()
+            ]
+        yield from self._grads
 
     @torch.no_grad()
     def accumulate_grads_(self, batch_size: int):
