@@ -48,7 +48,7 @@ class HivemindGradScaler(TorchGradScaler):
             return True
         else:
             super().step(optimizer)
-            self._optimizer_states_to_reset.add(optimizer)
+            self._optimizer_states_to_reset.add(id(optimizer))
             return False
 
     def update(self, new_scale=None):
