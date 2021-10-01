@@ -48,6 +48,7 @@ def main():
     parser.add_argument('--device', type=str, default=None, required=False,
                         help='all experts will use this device in torch notation; default: cuda if available else cpu')
     parser.add_argument('--fp16',action='store_true',help='Use mixed precision during forward and backward steps')
+    parser.add_argument('--offload',action='store_true',help='Use mixed precision during forward and backward steps')
 
     parser.add_argument('--optimizer', type=str, default='adam', required=False, help='adam, sgd or none')
     parser.add_argument('--scheduler', type=str, choices=schedule_name_to_scheduler.keys(), default='none',
