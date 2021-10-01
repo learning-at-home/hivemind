@@ -331,6 +331,7 @@ class Server(threading.Thread):
                     clip_grad_norm=clip_grad_norm,
                     min_batch_size=min_batch_size,
                     max_batch_size=max_batch_size,
+                    target_batch_size=averaging_target_batch_size,
                 )
 
         if checkpoint_dir is not None:
