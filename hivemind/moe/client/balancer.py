@@ -5,6 +5,9 @@ from contextlib import contextmanager
 from typing import Dict, List, Tuple
 import time
 
+import grpc
+from grpc._channel import _InactiveRpcError
+
 from hivemind.dht import DHT
 from hivemind.moe.client.expert import RemoteExpert
 from hivemind.moe.server.expert_uid import ExpertPrefix, ExpertUID
@@ -127,6 +130,13 @@ class ExpertBalancer:
                 logger.debug(f"Using expert {uid}, throughput = {self.throughputs[uid].samples_per_second}.")
                 yield RemoteExpert(uid, maybe_endpoint.value)
                 logger.debug(f"Finished using expert {uid}.")
+        except _InactiveRpcError as error:
+            if error.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+                # response was too slow, choose the next expert
+                pass
+            else:
+                self._ban_expert(uid)
+                raise
         except BaseException:
             self._ban_expert(uid)
             raise
