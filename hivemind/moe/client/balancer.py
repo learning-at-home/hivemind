@@ -79,6 +79,7 @@ class ExpertBalancer:
             if uid not in self.uid_to_queue:
                 logger.debug(f"Adding new expert: {uid}, expiration time = {expiration_time:.3f}.")
                 self.throughputs[uid] = PerformanceEMA(**self.ema_kwargs, paused=True)
+                # ensure that added experts are evaluated by placing them near the top of the queue
                 base_load = self.queue[0][0] if len(self.queue) > 0 else 0.0
                 heap_entry = (base_load, random.random(), uid)
                 heapq.heappush(self.queue, heap_entry)
