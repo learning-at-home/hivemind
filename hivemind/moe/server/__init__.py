@@ -277,8 +277,6 @@ class Server(threading.Thread):
 
             scheduler = scheduler(optim, num_warmup_steps=num_warmup_steps, num_training_steps=num_total_steps)
 
-            expert.to(device)
-
             if use_averaging:
                 assert averaging_target_batch_size is not None
                 assert averaging_target_group_size is not None

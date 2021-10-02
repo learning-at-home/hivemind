@@ -1,5 +1,6 @@
 import random
 import re
+from time import sleep
 from typing import List, NamedTuple, Optional, Tuple, Union
 
 import hivemind
@@ -41,6 +42,8 @@ def generate_uids_from_pattern(
     expert_pattern: Optional[str],
     dht: Optional[DHT] = None,
     attempts_per_expert=10,
+    timeout=10,
+    random_sleep=True,
 ) -> List[str]:
     """
     Sample experts from a given pattern, optionally remove duplicates.
@@ -88,7 +91,7 @@ def generate_uids_from_pattern(
                 attempted_uids.add(new_uid)
                 new_uids.append(new_uid)
 
-        if dht:
+        if dht is not None:
             existing_expert_uids = {
                 found_expert.uid
                 for found_expert in hivemind.moe.server.get_experts(dht, new_uids)
@@ -97,6 +100,12 @@ def generate_uids_from_pattern(
             new_uids = [new_uid for new_uid in new_uids if new_uid not in existing_expert_uids]
 
         found_uids += new_uids
+
+        if len(found_uids) < num_experts:
+            if random_sleep:
+                sleep(timeout + random.random())
+            else:
+                sleep(timeout)
 
     if len(found_uids) != num_experts:
         logger.warning(
