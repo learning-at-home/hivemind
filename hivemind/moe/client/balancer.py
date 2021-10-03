@@ -107,6 +107,7 @@ class ExpertBalancer:
                 continue
 
             with self.lock:
+                logger.debug(f"Getting a new expert, queue state: {self.queue}")
                 current_runtime, _, uid = heap_entry = heapq.heappop(self.queue)
                 maybe_endpoint = self.experts.get(uid)
                 if maybe_endpoint is None:
