@@ -134,7 +134,7 @@ class ExpertBalancer:
         except _InactiveRpcError as error:
             if error.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
                 # response was too slow, choose the next expert
-                pass
+                raise
             else:
                 self._ban_expert(uid)
                 raise
