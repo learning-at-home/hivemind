@@ -135,7 +135,7 @@ class ExpertBalancer:
             if error.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
                 # response was too slow, choose the next expert and mark this one as slow
                 with self.lock:
-                    new_throughput = 1.5 * max(self.queue, key=itemgetter(1))[1]
+                    new_throughput = max(self.queue, key=itemgetter(1))[1]
                     new_heap_entry = (True, new_throughput, random.random(), uid)
                     heapq.heappush(self.queue, new_heap_entry)
                     self.uid_to_queue[uid] = new_heap_entry
