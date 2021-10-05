@@ -54,11 +54,9 @@ class PerformanceEMA:
     def update_threadsafe(self, task_size: float):
         """measure the EMA throughout of the code that runs inside the context"""
         start_timestamp = get_dht_time()
-        try:
-            yield
-        finally:
-            with self.lock:
-                self.update(task_size, interval=max(0.0, get_dht_time() - max(start_timestamp, self.timestamp)))
-                # note: we define interval as such to support two distinct scenarios:
-                # (1) if this is the first call to measure_threadsafe after a pause, count time from entering this context
-                # (2) if there are concurrent calls to measure_threadsafe, respect the timestamp updates from these calls
+        yield
+        with self.lock:
+            self.update(task_size, interval=max(0.0, get_dht_time() - max(start_timestamp, self.timestamp)))
+            # note: we define interval as such to support two distinct scenarios:
+            # (1) if this is the first call to measure_threadsafe after a pause, count time from entering this context
+            # (2) if there are concurrent calls to measure_threadsafe, respect the timestamp updates from these calls
