@@ -95,7 +95,6 @@ As the peer begins training, it will periodically report training logs in the fo
 06/17/2021 18:58:23 - INFO - __main__ -   Step 0
 06/17/2021 18:58:23 - INFO - __main__ -   Your current contribution: 892 samples
 06/17/2021 18:58:23 - INFO - __main__ -   Local loss: 11.023
-
 ```
 
 __Sanity check:__ a healthy peer will periodically report `Averaged tensors successfully with [N > 1]` peers.
