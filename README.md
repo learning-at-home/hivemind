@@ -83,9 +83,8 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 * API reference and additional tutorials are available
   at [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
 
-The documentation is currently under development. If you have any questions about installing and using hivemind,
-feel free to ask them in [our Discord chat](https://discord.gg/uGugx9zYvN) or
-file an [issue](https://github.com/learning-at-home/hivemind/issues).
+If you have any questions about installing and using hivemind, feel free to ask them in
+[our Discord chat](https://discord.gg/uGugx9zYvN) or file an [issue](https://github.com/learning-at-home/hivemind/issues).
 
 ## Contributing
 
