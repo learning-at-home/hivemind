@@ -120,15 +120,15 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```bibtex
 @inproceedings{ryabinin2020crowdsourced,
- author = {Ryabinin, Max and Gusev, Anton},
- booktitle = {Advances in Neural Information Processing Systems},
- editor = {H. Larochelle and M. Ranzato and R. Hadsell and M. F. Balcan and H. Lin},
- pages = {3659--3672},
- publisher = {Curran Associates, Inc.},
- title = {Towards Crowdsourced Training of Large Neural Networks using Decentralized Mixture-of-Experts},
- url = {https://proceedings.neurips.cc/paper/2020/file/25ddc0f8c9d3e22e03d3076f98d83cb2-Paper.pdf},
- volume = {33},
- year = {2020}
+  author = {Ryabinin, Max and Gusev, Anton},
+  booktitle = {Advances in Neural Information Processing Systems},
+  editor = {H. Larochelle and M. Ranzato and R. Hadsell and M. F. Balcan and H. Lin},
+  pages = {3659--3672},
+  publisher = {Curran Associates, Inc.},
+  title = {Towards Crowdsourced Training of Large Neural Networks using Decentralized Mixture-of-Experts},
+  url = {https://proceedings.neurips.cc/paper/2020/file/25ddc0f8c9d3e22e03d3076f98d83cb2-Paper.pdf},
+  volume = {33},
+  year = {2020}
 }
 ```
 
@@ -139,12 +139,12 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```bibtex
 @misc{ryabinin2021moshpit,
-      title={Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices},
-      author={Max Ryabinin and Eduard Gorbunov and Vsevolod Plokhotnyuk and Gennady Pekhimenko},
-      year={2021},
-      eprint={2103.03239},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+  title = {Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices},
+  author = {Max Ryabinin and Eduard Gorbunov and Vsevolod Plokhotnyuk and Gennady Pekhimenko},
+  year = {2021},
+  eprint = {2103.03239},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG}
 }
 ```
 
@@ -152,12 +152,12 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```bibtex
 @misc{diskin2021distributed,
-      title={Distributed Deep Learning in Open Collaborations},
-      author={Michael Diskin and Alexey Bukhtiyarov and Max Ryabinin and Lucile Saulnier and Quentin Lhoest and Anton Sinitsin and Dmitry Popov and Dmitry Pyrkin and Maxim Kashirin and Alexander Borzunov and Albert Villanova del Moral and Denis Mazur and Ilia Kobelev and Yacine Jernite and Thomas Wolf and Gennady Pekhimenko},
-      year={2021},
-      eprint={2106.10207},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+  title = {Distributed Deep Learning in Open Collaborations},
+  author = {Michael Diskin and Alexey Bukhtiyarov and Max Ryabinin and Lucile Saulnier and Quentin Lhoest and Anton Sinitsin and Dmitry Popov and Dmitry Pyrkin and Maxim Kashirin and Alexander Borzunov and Albert Villanova del Moral and Denis Mazur and Ilia Kobelev and Yacine Jernite and Thomas Wolf and Gennady Pekhimenko},
+  year = {2021},
+  eprint = {2106.10207},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG}
 }
 ```
 
@@ -165,12 +165,12 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```bibtex
 @misc{gorbunov2021secure,
-      title={Secure Distributed Training at Scale},
-      author={Eduard Gorbunov and Alexander Borzunov and Michael Diskin and Max Ryabinin},
-      year={2021},
-      eprint={2106.11257},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+  title = {Secure Distributed Training at Scale},
+  author = {Eduard Gorbunov and Alexander Borzunov and Michael Diskin and Max Ryabinin},
+  year = {2021},
+  eprint = {2106.11257},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG}
 }
 ```
 
