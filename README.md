@@ -52,7 +52,7 @@ cd hivemind
 pip install .
 ```
 
-If you would like to verify that your installation is working properly, you can install with `pip install -e .[dev]`
+If you would like to verify that your installation is working properly, you can install with `pip install .[dev]`
 instead. Then, you can run the tests with `pytest tests/`.
 
 By default, hivemind uses the precompiled binary of
