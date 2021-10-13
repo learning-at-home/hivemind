@@ -65,8 +65,8 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 
 - __Linux__ is the default OS for which hivemind is developed and tested. We recommend Ubuntu 18.04+ (64-bit), but
   other 64-bit distros should work as well. Legacy 32-bit is not recommended.
-- __macOS 10.x__ mostly works but requires building hivemind from source, and some edge cases may fail. To ensure full
-  compatibility, we recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
+- __macOS 10.x__ can run hivemind using [Docker](https://docs.docker.com/desktop/mac/install/).
+  We recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
 - __Windows 10+ (experimental)__ can run hivemind
   using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10). You can configure WSL to use GPU by
   following sections 1–3 of [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA. After
