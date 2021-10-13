@@ -82,7 +82,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          python setup.py develop
+          pip install -e --no-use-pep517
       - name: Test
         run: |
           pytest --cov=hivemind -v tests
