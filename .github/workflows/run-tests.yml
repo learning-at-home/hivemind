@@ -24,12 +24,12 @@ jobs:
           key: Key-v1-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip==21.2.1
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          pip install .
+          python -m pip install .
       - name: Test
         run: |
           cd tests
