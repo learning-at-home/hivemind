@@ -9,9 +9,9 @@ of computers, whether you're running a very capable computer or a less reliable 
 Learn how to create or join a Hivemind run in the `quickstart tutorial <./user/quickstart.html>`__ or browse the API
 documentation below.
 
-| Hivemind is currently in active development, so expect some adventures. If you encounter any issues, please let us know
-  `on github <https://github.com/learning-at-home/hivemind/issues>`__.
-
+| This documentation is currently under development. If you have any questions, feel free to ask them
+  in `our Discord chat <https://discord.com/invite/uGugx9zYvN>`_ or
+  file an `issue <https://github.com/learning-at-home/hivemind/issues>`__.
 
 **Table of contents:**
 ~~~~~~~~~~~~~~~~~~~~~~

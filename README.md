@@ -83,13 +83,14 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 * API reference and additional tutorials are available
   at [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
 
-If you have any questions about installing and using hivemind, you can ask them in
-[our Discord chat](https://discord.gg/uGugx9zYvN) or file an [issue](https://github.com/learning-at-home/hivemind/issues).
+The documentation is currently under development. If you have any questions about installing and using hivemind,
+feel free to ask them in [our Discord chat](https://discord.gg/uGugx9zYvN) or
+file an [issue](https://github.com/learning-at-home/hivemind/issues).
 
 ## Contributing
 
 Hivemind is currently at the active development stage, and we welcome all contributions. Everything, from bug fixes and
-documentation improvements to entirely new features, is equally appreciated.
+documentation improvements to entirely new features, is appreciated.
 
 If you want to contribute to hivemind but don't know where to start, take a look at the
 unresolved [issues](https://github.com/learning-at-home/hivemind/issues). Open a new issue or
@@ -139,7 +140,7 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```
 @misc{ryabinin2021moshpit,
-      title={Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices}, 
+      title={Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices},
       author={Max Ryabinin and Eduard Gorbunov and Vsevolod Plokhotnyuk and Gennady Pekhimenko},
       year={2021},
       eprint={2103.03239},
@@ -152,7 +153,7 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```
 @misc{diskin2021distributed,
-      title={Distributed Deep Learning in Open Collaborations}, 
+      title={Distributed Deep Learning in Open Collaborations},
       author={Michael Diskin and Alexey Bukhtiyarov and Max Ryabinin and Lucile Saulnier and Quentin Lhoest and Anton Sinitsin and Dmitry Popov and Dmitry Pyrkin and Maxim Kashirin and Alexander Borzunov and Albert Villanova del Moral and Denis Mazur and Ilia Kobelev and Yacine Jernite and Thomas Wolf and Gennady Pekhimenko},
       year={2021},
       eprint={2106.10207},
@@ -165,7 +166,7 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```
 @misc{gorbunov2021secure,
-      title={Secure Distributed Training at Scale}, 
+      title={Secure Distributed Training at Scale},
       author={Eduard Gorbunov and Alexander Borzunov and Michael Diskin and Max Ryabinin},
       year={2021},
       eprint={2106.11257},
