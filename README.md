@@ -23,8 +23,8 @@ large model on hundreds of computers from different universities, companies, and
 * Train neural networks of arbitrary size: parts of their layers are distributed across the participants with the
   Decentralized Mixture-of-Experts ([paper](https://arxiv.org/abs/2002.04013)).
 
-To learn more about the ideas behind this library, see https://learning-at-home.github.io or read
-the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).
+To learn more about the ideas behind this library,
+see the [full list](https://github.com/learning-at-home/hivemind/tree/refer-to-discord-in-docs#citation) of our papers.
 
 ## Installation
 
