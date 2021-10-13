@@ -105,9 +105,9 @@ our [guide](https://learning-at-home.readthedocs.io/en/latest/user/contributing.
 
 If you found hivemind or its underlying algorithms useful for your research, please cite the following source:
 
-```
+```bibtex
 @misc{hivemind,
-  author = {Learning@home team},
+  author = {Learning{@}home team},
   title = {{H}ivemind: a {L}ibrary for {D}ecentralized {D}eep {L}earning},
   year = 2020,
   howpublished = {\url{https://github.com/learning-at-home/hivemind}},
@@ -118,7 +118,7 @@ Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired t
 (prototype implementation of hivemind available
 at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
-```
+```bibtex
 @inproceedings{ryabinin2020crowdsourced,
  author = {Ryabinin, Max and Gusev, Anton},
  booktitle = {Advances in Neural Information Processing Systems},
@@ -137,7 +137,7 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ["Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices"](https://arxiv.org/abs/2103.03239)
 
-```
+```bibtex
 @misc{ryabinin2021moshpit,
       title={Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices},
       author={Max Ryabinin and Eduard Gorbunov and Vsevolod Plokhotnyuk and Gennady Pekhimenko},
@@ -150,7 +150,7 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ["Distributed Deep Learning in Open Collaborations"](https://arxiv.org/abs/2106.10207)
 
-```
+```bibtex
 @misc{diskin2021distributed,
       title={Distributed Deep Learning in Open Collaborations},
       author={Michael Diskin and Alexey Bukhtiyarov and Max Ryabinin and Lucile Saulnier and Quentin Lhoest and Anton Sinitsin and Dmitry Popov and Dmitry Pyrkin and Maxim Kashirin and Alexander Borzunov and Albert Villanova del Moral and Denis Mazur and Ilia Kobelev and Yacine Jernite and Thomas Wolf and Gennady Pekhimenko},
@@ -163,7 +163,7 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ["Secure Distributed Training at Scale"](https://arxiv.org/abs/2106.11257)
 
-```
+```bibtex
 @misc{gorbunov2021secure,
       title={Secure Distributed Training at Scale},
       author={Eduard Gorbunov and Alexander Borzunov and Michael Diskin and Max Ryabinin},
