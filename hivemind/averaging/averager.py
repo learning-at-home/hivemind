@@ -612,7 +612,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         stream = stub.rpc_download_state(averaging_pb2.DownloadRequest())
                         current_tensor_parts, tensors = [], []
 
-                        async for message in aiter_with_timeout(stream, timeout=self.request_timeout):
+                        async for message in aiter_with_timeout(stream, timeout=60):
                             if message.metadata:
                                 metadata = self.serializer.loads(message.metadata)
                             if message.tensor_part.dtype and current_tensor_parts:
