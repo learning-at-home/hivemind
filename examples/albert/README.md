@@ -22,15 +22,16 @@ Run the first DHT peer to welcome trainers and record training statistics (e.g.,
   & Biases, here's a [quickstart tutorial](https://docs.wandb.ai/quickstart).
 - Run `python run_training_monitor.py --experiment_prefix YOUR_EXPERIMENT_NAME --wandb_project YOUR_WANDB_PROJECT`
 
-  - `YOUR_EXPERIMENT_NAME` must be a unique name of this training run, e.g. `my-first-albert`. It cannot contain `.`
+  - `YOUR_EXPERIMENT_NAME` must be a unique name of this training run, e.g. `my-albert-v1`. It cannot contain `.`
     due to naming conventions.
   - `YOUR_WANDB_PROJECT` is a name of wandb project used to track training metrics. Multiple experiments can have the
     same project name.
 
 ```
 $ python run_training_monitor.py --experiment_prefix my-albert-v1 --wandb_project Demo-run
-[2021/06/17 16:26:36.083][INFO][root.log_visible_maddrs:54] Running a DHT peer. To connect other peers to this one over the Internet,
+Oct 14 16:26:36.083 [INFO] [utils.log_visible_maddrs:47] Running a DHT peer. To connect other peers to this one over the Internet,
 use --initial_peers /ip4/1.2.3.4/tcp/1337/p2p/XXXX /ip4/1.2.3.4/udp/31337/quic/p2p/XXXX
+Oct 14 16:26:36.083 [INFO] [utils.log_visible_maddrs:50] Full list of visible multiaddresses: ...
 wandb: Currently logged in as: XXX (use `wandb login --relogin` to force relogin)
 wandb: Tracking run with wandb version 0.10.32
 wandb: Syncing run dry-mountain-2
@@ -38,12 +39,12 @@ wandb:  View project at https://wandb.ai/XXX/Demo-run
 wandb:  View run at https://wandb.ai/XXX/Demo-run/runs/YYY
 wandb: Run data is saved locally in /path/to/run/data
 wandb: Run `wandb offline` to turn off syncing.
-[2021/04/19 02:26:41.064][INFO][optim.collaborative.fetch_collaboration_state:323] Found no active peers: None
-[2021/04/19 02:26:44.068][INFO][optim.collaborative.fetch_collaboration_state:323] Found no active peers: None
+Oct 14 16:26:41.064 [INFO] [optim.collaborative._fetch_state:448] Found no active peers: None
+Oct 14 16:26:44.068 [INFO] [optim.collaborative._fetch_state:448] Found no active peers: None
 ...
-[2021/04/19 02:37:37.246][INFO][__main__.<module>:194] Step #1  loss = 11.05164
-[2021/04/19 02:39:37.441][INFO][__main__.<module>:194] Step #2  loss = 11.03771
-[2021/04/19 02:40:37.541][INFO][__main__.<module>:194] Step #3  loss = 11.02886
+Oct 14 16:37:37.246 [INFO] [__main__.<module>:209] Step #1  loss = 11.05164
+Oct 14 16:39:37.441 [INFO] [__main__.<module>:209] Step #2  loss = 11.03771
+Oct 14 16:40:37.541 [INFO] [__main__.<module>:209] Step #3  loss = 11.02886
 ```
 
 ### GPU trainers
@@ -88,14 +89,13 @@ See the ["Tips and tricks"](#tips-and-tricks) section for more information on se
 As the peer begins training, it will periodically report training logs in the following form:
 
 ```
-[...][INFO][...] Collaboration accumulated 448 samples from 17 peers; ETA 18.88 seconds (refresh in 15.73s.)
-[...][INFO][...] Collaboration accumulated 4096 samples from 16 peers; ETA 0.00 seconds (refresh in 0.50s.)
-[...][INFO][optim.collaborative.step:195] Averaged tensors successfully with 17 peers
-[...][INFO][optim.collaborative.step:211] Optimizer step: done!
-06/17/2021 18:58:23 - INFO - __main__ -   Step 0
-06/17/2021 18:58:23 - INFO - __main__ -   Your current contribution: 892 samples
-06/17/2021 18:58:23 - INFO - __main__ -   Local loss: 11.023
-
+... [INFO] [...] my-albert-v1 accumulated 448 samples from 17 peers for step #0. ETA 18.88 sec (refresh in 15.73 sec)
+... [INFO] [...] my-albert-v1 accumulated 4096 samples from 16 peers for step #0. ETA 0.00 sec (refresh in 0.50 sec)
+... [INFO] [optim.collaborative.step:283] Averaged tensors successfully with 17 peers
+... [INFO] [optim.collaborative.step:317] Optimizer step: done!
+Oct 14 18:58:03.750 [INFO] [__main__.on_step_end:141] Step 1
+Oct 14 18:58:03.750 [INFO] [__main__.on_step_end:142] Your current contribution: 892 samples
+Oct 14 18:58:03.750 [INFO] [__main__.on_step_end:143] Local loss: 11.023
 ```
 
 __Sanity check:__ a healthy peer will periodically report `Averaged tensors successfully with [N > 1]` peers.
@@ -171,7 +171,7 @@ Here's an example of a full trainer script for Google Colab:
 !curl -L YOUR_HOSTED_DATA | tar xzf -
 !ulimit -n 4096 && python ./hivemind/examples/albert/run_trainer.py \
     --experiment_prefix YOUR_EXPERIMENT_NAME --initial_peers ONE_OR_MORE_PEERS \
-    --logging_first_step --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs \
+    --logging_dir ./logs --logging_first_step --output_dir ./outputs --overwrite_output_dir \
     --client_mode --averaging_expiration 10 --batch_size_lead 300 --gradient_accumulation_steps 1
 ```
 
