@@ -24,7 +24,7 @@ large model on hundreds of computers from different universities, companies, and
   Decentralized Mixture-of-Experts ([paper](https://arxiv.org/abs/2002.04013)).
 
 To learn more about the ideas behind this library,
-see the [full list](https://github.com/learning-at-home/hivemind/tree/refer-to-discord-in-docs#citation) of our papers.
+see the [full list](https://github.com/learning-at-home/hivemind/tree/refer-to-discord-in-docs#citation) of our papers below.
 
 ## Installation
 
