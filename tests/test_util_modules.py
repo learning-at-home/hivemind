@@ -23,8 +23,9 @@ from hivemind.utils.asyncio import (
     anext,
     as_aiter,
     asingle,
+    attach_event_on_finished,
     azip,
-    cancel_and_wait, attach_event_on_finished,
+    cancel_and_wait,
 )
 from hivemind.utils.mpfuture import InvalidStateError
 

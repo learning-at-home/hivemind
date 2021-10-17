@@ -9,8 +9,15 @@ from hivemind.compression import deserialize_torch_tensor, serialize_torch_tenso
 from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase, StubBase
 from hivemind.proto import averaging_pb2
 from hivemind.utils import get_logger
-from hivemind.utils.asyncio import achain, aenumerate, afirst, amap_in_executor, anext, as_aiter, \
-    attach_event_on_finished
+from hivemind.utils.asyncio import (
+    achain,
+    aenumerate,
+    afirst,
+    amap_in_executor,
+    anext,
+    as_aiter,
+    attach_event_on_finished,
+)
 
 # flavour types
 GroupID = bytes
@@ -220,6 +227,7 @@ class AllReduceRunner(ServicerBase):
                         async for msg in self._accumulate_parts_streaming(inputs_aiter, sender_index):
                             delayed_results.put_nowait(msg)
                         delayed_results.put_nowait(None)
+
                     accumulate_task = asyncio.create_task(_accumulate_parts())
 
                     await done_receiving.wait()
