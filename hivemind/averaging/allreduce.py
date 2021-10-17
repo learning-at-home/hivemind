@@ -45,13 +45,9 @@ class AllReduceRunner(ServicerBase):
     :param modes: AveragingMode for each peer in ordered_peer_ids (normal, client-only or auxiliary)
     :param weights: scaling coefficients for weighted averaging (default = equal weights for all non-aux peers)
     :param gathered: additional user-defined data collected from this group
-    :param overlap: [congestion control] the rate at which this peer can receive results in parallel with sending
-      with overlap = 1.0, the runner will send tensors and receive results as soon as possible
-      with overlap = 0.5, read one tensor part per two parts sent -- and then read the rest after all data is sent
-      setting overlap to 0 will result in writing all data before reading the first chunk of results. However, this
-      setting is not recommended due to the risk that data sender will hit internal timeouts.
-      By default, set overlap to 1.0 for full peers and 0.5 for non-averaging peers (heuristic)
-    :note: the overlap is used to prevent ACK compression over TCP links
+    :param delay_results: If False(default), the runner will send tensors and receive results concurrently.
+      If True, runner will only receive results after it has finished sending, which is less efficient but fits better
+      for asymmetric high-latency connections to avoid ACK compression. Defaults to ``delay = (local_part_size == 0)``
     :param kwargs: additional parameters (e.g. part_size_bytes) will be passed to TensorPartContainer
     """
 
@@ -68,7 +64,7 @@ class AllReduceRunner(ServicerBase):
         weights: Optional[Sequence[float]] = None,
         modes: Optional[Sequence[AveragingMode]] = None,
         gathered: Optional[Dict[PeerID, Any]] = None,
-        overlap: Optional[float] = None,
+        delay_results: Optional[bool] = None,
         **kwargs,
     ):
         self._p2p = p2p
@@ -107,10 +103,9 @@ class AllReduceRunner(ServicerBase):
             self.sender_weights,
         )
 
-        if overlap is None:
-            overlap = 1.0 if self.peer_fractions[self.ordered_peer_ids.index(self.peer_id)] > 0 else 0.5
-        assert 0.0 <= overlap <= 1.0
-        self.overlap = overlap
+        if delay_results is None:
+            delay_results = self.peer_fractions[self.ordered_peer_ids.index(self.peer_id)] == 0
+        self.delay_results = delay_results
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.peer_id}, group_size={self.group_size})"
