@@ -45,12 +45,14 @@ class AllReduceRunner(ServicerBase):
     :param modes: AveragingMode for each peer in ordered_peer_ids (normal, client-only or auxiliary)
     :param weights: scaling coefficients for weighted averaging (default = equal weights for all non-aux peers)
     :param gathered: additional user-defined data collected from this group
-    :param bidirectional: If True, runner will send tensors and receive results concurrently.
-      If False, runner will only receive results when it has finished sending, which is less efficient but fits better
-      for asymmetric high-latency connections to avoid missing ACKs.
-      Defaults to ``bidirectional = (local_part_size != 0)``
-      because such connections are typical for the client-mode peers.
-    :param kwargs: additional paramters (e.g. part_size_bytes) will be passed to TensorPartContainer
+    :param overlap: [congestion control] the rate at which this peer can receive results in parallel with sending
+      with overlap = 1.0, the runner will send tensors and receive results as soon as possible
+      with overlap = 0.5, read one tensor part per two parts sent -- and then read the rest after all data is sent
+      setting overlap to 0 will result in writing all data before reading the first chunk of results. However, this
+      setting is not recommended due to the risk that data sender will hit internal timeouts.
+      By default, set overlap to 1.0 for full peers and 0.5 for non-averaging peers (heuristic)
+    :note: the overlap is used to prevent ACK compression over TCP links
+    :param kwargs: additional parameters (e.g. part_size_bytes) will be passed to TensorPartContainer
     """
 
     def __init__(
@@ -66,14 +68,12 @@ class AllReduceRunner(ServicerBase):
         weights: Optional[Sequence[float]] = None,
         modes: Optional[Sequence[AveragingMode]] = None,
         gathered: Optional[Dict[PeerID, Any]] = None,
-        bidirectional: Optional[bool] = None,
+        overlap: Optional[float] = None,
         **kwargs,
     ):
         self._p2p = p2p
         self.peer_id = p2p.peer_id
         assert self.peer_id in ordered_peer_ids, "peer_id is not a part of the group"
-        if bidirectional is None:
-            bidirectional = peer_fractions[ordered_peer_ids.index(self.peer_id)] > 0
 
         if not issubclass(servicer_type, ServicerBase):
             raise TypeError("`servicer_type` is expected to be a ServicerBase subclass")
@@ -107,10 +107,10 @@ class AllReduceRunner(ServicerBase):
             self.sender_weights,
         )
 
-        self._remaining_streams = sum(num_parts > 0 for num_parts in self.tensor_part_container.num_parts_by_peer)
-        self._can_receive_results = asyncio.Event()
-        if bidirectional:
-            self._can_receive_results.set()
+        if overlap is None:
+            overlap = 1.0 if self.peer_fractions[self.ordered_peer_ids.index(self.peer_id)] > 0 else 0.5
+        assert 0.0 <= overlap <= 1.0
+        self.overlap = overlap
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.peer_id}, group_size={self.group_size})"
@@ -163,12 +163,10 @@ class AllReduceRunner(ServicerBase):
             for part_index, tensor_part in enumerate(self.parts_for_local_averaging):
                 averaged_part = await self.tensor_part_reducer.accumulate_part(sender_index, part_index, tensor_part)
                 self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part - tensor_part)
-            self._mark_stream_as_finished()
 
         else:
             code = None
             stream = await self._get_peer_stub(peer_id).rpc_aggregate_part(self._generate_input_for_peer(peer_index))
-            await self._can_receive_results.wait()
             async for part_index, (averaged_part_delta, msg) in aenumerate(
                 amap_in_executor(
                     lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg),
@@ -197,12 +195,6 @@ class AllReduceRunner(ServicerBase):
         )
         async for part in parts_aiter:
             yield averaging_pb2.AveragingData(tensor_part=part)
-        self._mark_stream_as_finished()
-
-    def _mark_stream_as_finished(self):
-        self._remaining_streams -= 1
-        if self._remaining_streams == 0:
-            self._can_receive_results.set()
 
     async def rpc_aggregate_part(
         self, stream: AsyncIterator[averaging_pb2.AveragingData], context: P2PContext
