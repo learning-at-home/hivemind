@@ -11,7 +11,7 @@ You can also install the bleeding edge version from GitHub:
 ```
 git clone https://github.com/learning-at-home/hivemind
 cd hivemind
-pip install -e .
+pip install -e . --no-use-pep517
 ```
  
 ## Decentralized Training

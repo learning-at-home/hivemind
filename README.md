@@ -1,7 +1,7 @@
 ## Hivemind: decentralized deep learning in PyTorch
 
 [![Documentation Status](https://readthedocs.org/projects/learning-at-home/badge/?version=latest)](https://learning-at-home.readthedocs.io/en/latest/?badge=latest)
-[![PyPI version](https://img.shields.io/pypi/v/hivemind.svg)](https://pypi.org/project/hivemind/)
+[![PyPI version](https://img.shields.io/pypi/v/hivemind.svg?color=blue)](https://pypi.org/project/hivemind/)
 [![Discord](https://img.shields.io/static/v1?style=default&label=Discord&logo=discord&message=join)](https://discord.gg/uGugx9zYvN)
 [![CI status](https://github.com/learning-at-home/hivemind/actions/workflows/run-tests.yml/badge.svg?branch=master)](https://github.com/learning-at-home/hivemind/actions)
 ![Codecov](https://img.shields.io/codecov/c/github/learning-at-home/hivemind)
@@ -23,8 +23,8 @@ large model on hundreds of computers from different universities, companies, and
 * Train neural networks of arbitrary size: parts of their layers are distributed across the participants with the
   Decentralized Mixture-of-Experts ([paper](https://arxiv.org/abs/2002.04013)).
 
-To learn more about the ideas behind this library, see https://learning-at-home.github.io or read
-the [NeurIPS 2020 paper](https://arxiv.org/abs/2002.04013).
+To learn more about the ideas behind this library,
+see the [full list](https://github.com/learning-at-home/hivemind/tree/refer-to-discord-in-docs#citation) of our papers below.
 
 ## Installation
 
@@ -52,7 +52,7 @@ cd hivemind
 pip install .
 ```
 
-If you would like to verify that your installation is working properly, you can install with `pip install -e .[dev]`
+If you would like to verify that your installation is working properly, you can install with `pip install .[dev]`
 instead. Then, you can run the tests with `pytest tests/`.
 
 By default, hivemind uses the precompiled binary of
@@ -65,8 +65,8 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 
 - __Linux__ is the default OS for which hivemind is developed and tested. We recommend Ubuntu 18.04+ (64-bit), but
   other 64-bit distros should work as well. Legacy 32-bit is not recommended.
-- __macOS 10.x__ mostly works but requires building hivemind from source, and some edge cases may fail. To ensure full
-  compatibility, we recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
+- __macOS 10.x__ can run hivemind using [Docker](https://docs.docker.com/desktop/mac/install/).
+  We recommend using [our Docker image](https://hub.docker.com/r/learningathome/hivemind).
 - __Windows 10+ (experimental)__ can run hivemind
   using [WSL](https://docs.microsoft.com/ru-ru/windows/wsl/install-win10). You can configure WSL to use GPU by
   following sections 1–3 of [this guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) by NVIDIA. After
@@ -83,13 +83,13 @@ of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
 * API reference and additional tutorials are available
   at [learning-at-home.readthedocs.io](https://learning-at-home.readthedocs.io)
 
-If you have any questions about installing and using hivemind, you can ask them in
+If you have any questions about installing and using hivemind, feel free to ask them in
 [our Discord chat](https://discord.gg/uGugx9zYvN) or file an [issue](https://github.com/learning-at-home/hivemind/issues).
 
 ## Contributing
 
 Hivemind is currently at the active development stage, and we welcome all contributions. Everything, from bug fixes and
-documentation improvements to entirely new features, is equally appreciated.
+documentation improvements to entirely new features, is appreciated.
 
 If you want to contribute to hivemind but don't know where to start, take a look at the
 unresolved [issues](https://github.com/learning-at-home/hivemind/issues). Open a new issue or
@@ -105,9 +105,9 @@ our [guide](https://learning-at-home.readthedocs.io/en/latest/user/contributing.
 
 If you found hivemind or its underlying algorithms useful for your research, please cite the following source:
 
-```
+```bibtex
 @misc{hivemind,
-  author = {Learning@home team},
+  author = {Learning{@}home team},
   title = {{H}ivemind: a {L}ibrary for {D}ecentralized {D}eep {L}earning},
   year = 2020,
   howpublished = {\url{https://github.com/learning-at-home/hivemind}},
@@ -118,17 +118,17 @@ Also, you can cite [the paper](https://arxiv.org/abs/2002.04013) that inspired t
 (prototype implementation of hivemind available
 at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
-```
+```bibtex
 @inproceedings{ryabinin2020crowdsourced,
- author = {Ryabinin, Max and Gusev, Anton},
- booktitle = {Advances in Neural Information Processing Systems},
- editor = {H. Larochelle and M. Ranzato and R. Hadsell and M. F. Balcan and H. Lin},
- pages = {3659--3672},
- publisher = {Curran Associates, Inc.},
- title = {Towards Crowdsourced Training of Large Neural Networks using Decentralized Mixture-of-Experts},
- url = {https://proceedings.neurips.cc/paper/2020/file/25ddc0f8c9d3e22e03d3076f98d83cb2-Paper.pdf},
- volume = {33},
- year = {2020}
+  author = {Ryabinin, Max and Gusev, Anton},
+  booktitle = {Advances in Neural Information Processing Systems},
+  editor = {H. Larochelle and M. Ranzato and R. Hadsell and M. F. Balcan and H. Lin},
+  pages = {3659--3672},
+  publisher = {Curran Associates, Inc.},
+  title = {Towards Crowdsourced Training of Large Neural Networks using Decentralized Mixture-of-Experts},
+  url = {https://proceedings.neurips.cc/paper/2020/file/25ddc0f8c9d3e22e03d3076f98d83cb2-Paper.pdf},
+  volume = {33},
+  year = {2020}
 }
 ```
 
@@ -137,40 +137,40 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ["Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices"](https://arxiv.org/abs/2103.03239)
 
-```
+```bibtex
 @misc{ryabinin2021moshpit,
-      title={Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices}, 
-      author={Max Ryabinin and Eduard Gorbunov and Vsevolod Plokhotnyuk and Gennady Pekhimenko},
-      year={2021},
-      eprint={2103.03239},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+  title = {Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices},
+  author = {Max Ryabinin and Eduard Gorbunov and Vsevolod Plokhotnyuk and Gennady Pekhimenko},
+  year = {2021},
+  eprint = {2103.03239},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG}
 }
 ```
 
 ["Distributed Deep Learning in Open Collaborations"](https://arxiv.org/abs/2106.10207)
 
-```
+```bibtex
 @misc{diskin2021distributed,
-      title={Distributed Deep Learning in Open Collaborations}, 
-      author={Michael Diskin and Alexey Bukhtiyarov and Max Ryabinin and Lucile Saulnier and Quentin Lhoest and Anton Sinitsin and Dmitry Popov and Dmitry Pyrkin and Maxim Kashirin and Alexander Borzunov and Albert Villanova del Moral and Denis Mazur and Ilia Kobelev and Yacine Jernite and Thomas Wolf and Gennady Pekhimenko},
-      year={2021},
-      eprint={2106.10207},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+  title = {Distributed Deep Learning in Open Collaborations},
+  author = {Michael Diskin and Alexey Bukhtiyarov and Max Ryabinin and Lucile Saulnier and Quentin Lhoest and Anton Sinitsin and Dmitry Popov and Dmitry Pyrkin and Maxim Kashirin and Alexander Borzunov and Albert Villanova del Moral and Denis Mazur and Ilia Kobelev and Yacine Jernite and Thomas Wolf and Gennady Pekhimenko},
+  year = {2021},
+  eprint = {2106.10207},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG}
 }
 ```
 
 ["Secure Distributed Training at Scale"](https://arxiv.org/abs/2106.11257)
 
-```
+```bibtex
 @misc{gorbunov2021secure,
-      title={Secure Distributed Training at Scale}, 
-      author={Eduard Gorbunov and Alexander Borzunov and Michael Diskin and Max Ryabinin},
-      year={2021},
-      eprint={2106.11257},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+  title = {Secure Distributed Training at Scale},
+  author = {Eduard Gorbunov and Alexander Borzunov and Michael Diskin and Max Ryabinin},
+  year = {2021},
+  eprint = {2106.11257},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG}
 }
 ```
 
