@@ -264,7 +264,7 @@ class P2P:
         writer.write(len(data).to_bytes(P2P.HEADER_LEN, P2P.BYTEORDER))
         data = memoryview(data)
         for offset in range(0, len(data), chunk_size):
-            writer.write(data[offset : offset + chunk_size])
+            writer.write(data[offset: offset + chunk_size])
         await writer.drain()
 
     @staticmethod
