@@ -44,10 +44,10 @@ class AllReduceRunner(ServicerBase):
       (the actual number of values by peer will be nearly proportional, but there are no exact guarantees)
     :param modes: AveragingMode for each peer in ordered_peer_ids (normal, client-only or auxiliary)
     :param gathered: additional user-defined data collected from this group
-    :param delay_results: If False(default), the runner will send tensors and receive results concurrently.
-      If True, runner will only receive results after it has finished sending, which is less efficient but fits better
-      for asymmetric high-latency connections to avoid ACK compression. Defaults to ``delay = (local_part_size == 0)``
     :param kwargs: additional parameters (e.g. part_size_bytes) will be passed to TensorPartContainer
+    :note: full mode peers send and receive tensor parts concurrently, assuming full-duplex TCP stream
+      non-averaging peers will only receive results after they finished sending, which helps them avoid congestion
+      in case of asymmetric high-latency connections, avoiding issues such as ACK compression.
     """
 
     def __init__(
@@ -63,7 +63,6 @@ class AllReduceRunner(ServicerBase):
         peer_fractions: Tuple[float, ...],
         modes: Optional[Sequence[AveragingMode]] = None,
         gathered: Optional[Dict[PeerID, Any]] = None,
-        delay_results: Optional[bool] = None,
         **kwargs,
     ):
         self._p2p = p2p
@@ -83,6 +82,7 @@ class AllReduceRunner(ServicerBase):
 
         self.group_id, self.ordered_peer_ids = group_id, ordered_peer_ids
         self.modes, self.peer_fractions, self.gathered = modes, peer_fractions, gathered
+        self.delay_results = self.peer_fractions[self.ordered_peer_ids.index(self.peer_id)] == 0
 
         if weight is None:
             weight = float(modes[self.ordered_peer_ids.index(self.peer_id)] != AveragingMode.AUX)
@@ -102,10 +102,6 @@ class AllReduceRunner(ServicerBase):
             tuple(part.shape for part in self.parts_for_local_averaging),
             len(self.sender_peer_ids),
         )
-
-        if delay_results is None:
-            delay_results = self.peer_fractions[self.ordered_peer_ids.index(self.peer_id)] == 0
-        self.delay_results = delay_results
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.peer_id}, group_size={self.group_size})"
