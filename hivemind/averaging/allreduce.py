@@ -9,7 +9,8 @@ from hivemind.compression import deserialize_torch_tensor, serialize_torch_tenso
 from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase, StubBase
 from hivemind.proto import averaging_pb2
 from hivemind.utils import get_logger
-from hivemind.utils.asyncio import achain, aenumerate, afirst, amap_in_executor, anext, as_aiter
+from hivemind.utils.asyncio import achain, aenumerate, afirst, amap_in_executor, anext, as_aiter, \
+    attach_event_on_finished
 
 # flavour types
 GroupID = bytes
@@ -45,7 +46,7 @@ class AllReduceRunner(ServicerBase):
     :param modes: AveragingMode for each peer in ordered_peer_ids (normal, client-only or auxiliary)
     :param gathered: additional user-defined data collected from this group
     :param kwargs: additional parameters (e.g. part_size_bytes) will be passed to TensorPartContainer
-    :note: full mode peers send and receive tensor parts concurrently, assuming full-duplex TCP stream
+    :note: full mode peers send and receive tensor parts concurrently, assuming full-duplex TCP stream. In turn,
       non-averaging peers will only receive results after they finished sending, which helps them avoid congestion
       in case of asymmetric high-latency connections, avoiding issues such as ACK compression.
     """
@@ -82,7 +83,6 @@ class AllReduceRunner(ServicerBase):
 
         self.group_id, self.ordered_peer_ids = group_id, ordered_peer_ids
         self.modes, self.peer_fractions, self.gathered = modes, peer_fractions, gathered
-        self.delay_results = self.peer_fractions[self.ordered_peer_ids.index(self.peer_id)] == 0
 
         if weight is None:
             weight = float(modes[self.ordered_peer_ids.index(self.peer_id)] != AveragingMode.AUX)
@@ -118,6 +118,9 @@ class AllReduceRunner(ServicerBase):
 
     def _get_peer_stub(self, peer: PeerID) -> StubBase:
         return self._servicer_type.get_stub(self._p2p, peer, namespace=self._prefix)
+
+    def should_delay_results(self, peer_id: PeerID) -> bool:
+        return self.peer_fractions[self.ordered_peer_ids.index(peer_id)] == 0
 
     async def run(self) -> AsyncIterator[torch.Tensor]:
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""
@@ -203,8 +206,30 @@ class AllReduceRunner(ServicerBase):
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             try:
                 sender_index = self.sender_peer_ids.index(context.remote_id)
-                async for msg in self._accumulate_parts_streaming(achain(as_aiter(request), stream), sender_index):
-                    yield msg
+
+                if not self.should_delay_results(context.remote_id):
+                    async for msg in self._accumulate_parts_streaming(achain(as_aiter(request), stream), sender_index):
+                        yield msg
+
+                else:
+                    done_receiving = asyncio.Event()
+                    delayed_results = asyncio.Queue()
+
+                    async def _accumulate_parts():
+                        inputs_aiter = attach_event_on_finished(achain(as_aiter(request), stream), done_receiving)
+                        async for msg in self._accumulate_parts_streaming(inputs_aiter, sender_index):
+                            delayed_results.put_nowait(msg)
+                        delayed_results.put_nowait(None)
+                    accumulate_task = asyncio.create_task(_accumulate_parts())
+
+                    await done_receiving.wait()
+
+                    while True:
+                        next_result = await delayed_results.get()
+                        if next_result is None:
+                            break
+                        yield next_result
+                    await accumulate_task
 
             except Exception as e:
                 self.finalize(exception=e)
