@@ -89,7 +89,7 @@ class ServicerBase:
         output_type = AsyncIterator[handler.response_type] if handler.stream_output else handler.response_type
 
         # This method will be added to a new Stub type (a subclass of StubBase)
-        async def caller(self: StubBase, input: input_type, timeout: None = None) -> output_type:
+        async def caller(self: StubBase, input: input_type, timeout: Optional[float] = None) -> output_type:
             handle_name = cls._get_handle_name(self._namespace, handler.method_name)
             if not handler.stream_output:
                 return await asyncio.wait_for(
