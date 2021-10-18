@@ -53,9 +53,9 @@ class AllReduceRunner(ServicerBase):
     :param modes: AveragingMode for each peer in ordered_peer_ids (normal, client-only or auxiliary)
     :param gathered: additional user-defined data collected from this group
     :param kwargs: additional parameters (e.g. part_size_bytes) will be passed to TensorPartContainer
-    :note: full mode peers send and receive tensor parts concurrently, assuming full-duplex TCP stream. In turn,
-      non-averaging peers will only receive results after they finished sending, which helps them avoid congestion
-      in case of asymmetric high-latency connections, avoiding issues such as ACK compression.
+    :note: Full-mode peers send and receive tensor parts concurrently, assuming a full-duplex TCP stream. In turn,
+      non-averaging peers receive results only after they finish sending, which helps them avoid
+      throughput issues in case of asymmetric high-latency connections (e.g. ACK congestion).
     """
 
     def __init__(
