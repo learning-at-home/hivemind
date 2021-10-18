@@ -55,7 +55,7 @@ class AllReduceRunner(ServicerBase):
     :param kwargs: additional parameters (e.g. part_size_bytes) will be passed to TensorPartContainer
     :note: Full-mode peers send and receive tensor parts concurrently, assuming a full-duplex TCP stream. In turn,
       non-averaging peers receive results only after they finish sending, which helps them avoid
-      throughput issues in case of asymmetric high-latency connections (e.g. ACK congestion).
+      throughput issues in case of asymmetric high-latency connections (e.g. ACK compression).
     """
 
     def __init__(
