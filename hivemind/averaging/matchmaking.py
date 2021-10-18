@@ -180,7 +180,7 @@ class Matchmaking:
             async with self.lock_request_join_group:
                 leader_stub = self._servicer_type.get_stub(self._p2p, leader, namespace=self._prefix)
 
-                stream = leader_stub.rpc_join_group(
+                stream = await leader_stub.rpc_join_group(
                     averaging_pb2.JoinRequest(
                         schema_hash=self.schema_hash,
                         expiration=expiration_time,

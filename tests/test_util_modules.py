@@ -23,6 +23,7 @@ from hivemind.utils.asyncio import (
     anext,
     as_aiter,
     asingle,
+    attach_event_on_finished,
     azip,
     cancel_and_wait,
 )
@@ -489,6 +490,18 @@ async def test_asyncio_utils():
             num_steps += 1
 
     assert num_steps == 2
+
+    event = asyncio.Event()
+    async for i in attach_event_on_finished(iterate_with_delays([0, 0, 0, 0, 0]), event):
+        assert not event.is_set()
+    assert event.is_set()
+
+    event = asyncio.Event()
+    sleepy_aiter = iterate_with_delays([0.1, 0.1, 0.3, 0.1, 0.1])
+    with pytest.raises(asyncio.TimeoutError):
+        async for _ in attach_event_on_finished(aiter_with_timeout(sleepy_aiter, timeout=0.2), event):
+            assert not event.is_set()
+    assert event.is_set()
 
 
 @pytest.mark.asyncio

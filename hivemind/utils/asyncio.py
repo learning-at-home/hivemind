@@ -138,3 +138,12 @@ async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: float) -> Asyn
             yield await asyncio.wait_for(iterator.__anext__(), timeout=timeout)
         except StopAsyncIteration:
             break
+
+
+async def attach_event_on_finished(iterable: AsyncIterable[T], event: asyncio.Event()) -> AsyncIterator[T]:
+    """Iterate over an async iterable and set an event when the iteration has stopped, failed or terminated"""
+    try:
+        async for item in iterable:
+            yield item
+    finally:
+        event.set()

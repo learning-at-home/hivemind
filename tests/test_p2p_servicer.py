@@ -68,8 +68,9 @@ async def test_unary_stream(server_client):
     await servicer.add_p2p_handlers(server)
     stub = ExampleServicer.get_stub(client, server.peer_id)
 
+    stream = await stub.rpc_count(test_pb2.TestRequest(number=10))
     i = 0
-    async for item in stub.rpc_count(test_pb2.TestRequest(number=10)):
+    async for item in stream:
         assert item == test_pb2.TestResponse(number=i)
         i += 1
     assert i == 10
@@ -94,8 +95,9 @@ async def test_stream_stream(server_client):
         for i in range(10):
             yield test_pb2.TestRequest(number=i)
 
+    stream = await stub.rpc_powers(generate_requests())
     i = 0
-    async for item in stub.rpc_powers(generate_requests()):
+    async for item in stream:
         if i % 2 == 0:
             assert item == test_pb2.TestResponse(number=(i // 2) ** 2)
         else:
@@ -140,7 +142,7 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
         writer.close()
     elif cancel_reason == "close_generator":
         stub = ExampleServicer.get_stub(client, server.peer_id)
-        iter = stub.rpc_wait(test_pb2.TestRequest(number=10))
+        iter = await stub.rpc_wait(test_pb2.TestRequest(number=10))
 
         assert await anext(iter) == test_pb2.TestResponse(number=11)
         await asyncio.sleep(0.25)

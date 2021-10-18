@@ -386,22 +386,25 @@ class P2P:
                 await P2P.send_protobuf(request, writer)
             await P2P.send_protobuf(P2P.END_OF_STREAM, writer)
 
-        with closing(writer):
-            writing_task = asyncio.create_task(_write_to_stream())
-            try:
-                while True:
-                    try:
-                        response, err = await P2P.receive_protobuf(output_protobuf_type, reader)
-                    except asyncio.IncompleteReadError:  # Connection is closed
-                        break
+        async def _read_from_stream() -> AsyncIterator[Message]:
+            with closing(writer):
+                try:
+                    while True:
+                        try:
+                            response, err = await P2P.receive_protobuf(output_protobuf_type, reader)
+                        except asyncio.IncompleteReadError:  # Connection is closed
+                            break
 
-                    if err is not None:
-                        raise P2PHandlerError(f"Failed to call handler `{name}` at {peer_id}: {err.message}")
-                    yield response
+                        if err is not None:
+                            raise P2PHandlerError(f"Failed to call handler `{name}` at {peer_id}: {err.message}")
+                        yield response
 
-                await writing_task
-            finally:
-                writing_task.cancel()
+                    await writing_task
+                finally:
+                    writing_task.cancel()
+
+        writing_task = asyncio.create_task(_write_to_stream())
+        return _read_from_stream()
 
     async def add_protobuf_handler(
         self,
@@ -476,7 +479,7 @@ class P2P:
         if not isinstance(input, AsyncIterableABC):
             return await self._call_unary_protobuf_handler(peer_id, name, input, output_protobuf_type)
 
-        responses = self._iterate_protobuf_stream_handler(peer_id, name, input, output_protobuf_type)
+        responses = await self._iterate_protobuf_stream_handler(peer_id, name, input, output_protobuf_type)
         return await asingle(responses)
 
     async def _call_unary_protobuf_handler(
@@ -490,7 +493,7 @@ class P2P:
         response = await self._client.call_unary_handler(peer_id, handle_name, serialized_input)
         return output_protobuf_type.FromString(response)
 
-    def iterate_protobuf_handler(
+    async def iterate_protobuf_handler(
         self,
         peer_id: PeerID,
         name: str,
@@ -498,7 +501,7 @@ class P2P:
         output_protobuf_type: Type[Message],
     ) -> TOutputStream:
         requests = input if isinstance(input, AsyncIterableABC) else as_aiter(input)
-        return self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
+        return await self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
 
     def _start_listening(self) -> None:
         async def listen() -> None:
