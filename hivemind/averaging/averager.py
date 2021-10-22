@@ -449,10 +449,10 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         async for tensor, update in azip(as_aiter(*local_tensors), allreduce):
                             # note: all-reduce is performed asynchronously while iterating
                             tensor.add_(update, alpha=self._averaging_alpha)
+                        self.last_updated = get_dht_time()
                     else:
                         empty_results = [_ async for _ in allreduce]  # trigger all-reduce by iterating
                         assert len(empty_results) == 0, "aux peers do not receive averaged tensors"
-                    self.last_updated = get_dht_time()
 
                 return allreduce.gathered
         except BaseException as e:
