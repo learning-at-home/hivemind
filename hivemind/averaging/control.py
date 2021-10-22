@@ -113,6 +113,15 @@ class StepControl(MPFuture):
     def allow_retries(self) -> bool:
         return self._allow_retries
 
+    def __getstate__(self):
+        return dict(super().__getstate__(), _trigger=self._trigger, _shared_buffer=self._shared_buffer,
+                    immutable_params=(self._gather_binary, self._deadline, self._allow_retries))
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        self._trigger, self._shared_buffer = state["_trigger"], state["_shared_buffer"]
+        self._gather_binary, self._deadline, self._allow_retries = state["immutable_params"]
+
     def cancel(self) -> bool:
         if self._trigger is not None:
             self._trigger.cancel()
