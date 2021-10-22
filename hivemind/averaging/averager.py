@@ -442,9 +442,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     **kwargs,
                 )
 
-                # actually run all-reduce
                 with self.register_allreduce_group(group_info.group_id, allreduce):
-
                     if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
                         async for tensor, update in azip(as_aiter(*local_tensors), allreduce):
                             # note: all-reduce is performed asynchronously while iterating
