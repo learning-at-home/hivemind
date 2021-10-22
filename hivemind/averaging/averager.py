@@ -451,7 +451,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                             tensor.add_(update, alpha=self._averaging_alpha)
                     else:
                         empty_results = [_ async for _ in allreduce]  # trigger all-reduce by iterating
-                        assert len(empty_results) == 0, "aux peers do not receive all averaged tensors"
+                        assert len(empty_results) == 0, "aux peers do not receive averaged tensors"
                     self.last_updated = get_dht_time()
 
                 return allreduce.gathered
