@@ -5,18 +5,18 @@ from typing import Optional
 import numpy as np
 import torch
 
-from hivemind.utils import MPFuture, DHTExpiration, get_logger
+from hivemind.utils import MPFuture, DHTExpiration, get_logger, get_dht_time
 
 
 logger = get_logger(__file__)
 
 
 class AveragingStage(Enum):
-    IDLE = 0               # still initializing
+    IDLE = 0  # still initializing
     LOOKING_FOR_GROUP = 1  # running decentralized matchmaking, can't run allreduce yet
-    AWAITING_TRIGGER = 2   # waiting for user to set the trigger that allows running allreduce
+    AWAITING_TRIGGER = 2  # waiting for user to set the trigger that allows running allreduce
     RUNNING_ALLREDUCE = 3  # exchanging tensors with groupmates
-    FINISHED = 4           # either done or failed with exception
+    FINISHED = 4  # either done or failed with exception
 
 
 class StepControl(MPFuture):
@@ -30,12 +30,13 @@ class StepControl(MPFuture):
 
     """
 
-    def __init__(self, scheduled_time: DHTExpiration, deadline: Optional[float], allow_retries: bool,
-                 weight: float, gather_binary: bytes):
+    def __init__(
+        self, scheduled_time: DHTExpiration, deadline: float, allow_retries: bool, weight: float, gather_binary: bytes
+    ):
         super().__init__()
         self._gather_binary, self._deadline, self._allow_retries = gather_binary, deadline, allow_retries
         self._trigger: Optional[MPFuture] = None
-        self._metadata = torch.zeros([18], dtype=torch.uint8).share_memory_()
+        self._shared_buffer = torch.zeros([18], dtype=torch.uint8).share_memory_()
         self.stage = AveragingStage.IDLE
         self.scheduled_time = scheduled_time
         self.weight = weight
@@ -58,7 +59,7 @@ class StepControl(MPFuture):
 
     @property
     def scheduled_time(self) -> DHTExpiration:
-        return struct.unpack('d', self._metadata[0:8].numpy().data)[0]
+        return struct.unpack("d", self._shared_buffer[0:8].numpy().data)[0]
 
     @scheduled_time.setter
     def scheduled_time(self, scheduled_time):
@@ -66,36 +67,36 @@ class StepControl(MPFuture):
             logger.warning("Changing scheduled time has no effect after all-reduce has already started")
         if scheduled_time >= self.deadline:
             logger.warning("Changing scheduled time to after deadline, averaging will likely fail due to timeout.")
-        struct.pack_into('d', self._metadata[0:8].numpy().data, 0, float(scheduled_time))
+        struct.pack_into("d", self._shared_buffer[0:8].numpy().data, 0, float(scheduled_time))
 
     @property
     def weight(self) -> float:
-        return struct.unpack('d', self._metadata[8:16].numpy().data)[0]
+        return struct.unpack("d", self._shared_buffer[8:16].numpy().data)[0]
 
     @weight.setter
     def weight(self, weight: float):
         assert weight >= 0 and np.isfinite(weight)
         if self.began_allreduce:
             logger.warning("Changing weights has no effect after all-reduce has already started")
-        struct.pack_into('d', self._metadata[8:16].numpy().data, 0, float(weight))
+        struct.pack_into("d", self._shared_buffer[8:16].numpy().data, 0, float(weight))
 
     @property
     def stage(self) -> AveragingStage:
-        return AveragingStage(self._metadata[16].item())
+        return AveragingStage(self._shared_buffer[16].item())
 
     @stage.setter
     def stage(self, stage: AveragingStage):
         if stage == AveragingStage.RUNNING_ALLREDUCE:
             self.can_modify = False
-        self._metadata[16] = stage.value
+        self._shared_buffer[16] = stage.value
 
     @property
     def began_allreduce(self) -> bool:
-        return bool(self._metadata[17].item())
+        return bool(self._shared_buffer[17].item())
 
     @began_allreduce.setter
     def began_allreduce(self, value: bool):
-        self._metadata[17] = int(value)
+        self._shared_buffer[17] = int(value)
 
     @property
     def gather_binary(self) -> bytes:
@@ -104,6 +105,9 @@ class StepControl(MPFuture):
     @property
     def deadline(self) -> DHTExpiration:
         return self._deadline
+
+    def get_timeout(self) -> Optional[DHTExpiration]:
+        return max(0.0, self.deadline - get_dht_time())
 
     @property
     def allow_retries(self) -> bool:
