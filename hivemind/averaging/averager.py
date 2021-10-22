@@ -442,15 +442,13 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     **kwargs,
                 )
 
+                # actually run all-reduce
                 with self.register_allreduce_group(group_info.group_id, allreduce):
-
-                    # actually run all-reduce
-                    with self.register_allreduce_group(group_info.group_id, allreduce):
-                        assert len(local_tensors) == len(self._averaged_tensors)
-                        async for tensor, update in azip(as_aiter(*local_tensors), allreduce):
-                            # note: all-reduce is performed asynchronously while iterating
-                            tensor.add_(update, alpha=self._averaging_alpha)
-                        self.last_updated = get_dht_time()
+                    assert len(local_tensors) == len(self._averaged_tensors)
+                    async for tensor, update in azip(as_aiter(*local_tensors), allreduce):
+                        # note: all-reduce is performed asynchronously while iterating
+                        tensor.add_(update, alpha=self._averaging_alpha)
+                    self.last_updated = get_dht_time()
 
                 return allreduce.gathered
         except BaseException as e:
