@@ -451,7 +451,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                             tensor.add_(update, alpha=self._averaging_alpha)
                     else:
                         async for _ in allreduce:
-                            pass  # auxiliary peers do receive all averaged tensors to save bandwidth
+                            pass  # auxiliary peers do not receive all averaged tensors to save bandwidth
                     self.last_updated = get_dht_time()
 
                 return allreduce.gathered
