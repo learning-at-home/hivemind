@@ -28,7 +28,7 @@ class PerformanceEMA:
             self.timestamp, old_timestamp = time.perf_counter(), self.timestamp
             interval = interval if interval is not None else self.timestamp - old_timestamp
         else:
-            assert interval is not None, "If PerformanceEMA is paused, one must specify time interval"
+            assert interval is not None, "If PerformanceEMA is paused, please specify the time interval"
         self.ema_seconds_per_sample = (
             self.alpha * interval / task_size + (1 - self.alpha) * self.ema_seconds_per_sample
         )
