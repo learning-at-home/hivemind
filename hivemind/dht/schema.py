@@ -18,7 +18,9 @@ class SchemaValidator(RecordValidatorBase):
     This allows to enforce types, min/max values, require a subkey to contain a public key, etc.
     """
 
-    def __init__(self, schema: Type[pydantic.BaseModel], *, allow_extra_keys: bool = True, prefix: Optional[str] = None):
+    def __init__(
+        self, schema: Type[pydantic.BaseModel], *, allow_extra_keys: bool = True, prefix: Optional[str] = None
+    ):
         """
         :param schema: The Pydantic model (a subclass of pydantic.BaseModel).
 
