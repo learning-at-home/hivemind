@@ -1,8 +1,7 @@
+import time
 from contextlib import contextmanager
 from threading import Lock
 from typing import Optional
-
-from hivemind.utils import get_dht_time
 
 
 class PerformanceEMA:
@@ -14,7 +13,7 @@ class PerformanceEMA:
     def __init__(self, alpha: float = 0.1, eps: float = 1e-20, paused: bool = False):
         self.alpha, self.eps, self.num_updates = alpha, eps, 0
         self.ema_seconds_per_sample, self.samples_per_second = 0, eps
-        self.timestamp = get_dht_time()
+        self.timestamp = time.perf_counter()
         self.paused = paused
         self.lock = Lock()
 
@@ -27,7 +26,7 @@ class PerformanceEMA:
         assert task_size > 0, f"Can't register processing {task_size} samples"
         assert not self.paused or interval is not None, "If PerformanceEMA is paused, one must specify time interval"
         if not self.paused:
-            self.timestamp, old_timestamp = get_dht_time(), self.timestamp
+            self.timestamp, old_timestamp = time.perf_counter(), self.timestamp
             interval = interval if interval is not None else max(0.0, self.timestamp - old_timestamp)
         self.ema_seconds_per_sample = (
             self.alpha * interval / task_size + (1 - self.alpha) * self.ema_seconds_per_sample
@@ -44,7 +43,7 @@ class PerformanceEMA:
         try:
             yield
         finally:
-            self.timestamp = get_dht_time()
+            self.timestamp = time.perf_counter()
             self.paused = was_paused
 
     def __repr__(self):
@@ -52,11 +51,15 @@ class PerformanceEMA:
 
     @contextmanager
     def update_threadsafe(self, task_size: float):
-        """measure the EMA throughout of the code that runs inside the context. Supports multiple concurrent threads."""
-        start_timestamp = get_dht_time()
+        """
+        Update the EMA throughput of a code that runs inside the context manager, supports multiple concurrent threads.
+
+        :param task_size: how many items were processed since last call
+        """
+        start_timestamp = time.perf_counter()
         yield
         with self.lock:
-            self.update(task_size, interval=max(0.0, get_dht_time() - max(start_timestamp, self.timestamp)))
+            self.update(task_size, interval=max(0.0, time.perf_counter() - max(start_timestamp, self.timestamp)))
             # note: we define interval as such to support two distinct scenarios:
             # (1) if this is the first call to measure_threadsafe after a pause, count time from entering this context
             # (2) if there are concurrent calls to measure_threadsafe, respect the timestamp updates from these calls
