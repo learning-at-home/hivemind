@@ -52,7 +52,7 @@ class PerformanceEMA:
 
     @contextmanager
     def update_threadsafe(self, task_size: float):
-        """measure the EMA throughout of the code that runs inside the context"""
+        """measure the EMA throughout of the code that runs inside the context. Supports multiple concurrent threads."""
         start_timestamp = get_dht_time()
         yield
         with self.lock:
