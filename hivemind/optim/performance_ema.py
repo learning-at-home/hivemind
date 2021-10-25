@@ -27,7 +27,7 @@ class PerformanceEMA:
         assert not self.paused or interval is not None, "If PerformanceEMA is paused, one must specify time interval"
         if not self.paused:
             self.timestamp, old_timestamp = time.perf_counter(), self.timestamp
-            interval = interval if interval is not None else max(0.0, self.timestamp - old_timestamp)
+            interval = interval if interval is not None else self.timestamp - old_timestamp
         self.ema_seconds_per_sample = (
             self.alpha * interval / task_size + (1 - self.alpha) * self.ema_seconds_per_sample
         )
@@ -59,7 +59,7 @@ class PerformanceEMA:
         start_timestamp = time.perf_counter()
         yield
         with self.lock:
-            self.update(task_size, interval=max(0.0, time.perf_counter() - max(start_timestamp, self.timestamp)))
+            self.update(task_size, interval=time.perf_counter() - max(start_timestamp, self.timestamp))
             # note: we define interval as such to support two distinct scenarios:
             # (1) if this is the first call to measure_threadsafe after a pause, count time from entering this context
             # (2) if there are concurrent calls to measure_threadsafe, respect the timestamp updates from these calls
