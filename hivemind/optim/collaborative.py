@@ -263,7 +263,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         with self.lock_local_progress:
             self.local_samples_accumulated += batch_size
             self.local_updates_accumulated += 1
-            self.performance_ema.update(num_processed=batch_size)
+            self.performance_ema.update(task_size=batch_size)
             self.should_report_progress.set()
 
         if not self.collaboration_state.ready_for_step:
