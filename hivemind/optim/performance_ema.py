@@ -24,10 +24,11 @@ class PerformanceEMA:
         :returns: current estimate of performance (samples per second), but at most
         """
         assert task_size > 0, f"Can't register processing {task_size} samples"
-        assert not self.paused or interval is not None, "If PerformanceEMA is paused, one must specify time interval"
         if not self.paused:
             self.timestamp, old_timestamp = time.perf_counter(), self.timestamp
             interval = interval if interval is not None else self.timestamp - old_timestamp
+        else:
+            assert interval is not None, "If PerformanceEMA is paused, one must specify time interval"
         self.ema_seconds_per_sample = (
             self.alpha * interval / task_size + (1 - self.alpha) * self.ema_seconds_per_sample
         )
