@@ -10,8 +10,6 @@ class DecentralizedOptimizerBase(torch.optim.Optimizer):
     """A shared interface for all hivemind optimizers. Cooperates with DHT peers to train a shared model"""
 
     def __init__(self, opt: torch.optim.Optimizer, dht: DHT):
-        logger.warning(f"{self.__class__.__name__} is deprecated and will be removed in the hivemind v1.1.0."
-                       f"Please use HivemindOptimizer and set options for the desired behavior (see its docstring).")
         self.opt, self.dht = opt, dht
 
     @property
