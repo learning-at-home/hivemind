@@ -21,12 +21,13 @@ class AveragingStage(Enum):
 class StepControl(MPFuture):
     """
     An auxiliary data structure that allows user to control stages and track progress in a single averaging step
-    TODO description
+
+    :param scheduled_time: estimated time when averaging should begin. Will be used for scheduling
+    :param deadline: if averaging is still in progress at this time, it should be stopped due to TimeoutError
+    :param allow_retries: if True, allow running matchmaking and all-reduce again if previous attempt fails
+    :param weight: averaging weight, can be changed afterwards
     :param gather_binary: optionally send this data to all peers in the next group and gather it from groupmates
-    :param timeout: maximum time that may be spent looking for group (does not include allreduce itself)
     :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
-
-
     """
 
     def __init__(
