@@ -1,7 +1,7 @@
 import torch
 
-from hivemind.utils import get_logger
 from hivemind.dht import DHT
+from hivemind.utils import get_logger
 
 logger = get_logger(__name__)
 

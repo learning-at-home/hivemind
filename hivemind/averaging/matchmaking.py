@@ -420,7 +420,7 @@ class PotentialLeaders:
     async def begin_search(self, step: StepControl, key_manager: GroupKeyManager, declare: bool = True):
         async with self.lock_search:
             self.running.set()
-            self.search_end_time = step.deadline if step.deadline is not None else float('inf')
+            self.search_end_time = step.deadline if step.deadline is not None else float("inf")
             update_queue_task = asyncio.create_task(self._update_queue_periodically(key_manager))
             if declare:
                 declare_averager_task = asyncio.create_task(self._declare_averager_periodically(step, key_manager))
@@ -512,9 +512,13 @@ class PotentialLeaders:
             try:
                 while True:
                     await self.running.wait()
-                    new_expiration_time = float(np.clip(step.scheduled_time,
-                                                        a_min=get_dht_time() + self.min_matchmaking_time,
-                                                        a_max=self.search_end_time))
+                    new_expiration_time = float(
+                        np.clip(
+                            step.scheduled_time,
+                            a_min=get_dht_time() + self.min_matchmaking_time,
+                            a_max=self.search_end_time,
+                        )
+                    )
                     self.declared_group_key = group_key = key_manager.current_key
                     self.declared_expiration_time = new_expiration_time
                     self.declared_expiration.set()

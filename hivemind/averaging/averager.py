@@ -16,7 +16,7 @@ import numpy as np
 import torch
 
 from hivemind.averaging.allreduce import AllreduceException, AllReduceRunner, AveragingMode, GroupID
-from hivemind.averaging.control import StepControl, AveragingStage
+from hivemind.averaging.control import AveragingStage, StepControl
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.matchmaking import Matchmaking, MatchmakingException
@@ -134,7 +134,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         assert not client_mode or not auxiliary, "auxiliary peers must accept incoming connections"
 
         if averaging_expiration is not None:
-            logger.warning("averaging_expiration is deprecated and will be removed in v1.0.1, use min_matchmaking_time")
+            logger.warning(
+                "averaging_expiration is deprecated and will be removed in v1.0.1, use min_matchmaking_time"
+            )
             assert min_matchmaking_time == 5.0, "can't set both averaging_expiration and min_matchmaking_time"
             min_matchmaking_time = averaging_expiration
             del averaging_expiration
@@ -174,7 +176,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             target_group_size=target_group_size,
             min_group_size=min_group_size,
             request_timeout=request_timeout,
-            min_matchmaking_time=min_matchmaking_time
+            min_matchmaking_time=min_matchmaking_time,
         )
         self.allreduce_kwargs = dict(
             compression=compression,
@@ -355,7 +357,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             scheduled_time = get_dht_time() + self.matchmaking_kwargs["min_matchmaking_time"]
         if weight is None:
             weight = float(self.mode != AveragingMode.AUX)
-        deadline = get_dht_time() + timeout if timeout else float('inf')
+        deadline = get_dht_time() + timeout if timeout else float("inf")
         assert isinstance(weight, (int, float)) and weight >= 0, f"Expected a positive int/float, got {type(weight)}"
         assert not wait_for_trigger or wait, "Non-asynchronous step cannot wait for trigger (use wait=False)"
         assert scheduled_time < deadline, "Scheduled start time does not fit within timeout"

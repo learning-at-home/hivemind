@@ -5,8 +5,7 @@ from typing import Optional
 import numpy as np
 import torch
 
-from hivemind.utils import MPFuture, DHTExpiration, get_logger, get_dht_time
-
+from hivemind.utils import DHTExpiration, MPFuture, get_dht_time, get_logger
 
 logger = get_logger(__file__)
 
@@ -114,8 +113,12 @@ class StepControl(MPFuture):
         return self._allow_retries
 
     def __getstate__(self):
-        return dict(super().__getstate__(), _trigger=self._trigger, _shared_buffer=self._shared_buffer,
-                    immutable_params=(self._gather_binary, self._deadline, self._allow_retries))
+        return dict(
+            super().__getstate__(),
+            _trigger=self._trigger,
+            _shared_buffer=self._shared_buffer,
+            immutable_params=(self._gather_binary, self._deadline, self._allow_retries),
+        )
 
     def __setstate__(self, state):
         super().__setstate__(state)
