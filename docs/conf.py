@@ -203,7 +203,7 @@ todo_include_todos = True
 
 
 def setup(app):
-    app.add_stylesheet("fix_rtd.css")
+    app.add_css_file("fix_rtd.css")
     app.add_config_value(
         "recommonmark_config",
         {
