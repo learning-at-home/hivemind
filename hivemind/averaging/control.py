@@ -7,7 +7,7 @@ import torch
 
 from hivemind.utils import DHTExpiration, MPFuture, get_dht_time, get_logger
 
-logger = get_logger(__file__)
+logger = get_logger(__name__)
 
 
 class AveragingStage(Enum):
