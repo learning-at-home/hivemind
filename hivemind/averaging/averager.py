@@ -334,7 +334,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         weight: Optional[float] = None,
         timeout: Optional[float] = None,
         allow_retries: bool = True,
-        wait_for_trigger: bool = False,
+        require_trigger: bool = False,
         wait: bool = True,
     ) -> Union[Optional[Dict[PeerID, GatheredData]], StepControl]:
         """
@@ -346,7 +346,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         :param weight: averaging weight for this peer, int or float, must be strictly positive
         :param allow_retries: if averager fails to run one round of allreduce, this option will allow it to try again
           within the specified timeout
-        :param wait_for_trigger: if True, await for user to call .allow_allreduce() before running all-reduce
+        :param require_trigger: if True, await for user to call .allow_allreduce() before running all-reduce
         :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failedK
         :param wait: if True (default), return when finished. Otherwise return StepControl and run in background.
         :returns: on success, update averaged_tensors and return group info; on failure, return None
@@ -359,7 +359,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             weight = float(self.mode != AveragingMode.AUX)
         deadline = get_dht_time() + timeout if timeout else float("inf")
         assert isinstance(weight, (int, float)) and weight >= 0, f"Expected a positive int/float, got {type(weight)}"
-        assert not wait_for_trigger or wait, "Non-asynchronous step cannot wait for trigger (use wait=False)"
+        assert not require_trigger or not wait, "Non-asynchronous step cannot wait for trigger (use wait=False)"
         assert scheduled_time < deadline, "Scheduled start time does not fit within timeout"
 
         user_gather_bytes = self.serializer.dumps(gather)  # serialize here to avoid imports in the averager process
@@ -376,7 +376,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         self._outer_pipe.send(("_step", [], dict(step=step, future_for_trigger=future_for_trigger)))
         step.attach_trigger(future_for_trigger.result())
 
-        if not wait_for_trigger:
+        if not require_trigger:
             step.allow_allreduce()
         return step.result() if wait else step
 

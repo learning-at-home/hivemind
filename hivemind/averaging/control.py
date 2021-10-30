@@ -51,7 +51,8 @@ class StepControl(MPFuture):
         assert self._trigger is not None, "StepControl does not have an attached trigger (not properly initialized)"
         if self._trigger.done():
             logger.warning("Trigger is already set")
-        self._trigger.set_result(None)
+        else:
+            self._trigger.set_result(None)
 
     async def wait_for_trigger(self):
         assert self._trigger is not None, "StepControl does not have an attached trigger (not properly initialized)"
