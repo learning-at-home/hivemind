@@ -359,7 +359,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             weight = float(self.mode != AveragingMode.AUX)
         deadline = get_dht_time() + timeout if timeout else float("inf")
         assert isinstance(weight, (int, float)) and weight >= 0, f"Expected a positive int/float, got {type(weight)}"
-        assert not require_trigger or not wait, "Non-asynchronous step cannot wait for trigger (use wait=False)"
+        assert not (wait and require_trigger), "Non-asynchronous step cannot wait for trigger (use wait=False)"
         assert scheduled_time < deadline, "Scheduled start time does not fit within timeout"
 
         user_gather_bytes = self.serializer.dumps(gather)  # serialize here to avoid imports in the averager process
