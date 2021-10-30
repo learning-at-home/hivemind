@@ -462,7 +462,7 @@ def test_averaging_trigger():
     c2.allow_allreduce()
     time.sleep(0.5)
     assert all(c.stage == AveragingStage.FINISHED for c in controls)
-    assert not all(c.done() for c in controls)
+    assert all(c.done() for c in controls)
 
     # check that setting trigger twice does not raise error
     c0.allow_allreduce()
