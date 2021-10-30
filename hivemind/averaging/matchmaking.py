@@ -82,15 +82,15 @@ class Matchmaking:
         self.current_leader: Optional[PeerID] = None  # iff i am a follower, this is a link to my current leader
         self.current_followers: Dict[PeerID, averaging_pb2.JoinRequest] = {}  # my current followers excluding myself
         self.potential_leaders = PotentialLeaders(self.peer_id, min_matchmaking_time, target_group_size)
-        self.step: Optional[StepControl] = None
+        self.step_control: Optional[StepControl] = None
 
     @contextlib.asynccontextmanager
-    async def looking_for_group(self, step: StepControl):
+    async def looking_for_group(self, step_control: StepControl):
         async with self.lock_looking_for_group:
-            assert self.step is None
-            self.step = step
+            assert self.step_control is None
+            self.step_control = step_control
             yield
-            self.step = None
+            self.step_control = None
 
     @property
     def is_looking_for_group(self):
@@ -193,7 +193,7 @@ class Matchmaking:
                         schema_hash=self.schema_hash,
                         expiration=request_expiration_time,
                         client_mode=self.client_mode,
-                        gather=self.step.gather_binary,
+                        gather=self.step_control.gather_binary,
                         group_key=self.group_key_manager.current_key,
                     )
                 )
@@ -250,7 +250,7 @@ class Matchmaking:
         if isfinite(self.potential_leaders.declared_expiration_time):
             return self.potential_leaders.declared_expiration_time
         else:
-            scheduled_time = max(self.step.scheduled_time, get_dht_time() + self.min_matchmaking_time)
+            scheduled_time = max(self.step_control.scheduled_time, get_dht_time() + self.min_matchmaking_time)
             return min(scheduled_time, self.potential_leaders.search_end_time)
 
     async def rpc_join_group(
@@ -368,7 +368,7 @@ class Matchmaking:
         random.shuffle(ordered_peer_ids)
 
         gathered = tuple(
-            self.step.gather_binary if peer_id == self.peer_id else self.current_followers[peer_id].gather
+            self.step_control.gather_binary if peer_id == self.peer_id else self.current_followers[peer_id].gather
             for peer_id in ordered_peer_ids
         )
 
