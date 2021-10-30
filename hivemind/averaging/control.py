@@ -36,6 +36,9 @@ class StepControl(MPFuture):
         super().__init__()
         self._gather_binary, self._deadline, self._allow_retries = gather_binary, deadline, allow_retries
         self._trigger: Optional[MPFuture] = None
+
+        # Buffer contents:
+        # scheduled_time (double) | weight (double) | stage (AveragingStage, 1 byte) | began_allreduce: (bool, 1 byte)
         self._shared_buffer = torch.zeros([18], dtype=torch.uint8).share_memory_()
         self.stage = AveragingStage.IDLE
         self.scheduled_time = scheduled_time
