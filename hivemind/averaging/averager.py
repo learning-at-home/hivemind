@@ -135,7 +135,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         if averaging_expiration is not None:
             logger.warning(
-                "averaging_expiration is deprecated and will be removed in v1.0.1, use min_matchmaking_time"
+                "averaging_expiration is deprecated and will be removed soon, use min_matchmaking_time"
             )
             assert min_matchmaking_time == 5.0, "can't set both averaging_expiration and min_matchmaking_time"
             min_matchmaking_time = averaging_expiration
@@ -317,7 +317,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         else:
             logger.exception("Averager shutdown has no effect: the process is already not alive")
 
-    async def _shutdown(self, timeout: Optional[DHTExpiration]) -> None:
+    async def _shutdown(self, timeout: Optional[float]) -> None:
         remaining_tasks = set()
         for group in self._running_groups.values():
             remaining_tasks.update(group.finalize(cancel=True))
@@ -359,7 +359,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             weight = float(self.mode != AveragingMode.AUX)
         deadline = get_dht_time() + timeout if timeout else float("inf")
         assert isinstance(weight, (int, float)) and weight >= 0, f"Expected a positive int/float, got {type(weight)}"
-        assert not require_trigger or not wait, "Non-asynchronous step cannot wait for trigger (use wait=False)"
+        assert not (wait and require_trigger), "Non-asynchronous step cannot wait for trigger (use wait=False)"
         assert scheduled_time < deadline, "Scheduled start time does not fit within timeout"
 
         user_gather_bytes = self.serializer.dumps(gather)  # serialize here to avoid imports in the averager process
