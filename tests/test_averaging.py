@@ -429,8 +429,8 @@ def test_averaging_trigger():
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             target_group_size=4,
-            min_matchmaking_time=1,
-            request_timeout=0.5,
+            min_matchmaking_time=0.5,
+            request_timeout=0.3,
             prefix="mygroup",
             initial_group_bits="",
             start=True,
@@ -443,13 +443,13 @@ def test_averaging_trigger():
         controls.append(
             averager.step(
                 wait=False,
-                scheduled_time=hivemind.get_dht_time() + 1,
+                scheduled_time=hivemind.get_dht_time() + 0.5,
                 weight=1.0,
                 require_trigger=i in (1, 2),
             )
         )
 
-    time.sleep(1.1)
+    time.sleep(0.6)
 
     c0, c1, c2, c3 = controls
     assert not any(c.done() for c in controls)

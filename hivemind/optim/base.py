@@ -1,9 +1,6 @@
 import torch
 
 from hivemind.dht import DHT
-from hivemind.utils import get_logger
-
-logger = get_logger(__name__)
 
 
 class DecentralizedOptimizerBase(torch.optim.Optimizer):
