@@ -29,6 +29,7 @@ class StepControl(MPFuture):
     :param data_for_gather: send this data to all peers in the next group and gather it from groupmates
     :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
     """
+
     _SCHEDULED_TIME, _WEIGHT, _STAGE, _BEGAN_ALLREDUCE = slice(0, 8), slice(8, 16), 16, 17
 
     def __init__(
