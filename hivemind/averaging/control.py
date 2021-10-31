@@ -31,7 +31,12 @@ class StepControl(MPFuture):
     """
 
     def __init__(
-        self, scheduled_time: DHTExpiration, deadline: float, allow_retries: bool, weight: float, data_for_gather: bytes
+        self,
+        scheduled_time: DHTExpiration,
+        deadline: float,
+        allow_retries: bool,
+        weight: float,
+        data_for_gather: bytes,
     ):
         super().__init__()
         self._data_for_gather, self._deadline, self._allow_retries = data_for_gather, deadline, allow_retries
