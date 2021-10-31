@@ -1,19 +1,19 @@
 from __future__ import annotations
+
 import asyncio
 import multiprocessing as mp
 import os
 from functools import partial
-from typing import TypeVar, Optional, Sequence, Union, Iterable, Callable, Awaitable, List
+from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, TypeVar, Union
 
 from multiaddr import Multiaddr
 
-from hivemind.dht.node import DHTNode, DEFAULT_NUM_WORKERS
+from hivemind.dht.node import DEFAULT_NUM_WORKERS, DHTNode
 from hivemind.dht.routing import DHTKey, DHTValue, Subkey
-from hivemind.dht.validation import RecordValidatorBase, CompositeValidator
-from hivemind.utils.timed_storage import ValueWithExpiration, DHTExpiration
-from hivemind.utils import get_logger, MPFuture, switch_to_uvloop
+from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.p2p import P2P, PeerID
-
+from hivemind.utils import MPFuture, get_logger, switch_to_uvloop
+from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration
 
 logger = get_logger(__name__)
 ReturnType = TypeVar("ReturnType")
