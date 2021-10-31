@@ -69,6 +69,11 @@ class StepControl(MPFuture):
         await self._trigger
 
     @property
+    def triggered(self) -> bool:
+        assert self._trigger is not None, "StepControl does not have an attached trigger"
+        return self._trigger.done()
+
+    @property
     def scheduled_time(self) -> DHTExpiration:
         return struct.unpack("d", self._shared_buffer[StepControl._SCHEDULED_TIME].numpy().data)[0]
 
@@ -112,10 +117,6 @@ class StepControl(MPFuture):
     @property
     def data_for_gather(self) -> bytes:
         return self._data_for_gather
-
-    @property
-    def triggered(self) -> bool:
-        return self._trigger.done()
 
     @property
     def deadline(self) -> DHTExpiration:
