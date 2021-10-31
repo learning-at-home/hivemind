@@ -51,7 +51,7 @@ class StepControl(MPFuture):
 
     def allow_allreduce(self):
         """Allow averager to begin allreduce when it finds a group. Meant to be triggered by user."""
-        assert self._trigger is not None, "StepControl does not have an attached trigger (not properly initialized)"
+        assert self._trigger is not None, "StepControl does not have an attached trigger"
         if self._trigger.done():
             logger.warning("Trigger is already set")
         else:
