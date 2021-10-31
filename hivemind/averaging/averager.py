@@ -75,6 +75,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
           local tensors for averaging
     :param allow_state_sharing: if set to True, other peers can download this peer's state. Can be overwritten
       with averager.allow_state_sharing = True / False
+    :param declare_state_period: re-declare averager as a donor for load_state_from_peers every this many seconds
     :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
 
     Example:
