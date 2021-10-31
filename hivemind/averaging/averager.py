@@ -137,7 +137,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             logger.warning("averaging_expiration is deprecated and will be removed soon, use min_matchmaking_time")
             assert min_matchmaking_time == 5.0, "Can't set both averaging_expiration and min_matchmaking_time"
             min_matchmaking_time = averaging_expiration
-            del averaging_expiration
 
         super().__init__()
         self.dht = dht
