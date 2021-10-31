@@ -356,7 +356,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             scheduled_time = get_dht_time() + self.matchmaking_kwargs["min_matchmaking_time"]
         if weight is None:
             weight = float(self.mode != AveragingMode.AUX)
-        deadline = get_dht_time() + timeout if timeout else float("inf")
+        deadline = get_dht_time() + timeout if timeout is not None else float("inf")
         assert isinstance(weight, (int, float)) and weight >= 0, f"Expected a positive int/float, got {type(weight)}"
         assert not (wait and require_trigger), "Non-asynchronous step cannot wait for trigger (use wait=False)"
         assert scheduled_time < deadline, "Scheduled start time does not fit within timeout"
