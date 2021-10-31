@@ -395,8 +395,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
                     if not step.triggered:
                         step.stage = AveragingStage.AWAITING_TRIGGER
+                        await step.wait_for_trigger()
 
-                    await step.wait_for_trigger()
                     step.stage = AveragingStage.RUNNING_ALLREDUCE
 
                     step.set_result(
@@ -419,7 +419,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     P2PHandlerError,
                 ) as e:
                     if not step.allow_retries or get_dht_time() >= step.deadline:
-                        logger.exception(f"{self.__class__.__name__} caught {repr(e)}")
+                        logger.exception(e)
                         step.set_exception(e)
                     else:
                         logger.warning(f"{self.__class__.__name__} caught {repr(e)}, retrying")
@@ -472,7 +472,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         async for tensor, update in azip(as_aiter(*local_tensors), allreduce):
                             # all-reduce is performed asynchronously while iterating
                             tensor.add_(update, alpha=self._averaging_alpha)
-                            self._mark_state_updated()
+                            self.last_updated = get_dht_time()
+                            self._state_updated.set()
+
                     else:
                         async for _ in allreduce:  # trigger all-reduce by iterating
                             raise ValueError("aux peers should not receive averaged tensors")
@@ -559,10 +561,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 await asyncio.wait_for(self._state_updated.wait(), self.declare_state_period - self.request_timeout)
             except asyncio.TimeoutError:
                 pass
-
-    def _mark_state_updated(self):
-        self.last_updated = get_dht_time()
-        self._state_updated.set()
 
     async def rpc_download_state(
         self, _request: averaging_pb2.DownloadRequest, _context: P2PContext
