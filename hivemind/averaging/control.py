@@ -26,15 +26,15 @@ class StepControl(MPFuture):
     :param deadline: if averaging is still in progress at this time, it should be stopped due to TimeoutError
     :param allow_retries: if True, allow running matchmaking and all-reduce again if previous attempt fails
     :param weight: averaging weight, can be changed afterwards
-    :param gather_binary: optionally send this data to all peers in the next group and gather it from groupmates
+    :param data_for_gather: optionally send this data to all peers in the next group and gather it from groupmates
     :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
     """
 
     def __init__(
-        self, scheduled_time: DHTExpiration, deadline: float, allow_retries: bool, weight: float, gather_binary: bytes
+        self, scheduled_time: DHTExpiration, deadline: float, allow_retries: bool, weight: float, data_for_gather: bytes
     ):
         super().__init__()
-        self._gather_binary, self._deadline, self._allow_retries = gather_binary, deadline, allow_retries
+        self._data_for_gather, self._deadline, self._allow_retries = data_for_gather, deadline, allow_retries
         self._trigger: Optional[MPFuture] = None
 
         # Buffer contents:
@@ -103,8 +103,8 @@ class StepControl(MPFuture):
         self._shared_buffer[17] = int(value)
 
     @property
-    def gather_binary(self) -> bytes:
-        return self._gather_binary
+    def data_for_gather(self) -> bytes:
+        return self._data_for_gather
 
     @property
     def deadline(self) -> DHTExpiration:
@@ -122,13 +122,13 @@ class StepControl(MPFuture):
             super().__getstate__(),
             _trigger=self._trigger,
             _shared_buffer=self._shared_buffer,
-            immutable_params=(self._gather_binary, self._deadline, self._allow_retries),
+            immutable_params=(self._data_for_gather, self._deadline, self._allow_retries),
         )
 
     def __setstate__(self, state):
         super().__setstate__(state)
         self._trigger, self._shared_buffer = state["_trigger"], state["_shared_buffer"]
-        self._gather_binary, self._deadline, self._allow_retries = state["immutable_params"]
+        self._data_for_gather, self._deadline, self._allow_retries = state["immutable_params"]
 
     def cancel(self) -> bool:
         if self._trigger is not None:

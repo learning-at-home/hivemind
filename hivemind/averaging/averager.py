@@ -368,7 +368,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             deadline=deadline,
             allow_retries=allow_retries,
             weight=weight,
-            gather_binary=gather_binary,
+            data_for_gather=gather_binary,
         )
 
         future_for_trigger = MPFuture()

@@ -193,7 +193,7 @@ class Matchmaking:
                         schema_hash=self.schema_hash,
                         expiration=request_expiration_time,
                         client_mode=self.client_mode,
-                        gather=self.step_control.gather_binary,
+                        gather=self.step_control.data_for_gather,
                         group_key=self.group_key_manager.current_key,
                     )
                 )
@@ -368,7 +368,7 @@ class Matchmaking:
         random.shuffle(ordered_peer_ids)
 
         gathered = tuple(
-            self.step_control.gather_binary if peer_id == self.peer_id else self.current_followers[peer_id].gather
+            self.step_control.data_for_gather if peer_id == self.peer_id else self.current_followers[peer_id].gather
             for peer_id in ordered_peer_ids
         )
 
