@@ -51,7 +51,7 @@ class StepControl(MPFuture):
         self.began_allreduce = False
 
     def attach_trigger(self, trigger: MPFuture):
-        assert self._trigger is None, "trigger is already attached"
+        assert self._trigger is None, "Trigger is already attached"
         self._trigger = trigger
 
     def allow_allreduce(self):
