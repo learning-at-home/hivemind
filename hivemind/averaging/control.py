@@ -65,7 +65,7 @@ class StepControl(MPFuture):
             self._trigger.set_result(None)
 
     async def wait_for_trigger(self):
-        assert self._trigger is not None, "StepControl does not have an attached trigger (not properly initialized)"
+        assert self._trigger is not None, "StepControl does not have an attached trigger"
         await self._trigger
 
     @property
