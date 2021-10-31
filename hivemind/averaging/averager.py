@@ -340,7 +340,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         :param gather: optionally send this informaton to all peers in the next group and gather it from every groupmate
           (this operation is known as all-gather). The gathered data will be available as the output of this function.
-        :param scheduled_time: when matchmaking, assume that all-reduce will begin at this moment
+        :param scheduled_time: when matchmaking, assume that all-reduce will begin at this moment.
+          By default, schedule all-reduce current time plus min_matchmaking_time seconds
         :param weight: averaging weight for this peer, int or float, must be strictly positive
         :param allow_retries: if averager fails to run one round of allreduce, this option will allow it to try again
           within the specified timeout
