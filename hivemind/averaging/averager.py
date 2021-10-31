@@ -106,7 +106,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         target_group_size: int,
         min_group_size: int = 2,
         initial_group_bits: str = "",
-        averaging_expiration: float = None,
+        averaging_expiration: Optional[float] = None,
         min_matchmaking_time: float = 5.0,
         request_timeout: float = 3.0,
         averaging_alpha: float = 1.0,
