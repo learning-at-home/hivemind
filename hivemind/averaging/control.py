@@ -107,6 +107,10 @@ class StepControl(MPFuture):
         return self._data_for_gather
 
     @property
+    def triggered(self) -> bool:
+        return self._trigger.done()
+
+    @property
     def deadline(self) -> DHTExpiration:
         return self._deadline
 

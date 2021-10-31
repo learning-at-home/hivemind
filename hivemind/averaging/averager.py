@@ -393,7 +393,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     if group_info is None:
                         raise AllreduceException("Averaging step failed: could not find a group.")
 
-                    if not step.done():
+                    if not step.triggered:
                         step.stage = AveragingStage.AWAITING_TRIGGER
 
                     await step.wait_for_trigger()
