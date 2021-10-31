@@ -28,6 +28,7 @@ class StepControl(MPFuture):
     :param weight: averaging weight, can be changed afterwards
     :param data_for_gather: send this data to all peers in the next group and gather it from groupmates
     """
+
     # indices for the shared buffer
     _SCHEDULED_TIME, _WEIGHT, _STAGE, _BEGAN_ALLREDUCE = slice(0, 8), slice(8, 16), 16, 17
 
