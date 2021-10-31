@@ -135,7 +135,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         if averaging_expiration is not None:
             logger.warning("averaging_expiration is deprecated and will be removed soon, use min_matchmaking_time")
-            assert min_matchmaking_time == 5.0, "can't set both averaging_expiration and min_matchmaking_time"
+            assert min_matchmaking_time == 5.0, "Can't set both averaging_expiration and min_matchmaking_time"
             min_matchmaking_time = averaging_expiration
             del averaging_expiration
 
