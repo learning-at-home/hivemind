@@ -361,14 +361,14 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         assert not (wait and require_trigger), "Non-asynchronous step cannot wait for trigger (use wait=False)"
         assert scheduled_time < deadline, "Scheduled start time does not fit within timeout"
 
-        user_gather_bytes = self.serializer.dumps(gather)  # serialize here to avoid imports in the averager process
-        gather_binary = self.serializer.dumps([self.bandwidth, self.mode.value, user_gather_bytes])
+        user_data_for_gather = self.serializer.dumps(gather)  # serialize here to avoid imports in the averager process
+        data_for_gather = self.serializer.dumps([self.bandwidth, self.mode.value, user_data_for_gather])
         step = StepControl(
             scheduled_time=scheduled_time,
             deadline=deadline,
             allow_retries=allow_retries,
             weight=weight,
-            data_for_gather=gather_binary,
+            data_for_gather=data_for_gather,
         )
 
         future_for_trigger = MPFuture()
