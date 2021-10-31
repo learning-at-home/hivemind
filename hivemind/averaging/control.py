@@ -26,7 +26,7 @@ class StepControl(MPFuture):
     :param deadline: if averaging is still in progress at this time, it should be stopped due to TimeoutError
     :param allow_retries: if True, allow running matchmaking and all-reduce again if previous attempt fails
     :param weight: averaging weight, can be changed afterwards
-    :param data_for_gather: optionally send this data to all peers in the next group and gather it from groupmates
+    :param data_for_gather: send this data to all peers in the next group and gather it from groupmates
     :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
     """
 
