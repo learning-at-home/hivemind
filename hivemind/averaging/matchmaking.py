@@ -513,11 +513,7 @@ class PotentialLeaders:
                 while True:
                     await self.running.wait()
                     new_expiration_time = float(
-                        np.clip(
-                            step.scheduled_time,
-                            a_min=get_dht_time() + self.min_matchmaking_time,
-                            a_max=self.search_end_time,
-                        )
+                        min(max(step.scheduled_time, get_dht_time() + self.min_matchmaking_time), self.search_end_time)
                     )
                     self.declared_group_key = group_key = key_manager.current_key
                     self.declared_expiration_time = new_expiration_time
