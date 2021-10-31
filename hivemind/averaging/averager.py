@@ -345,7 +345,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         :param allow_retries: if averager fails to run one round of allreduce, this option will allow it to try again
           within the specified timeout
         :param require_trigger: if True, await for user to call .allow_allreduce() before running all-reduce
-        :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failedK
+        :param timeout: if averager was unable to *find* a group in this many seconds, consider allreduce failed
         :param wait: if True (default), return when finished. Otherwise return StepControl and run in background.
         :returns: on success, update averaged_tensors and return group info; on failure, return None
         """
