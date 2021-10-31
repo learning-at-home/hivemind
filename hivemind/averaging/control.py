@@ -29,6 +29,7 @@ class StepControl(MPFuture):
     :param data_for_gather: send this data to all peers in the next group and gather it from groupmates
     :returns: an assembled group if successful, None if failed; does NOT perform the actual averaging
     """
+    _SCHEDULED_TIME, _WEIGHT, _STAGE, _BEGAN_ALLREDUCE = slice(0, 8), slice(8, 16), 16, 17
 
     def __init__(
         self,
@@ -68,7 +69,7 @@ class StepControl(MPFuture):
 
     @property
     def scheduled_time(self) -> DHTExpiration:
-        return struct.unpack("d", self._shared_buffer[0:8].numpy().data)[0]
+        return struct.unpack("d", self._shared_buffer[StepControl._SCHEDULED_TIME].numpy().data)[0]
 
     @scheduled_time.setter
     def scheduled_time(self, scheduled_time):
@@ -76,36 +77,36 @@ class StepControl(MPFuture):
             logger.warning("Changing scheduled time has no effect after all-reduce has already started")
         if scheduled_time >= self.deadline:
             logger.warning("Changing scheduled time to after deadline, averaging will likely fail due to timeout.")
-        struct.pack_into("d", self._shared_buffer[0:8].numpy().data, 0, float(scheduled_time))
+        struct.pack_into("d", self._shared_buffer[StepControl._SCHEDULED_TIME].numpy().data, 0, float(scheduled_time))
 
     @property
     def weight(self) -> float:
-        return struct.unpack("d", self._shared_buffer[8:16].numpy().data)[0]
+        return struct.unpack("d", self._shared_buffer[StepControl._WEIGHT].numpy().data)[0]
 
     @weight.setter
     def weight(self, weight: float):
         assert weight >= 0 and np.isfinite(weight)
         if self.began_allreduce:
             logger.warning("Changing weights has no effect after all-reduce has already started")
-        struct.pack_into("d", self._shared_buffer[8:16].numpy().data, 0, float(weight))
+        struct.pack_into("d", self._shared_buffer[StepControl._WEIGHT].numpy().data, 0, float(weight))
 
     @property
     def stage(self) -> AveragingStage:
-        return AveragingStage(self._shared_buffer[16].item())
+        return AveragingStage(self._shared_buffer[StepControl._STAGE].item())
 
     @stage.setter
     def stage(self, stage: AveragingStage):
         if stage == AveragingStage.RUNNING_ALLREDUCE:
             self.can_modify = False
-        self._shared_buffer[16] = stage.value
+        self._shared_buffer[StepControl._STAGE] = stage.value
 
     @property
     def began_allreduce(self) -> bool:
-        return bool(self._shared_buffer[17].item())
+        return bool(self._shared_buffer[StepControl._BEGAN_ALLREDUCE].item())
 
     @began_allreduce.setter
     def began_allreduce(self, value: bool):
-        self._shared_buffer[17] = int(value)
+        self._shared_buffer[StepControl._BEGAN_ALLREDUCE] = int(value)
 
     @property
     def data_for_gather(self) -> bytes:
