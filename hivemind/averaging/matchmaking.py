@@ -246,7 +246,7 @@ class Matchmaking:
                 await stream.aclose()
 
     def get_request_expiration_time(self) -> float:
-        """this averager's current expiration time - used to send join requests to leaders"""
+        """Returns the averager's current expiration time, which is used to send join requests to leaders"""
         if isfinite(self.potential_leaders.declared_expiration_time):
             return self.potential_leaders.declared_expiration_time
         else:
