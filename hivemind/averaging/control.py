@@ -103,7 +103,7 @@ class StepControl(MPFuture):
     @stage.setter
     def stage(self, stage: AveragingStage):
         if stage == AveragingStage.RUNNING_ALLREDUCE:
-            self.can_modify = False
+            self.began_allreduce = True
         self._shared_buffer[StepControl._STAGE] = stage.value
 
     @property
