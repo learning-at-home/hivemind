@@ -4,9 +4,9 @@ from typing import Optional, Sequence, Tuple
 
 import torch
 
-from hivemind.averaging import TrainingAverager
 from hivemind.dht import DHT
 from hivemind.optim.base import DecentralizedOptimizerBase
+from hivemind.optim.training_averager import TrainingAverager
 from hivemind.utils import get_dht_time, get_logger
 
 logger = get_logger(__name__)
