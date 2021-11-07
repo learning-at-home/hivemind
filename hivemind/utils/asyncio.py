@@ -2,7 +2,7 @@ import asyncio
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, asynccontextmanager
-from typing import AsyncIterable, AsyncIterator, Awaitable, Callable, Optional, Tuple, TypeVar, Union, ContextManager
+from typing import AsyncIterable, AsyncIterator, Awaitable, Callable, ContextManager, Optional, Tuple, TypeVar, Union
 
 import uvloop
 
@@ -152,6 +152,7 @@ async def attach_event_on_finished(iterable: AsyncIterable[T], event: asyncio.Ev
 
 class _AsyncContextWrapper(AbstractAsyncContextManager):
     """Wrapper for a non-async context manager that allows entering and exiting it in EventLoop-friendly manner"""
+
     def __init__(self, context: AbstractContextManager):
         self._context = context
 

@@ -11,7 +11,6 @@ import torch
 
 import hivemind
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
-from hivemind.optim.performance_ema import PerformanceEMA
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
@@ -27,9 +26,11 @@ from hivemind.utils.asyncio import (
     asingle,
     attach_event_on_finished,
     azip,
-    cancel_and_wait, enter_asynchronously,
+    cancel_and_wait,
+    enter_asynchronously,
 )
 from hivemind.utils.mpfuture import InvalidStateError
+from hivemind.utils.performance_ema import PerformanceEMA
 
 
 @pytest.mark.forked
