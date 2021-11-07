@@ -1,6 +1,6 @@
 name: Check style
 
-on: [ push ]
+on: [ push, pull_request ]
 
 jobs:
   black:
