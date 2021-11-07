@@ -27,7 +27,7 @@ from hivemind.utils.asyncio import (
     asingle,
     attach_event_on_finished,
     azip,
-    cancel_and_wait,
+    cancel_and_wait, enter_asynchronously,
 )
 from hivemind.utils.mpfuture import InvalidStateError
 
@@ -536,6 +536,23 @@ async def test_cancel_and_wait():
     await asyncio.sleep(0.05)
     assert not await cancel_and_wait(task_with_result)
     assert not await cancel_and_wait(task_with_error)
+
+
+@pytest.mark.asyncio
+async def test_async_context():
+    lock = mp.Lock()
+
+    async def coro1():
+        async with enter_asynchronously(lock):
+            await asyncio.sleep(0.2)
+
+    async def coro2():
+        await asyncio.sleep(0.1)
+        async with enter_asynchronously(lock):
+            await asyncio.sleep(0.1)
+
+    await asyncio.wait_for(asyncio.gather(coro1(), coro2()), timeout=0.5)
+    # running this without enter_asynchronously would deadlock the event loop
 
 
 def test_batch_tensor_descriptor_msgpack():
