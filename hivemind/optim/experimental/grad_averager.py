@@ -68,20 +68,23 @@ class GradientAverager(DecentralizedAverager):
                  reuse_grad_buffers: bool = False,
                  accumulate_grads_on: Optional[torch.device] = None,
                  client_mode: bool = None,
+                 warn: bool = True,
                  **kwargs):
+        if reuse_grad_buffers and accumulate_grads_on is not None:
+            logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
         client_mode = client_mode if client_mode is not None else dht.client_mode
+        self._parameters = tuple(parameters)
         self.reuse_grad_buffers = reuse_grad_buffers
-        self._parameters = parameters = tuple(parameters)
+        self.warn = warn
         self.local_samples_accumulated = 0
         self.local_times_accumulated = 0
         self._anchor_batch_size = None
-        self._need_reset = False
-        self._local_grads = None
+        self._local_accumulators = None
         if not reuse_grad_buffers:
-            self._local_grads = tuple(torch.zeros_like(grad, device=accumulate_grads_on)
-                                      for grad in self._grads_from_parameters())
-        if reuse_grad_buffers and accumulate_grads_on is not None:
-            logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
+            self._local_accumulators = tuple(torch.zeros_like(grad, device=accumulate_grads_on)
+                                             for grad in self._grads_from_parameters())
+        self._accumulators_used_in_step = False
+        self._new_averaged_grads = False
 
         with torch.no_grad():
             averaged_grads = tuple(grad.detach().cpu().clone().share_memory_()
@@ -98,12 +101,16 @@ class GradientAverager(DecentralizedAverager):
     @torch.no_grad()
     def _grad_acumulators(self) -> Iterator[torch.Tensor]:
         """averager-based gradient accumulators"""
-        assert (self._local_grads is None) == self.reuse_grad_buffers
-        yield from self._grads_from_parameters() if self.reuse_grad_buffers else self._local_grads
+        assert (self._local_accumulators is None) == self.reuse_grad_buffers
+        yield from self._grads_from_parameters() if self.reuse_grad_buffers else self._local_accumulators
 
     @torch.no_grad()
     def accumulate_grads_(self, batch_size: int):
         """add current gradients to local grad accumulators (if used)"""
+        if self._accumulators_used_in_step:
+            logger.warning("[warn=True] Gradient accumulators were not reset since the last averaging round. Please "
+                           "call .reset_accumulated_grads_ after every step or use .step(reset_accumulators=True).")
+            self._accumulators_used_in_step = False  # warn once per round
         if self._anchor_batch_size is None:
             self._anchor_batch_size = batch_size
         self.local_samples_accumulated += batch_size
@@ -144,19 +151,25 @@ class GradientAverager(DecentralizedAverager):
         """
         if control is None:
             control = self.schedule_step(**kwargs)
-        assert not control.triggered, "this StepControl instance was already used."
+        assert not control.triggered, f"this {type(control)} instance was already used."
         self._load_accumulators_into_averager_()
+        self._accumulators_used_in_step = True
+        self._new_averaged_grads = True
 
         control.weight = self.local_samples_accumulated
-        control.allow_allreduce()
         if reset_accumulators:
             self.reset_accumulated_grads_()
 
+        control.allow_allreduce()
         return control.result() if wait else control
 
     @torch.no_grad()
     def _load_accumulators_into_averager_(self):
         """load locally accumulated gradients into the averager for aggregation"""
+        if self._new_averaged_grads and self.warn:
+            logger.warning("[warn=True] Starting new averaging round, but previous round results were not used."
+                           "This may be a sign of incorrect optimizer behavior.")
+            self._new_averaged_grads = False  # warn once per round
         # divide locally accumulated gradients by the number of times they were accumulated
         grad_scale = (1. / self.local_times_accumulated) if self.local_times_accumulated != 0 else 0.0
         with self.get_tensors() as averaged_grads:
@@ -166,6 +179,7 @@ class GradientAverager(DecentralizedAverager):
     @torch.no_grad()
     def reset_accumulated_grads_(self):
         """reset averager-internal gradient accumulators and the denominator"""
+        self._accumulators_used_in_step = False
         self.local_samples_accumulated = self.local_times_accumulated = 0
         self._anchor_batch_size = None
         for grad_buf in self._grad_acumulators():
@@ -174,6 +188,7 @@ class GradientAverager(DecentralizedAverager):
     @contextlib.contextmanager
     @torch.no_grad()
     def use_averaged_gradients(self):
+        self._new_averaged_grads = False
         with self.get_tensors() as averaged_grads:
             try:
                 assert len(averaged_grads) == len(self._parameters)
