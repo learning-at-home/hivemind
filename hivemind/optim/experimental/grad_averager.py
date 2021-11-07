@@ -1,12 +1,12 @@
 import contextlib
-from typing import Optional, Iterator, Iterable
+from typing import Iterable, Iterator, Optional
 
-import hivemind.dht.dht
 import torch
 
+import hivemind.dht.dht
 from hivemind.averaging import DecentralizedAverager
 from hivemind.averaging.control import StepControl
-from hivemind.utils import get_logger, DHTExpiration
+from hivemind.utils import DHTExpiration, get_logger
 
 logger = get_logger(__name__)
 
