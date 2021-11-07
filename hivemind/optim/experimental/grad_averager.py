@@ -60,16 +60,19 @@ class GradientAverager(DecentralizedAverager):
     >>>        next_step_control = None
 
     """
-    def __init__(self,
-                 parameters: Iterable[torch.nn.Parameter],
-                 *,
-                 dht: hivemind.DHT,
-                 prefix: str,
-                 reuse_grad_buffers: bool = False,
-                 accumulate_grads_on: Optional[torch.device] = None,
-                 client_mode: bool = None,
-                 warn: bool = True,
-                 **kwargs):
+
+    def __init__(
+        self,
+        parameters: Iterable[torch.nn.Parameter],
+        *,
+        dht: hivemind.DHT,
+        prefix: str,
+        reuse_grad_buffers: bool = False,
+        accumulate_grads_on: Optional[torch.device] = None,
+        client_mode: bool = None,
+        warn: bool = True,
+        **kwargs,
+    ):
         if reuse_grad_buffers and accumulate_grads_on is not None:
             logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
         client_mode = client_mode if client_mode is not None else dht.client_mode
@@ -81,14 +84,16 @@ class GradientAverager(DecentralizedAverager):
         self._anchor_batch_size = None
         self._local_accumulators = None
         if not reuse_grad_buffers:
-            self._local_accumulators = tuple(torch.zeros_like(grad, device=accumulate_grads_on)
-                                             for grad in self._grads_from_parameters())
+            self._local_accumulators = tuple(
+                torch.zeros_like(grad, device=accumulate_grads_on) for grad in self._grads_from_parameters()
+            )
         self._accumulators_used_in_step = False
         self._new_averaged_grads = False
 
         with torch.no_grad():
-            averaged_grads = tuple(grad.detach().cpu().clone().share_memory_()
-                                   for grad in self._grads_from_parameters())
+            averaged_grads = tuple(
+                grad.detach().cpu().clone().share_memory_() for grad in self._grads_from_parameters()
+            )
         super().__init__(averaged_tensors=averaged_grads, dht=dht, prefix=prefix, client_mode=client_mode, **kwargs)
 
     def _grads_from_parameters(self) -> Iterator[torch.Tensor]:
@@ -108,8 +113,10 @@ class GradientAverager(DecentralizedAverager):
     def accumulate_grads_(self, batch_size: int):
         """add current gradients to local grad accumulators (if used)"""
         if self._accumulators_used_in_step:
-            logger.warning("[warn=True] Gradient accumulators were not reset since the last averaging round. Please "
-                           "call .reset_accumulated_grads_ after every step or use .step(reset_accumulators=True).")
+            logger.warning(
+                "[warn=True] Gradient accumulators were not reset since the last averaging round. Please "
+                "call .reset_accumulated_grads_ after every step or use .step(reset_accumulators=True)."
+            )
             self._accumulators_used_in_step = False  # warn once per round
         if self._anchor_batch_size is None:
             self._anchor_batch_size = batch_size
@@ -122,8 +129,9 @@ class GradientAverager(DecentralizedAverager):
             for grad_buf, grad_acc in zip(self._grads_from_parameters(), self._grad_acumulators()):
                 grad_acc.add_(grad_buf.to(grad_acc.device), alpha=alpha)
 
-    def schedule_step(self, scheduled_time: Optional[DHTExpiration] = None, weight: Optional[float] = None, **kwargs
-                      ) -> StepControl:
+    def schedule_step(
+        self, scheduled_time: Optional[DHTExpiration] = None, weight: Optional[float] = None, **kwargs
+    ) -> StepControl:
         """
         Begin matchmaking: look for a group of peers and prepare for averaging gradients at a specified time.
 
@@ -135,12 +143,14 @@ class GradientAverager(DecentralizedAverager):
         assert weight is None, "setting weight in schedule_step is not supported"
         return super().step(scheduled_time=scheduled_time, wait=False, require_trigger=True, **kwargs)
 
-    def step(self,
-             weight: Optional[float] = None,
-             reset_accumulators: bool = True,
-             control: Optional[StepControl] = None,
-             wait: bool = True,
-             **kwargs):
+    def step(
+        self,
+        weight: Optional[float] = None,
+        reset_accumulators: bool = True,
+        control: Optional[StepControl] = None,
+        wait: bool = True,
+        **kwargs,
+    ):
         """
         Average accumulated gradients with peers, optionally load averaged gradients and reset accumulators
 
@@ -167,11 +177,13 @@ class GradientAverager(DecentralizedAverager):
     def _load_accumulators_into_averager_(self):
         """load locally accumulated gradients into the averager for aggregation"""
         if self._new_averaged_grads and self.warn:
-            logger.warning("[warn=True] Starting new averaging round, but previous round results were not used."
-                           "This may be a sign of incorrect optimizer behavior.")
+            logger.warning(
+                "[warn=True] Starting new averaging round, but previous round results were not used."
+                "This may be a sign of incorrect optimizer behavior."
+            )
             self._new_averaged_grads = False  # warn once per round
         # divide locally accumulated gradients by the number of times they were accumulated
-        grad_scale = (1. / self.local_times_accumulated) if self.local_times_accumulated != 0 else 0.0
+        grad_scale = (1.0 / self.local_times_accumulated) if self.local_times_accumulated != 0 else 0.0
         with self.get_tensors() as averaged_grads:
             for grad_acc, averaged_grad in zip(self._grad_acumulators(), averaged_grads):
                 averaged_grad.copy_(grad_acc, non_blocking=True).mul_(grad_scale)
