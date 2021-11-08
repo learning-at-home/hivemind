@@ -165,8 +165,8 @@ class GradientAverager(DecentralizedAverager):
         """
         if control is None:
             control = self.schedule_step(**kwargs)
-        else:
-            logger.warning(f"Averaging with a pre-scheduled group, parameters {kwargs} will have no effect.")
+        elif len(kwargs) > 0:
+            RuntimeError(f"Averaging with a pre-scheduled group, parameters {kwargs} will have no effect.")
         assert not control.triggered, f"This {type(control)} instance was already used."
         self._load_accumulators_into_averager_()
         self._accumulators_used_in_step = True
