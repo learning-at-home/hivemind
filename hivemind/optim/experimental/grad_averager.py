@@ -30,8 +30,12 @@ class GradientAverager(DecentralizedAverager):
     :param reuse_grad_buffers: if True, use model's .grad buffers for accumulating gradients over multiple steps.
       This is more memory efficient, but it requires that the user does *not* call zero_grad or clip_by_whatever at all
     :param accumulate_grads_on: if specified, accumulate gradients on this device. By default, this will use the same
-     device as model parameters. One can specify a different device (e.g. 'cpu' vs 'cuda') to save device memory at
-     the cost of extra time per step. If reuse_grad_buffers is True, this parameter has no effect.
+      device as model parameters. One can specify a different device (e.g. 'cpu' vs 'cuda') to save device memory at
+      the cost of extra time per step. If reuse_grad_buffers is True, this parameter has no effect.
+    :param client_mode: if False, this averager will accept incoming requests from other peers.
+      if True, the averager will only join existing groups where at least one peer has client_mode=False.
+      By default, this flag is copied from DHTNode inside the ``dht`` instance.
+    :param warn: if True, warn when the averager did not reset accumulators after use or did not use averaging results
     :param kwargs: see DecentralizedAverager keyword arguments for additional parameters
 
 
@@ -112,7 +116,7 @@ class GradientAverager(DecentralizedAverager):
     @torch.no_grad()
     def accumulate_grads_(self, batch_size: int):
         """add current gradients to local grad accumulators (if used)"""
-        if self._accumulators_used_in_step:
+        if self._accumulators_used_in_step and self.warn:
             logger.warning(
                 "[warn=True] Gradient accumulators were not reset since the last averaging round. Please "
                 "call .reset_accumulated_grads_ after every step or use .step(reset_accumulators=True)."
