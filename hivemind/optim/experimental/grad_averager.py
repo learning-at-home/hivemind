@@ -123,6 +123,7 @@ class GradientAverager(DecentralizedAverager):
             )
             self._accumulators_used_in_step = False  # warn once per round
         if self._anchor_batch_size is None:
+            # remember the first batch size to correctly re-scale gradients if subsequent batches have a different size
             self._anchor_batch_size = batch_size
         self.local_samples_accumulated += batch_size
         self.local_times_accumulated += 1
