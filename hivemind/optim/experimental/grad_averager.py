@@ -17,8 +17,8 @@ class GradientAverager(DecentralizedAverager):
     GradientAverager is meant to be used within hivemind.Optimizer, but it can be used standalone (see example below).
 
     GradientAverager manages three sets of buffers:
-    (1) gradients from model parameters - the gradients associated with local model parameters by PyTorch.
-        These tensors are typically stored in device memory
+    (1) model gradients - the gradients associated with local model parameters by PyTorch (param.grad).
+        These tensors are typically stored on device and updated by torch autograd
     (2) gradient accumulators - an [optional] set of buffers where local gradients are accumulated.
       - note: if reuse_grad_buffers is True, the averager will use gradients from parameters as local accumulators,
         which reduces RAM usage but requires the user to avoid calling zero_grad / clip_grad manually
