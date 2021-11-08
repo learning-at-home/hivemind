@@ -1,13 +1,13 @@
 import asyncio
 import gc
-import multiprocessing as mp
 from contextlib import suppress
 
 import psutil
 import pytest
 
+from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
-from hivemind.utils.mpfuture import MPFuture, SharedBytes
+from hivemind.utils.mpfuture import MPFuture
 
 use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
@@ -32,6 +32,9 @@ def event_loop():
 @pytest.fixture(autouse=True, scope="session")
 def cleanup_children():
     yield
+
+    with RSAPrivateKey._process_wide_key_lock:
+        RSAPrivateKey._process_wide_key = None
 
     gc.collect()  # Call .__del__() for removed objects
 
