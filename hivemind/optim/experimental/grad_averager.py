@@ -141,7 +141,7 @@ class GradientAverager(DecentralizedAverager):
         :param scheduled_time: expected time when to perform all-reduce. Can be changed using control.scheduled_time
         :param kwargs: any additional keyword args from DecentralizedAverager.step, such as gather, allow_retries, etc
         :note: setting weight at this stage is not supported, please leave this parameter as None
-        :returns: a step_control - handle that can be passed into GradientAverager.step to use the pre-scheduled group
+        :returns: step_control - a handle that can be passed into GradientAverager.step to use the pre-scheduled group
         :note: in the current implementation, each step_control can only be used in one step.
         """
         assert kwargs.get("weight") is None, "setting weight in schedule_step is not supported"
