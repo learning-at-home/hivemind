@@ -157,7 +157,7 @@ class GradientAverager(DecentralizedAverager):
         """
         Average accumulated gradients with peers, optionally load averaged gradients and reset accumulators
 
-        :param weight: by default, peer's weight is equal to the number of accumulated samples. Use this to override.
+        :param weight: overrides the averaging weight; by default, weight equals the number of accumulated samples
         :param reset_accumulators: by default, set local gradient accumulators to zeros after averaging succeeds
         :param control: reuse a pre-arranged group of peers (or a matchmaking in progress) from averager.schedule_step
         :param wait: if True, await for the step to finish (or fail), otherwise run all-reduce in background
