@@ -48,7 +48,7 @@ class GradientAverager(DecentralizedAverager):
     >>>    loss.backward()
     >>>    grad_averager.accumulate_grads_(batch_size=32)
     >>>    # [optional] next step in 5 seconds, start looking for peers in advance
-    >>>    if next_step_time - hivemind.get_dht_time() <= 5.
+    >>>    if next_step_time - hivemind.get_dht_time() <= 5
     >>>        next_step_control = grad_averager.schedule_step(scheduled_time=next_step_time)
     >>>    # aggregate gradients and perform optimizer step
     >>>    if hivemind.get_dht_time() >= next_step_time:
