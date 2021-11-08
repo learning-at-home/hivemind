@@ -1,4 +1,3 @@
-import multiprocessing as mp
 import time
 
 import pytest
@@ -42,11 +41,12 @@ def test_grad_averager():
             # note: we do not call zero grad here because reuse_grad_buffers=True
 
     assert control1.stage == control2.stage == AveragingStage.AWAITING_TRIGGER
-    assert averager1.local_samples_accumulated == 8 and averager1.local_times_accumulated == 4
+    peer1_samples, peer1_times, peer2_samples, peer2_times = 8, 4, 18, 6
+    assert averager1.local_samples_accumulated == peer1_samples and averager1.local_times_accumulated == peer1_times
     ref_grads1 = torch.full((3,), -2 * 1 / 3 * averager1.local_times_accumulated)
     assert torch.allclose(next(averager1._grad_accumulators()), ref_grads1)
 
-    assert averager2.local_samples_accumulated == 18 and averager2.local_times_accumulated == 6
+    assert averager2.local_samples_accumulated == peer2_samples and averager2.local_times_accumulated == peer2_times
     ref_grads2 = torch.full((3,), 2 * 1 / 3 * averager2.local_times_accumulated)
     assert torch.allclose(next(averager2._grad_accumulators()), ref_grads2)
 
@@ -55,7 +55,9 @@ def test_grad_averager():
     for step in (control1, control2):
         step.result()  # wait for all-reduce to finish
 
-    ref_average = 8 / 26 * (ref_grads1 / 4) + 18 / 26 * (ref_grads2 / 6)
+    peer1_weight = peer1_samples / (peer1_samples + peer2_samples)
+    peer2_weight = peer2_samples / (peer1_samples + peer2_samples)
+    ref_average = peer1_weight * (ref_grads1 / peer1_times) + peer2_weight * (ref_grads2 / peer2_times)
     with averager1.use_averaged_gradients():
         assert torch.allclose(model1.w.grad, ref_average)
     with averager2.use_averaged_gradients():
