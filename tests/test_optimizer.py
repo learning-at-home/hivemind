@@ -14,7 +14,7 @@ from hivemind.optim.experimental.grad_averager import GradientAverager
 @pytest.mark.forked
 def test_grad_averager():
     dht1 = hivemind.DHT(start=True)
-    model1 = nn.ParameterDict(dict(w=nn.Parameter(torch.zeros(3))))
+    model1 = nn.ParameterDict({"w": nn.Parameter(torch.zeros(3))})
     averager1 = GradientAverager(
         model1.parameters(), dht=dht1, prefix="test", target_group_size=2, reuse_grad_buffers=False, start=True
     )
