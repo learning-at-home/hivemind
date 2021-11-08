@@ -19,7 +19,7 @@ def test_grad_averager():
     )
 
     dht2 = hivemind.DHT(start=True, initial_peers=dht1.get_visible_maddrs())
-    model2 = nn.ParameterDict(dict(w=nn.Parameter(torch.zeros(3))))
+    model2 = nn.ParameterDict({"w": nn.Parameter(torch.zeros(3))})
     averager2 = GradientAverager(
         model2.parameters(), dht=dht2, prefix="test", target_group_size=2, reuse_grad_buffers=True, start=True
     )
