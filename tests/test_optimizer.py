@@ -84,6 +84,7 @@ def test_load_state_from_peers():
         param_groups=model1.parameters(),
         optimizer=partial(torch.optim.SGD, lr=0.1),
         scheduler=partial(torch.optim.lr_scheduler.LambdaLR, lr_lambda=lambda t: 1.0 / max(1, t)),
+        allow_state_sharing=False,
         target_group_size=2,
         prefix="my_exp",
         start=True,
@@ -101,6 +102,7 @@ def test_load_state_from_peers():
 
     avgr2.local_epoch = 1337
     model2.weight.data[...] = 42
+    time.sleep(0.5)
 
     avgr1.load_state_from_peers()
     assert avgr1.local_epoch == 1337
