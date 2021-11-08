@@ -194,8 +194,7 @@ class TrainingStateAverager(DecentralizedAverager):
 
         # verify optimizer and scheduler
         assert isinstance(optimizer, TorchOptimizer)
-        #TODO REPLACE NESTED_COMPARE WITH SCHEMA-BASED COMPARISON!!!!
-        #assert nested_compare(optimizer.param_groups, param_groups), (optimizer.param_groups, param_groups)
+        assert len(optimizer.param_groups) == len(param_groups)
         if self.offload_optimizer or self.reuse_tensors:
             for param_group in optimizer.param_groups:
                 for param in param_group["params"]:
