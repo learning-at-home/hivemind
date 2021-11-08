@@ -3,7 +3,7 @@ from typing import Iterable, Iterator, Optional
 
 import torch
 
-import hivemind.dht.dht
+import hivemind
 from hivemind.averaging import DecentralizedAverager
 from hivemind.averaging.control import StepControl
 from hivemind.utils import DHTExpiration, get_logger
