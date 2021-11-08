@@ -1,5 +1,7 @@
 import time
+from functools import partial
 
+import numpy as np
 import pytest
 import torch
 import torch.nn as nn
@@ -8,6 +10,7 @@ import torch.nn.functional as F
 import hivemind
 from hivemind.averaging.control import AveragingStage
 from hivemind.optim.experimental.grad_averager import GradientAverager
+from hivemind.optim.experimental.state_averager import TrainingStateAverager
 
 
 @pytest.mark.forked
@@ -66,3 +69,32 @@ def test_grad_averager():
     # after no longer use_averaged_gradients
     assert not torch.allclose(model1.w.grad, ref_average)
     assert not torch.allclose(model2.w.grad, ref_average)
+
+
+@pytest.mark.forked
+def test_load_state_from_peers():
+    dht1 = hivemind.DHT(start=True)
+    dht2 = hivemind.DHT(initial_peers=dht1.get_visible_maddrs(), start=True)
+
+    model1 = nn.Linear(2, 3)
+    model2 = nn.Linear(2, 3)
+
+    avgr1 = TrainingStateAverager(dht=dht1, param_groups=model1.parameters(),
+                                  optimizer=partial(torch.optim.SGD, lr=0.1),
+                                  scheduler=partial(torch.optim.lr_scheduler.LambdaLR,
+                                                    lr_lambda=lambda t: 1. / max(1, t)),
+                                  target_group_size=2, prefix="my_exp", start=True)
+
+    avgr2 = TrainingStateAverager(dht=dht2, param_groups=model2.parameters(),
+                                  optimizer=partial(torch.optim.SGD, lr=0.1),
+                                  scheduler=partial(torch.optim.lr_scheduler.LambdaLR,
+                                                    lr_lambda=lambda t: 1. / max(1, t)),
+                                  target_group_size=2, prefix="my_exp", start=True)
+
+    avgr2.local_epoch = 1337
+    model2.weight.data[...] = 42
+
+    avgr1.load_state_from_peers()
+    assert avgr1.local_epoch == 1337
+    assert torch.all(model1.weight == 42).item()
+    assert np.allclose(avgr1.optimizer.param_groups[0]["lr"], 0.1 / 1337)

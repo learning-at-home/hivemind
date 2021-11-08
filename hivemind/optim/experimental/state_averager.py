@@ -193,8 +193,7 @@ class TrainingStateAverager(DecentralizedAverager):
             scheduler = scheduler_or_factory
 
         # verify optimizer and scheduler
-        assert isinstance(optimizer, TorchOptimizer)
-        assert len(optimizer.param_groups) == len(param_groups)
+        assert isinstance(optimizer, TorchOptimizer) and len(optimizer.param_groups) == len(list(param_groups))
         if self.offload_optimizer or self.reuse_tensors:
             for param_group in optimizer.param_groups:
                 for param in param_group["params"]:
