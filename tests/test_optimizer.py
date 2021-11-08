@@ -79,17 +79,25 @@ def test_load_state_from_peers():
     model1 = nn.Linear(2, 3)
     model2 = nn.Linear(2, 3)
 
-    avgr1 = TrainingStateAverager(dht=dht1, param_groups=model1.parameters(),
-                                  optimizer=partial(torch.optim.SGD, lr=0.1),
-                                  scheduler=partial(torch.optim.lr_scheduler.LambdaLR,
-                                                    lr_lambda=lambda t: 1. / max(1, t)),
-                                  target_group_size=2, prefix="my_exp", start=True)
+    avgr1 = TrainingStateAverager(
+        dht=dht1,
+        param_groups=model1.parameters(),
+        optimizer=partial(torch.optim.SGD, lr=0.1),
+        scheduler=partial(torch.optim.lr_scheduler.LambdaLR, lr_lambda=lambda t: 1.0 / max(1, t)),
+        target_group_size=2,
+        prefix="my_exp",
+        start=True,
+    )
 
-    avgr2 = TrainingStateAverager(dht=dht2, param_groups=model2.parameters(),
-                                  optimizer=partial(torch.optim.SGD, lr=0.1),
-                                  scheduler=partial(torch.optim.lr_scheduler.LambdaLR,
-                                                    lr_lambda=lambda t: 1. / max(1, t)),
-                                  target_group_size=2, prefix="my_exp", start=True)
+    avgr2 = TrainingStateAverager(
+        dht=dht2,
+        param_groups=model2.parameters(),
+        optimizer=partial(torch.optim.SGD, lr=0.1),
+        scheduler=partial(torch.optim.lr_scheduler.LambdaLR, lr_lambda=lambda t: 1.0 / max(1, t)),
+        target_group_size=2,
+        prefix="my_exp",
+        start=True,
+    )
 
     avgr2.local_epoch = 1337
     model2.weight.data[...] = 42
