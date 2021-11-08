@@ -44,11 +44,11 @@ def test_grad_averager():
     assert control1.stage == control2.stage == AveragingStage.AWAITING_TRIGGER
     assert averager1.local_samples_accumulated == 8 and averager1.local_times_accumulated == 4
     ref_grads1 = torch.full((3,), -2 * 1 / 3 * averager1.local_times_accumulated)
-    assert torch.allclose(next(averager1._grad_acumulators()), ref_grads1)
+    assert torch.allclose(next(averager1._grad_accumulators()), ref_grads1)
 
     assert averager2.local_samples_accumulated == 18 and averager2.local_times_accumulated == 6
     ref_grads2 = torch.full((3,), 2 * 1 / 3 * averager2.local_times_accumulated)
-    assert torch.allclose(next(averager2._grad_acumulators()), ref_grads2)
+    assert torch.allclose(next(averager2._grad_accumulators()), ref_grads2)
 
     averager1.step(control=control1, wait=False)
     averager2.step(control=control2, wait=False)
