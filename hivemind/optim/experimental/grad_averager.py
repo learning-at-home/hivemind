@@ -171,7 +171,7 @@ class GradientAverager(DecentralizedAverager):
         self._accumulators_used_in_step = True
         self._new_averaged_grads = True
 
-        control.weight = self.local_samples_accumulated
+        control.weight = self.local_samples_accumulated if weight is None else weight
         if reset_accumulators:
             self.reset_accumulated_grads_()
 
