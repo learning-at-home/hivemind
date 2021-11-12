@@ -147,6 +147,7 @@ async def benchmark_dht(
     ]
 
     store_and_get_result = await asyncio.gather(*task_list)
+    benchmark_total_time = time.perf_counter() - benchmark_started
     total_store_time = total_get_time = 0
     total_successful_gets = total_gets = 0
     for result in store_and_get_result:
@@ -159,20 +160,24 @@ async def benchmark_dht(
 
     alive_peers = [peer.is_alive() for peer in peers]
     logger.info(
-        f"Total store time: {total_store_time} Total get time: {total_get_time} "
-        + f"Total get succcess rate: {total_successful_gets / total_gets * 100:.1f}% "
+        f"Average store time per worker: {total_store_time / num_threads} "
+        + f"Average get time per worker: {total_get_time / num_threads}"
+    )
+    logger.info(
+        f"Total get succcess rate: {total_successful_gets / total_gets * 100:.1f}% "
         + f"({total_successful_gets}/{total_gets})"
     )
+    logger.info(f"Total benchmark time: {benchmark_total_time:.5f} sec.")
     logger.info(f"Node survival rate: {len(alive_peers) / len(peers) * 100:.3f}%")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_peers", type=int, default=4, required=False)
-    parser.add_argument("--initial_peers", type=int, default=1, required=False)
+    parser.add_argument("--num_peers", type=int, default=16, required=False)
+    parser.add_argument("--initial_peers", type=int, default=4, required=False)
     parser.add_argument("--random_seed", type=int, default=30, required=False)
-    parser.add_argument("--num_threads", type=int, default=16, required=False)
-    parser.add_argument("--total_num_rounds", type=int, default=8, required=False)
+    parser.add_argument("--num_threads", type=int, default=100, required=False)
+    parser.add_argument("--total_num_rounds", type=int, default=16, required=False)
     parser.add_argument("--num_store_peers", type=int, default=8, required=False)
     parser.add_argument("--num_get_peers", type=int, default=8, required=False)
     parser.add_argument("--wait_after_iteration", type=float, default=0, required=False)
