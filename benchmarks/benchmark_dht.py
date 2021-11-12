@@ -1,10 +1,10 @@
 import argparse
+import asyncio
 import random
 import time
 import uuid
 
-import asyncio
-
+import numpy as np
 from tqdm import trange
 
 import hivemind
@@ -16,88 +16,92 @@ logger = get_logger(__name__)
 
 async def store_task(peer, key, value, expiration):
     subkey = uuid.uuid4().hex
-    
+
     store_ok = await peer.store(
-        key, subkey=subkey, value=value, 
-        expiration_time=hivemind.get_dht_time() + expiration, return_future=True
+        key, subkey=subkey, value=value, expiration_time=hivemind.get_dht_time() + expiration, return_future=True
     )
 
-    return store_ok
+    return store_ok, subkey, value
 
 
-async def get_task(peer, key):
-    latest = bool(random.getrandbits(1))
-    value, expiration = await peer.get(key, latest=latest, return_future=True)
-
-    return value, expiration
-
-
-async def corouting_task(
+async def store_and_get_task(
     peers: list,
     total_num_rounds: int,
     num_store_peers: int,
     num_get_peers: int,
     wait_after_iteration: float,
-    wait_before_read: float,
+    delay: float,
     expiration: float,
+    latest: bool,
+    failure_rate: float,
 ):
-    successful_stores = total_stores = total_store_time = 0
-    successful_gets = total_get_time = 0
-    
+    total_stores = total_gets = 0
+    successful_stores = []
+    successful_gets = []
+    store_times = []
+    get_times = []
+
     for _ in range(total_num_rounds):
         key = uuid.uuid4().hex
-        
+        value = uuid.uuid4().hex
+
         store_start = time.perf_counter()
         store_peers = random.sample(peers, min(num_store_peers, len(peers)))
-        store_tasks = [
-            store_task(peer, key, 'yes', expiration) for peer in store_peers
-        ]
-        store_result, _ = await asyncio.wait(
-            store_tasks, return_when=asyncio.ALL_COMPLETED
-        )
-        total_store_time += time.perf_counter() - store_start
+        store_tasks = [store_task(peer, key, value, expiration) for peer in store_peers]
+        store_result, _ = await asyncio.wait(store_tasks, return_when=asyncio.ALL_COMPLETED)
+        store_times.append(time.perf_counter() - store_start)
+
+        successful_stores_per_iter = 0
+        store_attendees = dict()
 
         total_stores += len(store_result)
-        successful_stores += sum(map(bool, [
-            result.result() for result in store_result
-        ]))
-        await asyncio.sleep(wait_before_read)
-        
+        for result in store_result:
+            store_ok, attendee, value = result.result()
+            successful_stores_per_iter += store_ok
+            store_attendees[attendee] = value
+
+        successful_stores.append(successful_stores_per_iter)
+        await asyncio.sleep(delay)
+
         get_start = time.perf_counter()
         get_peers = random.sample(peers, min(num_get_peers, len(peers)))
-        get_tasks = [
-            get_task(peer, key) for peer in get_peers
-        ]
-        get_result, _ = await asyncio.wait(
-            get_tasks, return_when=asyncio.ALL_COMPLETED
-        )
-        for result in get_result:
-            if result.result()[0]:
-                successful_gets += 1
-        
-        total_get_time += time.perf_counter() - get_start
+        get_tasks = [peer.get(key, latest, return_future=True) for peer in get_peers]
+        get_result, _ = await asyncio.wait(get_tasks, return_when=asyncio.ALL_COMPLETED)
+        get_times.append(time.perf_counter() - get_start)
 
+        successful_gets_per_iter = 0
+
+        total_gets += len(get_result)
+        for result in get_result:
+            attendees, expiration = result.result()
+            if attendees.keys() == store_attendees.keys():
+                get_ok = True
+                for key in attendees:
+                    if attendees[key][0] != store_attendees[key]:
+                        get_ok = False
+                        break
+                successful_gets_per_iter += get_ok
+
+        successful_gets.append(successful_gets_per_iter)
         await asyncio.sleep(wait_after_iteration)
 
     logger.info(
-        f"Store success rate: {successful_stores / total_stores * 100:.1f}% \
-        ({successful_stores} / {total_stores})"
-    )
-    logger.info(f"Mean store time: {total_store_time / total_stores:.5}, \
-        Total: {total_store_time:.5}")
-    logger.info(
-        f"Get success rate: \
-        {successful_gets / num_get_peers / min(num_get_peers, len(peers)) * 100:.1f} \
-        ({successful_gets} / {num_get_peers * min(num_get_peers, len(peers))})"
+        "Store wall time: "
+        + f"mean({np.mean(store_times):.3f}) std({np.std(store_times, ddof=1):.3f}) max({np.max(store_times):.3f}) "
+        + "Store success rate: "
+        + f"{sum(successful_stores) / total_stores * 100:.1f}% ({sum(successful_stores)}/{total_stores})"
     )
     logger.info(
-        f"Mean get time: \
-        {total_get_time / num_get_peers / total_num_rounds:.5f}, \
-        Total: {total_get_time:.5f}"
+        "Get wall time: "
+        + f"mean({np.mean(get_times):.3f}) std({np.std(get_times, ddof=1):.3f}) max({np.max(get_times):.3f}) "
+        + "Get success rate: "
+        + f"{sum(successful_gets) / total_gets * 100:.1f}% ({sum(successful_gets)}/{total_gets})"
     )
-            
 
-def benchmark_dht(
+    return sum(store_times), sum(get_times), sum(successful_gets), total_gets
+
+
+async def benchmark_dht(
     num_peers: int,
     initial_peers: int,
     random_seed: int,
@@ -106,59 +110,78 @@ def benchmark_dht(
     num_store_peers: int,
     num_get_peers: int,
     wait_after_iteration: float,
-    wait_before_read: float,
+    delay: float,
     wait_timeout: float,
     expiration: float,
+    latest: bool,
+    failure_rate: float,
 ):
     random.seed(random_seed)
-    
+
     logger.info("Creating peers...")
     peers = []
     for _ in trange(num_peers):
         neighbors = sum(
-            [peer.get_visible_maddrs() for peer in random.sample(
-                peers, min(initial_peers, len(peers))
-            )], []
+            [peer.get_visible_maddrs() for peer in random.sample(peers, min(initial_peers, len(peers)))], []
         )
-        peer = hivemind.DHT(initial_peers=neighbors, start=True, 
-                wait_timeout=wait_timeout)
+        peer = hivemind.DHT(initial_peers=neighbors, start=True, wait_timeout=wait_timeout)
         peers.append(peer)
 
-    logger.info("Creating coroutines...")
-    loop = asyncio.get_event_loop()
-
+    benchmark_started = time.perf_counter()
+    logger.info("Creating store and get tasks...")
     task_list = [
-        loop.create_task(
-            corouting_task(peers, total_num_rounds, num_store_peers, 
-                num_get_peers, wait_after_iteration, wait_before_read,
-                expiration)
-        ) for _ in range(num_threads)
+        asyncio.create_task(
+            store_and_get_task(
+                peers,
+                total_num_rounds,
+                num_store_peers,
+                num_get_peers,
+                wait_after_iteration,
+                delay,
+                expiration,
+                latest,
+                failure_rate,
+            )
+        )
+        for _ in trange(num_threads)
     ]
 
-    loop.run_until_complete(asyncio.wait(task_list))
-    loop.close()
+    store_and_get_result = await asyncio.gather(*task_list)
+    total_store_time = total_get_time = 0
+    total_successful_gets = total_gets = 0
+    for result in store_and_get_result:
+        store_time, get_time, successful_gets, gets = result
+
+        total_store_time += store_time
+        total_get_time += get_time
+        total_successful_gets += successful_gets
+        total_gets += gets
 
     alive_peers = [peer.is_alive() for peer in peers]
     logger.info(
-        f"Node survival rate: {len(alive_peers) / len(peers) * 100:.3f}%"
+        f"Total store time: {total_store_time} Total get time: {total_get_time} "
+        + f"Total get succcess rate: {total_successful_gets / total_gets * 100:.1f}% "
+        + f"({total_successful_gets}/{total_gets})"
     )
+    logger.info(f"Node survival rate: {len(alive_peers) / len(peers) * 100:.3f}%")
 
-    
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_peers", type=int, default=32, required=False)
+    parser.add_argument("--num_peers", type=int, default=4, required=False)
     parser.add_argument("--initial_peers", type=int, default=1, required=False)
-    parser.add_argument("--random_seed", type=int, default=random.randint(1, 1000))
+    parser.add_argument("--random_seed", type=int, default=30, required=False)
     parser.add_argument("--num_threads", type=int, default=16, required=False)
     parser.add_argument("--total_num_rounds", type=int, default=8, required=False)
     parser.add_argument("--num_store_peers", type=int, default=8, required=False)
     parser.add_argument("--num_get_peers", type=int, default=8, required=False)
     parser.add_argument("--wait_after_iteration", type=float, default=0, required=False)
-    parser.add_argument("--wait_before_read", type=float, default=0, required=False)
+    parser.add_argument("--delay", type=float, default=0, required=False)
     parser.add_argument("--wait_timeout", type=float, default=5, required=False)
     parser.add_argument("--expiration", type=float, default=300, required=False)
+    parser.add_argument("--latest", type=bool, default=True, required=False)
+    parser.add_argument("--failure_rate", type=float, default=0.1, required=False)
 
     args = vars(parser.parse_args())
 
-    benchmark_dht(**args)
-    
+    asyncio.run(benchmark_dht(**args))
