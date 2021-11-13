@@ -83,6 +83,8 @@ class TrainingStateAverager(DecentralizedAverager):
         status_loglevel: int = logging.DEBUG,
         **kwargs,
     ):
+        average_opt_statistics = tuple(average_opt_statistics)
+        assert all(isinstance(key, str) for key in average_opt_statistics)
         if offload_optimizer and reuse_tensors:
             logger.warning("offload_optimizer has no effect because reuse_parameters=True (all params must be on cpu)")
         param_groups, main_parameters, parameter_names = self._check_params(optimizer, param_groups, parameter_names)
@@ -90,7 +92,7 @@ class TrainingStateAverager(DecentralizedAverager):
         self.status_loglevel = status_loglevel
         self.reuse_tensors, self.offload_optimizer = reuse_tensors, offload_optimizer
         self._main_parameters, self._parameter_names = main_parameters, parameter_names
-        self._averaged_parameters = tuple(map(self._make_averaged_tensor, main_parameters))
+        self._averaged_parameters = tuple(map(self._make_host_tensor, main_parameters))
         self.optimizer, self.scheduler = self._init_components(
             param_groups, optimizer, scheduler, initialize_optimizer
         )
@@ -99,8 +101,8 @@ class TrainingStateAverager(DecentralizedAverager):
         self.local_epoch = 0
 
         self.step_executor = ThreadPoolExecutor(max_workers=1)
-        self.pending_optimizer_step = Event()
-        self.pending_averaging_round = Event()
+        self.finished_optimizer_step = Event()
+        self.finished_averaging_round = Event()
         self.pending_update = Future()
         self.pending_update.set_result(None)
 
@@ -137,8 +139,8 @@ class TrainingStateAverager(DecentralizedAverager):
         assert len(set(parameters)) == len(parameters), "Found duplicate parameters in param_groups"
         return param_groups, parameters, parameter_names
 
-    def _make_averaged_tensor(self, source_tensor: torch.Tensor) -> torch.Tensor:
-        """Create a new averaged tensor or reuse the existing one"""
+    def _make_host_tensor(self, source_tensor: torch.Tensor) -> torch.Tensor:
+        """Create a new tensor for averaging or reuse the existing one"""
         if self.reuse_tensors:
             assert source_tensor.device == torch.device("cpu") and source_tensor.dtype == torch.float32
             if not source_tensor.is_shared():
@@ -167,6 +169,10 @@ class TrainingStateAverager(DecentralizedAverager):
         # create optimizer
         if optimizer_is_factory:
             if self.offload_optimizer:
+                for param in self._averaged_parameters:
+                    if param.grad is None:
+                        param.grad = torch.zeros_like(param)
+
                 next_index = 0
                 param_groups_for_optimizer = []
                 for param_group in param_groups:
@@ -175,6 +181,7 @@ class TrainingStateAverager(DecentralizedAverager):
                     param_groups_for_optimizer.append(dict(param_group, params=averaged_params_for_group))
                     next_index += num_params
                 assert next_index == len(self._averaged_parameters)
+
             else:
                 param_groups_for_optimizer = param_groups
             optimizer = optimizer_or_factory(param_groups_for_optimizer)
@@ -189,6 +196,7 @@ class TrainingStateAverager(DecentralizedAverager):
                 "Initializing optimizer manually since it has no tensors in state dict."
                 "To override this, please provide initialize_optimizer=False",
             )
+
         if initialize_optimizer:
             initialize_optimizer_state_(optimizer)  # note: this will run one optimizer step!
 
@@ -229,8 +237,9 @@ class TrainingStateAverager(DecentralizedAverager):
 
         local_tensors = tuple(self._local_tensors())
         local_non_parameters = local_tensors[len(self._averaged_parameters) :]
-        averaged_non_parameters = tuple(map(self._make_averaged_tensor, local_non_parameters))
-        averaged_tensors = tuple(chain(self._averaged_parameters, averaged_non_parameters))
+        averaged_tensors = tuple(map(torch.Tensor.detach, self._averaged_parameters))
+        averaged_non_parameters = tuple(map(self._make_host_tensor, local_non_parameters))
+        averaged_tensors = tuple(chain(averaged_tensors, averaged_non_parameters))
 
         assert len(averaged_tensors) == len(local_tensors)
         for local_tensor, averaged_tensor in zip(local_tensors, averaged_tensors):
@@ -246,7 +255,9 @@ class TrainingStateAverager(DecentralizedAverager):
         for param, param_name in zip(self._main_parameters, self._parameter_names):
             tensor_infos.append(CompressionInfo.from_tensor(param, key=param_name, role=TensorRole.PARAMETER))
         for stats_name in self.opt_keys_for_averaging:
-            for param, param_name in zip(self._main_parameters, self._parameter_names):
+            opt_parameters = [param for group in self.optimizer.param_groups for param in group["params"]]
+            assert len(opt_parameters) == len(self._parameter_names)
+            for param, param_name in zip(opt_parameters, self._parameter_names):
                 tensor_infos.append(
                     CompressionInfo.from_tensor(
                         self.optimizer.state[param][stats_name],
@@ -260,7 +271,7 @@ class TrainingStateAverager(DecentralizedAverager):
 
     def step(
         self,
-        wait_for_delayed_updates: bool = None,
+        wait_for_delayed_update: bool = None,
         apply_delayed_updates: bool = True,
         increment_epoch: bool = False,
         optimizer_step: bool = False,
@@ -268,13 +279,13 @@ class TrainingStateAverager(DecentralizedAverager):
         delay_optimizer_step: bool = False,
         averaging_round: bool = False,
         delay_averaging: Optional[bool] = None,
-        **kwargs,
+        averaging_kwargs: Optional[Dict[str, Any]] = None,
     ):
         """
         Perform one or several possible actions, depending on the specified keyword args.
         The actions will be performed in the same order as specified below:
 
-        :param wait_for_delayed_updates: if there are background averaging rounds, wait for them to finish
+        :param wait_for_delayed_update: if there are background averaging rounds, wait for them to finish
           by default, await delayed updates when scheduling the next optimizer step, otherwise do not update
         :param apply_delayed_updates: apply any averaging rounds that have finished but were not applied yet
         :param increment_epoch: increment .local_epoch and update the learning rate scheduler (if present)
@@ -284,42 +295,42 @@ class TrainingStateAverager(DecentralizedAverager):
         :param averaging_round: average parameters, chosen optimizer keys and extra tensors with a group of peers
         :param delay_averaging: if True, perform averaging in background and apply results in a future step
           by default, delay averaging if the optimizer step is also delayed. Set to true to delay only this phase.
-
+        :param averaging_kwargs: a dict of keyword arguments forwarded into averaging round
         """
         if delay_averaging is None:
             delay_averaging = delay_optimizer_step
-        if wait_for_delayed_updates is None:
-            wait_for_delayed_updates = optimizer_step or averaging_round or zero_grad
+        if wait_for_delayed_update is None:
+            wait_for_delayed_update = optimizer_step or zero_grad or averaging_round
         assert not delay_optimizer_step or delay_averaging, "delayed optimizer step requires delayed averaging"
-        assert (
-            not (optimizer_step or averaging_round or zero_grad) or wait_for_delayed_updates
-        ), "must ensure that all background updates have finished before scheduling any new updates"
-        assert not delay_optimizer_step or (
-            delay_averaging and self.offload_optimizer
-        ), "delayed optimizer step requires both offload_optimizer and delay_averaging"
+        if optimizer_step or averaging_round or zero_grad:
+            assert wait_for_delayed_update, "wait fpr background updates to finish before scheduling new ones"
+        if delay_optimizer_step:
+            assert self.offload_optimizer, "delayed optimizer step is only available with offload_optimizer"
+            assert not averaging_round or delay_averaging, "averaging after delayed optimizer should also be delayed"
+        if averaging_kwargs and not averaging_round:
+            logger.warning(f"Averaging parameters not used because averaging_round=False: {averaging_kwargs}")
         output = None
 
-        if wait_for_delayed_updates:
+        if wait_for_delayed_update:
             if not self.pending_update.done():
                 logger.log(self.status_loglevel, "Waiting for delayed updates to finish...")
                 output = self.pending_update.result()
 
         if self.pending_update.done() and self.pending_update.exception():
-            logger.warning(f"Delayed update failed with {self.pending_update.exception()}")
-            self.pending_averaging_round.clear()
-            self.pending_optimizer_step.clear()
+            logger.warning(f"Background update failed with {self.pending_update.exception()} and will be ignored.")
 
         if apply_delayed_updates:
-            if self.pending_averaging_round.is_set():
+            if self.finished_averaging_round.is_set():
                 if not self.reuse_tensors:
-                    self._apply_averaged_tensors_()
-                self.pending_averaging_round.clear()
-                logger.log(self.status_loglevel, "Finished delayed averaging round")
+                    self._apply_averaging_results_()
+                logger.log(self.status_loglevel, "Received results from background averaging round")
+                self.finished_averaging_round.clear()
 
-            if self.pending_optimizer_step.is_set():
-                self._apply_offloaded_optimizer_()
-                self.pending_optimizer_step.clear()
-                logger.log(self.status_loglevel, "Finished delayed optimizer step")
+            if self.finished_optimizer_step.is_set():
+                if self.offload_optimizer:
+                    self._apply_optimizer_results_()
+                logger.log(self.status_loglevel, "Received results from background optimizer step")
+                self.finished_optimizer_step.clear()
 
         if increment_epoch:
             self.local_epoch += 1
@@ -327,34 +338,42 @@ class TrainingStateAverager(DecentralizedAverager):
             self._update_scheduler()
 
         if optimizer_step or zero_grad or averaging_round:
-            assert self.pending_update.done(), "attempted to perform a new update but previous update is still running"
+            assert self.pending_update.done(), "Attempted to perform a new update but previous update is still running"
+
+            if self.offload_optimizer:
+                self._load_local_grads_into_optimizer_()
+
             self.pending_update = self.step_executor.submit(
-                self._perform_actions, optimizer_step, zero_grad, averaging_round
+                self._perform_actions,
+                optimizer_step,
+                zero_grad,
+                averaging_round,
+                **averaging_kwargs or {},
             )
 
             if (optimizer_step or zero_grad) and not delay_optimizer_step:
-                self.pending_optimizer_step.wait()
-                self.pending_optimizer_step.clear()
+                self.finished_optimizer_step.wait()
+                self.finished_optimizer_step.clear()
                 if self.offload_optimizer:
-                    self._apply_offloaded_optimizer_()
+                    self._apply_optimizer_results_()
                 logger.log(self.status_loglevel, "Finished optimizer step")
 
             if averaging_round and not delay_averaging:
-                self.pending_averaging_round.wait()
-                self.pending_averaging_round.clear()
+                self.finished_averaging_round.wait()
+                self.finished_averaging_round.clear()
                 if not self.reuse_tensors:
-                    self._apply_averaged_tensors_()
+                    self._apply_averaging_results_()
                 logger.log(self.status_loglevel, "Finished averaging round")
 
             if not delay_averaging:
                 try:
                     output = self.pending_update.result()
                 finally:
-                    self.pending_averaging_round.clear()
-                    self.pending_optimizer_step.clear()
+                    self.finished_averaging_round.clear()
+                    self.finished_optimizer_step.clear()
         return output
 
-    def _perform_actions(self, optimizer_step: bool, zero_grad: bool, averaging_round: bool):
+    def _perform_actions(self, optimizer_step: bool, zero_grad: bool, averaging_round: bool, **kwargs):
         """Run the optimizer step, followed by a scheduler step and an averaging round, each stage is optional"""
         try:
             if optimizer_step:
@@ -363,18 +382,25 @@ class TrainingStateAverager(DecentralizedAverager):
             if zero_grad:
                 logger.log(self.status_loglevel, f"Running zero grad.")
                 self.optimizer.zero_grad()
-            self.pending_optimizer_step.set()
+                if self.offload_optimizer:
+                    for parameter in self._main_parameters:
+                        if parameter.grad is not None:
+                            parameter.grad.zero_()
+
+            self.finished_optimizer_step.set()
 
             if averaging_round:
+                if not self.reuse_tensors:
+                    self._load_local_tensors_into_averager_()
                 try:
-                    gathered = super().step(gather=self.local_epoch)
+                    gathered = super().step(gather=self.local_epoch, **kwargs)
                     logger.log(self.status_loglevel, f"Averaged parameters with {len(gathered)} peers.")
                 except BaseException as e:
                     logger.log(self.status_loglevel, f"Averaging failed with {type(e)}")
-                    self.pending_averaging_round.set()
+                    self.finished_averaging_round.set()
                     gathered = {}
 
-                self.pending_averaging_round.set()
+                self.finished_averaging_round.set()
 
                 if self.sync_epoch_when_averaging:
                     old_epoch = self.local_epoch
@@ -386,29 +412,48 @@ class TrainingStateAverager(DecentralizedAverager):
 
         except Exception as e:
             logger.exception(e)
-            self.pending_optimizer_step.set()
-            self.pending_averaging_round.set()
+            self.finished_optimizer_step.set()
+            self.finished_averaging_round.set()
 
-    def _apply_averaged_tensors_(self):
-        """Copy averaged tensors into their respective local tensors"""
-        assert not self.reuse_tensors, "no need to update averaged tensors since they reuse the same memory"
-        with torch.no_grad(), self.get_tensors() as averaged_tensors:
-            local_tensors = list(self._local_tensors())
-            assert len(local_tensors) == len(averaged_tensors), "tensor structure changed during training"
-            for local_tensor, averaged_tensor in zip(local_tensors, averaged_tensors):
-                local_tensor.copy_(averaged_tensor, non_blocking=True)
+    @torch.no_grad()
+    def _load_local_grads_into_optimizer_(self):
+        """Copy local gradients into the gradient buffers of the offloaded optimizer"""
+        assert self.offload_optimizer, "loading into offloaded optimizer requires using offloaded optimizer"
+        opt_parameters = [param for group in self.optimizer.param_groups for param in group["params"]]
+        for main_param, opt_param in zip(self._main_parameters, opt_parameters):
+            if main_param.grad is not None:
+                opt_param.grad.copy_(main_param.grad, non_blocking=True)
 
-    def _apply_offloaded_optimizer_(self):
+    @torch.no_grad()
+    def _apply_optimizer_results_(self):
         """Copy parameters from offloaded optimizer to the main model"""
         assert self.offload_optimizer, "applying offloaded optimizer updates requires offloaded optimizer"
         with self.lock_averaged_tensors:
-            offloaded_parameters = [p for param_group in self.optimizer.param_groups for p in param_group]
+            offloaded_parameters = [param for group in self.optimizer.param_groups for param in group["params"]]
             assert len(offloaded_parameters) == len(self._main_parameters), "opt parameters changed during training"
             for main_param, offloaded_param in zip(self._main_parameters, offloaded_parameters):
                 main_param.copy_(offloaded_param, non_blocking=True)
 
+    @torch.no_grad()
+    def _load_local_tensors_into_averager_(self):
+        assert not self.reuse_tensors, "no need to load tensors into averager: local and averaged tensors share memory"
+        with self.get_tensors() as averaged_tensors:
+            for local_tensor, averaged_tensor in zip(self._local_tensors(), averaged_tensors):
+                averaged_tensor.copy_(local_tensor, non_blocking=True)
+
+    @torch.no_grad()
+    def _apply_averaging_results_(self):
+        """Copy averaged tensors into their respective local tensors"""
+        assert not self.reuse_tensors, "no need to update averaged tensors since they reuse the same memory"
+        with self.get_tensors() as averaged_tensors:
+            local_tensors = list(self._local_tensors())
+            print(local_tensors)
+            assert len(local_tensors) == len(averaged_tensors), "tensor structure changed during training"
+            for local_tensor, averaged_tensor in zip(local_tensors, averaged_tensors):
+                local_tensor.copy_(averaged_tensor, non_blocking=True)
+
     def get_current_state(self):
-        """
+        """_apply_offloaded_optimizer_
         Get current model/optimizer state and when requested by a newbie peer. executed in the host process.
         :returns: a tuple of (serializable_small_metadata, sequence of torch tensors)
         """
@@ -468,11 +513,14 @@ class TrainingStateAverager(DecentralizedAverager):
 
 
 def initialize_optimizer_state_(opt: torch.optim.Optimizer):
-    for param_group in opt.param_groups:
-        for param in param_group["params"]:
-            param.grad = torch.zeros_like(param)
+    flat_params = tuple(param for group in opt.param_groups for param in group["params"])
+    old_grads = []
+    for param in flat_params:
+        old_grads.append(param.grad)
+        param.grad = torch.zeros_like(param)
     opt.step()
-    opt.zero_grad(set_to_none=True)
+    for param, old_grad in zip(flat_params, old_grads):
+        param.grad = old_grad
 
 
 def dump_optimizer_state(opt: torch.optim.Optimizer):
