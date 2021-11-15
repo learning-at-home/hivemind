@@ -405,7 +405,7 @@ class TrainingStateAverager(DecentralizedAverager):
                     gathered = super().step(gather=self.local_epoch, **kwargs)
                     logger.log(self.status_loglevel, f"Averaged parameters with {len(gathered)} peers")
                 except BaseException as e:
-                    logger.log(self.status_loglevel, f"Averaging failed with {type(e)}")
+                    logger.log(self.status_loglevel, "Averaging failed", exc_info=True)
                     self.finished_averaging_round.set()
                     gathered = {}
 
