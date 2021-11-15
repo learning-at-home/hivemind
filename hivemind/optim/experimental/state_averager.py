@@ -513,12 +513,14 @@ class TrainingStateAverager(DecentralizedAverager):
         self._update_scheduler()
 
     def _update_scheduler(self):
+        """Increase the scheduler state until it becomes synchronized with local epoch"""
         if self.scheduler:
             while self.scheduler._step_count <= self.local_epoch:
                 self.scheduler.step()
 
 
 def initialize_optimizer_state_(opt: torch.optim.Optimizer):
+    """Initialize optimizer statistics by running a virtual optimizer step with zero gradients"""
     flat_params = tuple(param for group in opt.param_groups for param in group["params"])
     old_grads = []
     for param in flat_params:
@@ -543,6 +545,7 @@ def dump_optimizer_state(opt: torch.optim.Optimizer):
 
 
 def load_optimizer_state(optimizer: torch.optim.Optimizer, flat_metadata: Dict, flat_tensors: Sequence[torch.Tensor]):
+    """Load a state obtained by dump_optimizer_state back into the optimizer"""
     flat_optimizer_state = []
     for elem in flat_metadata:
         if elem.get("type") == "tensor" and isinstance(elem.get("index"), int):
