@@ -129,7 +129,6 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
     assert not torch.allclose(stats1, stats2)
 
     avgr1.step(increment_epoch=True)
-
     avgr1.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
     avgr2.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
 
