@@ -126,8 +126,6 @@ class TrainingStateAverager(DecentralizedAverager):
         parameter_names: Optional[Sequence[str]],
     ) -> Tuple[ParamGroups, Sequence[torch.Tensor], Sequence[str]]:
         """Get and verify parameters, groups and names"""
-        if (callable(optimizer) and param_groups is not None) == hasattr(optimizer, "param_groups"):
-            raise ValueError("Please provide either optimizer factory *and* param_groups or an existing optimizer")
         if param_groups is None:
             assert hasattr(optimizer, "param_groups"), "Must provide param_groups or an optimizer with .param_groups"
             param_groups = optimizer.param_groups
