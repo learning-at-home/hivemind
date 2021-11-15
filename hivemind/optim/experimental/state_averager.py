@@ -380,7 +380,10 @@ class TrainingStateAverager(DecentralizedAverager):
         return output
 
     def _perform_actions(self, optimizer_step: bool, zero_grad: bool, averaging_round: bool, **kwargs):
-        """Run the optimizer step, followed by a scheduler step and an averaging round, each stage is optional"""
+        """
+        Run the optimizer step, followed by a scheduler step and an averaging round, each stage is optional.
+        This method is meant to be called in the background executor.
+        """
         try:
             if optimizer_step:
                 logger.log(self.status_loglevel, f"Running optimizer step")
