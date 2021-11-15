@@ -379,7 +379,7 @@ class TrainingStateAverager(DecentralizedAverager):
                     self.finished_optimizer_step.clear()
         return output
 
-    def _perform_actions(self, optimizer_step: bool, zero_grad: bool, averaging_round: bool, **kwargs):
+    def _do(self, optimizer_step: bool, zero_grad: bool, averaging_round: bool, **kwargs):
         """
         Run the optimizer step, followed by a scheduler step and an averaging round, each stage is optional.
         This method is meant to be called in the background executor.
