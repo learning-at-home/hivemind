@@ -229,7 +229,7 @@ class TrainingStateAverager(DecentralizedAverager):
             for param_group in self.optimizer.param_groups:
                 for param in param_group["params"]:
                     yield self.optimizer.state[param][stats]
-        yield from iter(self.extra_tensors)
+        yield from self.extra_tensors
 
     @torch.no_grad()
     def _init_averaged_tensors(self) -> Sequence[torch.Tensor]:
