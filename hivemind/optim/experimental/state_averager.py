@@ -206,6 +206,7 @@ class TrainingStateAverager(DecentralizedAverager):
 
         # create LR scheduler
         if scheduler_is_factory:
+            assert callable(scheduler_or_factory)
             scheduler = scheduler_or_factory(optimizer)
         else:
             scheduler = scheduler_or_factory
