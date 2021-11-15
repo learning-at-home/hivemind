@@ -15,6 +15,7 @@ from hivemind.optim.experimental.state_averager import TrainingStateAverager
 
 @pytest.mark.forked
 def test_grad_averager():
+    """Test accumulating gradients and averaging with peers in background"""
     dht1 = hivemind.DHT(start=True)
     model1 = nn.ParameterDict({"w": nn.Parameter(torch.zeros(3))})
     averager1 = GradientAverager(
@@ -77,6 +78,7 @@ def test_grad_averager():
     [(False, False, False), (True, False, False), (False, True, True), (True, False, True)],
 )
 def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch_when_averaging: bool):
+    """Test decentralized training with two peers using TrainingStateAverager and local updates"""
     dht1 = hivemind.DHT(start=True)
     dht2 = hivemind.DHT(initial_peers=dht1.get_visible_maddrs(), start=True)
 
@@ -127,8 +129,10 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
     assert not torch.allclose(stats1, stats2)
 
     avgr1.step(increment_epoch=True)
+
     avgr1.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
     avgr2.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
+
     avgr1.step(wait_for_delayed_update=True)
     avgr2.step(wait_for_delayed_update=True)
 
@@ -141,6 +145,7 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
 
 @pytest.mark.forked
 def test_load_state_from_peers():
+    """Test loading model parameters and optimizer state from a more advanced peer"""
     dht1 = hivemind.DHT(start=True)
     dht2 = hivemind.DHT(initial_peers=dht1.get_visible_maddrs(), start=True)
 
@@ -165,6 +170,7 @@ def test_load_state_from_peers():
     time.sleep(0.1)
 
     avgr1.load_state_from_peers()
+
     assert avgr1.local_epoch == 1337
     assert torch.all(model1.weight == 42).item()
     assert np.allclose(avgr1.optimizer.param_groups[0]["lr"], 0.1 / 1337)
