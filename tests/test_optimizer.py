@@ -87,32 +87,22 @@ def test_state_averager(offload_optimizer, reuse_tensors):
     extras1 = (torch.randn(2, 2), -torch.rand(1))
     extras2 = (-torch.randn(2, 2), torch.rand(1))
 
-    avgr1 = TrainingStateAverager(
-        dht=dht1,
-        param_groups=model1.parameters(),
+    common_kwargs = dict(
         optimizer=partial(torch.optim.Adam, lr=0.1, betas=(0.9, 0.9)),
         scheduler=partial(torch.optim.lr_scheduler.LambdaLR, lr_lambda=lambda t: 1.0 / max(1, t)),
         average_opt_statistics=("exp_avg_sq",),
         offload_optimizer=offload_optimizer,
         reuse_tensors=reuse_tensors,
-        extra_tensors=extras1,
         target_group_size=2,
         prefix="my_exp",
-        start=True,
+    )
+
+    avgr1 = TrainingStateAverager(
+        dht=dht1, param_groups=model1.parameters(), extra_tensors=extras1, start=True, **common_kwargs
     )
 
     avgr2 = TrainingStateAverager(
-        dht=dht2,
-        param_groups=model2.parameters(),
-        optimizer=partial(torch.optim.Adam, lr=0.1, betas=(0.9, 0.9)),
-        scheduler=partial(torch.optim.lr_scheduler.LambdaLR, lr_lambda=lambda t: 1.0 / max(1, t)),
-        average_opt_statistics=("exp_avg_sq",),
-        offload_optimizer=offload_optimizer,
-        reuse_tensors=reuse_tensors,
-        extra_tensors=extras2,
-        target_group_size=2,
-        prefix="my_exp",
-        start=True,
+        dht=dht2, param_groups=model2.parameters(), extra_tensors=extras2, start=True, **common_kwargs
     )
 
     x = torch.ones(2)
