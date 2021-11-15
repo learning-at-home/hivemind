@@ -220,9 +220,9 @@ def test_progress_tracker():
                     samples_accumulated = 0
 
                 if index == 4 and local_epoch >= 5:
+                    time.sleep(0.5)
                     break
 
-        finished_evt.wait()
         emas[index] = tracker.performance_ema.samples_per_second
         tracker.shutdown()
         dht.shutdown()
