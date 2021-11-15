@@ -498,22 +498,31 @@ class TrainingStateAverager(DecentralizedAverager):
         :returns: whether or the averager succeeded in loading parameters
         """
         parameters_and_extras = tuple(chain(self._main_parameters, self.extra_tensors))
-        num_local_tensors = len(parameters_and_extras)
+        num_parameters_and_extras = len(parameters_and_extras)
 
         loaded_state = super().load_state_from_peers(**kwargs)
         if loaded_state is None:
             return
         metadata, flat_tensors = loaded_state
-        loaded_parameters_and_extras = flat_tensors[:num_local_tensors]
-        loaded_opt_tensors = flat_tensors[num_local_tensors:]
+        loaded_parameters_and_extras = flat_tensors[:num_parameters_and_extras]
+        loaded_opt_tensors = flat_tensors[num_parameters_and_extras:]
+
+        if num_parameters_and_extras != len(loaded_parameters_and_extras) or not isinstance(metadata.get("epoch"), int):
+            logger.error("Failed to load state from peer, received parameters, extras or metadata.")
+            return
+
+        try:
+            load_optimizer_state(self.optimizer, metadata["optimizer_metadata"], loaded_opt_tensors)
+        except StopIteration:
+            logger.error("Failed to load state from peer, received inconsistent number of optimizer statistics.")
+            return
+
+        self.local_epoch = max(self.local_epoch, metadata["epoch"])
+        self._update_scheduler()
 
         with torch.no_grad():
             for local_param, loaded_param in zip(parameters_and_extras, loaded_parameters_and_extras):
                 local_param[...] = loaded_param
-            load_optimizer_state(self.optimizer, metadata["optimizer_metadata"], loaded_opt_tensors)
-
-        self.local_epoch = max(self.local_epoch, metadata["epoch"])
-        self._update_scheduler()
 
     def _update_scheduler(self):
         """Increase the scheduler state until it becomes synchronized with local epoch"""
@@ -555,8 +564,4 @@ def load_optimizer_state(optimizer: torch.optim.Optimizer, flat_metadata: Dict, 
             flat_optimizer_state.append(flat_tensors[elem["index"]])
         elif elem.get("type") == "value" and "value" in elem:
             flat_optimizer_state.append(elem["value"])
-    with torch.no_grad():
-        try:
-            return optimizer.load_state_dict(nested_pack(flat_optimizer_state, structure=optimizer.state_dict()))
-        except StopIteration:
-            return optimizer
+    return optimizer.load_state_dict(nested_pack(flat_optimizer_state, structure=optimizer.state_dict()))
