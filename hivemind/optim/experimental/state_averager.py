@@ -454,7 +454,6 @@ class TrainingStateAverager(DecentralizedAverager):
         assert not self.reuse_tensors, "No need to update averaged tensors since they reuse the same memory."
         with self.get_tensors() as averaged_tensors:
             local_tensors = list(self._local_tensors())
-            print(local_tensors)
             assert len(local_tensors) == len(averaged_tensors), "Tensor structure changed during training."
             for local_tensor, averaged_tensor in zip(local_tensors, averaged_tensors):
                 local_tensor.copy_(averaged_tensor, non_blocking=True)
