@@ -504,7 +504,7 @@ class TrainingStateAverager(DecentralizedAverager):
 
         metadata, flat_tensors = loaded_state
         if (not isinstance(metadata.get("epoch"), int)) or metadata["epoch"] < self.local_epoch:
-            logger.error("Cowardly refusing to load state from peer: peer's epoch is behind our local epoch.")
+            logger.warning("Cowardly refusing to load state from peer: peer's epoch is behind our local epoch")
             return
 
         loaded_parameters_and_extras = flat_tensors[:num_parameters_and_extras]
