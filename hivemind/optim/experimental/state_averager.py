@@ -501,11 +501,15 @@ class TrainingStateAverager(DecentralizedAverager):
         loaded_state = super().load_state_from_peers(**kwargs)
         if loaded_state is None:
             return
+
         metadata, flat_tensors = loaded_state
+        if (not isinstance(metadata.get("epoch"), int)) or metadata["epoch"] < self.local_epoch:
+            logger.error("Cowardly refusing to load state from peer: peer's epoch is behind our local epoch.")
+            return
+
         loaded_parameters_and_extras = flat_tensors[:num_parameters_and_extras]
         loaded_opt_tensors = flat_tensors[num_parameters_and_extras:]
-
-        if num_parameters_and_extras != len(loaded_parameters_and_extras) or not isinstance(metadata.get("epoch"), int):
+        if num_parameters_and_extras != len(loaded_parameters_and_extras):
             logger.error("Failed to load state from peer, received parameters, extras or metadata.")
             return
 
@@ -515,12 +519,11 @@ class TrainingStateAverager(DecentralizedAverager):
             logger.error("Failed to load state from peer, received inconsistent number of optimizer statistics.")
             return
 
-        self.local_epoch = max(self.local_epoch, metadata["epoch"])
-        self._update_scheduler()
-
         with torch.no_grad():
             for local_param, loaded_param in zip(parameters_and_extras, loaded_parameters_and_extras):
-                local_param[...] = loaded_param
+                local_param.copy_(loaded_param, non_blocking=True)
+        self.local_epoch = metadata["epoch"]
+        self._update_scheduler()
 
     def _update_scheduler(self):
         """Increase the scheduler state until it becomes synchronized with local epoch"""
