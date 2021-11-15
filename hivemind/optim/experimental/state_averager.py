@@ -129,7 +129,7 @@ class TrainingStateAverager(DecentralizedAverager):
         if (callable(optimizer) and param_groups is not None) == hasattr(optimizer, "param_groups"):
             raise ValueError("Please provide either optimizer factory *and* param_groups or an existing optimizer")
         if param_groups is None:
-            assert hasattr(optimizer, "param_groups"), "Should provide param_groups or an optimizer with .param_groups"
+            assert hasattr(optimizer, "param_groups"), "Must provide param_groups or an optimizer with .param_groups."
             param_groups = optimizer.param_groups
         param_groups = tuple(param_groups)
         if all(isinstance(p, torch.Tensor) for p in param_groups):
