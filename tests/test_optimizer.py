@@ -79,6 +79,8 @@ def test_state_averager(offload_optimizer, reuse_tensors):
 
     torch.manual_seed(1337)
     torch.use_deterministic_algorithms(True)
+    # note: use_deterministic_algorithms does not affect further tests because this test is forked
+
     model1 = nn.Linear(2, 3)
     model2 = nn.Linear(2, 3)
 
