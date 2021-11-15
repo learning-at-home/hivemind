@@ -136,7 +136,7 @@ class TrainingStateAverager(DecentralizedAverager):
             parameter_names = tuple(i for i in range(len(parameters)))
         parameter_names = tuple(nested_flatten(parameter_names))
         assert len(parameters) == len(parameter_names), f"Expected {len(parameters)} names, got {len(parameter_names)}"
-        assert len(set(parameters)) == len(parameters), "Found duplicate parameters in param_groups"
+        assert len(set(parameters)) == len(parameters), "Found duplicate parameters in param_groups."
         return param_groups, parameters, parameter_names
 
     def _make_host_tensor(self, source_tensor: torch.Tensor) -> torch.Tensor:
@@ -164,7 +164,7 @@ class TrainingStateAverager(DecentralizedAverager):
         if optimizer_is_factory and not scheduler_is_factory and scheduler_or_factory is not None:
             raise ValueError("If optimizer is created internally, scheduler must also be initialized internally.")
         if self.offload_optimizer and not optimizer_is_factory:
-            raise ValueError("Using offload_optimizer requires creating optimizerL inside hivemind.")
+            raise ValueError("Using offload_optimizer requires creating optimizer inside hivemind.")
 
         # create optimizer
         if optimizer_is_factory:
@@ -231,8 +231,8 @@ class TrainingStateAverager(DecentralizedAverager):
     def _init_averaged_tensors(self) -> Sequence[torch.Tensor]:
         """Create or reuse a tuple of all averaged tensors, including parameters, optimizer statistics and extras"""
         assert hasattr(self, "optimizer"), "Optimizer should already be initialized by this point"
-        assert hasattr(self, "_averaged_parameters"), "Should initialize _averaged_parameters first"
-        assert not hasattr(self, "_averaged_tensors"), "Averager is already initialized"
+        assert hasattr(self, "_averaged_parameters"), "Should initialize _averaged_parameters first."
+        assert not hasattr(self, "_averaged_tensors"), "Averager is already initialized."
         assert all(isinstance(key, str) for key in self.opt_keys_for_averaging)
 
         local_tensors = tuple(self._local_tensors())
@@ -301,12 +301,12 @@ class TrainingStateAverager(DecentralizedAverager):
             delay_averaging = delay_optimizer_step
         if wait_for_delayed_update is None:
             wait_for_delayed_update = optimizer_step or zero_grad or averaging_round
-        assert not delay_optimizer_step or delay_averaging, "delayed optimizer step requires delayed averaging"
+        assert not delay_optimizer_step or delay_averaging, "Delayed optimizer step requires delayed averaging."
         if optimizer_step or averaging_round or zero_grad:
-            assert wait_for_delayed_update, "wait fpr background updates to finish before scheduling new ones"
+            assert wait_for_delayed_update, "Must wait for background updates to finish before scheduling new ones."
         if delay_optimizer_step:
-            assert self.offload_optimizer, "delayed optimizer step is only available with offload_optimizer"
-            assert not averaging_round or delay_averaging, "averaging after delayed optimizer should also be delayed"
+            assert self.offload_optimizer, "Delayed optimizer step is only available with offload_optimizer."
+            assert not averaging_round or delay_averaging, "Averaging after delayed optimizer should also be delayed."
         if averaging_kwargs and not averaging_round:
             logger.warning(f"Averaging parameters not used because averaging_round=False: {averaging_kwargs}")
         output = None
@@ -323,13 +323,13 @@ class TrainingStateAverager(DecentralizedAverager):
             if self.finished_averaging_round.is_set():
                 if not self.reuse_tensors:
                     self._apply_averaging_results_()
-                logger.log(self.status_loglevel, "Received results from background averaging round")
+                logger.log(self.status_loglevel, "Received results from background averaging round.")
                 self.finished_averaging_round.clear()
 
             if self.finished_optimizer_step.is_set():
                 if self.offload_optimizer:
                     self._apply_optimizer_results_()
-                logger.log(self.status_loglevel, "Received results from background optimizer step")
+                logger.log(self.status_loglevel, "Received results from background optimizer step.")
                 self.finished_optimizer_step.clear()
 
         if increment_epoch:
@@ -338,7 +338,7 @@ class TrainingStateAverager(DecentralizedAverager):
             self._update_scheduler()
 
         if optimizer_step or zero_grad or averaging_round:
-            assert self.pending_update.done(), "Attempted to perform a new update but previous update is still running"
+            assert self.pending_update.done(), "Tried to perform a new update but previous update is still running."
 
             if self.offload_optimizer:
                 self._load_local_grads_into_optimizer_()
@@ -356,14 +356,14 @@ class TrainingStateAverager(DecentralizedAverager):
                 self.finished_optimizer_step.clear()
                 if self.offload_optimizer:
                     self._apply_optimizer_results_()
-                logger.log(self.status_loglevel, "Finished optimizer step")
+                logger.log(self.status_loglevel, "Finished optimizer step.")
 
             if averaging_round and not delay_averaging:
                 self.finished_averaging_round.wait()
                 self.finished_averaging_round.clear()
                 if not self.reuse_tensors:
                     self._apply_averaging_results_()
-                logger.log(self.status_loglevel, "Finished averaging round")
+                logger.log(self.status_loglevel, "Finished averaging round.")
 
             if not delay_averaging:
                 try:
@@ -396,7 +396,7 @@ class TrainingStateAverager(DecentralizedAverager):
                     gathered = super().step(gather=self.local_epoch, **kwargs)
                     logger.log(self.status_loglevel, f"Averaged parameters with {len(gathered)} peers.")
                 except BaseException as e:
-                    logger.log(self.status_loglevel, f"Averaging failed with {type(e)}")
+                    logger.log(self.status_loglevel, f"Averaging failed with {type(e)}.")
                     self.finished_averaging_round.set()
                     gathered = {}
 
@@ -436,6 +436,7 @@ class TrainingStateAverager(DecentralizedAverager):
 
     @torch.no_grad()
     def _load_local_tensors_into_averager_(self):
+        """Copy local tensors into the averaging buffers."""
         assert not self.reuse_tensors, "no need to load tensors into averager: local and averaged tensors share memory"
         with self.get_tensors() as averaged_tensors:
             for local_tensor, averaged_tensor in zip(self._local_tensors(), averaged_tensors):
@@ -448,12 +449,12 @@ class TrainingStateAverager(DecentralizedAverager):
         with self.get_tensors() as averaged_tensors:
             local_tensors = list(self._local_tensors())
             print(local_tensors)
-            assert len(local_tensors) == len(averaged_tensors), "tensor structure changed during training"
+            assert len(local_tensors) == len(averaged_tensors), "Tensor structure changed during training."
             for local_tensor, averaged_tensor in zip(local_tensors, averaged_tensors):
                 local_tensor.copy_(averaged_tensor, non_blocking=True)
 
     def get_current_state(self):
-        """_apply_offloaded_optimizer_
+        """
         Get current model/optimizer state and when requested by a newbie peer. executed in the host process.
         :returns: a tuple of (serializable_small_metadata, sequence of torch tensors)
         """
