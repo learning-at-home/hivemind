@@ -90,6 +90,7 @@ def test_state_averager(offload_optimizer, reuse_tensors):
     common_kwargs = dict(
         optimizer=partial(torch.optim.Adam, lr=0.1, betas=(0.9, 0.9)),
         scheduler=partial(torch.optim.lr_scheduler.LambdaLR, lr_lambda=lambda t: 1.0 / max(1, t)),
+        sync_epoch_when_averaging=True,
         average_opt_statistics=("exp_avg_sq",),
         offload_optimizer=offload_optimizer,
         reuse_tensors=reuse_tensors,
@@ -123,6 +124,8 @@ def test_state_averager(offload_optimizer, reuse_tensors):
     stats2 = avgr2.optimizer.state_dict()["state"][0]["exp_avg_sq"].clone()
     assert not torch.allclose(stats1, stats2)
 
+    avgr2.step(increment_epoch=True)
+
     avgr1.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
     avgr2.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
 
@@ -132,6 +135,7 @@ def test_state_averager(offload_optimizer, reuse_tensors):
     assert torch.allclose(model1(x), model2(x)), "model parameters were not averaged correctly"
     assert torch.allclose(avgr1.optimizer.state_dict()["state"][0]["exp_avg_sq"], (stats1 + stats2) / 2)
     assert torch.allclose(avgr2.optimizer.state_dict()["state"][0]["exp_avg_sq"], (stats1 + stats2) / 2)
+    assert avgr1.local_epoch == avgr2.local_epoch == 2
 
 
 @pytest.mark.forked
