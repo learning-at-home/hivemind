@@ -89,9 +89,9 @@ class TrainingStateAverager(DecentralizedAverager):
         average_opt_statistics = tuple(average_opt_statistics)
         assert all(isinstance(key, str) for key in average_opt_statistics)
         if offload_optimizer and reuse_tensors:
-            logger.warning("offload_optimizer has no effect because reuse_parameters=True (all params must be on cpu)")
+            logger.warning("Setting offload_optimizer=True has no effect because reuse_parameters=True.")
         if custom_gradients and not offload_optimizer:
-            logger.warning("custom_gradients has no effect because the optimizer is not offloaded.")
+            logger.warning("Setting custom_gradients=True has no effect because the optimizer is not offloaded.")
 
         param_groups, main_parameters, parameter_names = self._check_params(optimizer, param_groups, parameter_names)
 
@@ -127,10 +127,7 @@ class TrainingStateAverager(DecentralizedAverager):
     ) -> Tuple[ParamGroups, Sequence[torch.Tensor], Sequence[str]]:
         """Get and verify parameters, groups and names"""
         if (callable(optimizer) and param_groups is not None) == hasattr(optimizer, "param_groups"):
-            raise ValueError(
-                "Please provide either optimizer factory *and* param_groups or an existing optimizer"
-                "that has .param_groups"
-            )
+            raise ValueError("Please provide either optimizer factory *and* param_groups or an existing optimizer")
         if param_groups is None:
             assert hasattr(optimizer, "param_groups"), "Should provide param_groups or an optimizer with .param_groups"
             param_groups = optimizer.param_groups
