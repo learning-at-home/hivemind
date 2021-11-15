@@ -56,6 +56,8 @@ class TrainingStateAverager(DecentralizedAverager):
       state tensors. If False, user must make sure that all tensors are pre-initialized at init.
       By default, initialize optimizer unless it already has some state tensors to begin with.
     :param offload_optimizer: if True, create optimizer on top of averaged parameters which may save device memory.
+    :param custom_gradients: if True, do *not* automatically load local gradients into the offloaded optimizer.
+      This assumes that offloaded gradients will be populated externally, e.g. by the user or by hivemind.Optimizer.
     :param reuse_tensors: if True, reuse parameters and optimizer statistics as averaged_tensors for allreduce.
       For this to work, all parameters must be on CPU and have the appropriate dtype for use in DecentralizedAverager
     :param sync_epoch_when_averaging: if True, update local epoch to the latest epoch among averaging peers
@@ -75,6 +77,7 @@ class TrainingStateAverager(DecentralizedAverager):
         scheduler: Optional[Union[LRSchedulerBase, SchedulerFactory]] = None,
         initialize_optimizer: Optional[bool] = None,
         offload_optimizer: bool = False,
+        custom_gradients: bool = False,
         reuse_tensors: bool = False,
         sync_epoch_when_averaging: bool = False,
         parameter_names: Optional[Sequence[str]] = None,
@@ -87,10 +90,16 @@ class TrainingStateAverager(DecentralizedAverager):
         assert all(isinstance(key, str) for key in average_opt_statistics)
         if offload_optimizer and reuse_tensors:
             logger.warning("offload_optimizer has no effect because reuse_parameters=True (all params must be on cpu)")
+        if custom_gradients and not offload_optimizer:
+            logger.warning("custom_gradients has no effect because the optimizer is not offloaded.")
+
         param_groups, main_parameters, parameter_names = self._check_params(optimizer, param_groups, parameter_names)
 
         self.status_loglevel = status_loglevel
-        self.reuse_tensors, self.offload_optimizer = reuse_tensors, offload_optimizer
+        self.reuse_tensors = reuse_tensors
+        self.offload_optimizer = offload_optimizer
+        self.custom_gradients = custom_gradients
+
         self._main_parameters, self._parameter_names = main_parameters, parameter_names
         self._averaged_parameters = tuple(map(self._make_host_tensor, main_parameters))
         self.optimizer, self.scheduler = self._init_components(
@@ -340,7 +349,7 @@ class TrainingStateAverager(DecentralizedAverager):
         if optimizer_step or zero_grad or averaging_round:
             assert self.pending_update.done(), "Tried to perform a new update but previous update is still running."
 
-            if self.offload_optimizer:
+            if self.offload_optimizer and not self.custom_gradients:
                 self._load_local_grads_into_optimizer_()
 
             self.pending_update = self.step_executor.submit(
@@ -418,7 +427,7 @@ class TrainingStateAverager(DecentralizedAverager):
     @torch.no_grad()
     def _load_local_grads_into_optimizer_(self):
         """Copy local gradients into the gradient buffers of the offloaded optimizer"""
-        assert self.offload_optimizer, "loading into offloaded optimizer requires using offloaded optimizer"
+        assert self.offload_optimizer, "Loading into offloaded optimizer requires using offloaded optimizer."
         opt_parameters = [param for group in self.optimizer.param_groups for param in group["params"]]
         for main_param, opt_param in zip(self._main_parameters, opt_parameters):
             if main_param.grad is not None:
@@ -427,7 +436,7 @@ class TrainingStateAverager(DecentralizedAverager):
     @torch.no_grad()
     def _apply_optimizer_results_(self):
         """Copy parameters from offloaded optimizer to the main model"""
-        assert self.offload_optimizer, "applying offloaded optimizer updates requires offloaded optimizer"
+        assert self.offload_optimizer, "Applying offloaded optimizer updates requires offloaded optimizer."
         with self.lock_averaged_tensors:
             offloaded_parameters = [param for group in self.optimizer.param_groups for param in group["params"]]
             assert len(offloaded_parameters) == len(self._main_parameters), "opt parameters changed during training"
@@ -437,7 +446,7 @@ class TrainingStateAverager(DecentralizedAverager):
     @torch.no_grad()
     def _load_local_tensors_into_averager_(self):
         """Copy local tensors into the averaging buffers."""
-        assert not self.reuse_tensors, "no need to load tensors into averager: local and averaged tensors share memory"
+        assert not self.reuse_tensors, "No need to load tensors into averager: both tensors share the same memory."
         with self.get_tensors() as averaged_tensors:
             for local_tensor, averaged_tensor in zip(self._local_tensors(), averaged_tensors):
                 averaged_tensor.copy_(local_tensor, non_blocking=True)
@@ -445,7 +454,7 @@ class TrainingStateAverager(DecentralizedAverager):
     @torch.no_grad()
     def _apply_averaging_results_(self):
         """Copy averaged tensors into their respective local tensors"""
-        assert not self.reuse_tensors, "no need to update averaged tensors since they reuse the same memory"
+        assert not self.reuse_tensors, "No need to update averaged tensors since they reuse the same memory."
         with self.get_tensors() as averaged_tensors:
             local_tensors = list(self._local_tensors())
             print(local_tensors)
