@@ -350,7 +350,7 @@ class TrainingStateAverager(DecentralizedAverager):
                 self._load_local_grads_into_optimizer_()
 
             self.pending_update = self.step_executor.submit(
-                self._perform_actions,
+                self._do,
                 optimizer_step,
                 zero_grad,
                 averaging_round,
