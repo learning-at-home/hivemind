@@ -129,6 +129,7 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
     assert not torch.allclose(stats1, stats2)
 
     avgr1.step(increment_epoch=True)
+
     avgr1.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
     avgr2.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
 
@@ -169,7 +170,6 @@ def test_load_state_from_peers():
     time.sleep(0.1)
 
     avgr1.load_state_from_peers()
-
     assert avgr1.local_epoch == 1337
     assert torch.all(model1.weight == 42).item()
     assert np.allclose(avgr1.optimizer.param_groups[0]["lr"], 0.1 / 1337)
