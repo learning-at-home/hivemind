@@ -116,14 +116,14 @@ def test_state_averager(offload_optimizer, reuse_tensors):
     x = torch.ones(2)
 
     for i in range(40):
-        step, is_first_peer = i // 2, i % 2
+        step, is_first_peer = i // 2, i % 2 == 0
 
         if is_first_peer:
             F.mse_loss(model1(x), torch.ones(3)).mul(2).backward()
             avgr1.step(optimizer_step=True, zero_grad=True, averaging_round=(step == 10), delay_averaging=True)
         else:
             F.mse_loss(model2(x), -torch.ones(3)).backward()
-            avgr2.step(optimizer_step=True, zero_grad=True, averaging_round=(step == 10), delay_averaging=True)
+            avgr2.step(optimizer_step=True, zero_grad=True, averaging_round=(step == 10), delay_averaging=False)
 
     assert torch.all(model1.weight.grad == 0) and torch.all(model2.weight.grad == 0), "zero grad did not trigger"
     assert model1(x).mean() > 0.5 and model2(x).mean() < -0.5, "models did not train properly"
