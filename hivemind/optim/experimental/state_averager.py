@@ -230,7 +230,7 @@ class TrainingStateAverager(DecentralizedAverager):
             for param_group in self.optimizer.param_groups:
                 for param in param_group["params"]:
                     yield self.optimizer.state[param][stats]
-        yield from iter(self.extra_tensors)
+        yield from self.extra_tensors
 
     @torch.no_grad()
     def _init_averaged_tensors(self) -> Sequence[torch.Tensor]:
@@ -505,7 +505,7 @@ class TrainingStateAverager(DecentralizedAverager):
 
         metadata, flat_tensors = loaded_state
         if (not isinstance(metadata.get("epoch"), int)) or metadata["epoch"] < self.local_epoch:
-            logger.error("Cowardly refusing to load state from peer: peer's epoch is behind our local epoch.")
+            logger.warning("Cowardly refusing to load state from peer: peer's epoch is behind our local epoch")
             return
 
         loaded_parameters_and_extras = flat_tensors[:num_parameters_and_extras]
@@ -517,7 +517,7 @@ class TrainingStateAverager(DecentralizedAverager):
         try:
             load_optimizer_state(self.optimizer, metadata["optimizer_metadata"], loaded_opt_tensors)
         except StopIteration:
-            logger.error("Failed to load state from peer, received inconsistent number of optimizer statistics.")
+            logger.warning("Failed to load state from peer, received inconsistent number of optimizer statistics")
             return
 
         with torch.no_grad():
