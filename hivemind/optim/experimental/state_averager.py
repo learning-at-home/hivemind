@@ -516,7 +516,7 @@ class TrainingStateAverager(DecentralizedAverager):
         try:
             load_optimizer_state(self.optimizer, metadata["optimizer_metadata"], loaded_opt_tensors)
         except StopIteration:
-            logger.error("Failed to load state from peer, received inconsistent number of optimizer statistics.")
+            logger.warning("Failed to load state from peer, received inconsistent number of optimizer statistics")
             return
 
         with torch.no_grad():
