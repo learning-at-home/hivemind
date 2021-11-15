@@ -72,8 +72,10 @@ def test_grad_averager():
 
 
 @pytest.mark.forked
-@pytest.mark.parametrize("offload_optimizer, reuse_tensors, sync_epoch_when_averaging",
-                         [(False, False, False), (True, False, False), (False, True, True), (True, False, True)])
+@pytest.mark.parametrize(
+    "offload_optimizer, reuse_tensors, sync_epoch_when_averaging",
+    [(False, False, False), (True, False, False), (False, True, True), (True, False, True)],
+)
 def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch_when_averaging: bool):
     dht1 = hivemind.DHT(start=True)
     dht2 = hivemind.DHT(initial_peers=dht1.get_visible_maddrs(), start=True)
@@ -145,26 +147,18 @@ def test_load_state_from_peers():
     model1 = nn.Linear(2, 3)
     model2 = nn.Linear(2, 3)
 
-    avgr1 = TrainingStateAverager(
-        dht=dht1,
-        param_groups=model1.parameters(),
+    common_kwargs = dict(
         optimizer=partial(torch.optim.SGD, lr=0.1),
         scheduler=partial(torch.optim.lr_scheduler.LambdaLR, lr_lambda=lambda t: 1.0 / max(1, t)),
-        allow_state_sharing=False,
         target_group_size=2,
         prefix="my_exp",
-        start=True,
     )
 
-    avgr2 = TrainingStateAverager(
-        dht=dht2,
-        param_groups=model2.parameters(),
-        optimizer=partial(torch.optim.SGD, lr=0.1),
-        scheduler=partial(torch.optim.lr_scheduler.LambdaLR, lr_lambda=lambda t: 1.0 / max(1, t)),
-        target_group_size=2,
-        prefix="my_exp",
-        start=True,
+    avgr1 = TrainingStateAverager(
+        dht=dht1, param_groups=model1.parameters(), allow_state_sharing=False, start=True, **common_kwargs
     )
+
+    avgr2 = TrainingStateAverager(dht=dht2, param_groups=model2.parameters(), start=True, **common_kwargs)
 
     avgr2.local_epoch = 1337
     model2.weight.data[...] = 42
