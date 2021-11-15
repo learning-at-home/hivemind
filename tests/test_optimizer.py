@@ -269,10 +269,10 @@ def test_progress_tracker():
     assert not tracker.is_alive()
 
     mean_step_time = sum(step_time_deltas) / len(step_time_deltas)
+    print(step_time_deltas)
     for i in (0, 1, 5):
-        assert 1.1 * mean_step_time < step_time_deltas[i] < 2.0 * mean_step_time
-    assert 0.5 * mean_step_time < step_time_deltas[2] < 1.5 * mean_step_time
-    for i in (3, 4):
-        assert 0.5 * mean_step_time < step_time_deltas[i] < 0.9 * mean_step_time
+        assert 1.05 * mean_step_time < step_time_deltas[i] < 2.0 * mean_step_time
+    for i in (2, 3, 4):
+        assert 0.5 * mean_step_time < step_time_deltas[i] < 0.95 * mean_step_time
     assert emas[1] < emas[2] < emas[3] < emas[4]
     assert tracker.performance_ema.samples_per_second < 1e-9
