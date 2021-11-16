@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+import numpy as np
 from pydantic import BaseModel, StrictBool, StrictFloat, confloat, conint
 
 from hivemind.dht import DHT
@@ -287,9 +288,10 @@ class ProgressTracker(threading.Thread):
 
         expected_max_peers = max(num_peers + self.expected_drift_peers, num_peers * (1 + self.expected_drift_rate))
         time_to_next_fetch = float(
-            min(
-                max(estimated_time_to_next_epoch * num_peers / expected_max_peers, self.min_refresh_period),
-                self.max_refresh_period,
+            np.clip(
+                a=estimated_time_to_next_epoch * num_peers / expected_max_peers,
+                a_min=self.min_refresh_period,
+                a_max=self.max_refresh_period,
             )
         )
         logger.log(
