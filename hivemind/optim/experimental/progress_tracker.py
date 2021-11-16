@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass
-from threading import Event, Lock, Thread
+import threading
 from typing import Dict, Optional
 
 import numpy as np
@@ -11,7 +11,7 @@ from pydantic import BaseModel, StrictBool, StrictFloat, confloat, conint
 from hivemind.dht import DHT
 from hivemind.dht.schema import BytesWithPublicKey, RSASignatureValidator, SchemaValidator
 from hivemind.utils import DHTExpiration, ValueWithExpiration, enter_asynchronously, get_dht_time, get_logger
-from hivemind.utils.crypto import RSAPrivateKey
+from hivemind.utils.crypto import PrivateKey
 from hivemind.utils.performance_ema import PerformanceEMA
 
 logger = get_logger(__name__)
@@ -41,7 +41,7 @@ class TrainingProgressSchema(BaseModel):
     progress: Dict[BytesWithPublicKey, Optional[LocalTrainingProgress]]
 
 
-class ProgressTracker(Thread):
+class ProgressTracker(threading.Thread):
     """
     Auxiliary class that keeps track of local & global training progress, measured in epochs.
     An epoch can be incremented after collaboration accumulates a said number of gradients (target_batch_size).
@@ -71,7 +71,7 @@ class ProgressTracker(Thread):
     >>>         with tracker.pause_updates():
     >>>             aggregate_gradients_with_peers()
     >>>             update_model_parameters()
-    >>>             local_epoch = tracker.increment_epoch(local_epoch + 1)
+    >>>             local_epoch = tracker.increment_epoch()
     >>>             local_samples = 0
     """
 
@@ -89,8 +89,9 @@ class ProgressTracker(Thread):
         expected_drift_rate: float = 0.2,
         performance_ema_alpha: float = 0.1,
         metadata_expiration: float = 30.0,
-        daemon: bool = True,
         status_loglevel: int = logging.DEBUG,
+        private_key: PrivateKey = None,
+        daemon: bool = True,
         start: bool,
     ):
         client_mode = client_mode if client_mode is not None else dht.client_mode
@@ -104,7 +105,7 @@ class ProgressTracker(Thread):
         self.performance_ema = PerformanceEMA(alpha=performance_ema_alpha)
         self.metadata_expiration = metadata_expiration
 
-        signature_validator = RSASignatureValidator(private_key=RSAPrivateKey())
+        signature_validator = RSASignatureValidator(private_key)
         self._local_public_key = signature_validator.local_public_key
         dht.add_validators([SchemaValidator(TrainingProgressSchema, prefix=prefix), signature_validator])
 
@@ -112,9 +113,9 @@ class ProgressTracker(Thread):
         self.local_progress = self._get_local_progress(local_epoch=0, samples_accumulated=0)
         metadata, _expiration = self.dht.get(self.training_progress_key, latest=True) or (None, -float("inf"))
         self.global_progress = self._parse_swarm_progress_data(metadata)
-        self.lock_global_progress, self.global_state_updated = Lock(), Event()
-        self.lock_local_progress, self.should_report_progress = Lock(), Event()
-        self.shutdown_triggered, self.shutdown_complete = Event(), Event()
+        self.lock_global_progress, self.global_state_updated = threading.Lock(), threading.Event()
+        self.lock_local_progress, self.should_report_progress = threading.Lock(), threading.Event()
+        self.shutdown_triggered, self.shutdown_complete = threading.Event(), threading.Event()
         super().__init__(name=f"{self.__class__.__name__}({self.prefix})", daemon=daemon)
         if start:
             self.start()

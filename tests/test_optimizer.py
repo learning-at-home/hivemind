@@ -14,6 +14,7 @@ from hivemind.averaging.control import AveragingStage
 from hivemind.optim.experimental.grad_averager import GradientAverager
 from hivemind.optim.experimental.progress_tracker import ProgressTracker
 from hivemind.optim.experimental.state_averager import TrainingStateAverager
+from hivemind.utils.crypto import RSAPrivateKey
 
 
 @pytest.mark.forked
@@ -186,7 +187,7 @@ def test_progress_tracker():
     finished_evt = mp.Event()
     emas = mp.Array(ctypes.c_double, 5)
 
-    def worker(index: int, batch_size: int, period: float, **kwargs):
+    def run_worker(index: int, batch_size: int, period: float, **kwargs):
         dht = hivemind.DHT(initial_peers=dht_root.get_visible_maddrs(), start=True)
         tracker = ProgressTracker(
             dht,
@@ -196,6 +197,7 @@ def test_progress_tracker():
             min_refresh_period=0.1,
             default_refresh_period=0.2,
             max_refresh_period=0.5,
+            private_key=RSAPrivateKey(),
             **kwargs,
         )
 
@@ -228,11 +230,12 @@ def test_progress_tracker():
         dht.shutdown()
 
     # note: we use processes here because RSASignatureValidator inside trackers uses process-wide RSA keys
-    worker1 = mp.Process(target=worker, kwargs=dict(index=1, batch_size=12, period=0.6))
-    worker2 = mp.Process(target=worker, kwargs=dict(index=2, batch_size=16, period=0.5))
-    worker3 = mp.Process(target=worker, kwargs=dict(index=3, batch_size=24, period=0.4))
-    worker4 = mp.Process(target=worker, kwargs=dict(index=4, batch_size=64, period=0.4))
-    workers = worker1, worker2, worker3, worker4
+    workers = [
+        mp.Process(target=run_worker, kwargs=dict(index=1, batch_size=12, period=0.6)),
+        mp.Process(target=run_worker, kwargs=dict(index=2, batch_size=16, period=0.5)),
+        mp.Process(target=run_worker, kwargs=dict(index=3, batch_size=24, period=0.4)),
+        mp.Process(target=run_worker, kwargs=dict(index=4, batch_size=64, period=0.4)),
+    ]
     for worker in workers:
         worker.start()
 
@@ -271,7 +274,6 @@ def test_progress_tracker():
     assert not tracker.is_alive()
 
     mean_step_time = sum(step_time_deltas) / len(step_time_deltas)
-    print(step_time_deltas)
     for i in (0, 1, 5):
         assert 1.05 * mean_step_time < step_time_deltas[i] < 2.0 * mean_step_time
     for i in (2, 3, 4):
