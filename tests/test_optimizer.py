@@ -216,9 +216,9 @@ def test_progress_tracker():
             samples_accumulated += batch_size
             tracker.report_local_progress(local_epoch, samples_accumulated)
 
-            if tracker.ready_to_increment_epoch:
+            if tracker.ready_to_update_epoch:
                 with tracker.pause_updates():
-                    local_epoch = tracker.increment_epoch(local_epoch + 1)
+                    local_epoch = tracker.update_epoch(local_epoch + 1)
                     samples_accumulated = 0
 
                 if index == 4 and local_epoch >= 5:

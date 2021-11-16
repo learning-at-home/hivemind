@@ -1,8 +1,8 @@
 import asyncio
 import contextlib
 import logging
-from dataclasses import dataclass
 import threading
+from dataclasses import dataclass
 from typing import Dict, Optional
 
 import numpy as np
@@ -71,7 +71,7 @@ class ProgressTracker(threading.Thread):
     >>>         with tracker.pause_updates():
     >>>             aggregate_gradients_with_peers()
     >>>             update_model_parameters()
-    >>>             local_epoch = tracker.increment_epoch()
+    >>>             local_epoch = tracker.update_epoch(local_epoch + 1)
     >>>             local_samples = 0
     """
 
@@ -125,7 +125,7 @@ class ProgressTracker(threading.Thread):
         return self.global_progress.epoch
 
     @property
-    def ready_to_increment_epoch(self) -> bool:
+    def ready_to_update_epoch(self) -> bool:
         """Whether or not this peer can increment epoch right away."""
         if self.global_epoch > self.local_progress.epoch:
             return True
@@ -136,9 +136,9 @@ class ProgressTracker(threading.Thread):
         return False
 
     @property
-    def estimated_next_increment_time(self) -> DHTExpiration:
+    def estimated_next_update_time(self) -> DHTExpiration:
         """Estimate (absolute) time when this peer should increment epoch"""
-        if self.ready_to_increment_epoch:
+        if self.ready_to_update_epoch:
             return get_dht_time()
         return self.global_progress.eta_next_epoch
 
@@ -171,7 +171,7 @@ class ProgressTracker(threading.Thread):
         with self.lock_global_progress, self.performance_ema.pause():
             yield
 
-    def increment_epoch(self, new_epoch: Optional[int] = None) -> int:
+    def update_epoch(self, new_epoch: Optional[int] = None) -> int:
         """Increment local epoch, reset the number of sample accumulated, reset local progress, return new epoch"""
         assert self.lock_global_progress.locked(), "ProgressTracker must be paused when incrementing epoch"
         if new_epoch is None:
@@ -239,9 +239,7 @@ class ProgressTracker(threading.Thread):
         finally:
             logger.log(self.status_loglevel, f"No longer fetching {self.training_progress_key}.")
 
-    def _parse_swarm_progress_data(
-        self, metadata: TrainingProgressSchema
-    ) -> GlobalTrainingProgress:
+    def _parse_swarm_progress_data(self, metadata: TrainingProgressSchema) -> GlobalTrainingProgress:
         """Read performance statistics reported by peers, estimate progress towards next batch"""
         current_time = get_dht_time()
 
