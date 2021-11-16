@@ -114,7 +114,7 @@ class ProgressTracker(threading.Thread):
         metadata, _expiration = self.dht.get(self.training_progress_key, latest=True) or (None, -float("inf"))
         self.global_progress = self._parse_swarm_progress_data(metadata)
         self.lock_global_progress, self.global_state_updated = threading.Lock(), threading.Event()
-        self.lock_local_progress, self.should_report_progress = threading.Lock(), threading.Event()
+        self.should_report_progress = threading.Event()
         self.shutdown_triggered, self.shutdown_complete = threading.Event(), threading.Event()
         super().__init__(name=f"{self.__class__.__name__}({self.prefix})", daemon=daemon)
         if start:
@@ -154,16 +154,15 @@ class ProgressTracker(threading.Thread):
 
     def report_local_progress(self, local_epoch: int, samples_accumulated: int):
         """Update the number of locally accumulated samples and notify to other peers about this."""
-        with self.lock_local_progress:
-            extra_samples = samples_accumulated - self.local_progress.samples_accumulated
-            if extra_samples > 0:
-                self.performance_ema.update(task_size=extra_samples)
-                logger.debug(f"Updated performance EMA: {self.performance_ema.samples_per_second:.5f}")
-            else:
-                logger.debug("Resetting performance timestamp to current time (progress was reset)")
-                self.performance_ema.reset_timer()
-            self.local_progress = self._get_local_progress(local_epoch, samples_accumulated)
-            self.should_report_progress.set()
+        extra_samples = samples_accumulated - self.local_progress.samples_accumulated
+        if extra_samples > 0:
+            self.performance_ema.update(task_size=extra_samples)
+            logger.debug(f"Updated performance EMA: {self.performance_ema.samples_per_second:.5f}")
+        else:
+            logger.debug("Resetting performance timestamp to current time (progress was reset)")
+            self.performance_ema.reset_timer()
+        self.local_progress = self._get_local_progress(local_epoch, samples_accumulated)
+        self.should_report_progress.set()
 
     @contextlib.contextmanager
     def pause_updates(self):
@@ -203,9 +202,8 @@ class ProgressTracker(threading.Thread):
                 else:
                     logger.debug(f"Progress update triggered by metadata_expiration.")
 
-                async with enter_asynchronously(self.lock_local_progress):
-                    local_progress = self.local_progress
-                    last_report_time = get_dht_time()
+                local_progress = self.local_progress
+                last_report_time = get_dht_time()
 
                 await self.dht.store(
                     key=self.training_progress_key,
