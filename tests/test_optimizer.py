@@ -1,3 +1,5 @@
+import ctypes
+import multiprocessing as mp
 import time
 from functools import partial
 
@@ -10,7 +12,9 @@ import torch.nn.functional as F
 import hivemind
 from hivemind.averaging.control import AveragingStage
 from hivemind.optim.experimental.grad_averager import GradientAverager
+from hivemind.optim.experimental.progress_tracker import ProgressTracker
 from hivemind.optim.experimental.state_averager import TrainingStateAverager
+from hivemind.utils.crypto import RSAPrivateKey
 
 
 @pytest.mark.forked
@@ -170,3 +174,108 @@ def test_load_state_from_peers():
     assert avgr1.local_epoch == 1337
     assert torch.all(model1.weight == 42).item()
     assert np.allclose(avgr1.optimizer.param_groups[0]["lr"], 0.1 / 1337)
+
+
+@pytest.mark.forked
+def test_progress_tracker():
+    # note to a curious reader: no, you cannot reduce the timings without compromising realism or stability
+    prefix = "my_exp"
+    target_batch_size = 256
+    dht_root = hivemind.DHT(start=True)
+    barrier = mp.Barrier(parties=5)
+    delayed_start_evt = mp.Event()
+    finished_evt = mp.Event()
+    emas = mp.Array(ctypes.c_double, 5)
+
+    def run_worker(index: int, batch_size: int, period: float, **kwargs):
+        dht = hivemind.DHT(initial_peers=dht_root.get_visible_maddrs(), start=True)
+        tracker = ProgressTracker(
+            dht,
+            prefix,
+            target_batch_size,
+            start=True,
+            min_refresh_period=0.1,
+            default_refresh_period=0.2,
+            max_refresh_period=0.5,
+            private_key=RSAPrivateKey(),
+            **kwargs,
+        )
+
+        barrier.wait()
+        if index == 4:
+            delayed_start_evt.wait()
+
+        local_epoch = 2 if index == 4 else 0
+        samples_accumulated = 0
+
+        while True:
+            time.sleep(period)
+            if finished_evt.is_set():
+                break
+
+            samples_accumulated += batch_size
+            tracker.report_local_progress(local_epoch, samples_accumulated)
+
+            if tracker.ready_to_update_epoch:
+                with tracker.pause_updates():
+                    local_epoch = tracker.update_epoch(local_epoch + 1)
+                    samples_accumulated = 0
+
+                if index == 4 and local_epoch >= 5:
+                    time.sleep(0.5)
+                    break
+
+        emas[index] = tracker.performance_ema.samples_per_second
+        tracker.shutdown()
+        dht.shutdown()
+
+    workers = [
+        mp.Process(target=run_worker, kwargs=dict(index=1, batch_size=12, period=0.6)),
+        mp.Process(target=run_worker, kwargs=dict(index=2, batch_size=16, period=0.5)),
+        mp.Process(target=run_worker, kwargs=dict(index=3, batch_size=24, period=0.4)),
+        mp.Process(target=run_worker, kwargs=dict(index=4, batch_size=64, period=0.4)),
+    ]
+    for worker in workers:
+        worker.start()
+
+    tracker = ProgressTracker(
+        dht_root,
+        prefix,
+        target_batch_size,
+        start=True,
+        min_refresh_period=0.1,
+        default_refresh_period=0.2,
+        max_refresh_period=0.5,
+    )
+    barrier.wait()
+
+    current_step = 0
+    last_timestamp = hivemind.get_dht_time()
+    step_time_deltas = []
+
+    while current_step < 6:
+        time.sleep(0.1)
+        if tracker.global_progress.epoch > current_step:
+            time_delta = hivemind.get_dht_time() - last_timestamp
+            current_step = tracker.global_progress.epoch
+            if current_step == 2:
+                delayed_start_evt.set()
+
+            last_timestamp = hivemind.get_dht_time()
+            step_time_deltas.append(time_delta)
+
+    finished_evt.set()
+    for worker in workers:
+        worker.join()
+
+    tracker.shutdown()
+    dht_root.shutdown()
+    assert not tracker.is_alive()
+
+    mean_step_time = sum(step_time_deltas) / len(step_time_deltas)
+    for i in (0, 1, 5):  # Without the 4th worker (the fastest one)
+        assert 1.05 * mean_step_time < step_time_deltas[i] < 2.0 * mean_step_time
+    for i in (2, 3, 4):  # With the 4th worker
+        assert 0.5 * mean_step_time < step_time_deltas[i] < 0.95 * mean_step_time
+    assert emas[1] < emas[2] < emas[3] < emas[4]
+    assert tracker.performance_ema.samples_per_second < 1e-9
