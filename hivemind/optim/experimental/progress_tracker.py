@@ -11,7 +11,7 @@ from pydantic import BaseModel, StrictBool, StrictFloat, confloat, conint
 from hivemind.dht import DHT
 from hivemind.dht.schema import BytesWithPublicKey, RSASignatureValidator, SchemaValidator
 from hivemind.utils import DHTExpiration, ValueWithExpiration, enter_asynchronously, get_dht_time, get_logger
-from hivemind.utils.crypto import PrivateKey
+from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.performance_ema import PerformanceEMA
 
 logger = get_logger(__name__)
@@ -90,7 +90,7 @@ class ProgressTracker(threading.Thread):
         performance_ema_alpha: float = 0.1,
         metadata_expiration: float = 30.0,
         status_loglevel: int = logging.DEBUG,
-        private_key: PrivateKey = None,
+        private_key: Optional[RSAPrivateKey] = None,
         daemon: bool = True,
         start: bool,
     ):
