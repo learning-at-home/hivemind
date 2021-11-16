@@ -128,9 +128,9 @@ class ProgressTracker(threading.Thread):
     def ready_to_update_epoch(self) -> bool:
         """Whether or not this peer can increment epoch right away."""
         return (
-            self.global_epoch > self.local_progress.epoch or
-            self.global_progress.samples_accumulated >= self.target_batch_size or
-            get_dht_time() >= self.global_progress.eta_next_epoch
+            self.global_epoch > self.local_progress.epoch
+            or self.global_progress.samples_accumulated >= self.target_batch_size
+            or get_dht_time() >= self.global_progress.eta_next_epoch
         )
 
     @property
