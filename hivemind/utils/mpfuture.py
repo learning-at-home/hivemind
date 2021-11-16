@@ -201,7 +201,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         try:
             with MPFuture._update_lock if self._use_lock else nullcontext():
                 self._sender_pipe.send((self._uid, update_type, payload))
-        except (ConnectionError, BrokenPipeError, EOFError) as e:
+        except (ConnectionError, BrokenPipeError, EOFError, OSError) as e:
             logger.debug(f"No updates were sent: pipe to origin process was broken ({e}).", exc_info=True)
 
     def set_result(self, result: ResultType):
