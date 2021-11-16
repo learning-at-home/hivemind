@@ -240,7 +240,7 @@ class ProgressTracker(threading.Thread):
             logger.log(self.status_loglevel, f"No longer fetching {self.training_progress_key}.")
 
     def _parse_swarm_progress_data(
-        self, metadata: Optional[Dict[BytesWithPublicKey, Optional[LocalTrainingProgress]]]
+        self, metadata: TrainingProgressSchema
     ) -> GlobalTrainingProgress:
         """Read performance statistics reported by peers, estimate progress towards next batch"""
         current_time = get_dht_time()
