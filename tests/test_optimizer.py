@@ -229,7 +229,6 @@ def test_progress_tracker():
         tracker.shutdown()
         dht.shutdown()
 
-    # note: we use processes here because RSASignatureValidator inside trackers uses process-wide RSA keys
     workers = [
         mp.Process(target=run_worker, kwargs=dict(index=1, batch_size=12, period=0.6)),
         mp.Process(target=run_worker, kwargs=dict(index=2, batch_size=16, period=0.5)),
