@@ -127,13 +127,11 @@ class ProgressTracker(threading.Thread):
     @property
     def ready_to_update_epoch(self) -> bool:
         """Whether or not this peer can increment epoch right away."""
-        if self.global_epoch > self.local_progress.epoch:
-            return True
-        elif self.global_progress.samples_accumulated >= self.target_batch_size:
-            return True
-        elif get_dht_time() >= self.global_progress.eta_next_epoch:
-            return True
-        return False
+        return (
+            self.global_epoch > self.local_progress.epoch or
+            self.global_progress.samples_accumulated >= self.target_batch_size or
+            get_dht_time() >= self.global_progress.eta_next_epoch
+        )
 
     @property
     def estimated_next_update_time(self) -> DHTExpiration:
@@ -171,7 +169,7 @@ class ProgressTracker(threading.Thread):
             yield
 
     def update_epoch(self, new_epoch: Optional[int] = None) -> int:
-        """Increment local epoch, reset the number of sample accumulated, reset local progress, return new epoch"""
+        """Update the local epoch, reset the number of sample accumulated, reset local progress, return new epoch"""
         assert self.lock_global_progress.locked(), "ProgressTracker must be paused when incrementing epoch"
         if new_epoch is None:
             new_epoch = self.local_progress.epoch + 1
@@ -194,7 +192,7 @@ class ProgressTracker(threading.Thread):
         try:
             while not self.shutdown_triggered.is_set():
                 wait_timeout = max(0.0, last_report_time + self.metadata_expiration - get_dht_time())
-                logger.debug(f"Will report progress again in {wait_timeout} seconds or on user command.")
+                logger.debug(f"Will report progress again in {wait_timeout} seconds or on user command")
                 await asyncio.get_event_loop().run_in_executor(None, self.should_report_progress.wait, wait_timeout)
                 if self.should_report_progress.is_set():
                     logger.debug(f"Progress update triggered by report_local_progress.")
