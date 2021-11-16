@@ -10,7 +10,7 @@ from pydantic import BaseModel, StrictBool, StrictFloat, confloat, conint
 
 from hivemind.dht import DHT
 from hivemind.dht.schema import BytesWithPublicKey, RSASignatureValidator, SchemaValidator
-from hivemind.utils import ValueWithExpiration, enter_asynchronously, get_dht_time, get_logger
+from hivemind.utils import DHTExpiration, ValueWithExpiration, enter_asynchronously, get_dht_time, get_logger
 from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.performance_ema import PerformanceEMA
 
@@ -120,15 +120,26 @@ class ProgressTracker(Thread):
             self.start()
 
     @property
-    def ready_for_next_epoch(self) -> bool:
-        """Whether or not the collaboration accumulated enough samples to transition to the next epoch"""
-        if self.global_progress.samples_accumulated >= self.target_batch_size:
+    def global_epoch(self) -> int:
+        return self.global_progress.epoch
+
+    @property
+    def ready_to_increment_epoch(self) -> bool:
+        """Whether or not this peer can increment epoch right away."""
+        if self.global_epoch > self.local_progress.epoch:
+            return True
+        elif self.global_progress.samples_accumulated >= self.target_batch_size:
             return True
         elif get_dht_time() >= self.global_progress.eta_next_epoch:
             return True
-        elif self.global_progress.epoch > self.local_progress.epoch:
-            return True
         return False
+
+    @property
+    def estimated_next_increment_time(self) -> DHTExpiration:
+        """Estimate (absolute) time when this peer should increment epoch"""
+        if self.ready_to_increment_epoch:
+            return get_dht_time()
+        return self.global_progress.eta_next_epoch
 
     def _get_local_progress(self, local_epoch: int, samples_accumulated: int):
         return LocalTrainingProgress(
