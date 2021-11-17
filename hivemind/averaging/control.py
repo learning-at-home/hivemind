@@ -145,4 +145,4 @@ class StepControl(MPFuture):
     def cancel(self) -> bool:
         if self._trigger is not None:
             self._trigger.cancel()
-        return self.cancel()
+        return super().cancel()
