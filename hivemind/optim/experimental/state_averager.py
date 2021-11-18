@@ -353,6 +353,7 @@ class TrainingStateAverager(DecentralizedAverager):
                 optimizer_step,
                 zero_grad,
                 averaging_round,
+                grad_scaler,
                 **averaging_opts or {},
             )
 
