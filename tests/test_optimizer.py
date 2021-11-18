@@ -400,6 +400,12 @@ def _run_training_with_swarm(args: TrainingArguments):
 
 @pytest.mark.forked
 def test_training_short():
-    _run_training_with_swarm(TrainingArguments(
-        num_peers=3, num_clients=1, target_batch_size=32, max_epoch=3, lr_step_size=1,
-    ))
+    _run_training_with_swarm(
+        TrainingArguments(
+            num_peers=3,
+            num_clients=1,
+            target_batch_size=32,
+            max_epoch=3,
+            lr_step_size=1,
+        )
+    )
