@@ -479,7 +479,7 @@ def test_averaging_cancel():
             prefix="mygroup",
             start=True,
         )
-        for i, dht in enumerate(launch_dht_instances(3))
+        for i, dht in enumerate(launch_dht_instances(4))
     )
 
     step_controls = [averager.step(wait=False, scheduled_time=hivemind.get_dht_time() + 1) for averager in averagers]

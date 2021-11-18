@@ -377,31 +377,33 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             data_for_gather=data_for_gather,
         )
 
-        future_for_trigger = MPFuture()
-        self._outer_pipe.send(("_step", [], dict(step=step, future_for_trigger=future_for_trigger)))
-        step.attach_trigger(future_for_trigger.result())
+        future_for_init = MPFuture()
+        self._outer_pipe.send(("_step", [], dict(step=step, future_for_init=future_for_init)))
+        step.attach(*future_for_init.result())
 
         if not require_trigger:
             step.allow_allreduce()
         return step.result() if wait else step
 
-    async def _step(self, *, step: StepControl, future_for_trigger: MPFuture):
+    async def _step(self, *, step: StepControl, future_for_init: MPFuture):
         try:
-            trigger = MPFuture()
-            step.attach_trigger(trigger)
-            future_for_trigger.set_result(trigger)
+            trigger, cancel = MPFuture(), MPFuture()
+            step.attach(trigger, cancel)
+            future_for_init.set_result((trigger, cancel))
 
             while not step.done():
                 try:
                     self._pending_group_assembled.clear()
                     step.stage = AveragingStage.LOOKING_FOR_GROUP
                     matchmaking_task = asyncio.create_task(self._matchmaking.look_for_group(step))
+                    check_cancel_task = asyncio.create_task(step.wait_for_cancel())
 
-                    await asyncio.wait(
-                        {matchmaking_task, step.wait_for_trigger()}, return_when=asyncio.FIRST_COMPLETED
-                    )
+                    await asyncio.wait({matchmaking_task, check_cancel_task}, return_when=asyncio.FIRST_COMPLETED)
                     if step.cancelled():
+                        matchmaking_task.cancel()
                         raise asyncio.CancelledError()
+                    else:
+                        check_cancel_task.cancel()
 
                     group_info = await matchmaking_task
                     if group_info is None:
