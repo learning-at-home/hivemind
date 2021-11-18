@@ -486,10 +486,10 @@ def test_averaging_cancel():
 
     time.sleep(0.2)
     step_controls[0].cancel()
-    step_controls[2].cancel()
+    step_controls[1].cancel()
 
     for i, control in enumerate(step_controls):
-        if i in (0, 2):
+        if i in (0, 1):
             assert control.cancelled()
         else:
             assert control.result() is not None and len(control.result()) == 2
