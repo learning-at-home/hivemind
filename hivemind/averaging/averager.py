@@ -112,7 +112,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         *,
         start: bool,
         prefix: str,
-        target_group_size: int,
+        target_group_size: Optional[int] = None,
         min_group_size: int = 2,
         initial_group_bits: str = "",
         averaging_expiration: Optional[float] = None,
@@ -137,8 +137,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         assert bandwidth is None or (
             bandwidth >= 0 and np.isfinite(np.float32(bandwidth))
         ), "bandwidth must be a non-negative float32"
-        if not is_power_of_two(target_group_size):
-            logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert all(bit in "01" for bit in initial_group_bits)
         assert not client_mode or not auxiliary, "auxiliary peers must accept incoming connections"
 
@@ -695,11 +693,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         except Exception as e:
             if not future.done():
                 future.set_exception(e)
-
-
-def is_power_of_two(n):
-    """Check whether n is a power of 2"""
-    return (n != 0) and (n & (n - 1) == 0)
 
 
 def _background_thread_fetch_current_state(
