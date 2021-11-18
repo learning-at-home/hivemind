@@ -124,7 +124,7 @@ class Matchmaking:
             request_leaders_task = asyncio.create_task(self._request_join_potential_leaders(step))
             try:
                 return await asyncio.wait_for(self.assembled_group, timeout=step.get_timeout())
-            except asyncio.TimeoutError:
+            except (asyncio.TimeoutError, asyncio.CancelledError):
                 return None
 
             except BaseException as e:
@@ -152,6 +152,9 @@ class Matchmaking:
         async with self.potential_leaders.begin_search(step, self.group_key_manager, declare=not self.client_mode):
             while True:
                 try:
+                    if step.cancelled():
+                        raise asyncio.CancelledError("Finishing abruptly because matchmaking was cancelled")
+
                     next_leader = await self.potential_leaders.pop_next_leader()  # throws TimeoutError on expiration
 
                     group = await self._request_join_group(next_leader)
