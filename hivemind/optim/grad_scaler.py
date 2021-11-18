@@ -2,17 +2,16 @@ import contextlib
 from typing import Dict, Optional
 
 import torch
+from torch.optim import Optimizer as TorchOptimizer
 from torch.cuda.amp import GradScaler as TorchGradScaler
 from torch.cuda.amp.grad_scaler import _refresh_per_optimizer_state
-from torch.optim import Optimizer
 
-from hivemind.optim.base import DecentralizedOptimizerBase
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class HivemindGradScaler(TorchGradScaler):
+class GradScaler(TorchGradScaler):
     """
     A thin wrapper over pytorch GradScaler that supports hivemind-style training with CollaborativeOptimizer, namely:
     - bypass .unscale_ and .update calls in order to accumulate gradients over several steps
@@ -33,8 +32,8 @@ class HivemindGradScaler(TorchGradScaler):
         finally:
             self._is_running_global_step = was_running
 
-    def unscale_(self, optimizer: Optimizer) -> bool:
-        assert isinstance(optimizer, DecentralizedOptimizerBase)
+    def unscale_(self, optimizer: TorchOptimizer) -> bool:
+        assert hasattr(optimizer, "opt"), "hivemind.GradScaler only supports hivemind optimizer wrappers"
         if self._is_running_global_step:
             super().unscale_(optimizer.opt)
             return True
@@ -43,11 +42,10 @@ class HivemindGradScaler(TorchGradScaler):
             self._optimizer_states_to_reset.add(id(optimizer))
             return False
 
-    def step(self, optimizer: Optimizer, *args, **kwargs) -> bool:
-        assert isinstance(optimizer, DecentralizedOptimizerBase)
+    def step(self, optimizer: TorchOptimizer, *args, **kwargs) -> bool:
         if self._is_running_global_step:
             if self.are_grads_finite(optimizer):
-                super().step(optimizer.opt, *args, **kwargs)
+                super().step(optimizer, *args, **kwargs)
             else:
                 logger.warning("Skipping global step due to gradient over/underflow")
             return True
@@ -72,12 +70,17 @@ class HivemindGradScaler(TorchGradScaler):
             return False
 
     def _unscale_grads_(
-        self, optimizer: Optimizer, inv_scale: torch.Tensor, found_inf: torch.Tensor, allow_fp16: bool
+        self, optimizer: TorchOptimizer, inv_scale: torch.Tensor, found_inf: torch.Tensor, allow_fp16: bool
     ) -> Dict[torch.device, torch.Tensor]:
         # note: the code below sets allow_fp16=True to allow training with master weights (partially) in fp16
         # inspired by: https://github.com/facebookresearch/fairscale/blob/945b9666/fairscale/optim/grad_scaler.py
         return super()._unscale_grads_(optimizer, inv_scale, found_inf, allow_fp16=True)
 
-    def are_grads_finite(self, optimizer: DecentralizedOptimizerBase) -> bool:
-        assert isinstance(optimizer, DecentralizedOptimizerBase)
-        return not sum(v.item() for v in self._check_inf_per_device(optimizer.opt).values())
+    def are_grads_finite(self, optimizer: TorchOptimizer) -> bool:
+        return not sum(v.item() for v in self._check_inf_per_device(optimizer).values())
+
+
+class HivemindGradScaler(GradScaler):
+    def __init__(self, *args, **kwargs):
+        logger.warning("HivemindGradScaler was renamed to hivemind.GradScaler, this reference will be removed in v1.1")
+        super().__init__(*args, **kwargs)
