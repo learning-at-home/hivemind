@@ -33,7 +33,7 @@ class GradScaler(TorchGradScaler):
             self._is_running_global_step = was_running
 
     def unscale_(self, optimizer: TorchOptimizer) -> bool:
-        assert hasattr(optimizer, "opt"), "hivemind.GradScaler only supports hivemind optimizer wrappers"
+        assert isinstance(optimizer, DecentralizedOptimizerBase)
         if self._is_running_global_step:
             super().unscale_(optimizer.opt)
             return True
