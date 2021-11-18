@@ -2,9 +2,9 @@ import contextlib
 from typing import Dict, Optional
 
 import torch
-from torch.optim import Optimizer as TorchOptimizer
 from torch.cuda.amp import GradScaler as TorchGradScaler
 from torch.cuda.amp.grad_scaler import _refresh_per_optimizer_state
+from torch.optim import Optimizer as TorchOptimizer
 
 from hivemind.utils.logging import get_logger
 
