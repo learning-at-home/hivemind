@@ -112,7 +112,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         *,
         start: bool,
         prefix: str,
-        target_group_size: int,
+        target_group_size: int = 2 ** 63 - 1,
         min_group_size: int = 2,
         initial_group_bits: str = "",
         averaging_expiration: Optional[float] = None,
