@@ -124,7 +124,7 @@ class Matchmaking:
             request_leaders_task = asyncio.create_task(self._request_join_potential_leaders(step))
             try:
                 return await asyncio.wait_for(self.assembled_group, timeout=step.get_timeout())
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except asyncio.TimeoutError:
                 return None
 
             except BaseException as e:
