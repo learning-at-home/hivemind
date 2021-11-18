@@ -400,8 +400,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     matchmaking_task = asyncio.create_task(self._matchmaking.look_for_group(step))
 
                     await asyncio.wait(
-                        {matchmaking_task, step.wait_for_trigger()},
-                        return_when=asyncio.FIRST_COMPLETED
+                        {matchmaking_task, step.wait_for_trigger()}, return_when=asyncio.FIRST_COMPLETED
                     )
                     if step.cancelled():
                         raise asyncio.CancelledError()
