@@ -207,15 +207,17 @@ class GradientAverager(DecentralizedAverager):
 
     @contextlib.contextmanager
     @torch.no_grad()
-    def use_averaged_gradients(self):
+    def use_averaged_gradients(self, replace_model_gradients: bool = True):
         self._new_averaged_grads = False
         with self.get_tensors() as averaged_grads:
+            assert len(averaged_grads) == len(self.parameters)
             try:
-                assert len(averaged_grads) == len(self.parameters)
-                old_grads = [param.grad for param in self.parameters]
-                for param, new_grad in zip(self.parameters, averaged_grads):
-                    param.grad = new_grad
-                yield
+                if replace_model_gradients:
+                    old_grads = [param.grad for param in self.parameters]
+                    for param, new_grad in zip(self.parameters, averaged_grads):
+                        param.grad = new_grad
+                yield averaged_grads
             finally:
-                for param, old_grad in zip(self.parameters, old_grads):
-                    param.grad = old_grad
+                if replace_model_gradients:
+                    for param, old_grad in zip(self.parameters, old_grads):
+                        param.grad = old_grad
