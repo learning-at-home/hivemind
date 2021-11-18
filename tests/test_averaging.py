@@ -428,7 +428,6 @@ def test_averaging_trigger():
         hivemind.averaging.DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
-            target_group_size=4,
             min_matchmaking_time=0.5,
             request_timeout=0.3,
             prefix="mygroup",

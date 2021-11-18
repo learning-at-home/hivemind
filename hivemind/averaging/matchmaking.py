@@ -44,7 +44,7 @@ class Matchmaking:
         *,
         servicer_type: Type[ServicerBase],
         prefix: str,
-        target_group_size: int,
+        target_group_size: Optional[int],
         min_group_size: int,
         min_matchmaking_time: float,
         request_timeout: float,
@@ -267,7 +267,11 @@ class Matchmaking:
                 self.current_followers[context.remote_id] = request
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
-                if len(self.current_followers) + 1 >= self.target_group_size and not self.assembled_group.done():
+                if (
+                    self.target_group_size is not None
+                    and len(self.current_followers) + 1 >= self.target_group_size
+                    and not self.assembled_group.done()
+                ):
                     # outcome 1: we have assembled a full group and are ready for allreduce
                     await self.leader_assemble_group()
 
@@ -353,7 +357,7 @@ class Matchmaking:
             )
         elif context.remote_id == self.peer_id or context.remote_id in self.current_followers:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_PEER_ID)
-        elif len(self.current_followers) + 1 >= self.target_group_size:
+        elif self.target_group_size is not None and len(self.current_followers) + 1 >= self.target_group_size:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_IS_FULL)
         else:
             return None
