@@ -3,25 +3,17 @@ import asyncio
 import random
 import time
 import uuid
+from typing import Tuple
 
 import numpy as np
 from tqdm import trange
 
 import hivemind
+from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
 
 use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
-
-
-async def store_task(peer, key, value, expiration):
-    subkey = uuid.uuid4().hex
-
-    store_ok = await peer.store(
-        key, subkey=subkey, value=value, expiration_time=hivemind.get_dht_time() + expiration, return_future=True
-    )
-
-    return store_ok, subkey, value
 
 
 async def store_and_get_task(
@@ -33,8 +25,13 @@ async def store_and_get_task(
     delay: float,
     expiration: float,
     latest: bool,
-    failure_rate: float,
-):
+    shutdown_peers: list,
+    shutdown_timestamps: list,
+    counters: list,
+    lock: asyncio.Lock,
+) -> Tuple[int, int, int, int]:
+    """Iteratively choose random peers to store data onto the dht, then retreive with another random subset of peers"""
+
     total_stores = total_gets = 0
     successful_stores = []
     successful_gets = []
@@ -43,41 +40,54 @@ async def store_and_get_task(
 
     for _ in range(total_num_rounds):
         key = uuid.uuid4().hex
-        value = uuid.uuid4().hex
 
         store_start = time.perf_counter()
         store_peers = random.sample(peers, min(num_store_peers, len(peers)))
-        store_tasks = [store_task(peer, key, value, expiration) for peer in store_peers]
-        store_result, _ = await asyncio.wait(store_tasks, return_when=asyncio.ALL_COMPLETED)
+        store_subkeys = [uuid.uuid4().hex for _ in store_peers]
+        store_values = {subkey: uuid.uuid4().hex for subkey in store_subkeys}
+        store_tasks = [
+            peer.store(
+                key,
+                subkey=subkey,
+                value=store_values[subkey],
+                expiration_time=hivemind.get_dht_time() + expiration,
+                return_future=True,
+            )
+            for peer, subkey in zip(store_peers, store_subkeys)
+        ]
+        store_result = await asyncio.gather(*store_tasks)
+        async with lock:
+            if (
+                shutdown_timestamps != None
+                and counters[1] < len(shutdown_peers)
+                and counters[0] == shutdown_timestamps[counters[1]]
+            ):
+                shutdown_peers[counters[1]].shutdown()
+                counters[1] += 1
+            counters[0] += 1
+
         store_times.append(time.perf_counter() - store_start)
 
-        successful_stores_per_iter = 0
-        store_attendees = dict()
-
         total_stores += len(store_result)
-        for result in store_result:
-            store_ok, attendee, value = result.result()
-            successful_stores_per_iter += store_ok
-            store_attendees[attendee] = value
-
+        successful_stores_per_iter = sum(store_result)
         successful_stores.append(successful_stores_per_iter)
         await asyncio.sleep(delay)
 
         get_start = time.perf_counter()
         get_peers = random.sample(peers, min(num_get_peers, len(peers)))
         get_tasks = [peer.get(key, latest, return_future=True) for peer in get_peers]
-        get_result, _ = await asyncio.wait(get_tasks, return_when=asyncio.ALL_COMPLETED)
+        get_result = await asyncio.gather(*get_tasks)
         get_times.append(time.perf_counter() - get_start)
 
         successful_gets_per_iter = 0
 
         total_gets += len(get_result)
         for result in get_result:
-            attendees, expiration = result.result()
-            if attendees.keys() == store_attendees.keys():
+            attendees, expiration = result
+            if len(attendees.keys()) == successful_stores_per_iter:
                 get_ok = True
                 for key in attendees:
-                    if attendees[key][0] != store_attendees[key]:
+                    if attendees[key][0] != store_values[key]:
                         get_ok = False
                         break
                 successful_gets_per_iter += get_ok
@@ -129,10 +139,18 @@ async def benchmark_dht(
 
     benchmark_started = time.perf_counter()
     logger.info("Creating store and get tasks...")
+    shutdown_peers = random.sample(peers, min(int(failure_rate * num_peers), num_peers))
+    remaining_peers = list(set(peers) - set(shutdown_peers))
+    shutdown_timestamps = random.sample(
+        range(0, num_threads * total_num_rounds), min(len(shutdown_peers), num_threads * total_num_rounds)
+    )
+    shutdown_timestamps.sort()
+    counters = [0, 0]
+    lock = asyncio.Lock()
     task_list = [
         asyncio.create_task(
             store_and_get_task(
-                peers,
+                remaining_peers,
                 total_num_rounds,
                 num_store_peers,
                 num_get_peers,
@@ -140,7 +158,10 @@ async def benchmark_dht(
                 delay,
                 expiration,
                 latest,
-                failure_rate,
+                shutdown_peers,
+                shutdown_timestamps,
+                counters,
+                lock,
             )
         )
         for _ in trange(num_threads)
@@ -186,7 +207,10 @@ if __name__ == "__main__":
     parser.add_argument("--expiration", type=float, default=300, required=False)
     parser.add_argument("--latest", type=bool, default=True, required=False)
     parser.add_argument("--failure_rate", type=float, default=0.1, required=False)
-
+    parser.add_argument("--increase_file_limit", action="store_true")
     args = vars(parser.parse_args())
+
+    if args.pop("increase_file_limit", False):
+        increase_file_limit()
 
     asyncio.run(benchmark_dht(**args))
