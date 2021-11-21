@@ -58,7 +58,7 @@ class Optimizer(torch.optim.Optimizer):
     :param target_batch_size: perform optimizer step after all peers collectively accumulate this many samples
     :param batch_size_per_step: before each call to .step, user should accumulate gradients over this many samples
     :param optimizer: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
-    :param param_groups: optional, a list/tuple of parameters or structured param groups for the optimizer
+    :param params: optional, a list/tuple of parameters or structured param groups for the optimizer
     :param scheduler: if specified, use this scheduler to update optimizer learning rate
     :note: If you are using ColloptaborativeOptimizer with lr_scheduler, it is recommended to pass this scheduler
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
@@ -92,7 +92,7 @@ class Optimizer(torch.optim.Optimizer):
         target_batch_size: int,
         batch_size_per_step: Optional[int] = None,
         optimizer: Union[TorchOptimizer, OptimizerFactory],
-        param_groups: Optional[Union[Parameters, ParamGroups]] = None,
+        params: Optional[Union[Parameters, ParamGroups]] = None,
         scheduler: Optional[Union[LRSchedulerBase, SchedulerFactory]] = None,
         matchmaking_time: Optional[float] = 15.0,
         averaging_timeout: Optional[float] = 300.0,
@@ -115,7 +115,7 @@ class Optimizer(torch.optim.Optimizer):
         self.scheduled_round: Optional[StepControl] = None
 
         self.state_averager = self._make_state_averager(
-            optimizer=optimizer, param_groups=param_groups, scheduler=scheduler, **averager_opts or {}
+            optimizer=optimizer, params=params, scheduler=scheduler, **averager_opts or {}
         )
         self.grad_averager = self._make_gradient_averager(reuse_grad_buffers=reuse_grad_buffers, **averager_opts or {})
         self.tracker = self._make_progress_tracker(target_batch_size, **tracker_opts or {})

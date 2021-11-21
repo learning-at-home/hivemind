@@ -106,10 +106,10 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
     )
 
     avgr1 = TrainingStateAverager(
-        dht=dht1, param_groups=model1.parameters(), extra_tensors=extras1, start=True, **common_kwargs
+        dht=dht1, params=model1.parameters(), extra_tensors=extras1, start=True, **common_kwargs
     )
     avgr2 = TrainingStateAverager(
-        dht=dht2, param_groups=model2.parameters(), extra_tensors=extras2, start=True, **common_kwargs
+        dht=dht2, params=model2.parameters(), extra_tensors=extras2, start=True, **common_kwargs
     )
 
     x = torch.ones(2)
@@ -161,10 +161,10 @@ def test_load_state_from_peers():
     )
 
     avgr1 = TrainingStateAverager(
-        dht=dht1, param_groups=model1.parameters(), allow_state_sharing=False, start=True, **common_kwargs
+        dht=dht1, params=model1.parameters(), allow_state_sharing=False, start=True, **common_kwargs
     )
 
-    avgr2 = TrainingStateAverager(dht=dht2, param_groups=model2.parameters(), start=True, **common_kwargs)
+    avgr2 = TrainingStateAverager(dht=dht2, params=model2.parameters(), start=True, **common_kwargs)
 
     avgr2.local_epoch = 1337
     model2.weight.data[...] = 42

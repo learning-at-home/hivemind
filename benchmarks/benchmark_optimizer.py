@@ -74,7 +74,7 @@ def _run_training_with_swarm(args: TrainingArguments):
         optimizer = Optimizer(
             prefix=args.prefix,
             target_batch_size=args.target_batch_size,
-            param_groups=model.parameters(),
+            params=model.parameters(),
             optimizer=partial(torch.optim.SGD, lr=args.lr_base),
             scheduler=partial(torch.optim.lr_scheduler.StepLR, gamma=args.lr_gamma, step_size=args.lr_step_size),
             dht=hivemind.DHT(initial_peers=dht.get_visible_maddrs(), client_mode=client_mode, start=True),
