@@ -243,7 +243,6 @@ class Optimizer(torch.optim.Optimizer):
                 f"BEFORE: {self.grad_averager.local_samples_accumulated}, {repr([grad.norm() / self.grad_averager.local_times_accumulated for grad in self.grad_averager._grad_accumulators()])}"
             )
 
-
             need_averaging = self.tracker.global_progress.num_peers > 1
             if need_averaging:
                 try:
