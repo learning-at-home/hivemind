@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Sequence, Union
+from typing import Optional, Union
 
 import torch
-from torch import nn
 
-from hivemind import get_dht_time
 from hivemind.averaging.control import StepControl
 from hivemind.dht import DHT
 from hivemind.optim.experimental.grad_averager import GradientAverager
@@ -21,7 +19,7 @@ from hivemind.optim.experimental.state_averager import (
     TrainingStateAverager,
 )
 from hivemind.optim.grad_scaler import HivemindGradScaler
-from hivemind.utils import get_logger
+from hivemind.utils import get_dht_time, get_logger
 
 logger = get_logger(__name__)
 
