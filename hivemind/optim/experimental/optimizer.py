@@ -372,5 +372,5 @@ class Optimizer(torch.optim.Optimizer):
         logger.debug(f"{self.__class__.__name__} is shut down.")
 
     def __del__(self):
-        if self._parent_pid == os.getpid() and self.is_alive():
+        if self.is_alive() and self._parent_pid == os.getpid():
             self.shutdown()
