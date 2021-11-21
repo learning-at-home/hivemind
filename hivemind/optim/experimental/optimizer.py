@@ -53,25 +53,27 @@ class Optimizer(torch.optim.Optimizer):
       number of local forward-backward cycles). This is because any device can join midway through training, when
       other peers have already made some progress and changed their learning rate accordingly.
 
-    TODO yozh, the doc below still needs update
-
-    :param opt: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
-    :param dht: a running hivemind.DHT daemon connected to other peers
-    :param prefix: a common prefix for all metadata stored by CollaborativeOptimizer in the DHT
+    :param dht: a running hivemind.DHT instance connected to other peers
+    :param prefix: a unique name of this experiment, used as a common prefix for all DHT keys
     :param target_batch_size: perform optimizer step after all peers collectively accumulate this many samples
     :param batch_size_per_step: before each call to .step, user should accumulate gradients over this many samples
-    :param bandwidth: peer's network bandwidth for the purpose of load balancing (recommended: internet speed in mbps)
-    :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
-    :param load_state_timeout: wait for at most this many seconds before giving up on load_state_from_peers
+    :param optimizer: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
+    :param param_groups: optional, a list/tuple of parameters or structured param groups for the optimizer
     :param scheduler: if specified, use this scheduler to update optimizer learning rate
-    :param epoch_tolerance: a peer can temporarily be delayed by this many steps without being deemed out of sync
-    :param reuse_grad_buffers: if True, use model's .grad buffers for gradient accumulation.
-      This is more memory efficient, but it requires that the user does *NOT* call model/opt zero_grad at all
-    :param client_mode: if True, runs training without incoming connections, in a firewall-compatible mode
-    :param kwargs: additional parameters forwarded to DecentralizedAverager
     :note: If you are using ColloptaborativeOptimizer with lr_scheduler, it is recommended to pass this scheduler
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
 
+    :param matchmaking_time: when looking for group, wait for peers to join for up to this many secodns
+    :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
+    :param load_state_timeout: wait for at most this many seconds before giving up on load_state_from_peers
+    :param reuse_grad_buffers: if True, use model's .grad buffers for gradient accumulation.
+      This is more memory efficient, but it requires that the user does *NOT* call model/opt zero_grad at all
+    :param epoch_tolerance: a peer can temporarily be delayed by this many steps without being deemed out of sync
+    :param delay_optimizer_step: if True, run optimizer step in background and apply results in a future step
+    :param client_mode: if True, runs training without incoming connections, in a firewall-compatible mode
+    :param averager_opts: additional keyword arguments forwarded to both GradientAverager and TrainingStateAverager
+    :param tracker_opts: additional keyword arguments forwarded to ProgressTracker
+    :param verbose: if True, report internal events such as accumilating gradients and running background tasks
 
     Internally, hivemind.Optimizer consists of 4 components:
     - DHT, a decentralized key-value storage used for coordination across the swarm
@@ -240,6 +242,7 @@ class Optimizer(torch.optim.Optimizer):
             logger.info(  # TODO
                 f"BEFORE: {self.grad_averager.local_samples_accumulated}, {repr([grad.norm() / self.grad_averager.local_times_accumulated for grad in self.grad_averager._grad_accumulators()])}"
             )
+
 
             need_averaging = self.tracker.global_progress.num_peers > 1
             if need_averaging:
