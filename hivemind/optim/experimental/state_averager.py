@@ -545,7 +545,7 @@ class TrainingStateAverager(DecentralizedAverager):
 
             if self.offload_optimizer:
                 optimized_parameters = [param for group in self.optimizer.param_groups for param in group["params"]]
-                loaded_parameters = loaded_parameters_and_extras[:len(optimized_parameters)]
+                loaded_parameters = loaded_parameters_and_extras[: len(optimized_parameters)]
                 for local_param, loaded_param in zip(optimized_parameters, loaded_parameters):
                     local_param.copy_(loaded_param, non_blocking=True)
 

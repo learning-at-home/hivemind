@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import random
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial
 from typing import Callable
@@ -15,7 +16,6 @@ from torch.utils.data import Dataset
 import hivemind
 from hivemind.optim.experimental.optimizer import Optimizer
 from hivemind.utils.crypto import RSAPrivateKey
-from contextlib import nullcontext
 
 
 @dataclass(frozen=True)
