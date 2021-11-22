@@ -187,11 +187,13 @@ class Optimizer(torch.optim.Optimizer):
         """If true, peer will discard local progress and attempt to download state from peers."""
         return self.local_epoch < self.tracker.global_epoch - self.epoch_tolerance
 
-    def step(self,
-             closure: Optional[Callable[[], torch.Tensor]] = None,
-             batch_size: Optional[int] = None,
-             grad_scaler: Optional[HivemindGradScaler] = None,
-             **kwargs):
+    def step(
+        self,
+        closure: Optional[Callable[[], torch.Tensor]] = None,
+        batch_size: Optional[int] = None,
+        grad_scaler: Optional[HivemindGradScaler] = None,
+        **kwargs,
+    ):
         """
         Report accumulating gradients w.r.t. batch_size additional samples, optionally update model parameters
 
@@ -358,7 +360,7 @@ class Optimizer(torch.optim.Optimizer):
         param_groups = tuple(dict(param_group) for param_group in self.state_averager.optimizer.param_groups)
         for param_group in param_groups:
             num_params = len(param_group["params"])
-            main_params_for_group = self.state_averager.main_parameters[next_index: next_index + num_params]
+            main_params_for_group = self.state_averager.main_parameters[next_index : next_index + num_params]
             param_group["params"] = main_params_for_group
             next_index += num_params
         assert next_index == len(self.state_averager.main_parameters)
