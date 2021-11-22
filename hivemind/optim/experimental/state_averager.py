@@ -1,5 +1,4 @@
 """ An extension of averager that supports common optimization use cases. """
-from __future__ import annotations
 import logging
 from asyncio import Future
 from concurrent.futures import ThreadPoolExecutor
