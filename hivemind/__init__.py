@@ -17,6 +17,7 @@ from hivemind.optim import (
     DecentralizedOptimizerBase,
     DecentralizedSGD,
     TrainingAverager,
+    GradScaler,
     Optimizer
 )
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, PeerInfo
