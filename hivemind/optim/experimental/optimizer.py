@@ -246,6 +246,7 @@ class Optimizer(torch.optim.Optimizer):
             if grad_scaler is not None:
                 with grad_scaler.running_global_step():
                     assert grad_scaler.unscale_(self)
+                    assert grad_scaler.update()
 
             if self.scheduled_round is not None and self.scheduled_round.triggered or self.scheduled_round.done():
                 logger.log(self.status_loglevel, f"Discarding failed matchmaking results: {self.scheduled_round}")

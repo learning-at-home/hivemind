@@ -399,11 +399,6 @@ class TrainingStateAverager(DecentralizedAverager):
                 else:
                     with grad_scaler.running_global_step():
                         assert grad_scaler.step(self.optimizer)
-
-            if grad_scaler is not None:
-                with grad_scaler.running_global_step():
-                    assert grad_scaler.update()
-
             self._update_scheduler()
 
             if zero_grad:
