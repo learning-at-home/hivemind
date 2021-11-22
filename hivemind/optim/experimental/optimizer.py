@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional, Union, Callable
+from typing import Callable, Optional, Union
 
 import torch
 
