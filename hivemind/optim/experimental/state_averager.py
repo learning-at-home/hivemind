@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Sequence, 
 
 import torch
 
+import hivemind
 from hivemind.averaging import DecentralizedAverager
 from hivemind.compression import CompressionInfo, TensorRole
 from hivemind.optim.grad_scaler import GradScaler
