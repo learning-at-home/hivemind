@@ -36,17 +36,18 @@ class GradScaler(TorchGradScaler):
     def unscale_(self, optimizer: TorchOptimizer) -> bool:
         assert isinstance(optimizer, (hivemind.Optimizer, hivemind.DecentralizedOptimizerBase))
         if self._is_running_global_step:
-            super().unscale_(optimizer.opt)
+            super().unscale_(optimizer)
             return True
         else:
-            self._check_inf_per_device(optimizer.opt)
+            self._check_inf_per_device(optimizer)
             self._optimizer_states_to_reset.add(id(optimizer))
             return False
 
     def step(self, optimizer: TorchOptimizer, *args, **kwargs) -> bool:
         if self._is_running_global_step:
             if self.are_grads_finite(optimizer):
-                super().step(optimizer, *args, **kwargs)
+                assert isinstance(optimizer, (hivemind.Optimizer, hivemind.DecentralizedOptimizerBase))
+                super().step(optimizer.opt, *args, **kwargs)
             else:
                 logger.warning("Skipping global step due to gradient over/underflow")
             return True
@@ -78,7 +79,8 @@ class GradScaler(TorchGradScaler):
         return super()._unscale_grads_(optimizer, inv_scale, found_inf, allow_fp16=True)
 
     def are_grads_finite(self, optimizer: TorchOptimizer) -> bool:
-        return not sum(v.item() for v in self._check_inf_per_device(optimizer).values())
+        assert isinstance(optimizer, (hivemind.Optimizer, hivemind.DecentralizedOptimizerBase))
+        return not sum(v.item() for v in self._check_inf_per_device(optimizer.opt).values())
 
 
 class HivemindGradScaler(GradScaler):
