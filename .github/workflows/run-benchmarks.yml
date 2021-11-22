@@ -21,7 +21,7 @@ jobs:
           key: Key-v1-3.9-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade piphttps://github.com/learning-at-home/hivemind/runs/4286457730?check_suite_focus=true
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - name: Build hivemind
