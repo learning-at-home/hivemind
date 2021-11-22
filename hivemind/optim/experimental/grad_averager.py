@@ -170,7 +170,7 @@ class GradientAverager(DecentralizedAverager):
         elif len(kwargs) > 0:
             raise RuntimeError(f"Averaging with a pre-scheduled group, parameters {kwargs} will have no effect.")
         assert not control.triggered, f"This {type(control)} instance was already used."
-        self._load_accumulators_into_averager_()
+        self.load_accumulators_into_averager_()
         self._accumulators_used_in_step = True
         self._new_averaged_grads = True
 
@@ -182,7 +182,7 @@ class GradientAverager(DecentralizedAverager):
         return control.result(timeout) if wait else control
 
     @torch.no_grad()
-    def _load_accumulators_into_averager_(self):
+    def load_accumulators_into_averager_(self):
         """load locally accumulated gradients into the averager for aggregation"""
         if self._new_averaged_grads and self.warn:
             logger.warning(
