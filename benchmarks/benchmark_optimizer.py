@@ -51,7 +51,7 @@ class TrainingArguments:
     )
 
 
-def _run_training_with_swarm(args: TrainingArguments):
+def benchmark_optimizer(args: TrainingArguments):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.set_num_threads(1)
