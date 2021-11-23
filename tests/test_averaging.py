@@ -484,7 +484,7 @@ def test_averaging_cancel():
 
     step_controls = [averager.step(wait=False, scheduled_time=hivemind.get_dht_time() + 1) for averager in averagers]
 
-    time.sleep(0.2)
+    time.sleep(0.1)
     step_controls[0].cancel()
     step_controls[1].cancel()
 
