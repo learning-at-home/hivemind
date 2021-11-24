@@ -372,9 +372,6 @@ def test_load_state_from_peers():
         target_group_size=2,
     )
 
-    # wait until averager2 receives info on loading state
-    dht_instances[1].get("demo-run.all_averagers")
-
     averager2 = TestAverager(
         [torch.randn(3), torch.rand(5)],
         dht=dht_instances[1],
@@ -382,6 +379,8 @@ def test_load_state_from_peers():
         prefix="demo-run",
         target_group_size=2,
     )
+
+    time.sleep(0.5)
 
     assert num_calls == 0
     got_metadata, got_tensors = averager2.load_state_from_peers()
@@ -401,7 +400,9 @@ def test_load_state_from_peers():
 
     averager1.allow_state_sharing = False
     assert averager2.load_state_from_peers() is None
+
     averager1.allow_state_sharing = True
+    time.sleep(0.5)
     got_metadata, got_tensors = averager2.load_state_from_peers()
     assert num_calls == 3
     assert got_metadata == super_metadata
