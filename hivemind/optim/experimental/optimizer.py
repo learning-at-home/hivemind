@@ -220,7 +220,7 @@ class Optimizer(torch.optim.Optimizer):
         if self.batch_size_per_step is None and batch_size is None and not self.auxiliary:
             raise ValueError("Please either set batch_size_per_step parameter at init or when calling .step")
         if self.auxiliary and (closure is not None or batch_size is not None or grad_scaler is not None):
-            raise ValueError("Auxiliary peers should not have batch size run closures, or use grad_scaler")
+            raise ValueError("Auxiliary peers should not have batch size, run closures, or use grad_scaler")
         batch_size = batch_size if batch_size is not None else self.batch_size_per_step
 
         loss = None
