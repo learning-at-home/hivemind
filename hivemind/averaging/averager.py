@@ -592,7 +592,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 None, self._should_redeclare_state_sharing.wait, self.declare_state_period - self.request_timeout
             )
 
-
     async def rpc_download_state(
         self, _request: averaging_pb2.DownloadRequest, _context: P2PContext
     ) -> AsyncIterator[averaging_pb2.DownloadData]:
