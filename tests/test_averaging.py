@@ -427,6 +427,7 @@ def test_load_state_priority():
         averager.state_sharing_priority = 5 - abs(3 - i)
         averagers.append(averager)
 
+    time.sleep(0.5)
     metadata, tensors = averagers[0].load_state_from_peers()
     assert tensors[-1].item() == 3
 
