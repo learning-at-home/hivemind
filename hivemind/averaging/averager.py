@@ -568,6 +568,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         download_key = f"{self._matchmaking.group_key_manager.prefix}.all_averagers"
         sharing_was_allowed = self.allow_state_sharing
         while True:
+            self._should_redeclare_state_sharing.clear()
             expiration_time = get_dht_time() + self.declare_state_period
 
             if self.allow_state_sharing or sharing_was_allowed:
@@ -586,12 +587,11 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 )
                 sharing_was_allowed = self.allow_state_sharing
 
-            self._should_redeclare_state_sharing.clear()
-
             # report again either in state_declare_period or after the field was changed by the user
             await asyncio.get_event_loop().run_in_executor(
                 None, self._should_redeclare_state_sharing.wait, self.declare_state_period - self.request_timeout
             )
+
 
     async def rpc_download_state(
         self, _request: averaging_pb2.DownloadRequest, _context: P2PContext
