@@ -206,7 +206,6 @@ class Optimizer(torch.optim.Optimizer):
         closure: Optional[Callable[[], torch.Tensor]] = None,
         batch_size: Optional[int] = None,
         grad_scaler: Optional[GradScaler] = None,
-        **kwargs,
     ):
         """
         Report accumulating gradients w.r.t. batch_size additional samples, optionally update model parameters
