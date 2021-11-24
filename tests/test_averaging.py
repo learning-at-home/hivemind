@@ -420,7 +420,7 @@ def test_load_state_priority():
             prefix="demo-run",
             target_group_size=2,
         )
-        averager.allow_state_sharing = (i != 2)
+        averager.allow_state_sharing = i != 2
         averager.state_sharing_priority = 5 - abs(3 - i)
         averagers.append(averager)
 
