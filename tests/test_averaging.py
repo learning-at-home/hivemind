@@ -380,6 +380,9 @@ def test_load_state_from_peers():
         target_group_size=2,
     )
 
+    # wait until averager2 receives info on loading state
+    dht_instances[1].get("demo-run.all_averagers")
+
     assert num_calls == 0
     got_metadata, got_tensors = averager2.load_state_from_peers()
     assert num_calls == 1
