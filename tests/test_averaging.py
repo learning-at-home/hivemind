@@ -372,7 +372,6 @@ def test_load_state_from_peers():
         target_group_size=2,
     )
 
-    dht_instances[1].get("demo-run.all_averagers")
     averager2 = TestAverager(
         [torch.randn(3), torch.rand(5)],
         dht=dht_instances[1],
@@ -406,6 +405,41 @@ def test_load_state_from_peers():
 
     for instance in [averager1, averager2] + dht_instances:
         instance.shutdown()
+
+
+@pytest.mark.forked
+def test_load_state_priority():
+    dht_instances = launch_dht_instances(5)
+
+    averagers = []
+    for i in range(5):
+        averager = hivemind.DecentralizedAverager(
+            [torch.randn(3), torch.rand(5), torch.tensor([i], dtype=torch.float32)],
+            dht=dht_instances[i],
+            start=True,
+            prefix="demo-run",
+            target_group_size=2,
+        )
+        averager.allow_state_sharing = (i != 2)
+        averager.state_sharing_priority = 5 - abs(3 - i)
+        averagers.append(averager)
+
+    metadata, tensors = averagers[0].load_state_from_peers()
+    assert tensors[-1].item() == 3
+
+    metadata, tensors = averagers[3].load_state_from_peers()
+    assert tensors[-1].item() == 4
+
+    averagers[1].state_sharing_priority = 10
+    time.sleep(0.2)
+
+    metadata, tensors = averagers[0].load_state_from_peers()
+    assert tensors[-1].item() == 1
+
+    averagers[1].allow_state_sharing = False
+    averagers[3].allow_state_sharing = False
+    metadata, tensors = averagers[0].load_state_from_peers()
+    assert tensors[-1].item() == 4
 
 
 @pytest.mark.forked
