@@ -307,15 +307,16 @@ class ProgressTracker(threading.Thread):
             next_fetch_time=current_time + time_to_next_fetch,
         )
 
-    def shutdown(self):
+    def shutdown(self, timeout: Optional[float]=None):
         """Permanently disable all tracking activity"""
         self.shutdown_triggered.set()
         self.should_report_progress.set()
         self.global_state_updated.set()
-        self.shutdown_complete.wait()
+        self.shutdown_complete.wait(timeout)
         self.dht.store(
             self.training_progress_key,
             subkey=self._local_public_key,
             value=None,
             expiration_time=get_dht_time() + self.metadata_expiration,
+            return_future=True
         )
