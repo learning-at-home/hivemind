@@ -7,6 +7,7 @@ import contextlib
 import ctypes
 import multiprocessing as mp
 import os
+import random
 import threading
 import weakref
 from dataclasses import asdict
@@ -101,7 +102,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     _matchmaking: Matchmaking
     _pending_group_assembled: asyncio.Event
-    _state_updated: asyncio.Event
     _p2p: P2P
     serializer = MSGPackSerializer
 
@@ -164,7 +164,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         self._averaged_tensors = tuple(averaged_tensors)
         self.lock_averaged_tensors = mp.Lock()
-        self.last_updated: DHTExpiration = -float("inf")
         for tensor in self._averaged_tensors:
             assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
             tensor.share_memory_()
@@ -193,6 +192,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with daemon
 
         self._allow_state_sharing = mp.Value(ctypes.c_bool, 0)
+        self._state_sharing_priority = mp.Value(ctypes.c_double, 0)
+        self._should_redeclare_state_sharing = mp.Event()
+
         if allow_state_sharing is None:
             allow_state_sharing = not client_mode and not auxiliary
         self.allow_state_sharing = allow_state_sharing
@@ -221,7 +223,23 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         if value and self.client_mode:
             raise ValueError("Cannot allow state sharing: averager in client mode cannot share its state.")
         else:
-            self._allow_state_sharing.value = value
+            old_value, self._allow_state_sharing.value = self._allow_state_sharing.value, value
+            if value != old_value:
+                self._should_redeclare_state_sharing.set()
+
+    @property
+    def state_sharing_priority(self) -> float:
+        """Others will preferentially downloading state from peers with highest priority."""
+        return float(self._state_sharing_priority.value)
+
+    @state_sharing_priority.setter
+    def state_sharing_priority(self, value: float):
+        if value and self.client_mode:
+            raise ValueError("State sharing priority is unused: averager in client mode cannot share its state.")
+        else:
+            old_value, self._state_sharing_priority.value = self._state_sharing_priority.value, value
+            if value != old_value:
+                self._should_redeclare_state_sharing.set()
 
     @property
     def peer_id(self) -> PeerID:
@@ -267,7 +285,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 if not self.client_mode:
                     asyncio.create_task(self._declare_for_download_periodically())
 
-                self._state_updated = asyncio.Event()
                 self._pending_group_assembled = asyncio.Event()
                 self._pending_group_assembled.set()
             except Exception as e:
@@ -490,8 +507,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         async for tensor, update in azip(as_aiter(*local_tensors), allreduce):
                             # all-reduce is performed asynchronously while iterating
                             tensor.add_(update, alpha=self._averaging_alpha)
-                            self.last_updated = get_dht_time()
-                            self._state_updated.set()
+                            self._should_redeclare_state_sharing.set()
 
                     else:
                         async for _ in allreduce:  # trigger all-reduce by iterating
@@ -550,26 +566,29 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     async def _declare_for_download_periodically(self):
         download_key = f"{self._matchmaking.group_key_manager.prefix}.all_averagers"
+        sharing_was_allowed = self.allow_state_sharing
         while True:
-            if self.allow_state_sharing:
-                self._state_updated.clear()
-                expiration_time = get_dht_time() + self.declare_state_period
+            expiration_time = get_dht_time() + self.declare_state_period
+
+            if self.allow_state_sharing or sharing_was_allowed:
+                # notify either if sharing is allowed or if it was just switched off (to overwrite previous message)
                 asyncio.create_task(
-                    asyncio.wait_for(
-                        self.dht.store(
-                            download_key,
-                            subkey=self.peer_id.to_bytes(),
-                            value=self.last_updated,
-                            expiration_time=expiration_time,
-                            return_future=True,
-                        ),
-                        timeout=expiration_time - self.request_timeout,
+                    self.dht.store(
+                        download_key,
+                        subkey=self.peer_id.to_bytes(),
+                        value=self.state_sharing_priority if self.allow_state_sharing else None,
+                        expiration_time=expiration_time,
+                        return_future=True,
                     )
                 )
-            try:
-                await asyncio.wait_for(self._state_updated.wait(), self.declare_state_period - self.request_timeout)
-            except asyncio.TimeoutError:
-                pass
+                sharing_was_allowed = self.allow_state_sharing
+
+            self._should_redeclare_state_sharing.clear()
+
+            # report again either in state_declare_period or after the field was changed by the user
+            await asyncio.get_event_loop().run_in_executor(
+                None, self._should_redeclare_state_sharing.wait, self.declare_state_period - self.request_timeout
+            )
 
     async def rpc_download_state(
         self, _request: averaging_pb2.DownloadRequest, _context: P2PContext
@@ -632,7 +651,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             key_manager = self._matchmaking.group_key_manager
             peer_priority, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
             peer_priority = {
-                PeerID(peer_id): float(info.value)
+                PeerID(peer_id): (float(info.value), random.random())  # using randomness as a tie breaker
                 for peer_id, info in peer_priority.items()
                 if isinstance(info, ValueWithExpiration) and isinstance(info.value, (float, int))
             }
