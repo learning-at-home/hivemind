@@ -219,7 +219,7 @@ class ProgressTracker(threading.Thread):
                 )
         finally:
             logger.log(self.status_loglevel, f"No longer reporting progress for {self.prefix}.")
-            if store_task is not None and not store_task.done():
+            if store_task is not None:
                 store_task.cancel()
 
     async def _progress_fetcher(self):
