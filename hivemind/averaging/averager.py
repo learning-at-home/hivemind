@@ -191,8 +191,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with daemon
 
-        self._allow_state_sharing = mp.Value(ctypes.c_bool, 0)
-        self._state_sharing_priority = mp.Value(ctypes.c_double, 0)
+        self._allow_state_sharing = mp.Value(ctypes.c_bool, 0, lock=False)
+        self._state_sharing_priority = mp.Value(ctypes.c_double, 0, lock=False)
         self._should_redeclare_state_sharing = mp.Event()
 
         if allow_state_sharing is None:
