@@ -322,12 +322,12 @@ class TrainingStateAverager(DecentralizedAverager):
         if averaging_opts and not averaging_round:
             logger.warning(f"Averaging parameters not used because averaging_round=False: {averaging_opts}")
         if wait_for_trigger is not None:
-            if not self.reuse_tensors or self.custom_gradients:
+            if not (self.reuse_tensors or self.custom_gradients):
                 # averager was asked to wait_for_trigger in background, but it is not clear which version of gradients
                 # should be used for optimizer step (e.g. the gradients that were present during the call to .step or
                 # the possibly different gradients when wait_for_trigger has finished).
                 raise ValueError(
-                    "wait_for_trigger is an advanced option that requires manual gradient manipulation. "
+                    "wait_for_trigger is a low-level option that requires manual gradient manipulation. "
                     "If you know what you're doing, please refer to the comments in the source code for details."
                 )
         output = None
