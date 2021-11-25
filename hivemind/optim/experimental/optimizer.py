@@ -333,7 +333,7 @@ class Optimizer(torch.optim.Optimizer):
                 self.tracker.update_epoch(new_epoch=self.state_averager.local_epoch)
                 self._should_check_synchronization_on_update = True
 
-            logger.log(self.status_loglevel, f"Optimizer step done! Transitioning to epoch {self.local_epoch}.")
+            logger.log(self.status_loglevel, f"Transitioning to epoch {self.local_epoch}.")
         return loss
 
     def _average_gradients_and_load_into_optimizer(self, maybe_step_control: Optional[StepControl]):
