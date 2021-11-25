@@ -199,7 +199,7 @@ class TrainingStateAverager(DecentralizedAverager):
             logger.log(
                 self.status_loglevel,
                 "Initializing optimizer manually since it has no tensors in state dict. "
-                "To override this, please provide initialize_optimizer=False",
+                "To override this, provide initialize_optimizer=False",
             )
 
         if initialize_optimizer:
