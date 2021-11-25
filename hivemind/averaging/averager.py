@@ -565,30 +565,25 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             yield message
 
     async def _declare_for_download_periodically(self):
-        return#TODO
         download_key = f"{self._matchmaking.group_key_manager.prefix}.all_averagers"
         sharing_was_allowed = self.allow_state_sharing
         while True:
-            self._should_redeclare_state_sharing.clear()
+            expiration_time = get_dht_time() + self.declare_state_period
             if self.allow_state_sharing or sharing_was_allowed:
                 # notify either if sharing is allowed or if it was just switched off (to overwrite previous message)
-                asyncio.create_task(
-                    asyncio.wait_for(
-                        self.dht.store(
-                            download_key,
-                            subkey=self.peer_id.to_bytes(),
-                            value=self.state_sharing_priority if self.allow_state_sharing else None,
-                            expiration_time=get_dht_time() + self.declare_state_period,
-                            return_future=True,
-                        ),
-                        timeout=self.declare_state_period - self.request_timeout,
-                    )
+                await self.dht.store(
+                    download_key,
+                    subkey=self.peer_id.to_bytes(),
+                    value=self.state_sharing_priority if self.allow_state_sharing else None,
+                    expiration_time=expiration_time,
+                    return_future=True,
                 )
                 sharing_was_allowed = self.allow_state_sharing
 
             # report again either in state_declare_period or after the field was changed by the user
+            self._should_redeclare_state_sharing.clear()
             await asyncio.get_event_loop().run_in_executor(
-                None, self._should_redeclare_state_sharing.wait, self.declare_state_period - self.request_timeout
+                None, self._should_redeclare_state_sharing.wait, max(0.0, expiration_time - get_dht_time())
             )
 
     async def rpc_download_state(
