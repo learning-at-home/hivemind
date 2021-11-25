@@ -102,6 +102,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     _matchmaking: Matchmaking
     _pending_group_assembled: asyncio.Event
+    _should_declare_load_state: asyncio.Event
     _p2p: P2P
     serializer = MSGPackSerializer
 
@@ -193,7 +194,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         self._allow_state_sharing = mp.Value(ctypes.c_bool, 0)
         self._state_sharing_priority = mp.Value(ctypes.c_double, 0)
-        self._should_redeclare_state_sharing = mp.Event()
 
         if allow_state_sharing is None:
             allow_state_sharing = not client_mode and not auxiliary
@@ -225,7 +225,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         else:
             old_value, self._allow_state_sharing.value = self._allow_state_sharing.value, value
             if value != old_value:
-                self._should_redeclare_state_sharing.set()
+                self._outer_pipe.send(("_trigger_declare_load_state", [], {}))
 
     @property
     def state_sharing_priority(self) -> float:
@@ -239,7 +239,11 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         else:
             old_value, self._state_sharing_priority.value = self._state_sharing_priority.value, value
             if self.allow_state_sharing and value != old_value:
-                self._should_redeclare_state_sharing.set()
+                self._outer_pipe.send(("_trigger_declare_load_state", [], {}))
+
+    async def _trigger_declare_load_state(self):
+        # note: previously tried to set mp.Event instead of this. Awaiting it in executor caused degradation in py39
+        self._should_declare_load_state.set()
 
     @property
     def peer_id(self) -> PeerID:
@@ -285,6 +289,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 if not self.client_mode:
                     asyncio.create_task(self._declare_for_download_periodically())
 
+                self._should_declare_load_state = asyncio.Event()
                 self._pending_group_assembled = asyncio.Event()
                 self._pending_group_assembled.set()
             except Exception as e:
@@ -582,10 +587,10 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
             # report again either in state_declare_period or after the field was changed by the user
             self._should_redeclare_state_sharing.clear()
-            #await asyncio.get_event_loop().run_in_executor(
-            #    None, self._should_redeclare_state_sharing.wait, max(0.0, expiration_time - get_dht_time())
-            #)
-            await asyncio.sleep(0.1)
+            await self._should_redeclare_state_sharing.wait(timeout=max(0.0, expiration_time - get_dht_time()))
+            await asyncio.get_event_loop().run_in_executor(
+               None, self._should_redeclare_state_sharing.wait,
+            )
 
     async def rpc_download_state(
         self, _request: averaging_pb2.DownloadRequest, _context: P2PContext

@@ -346,7 +346,7 @@ def test_overcrowded(num_peers=16):
     for process in averagers + dht_instances:
         process.shutdown()
 
-@pytest.mark.skip("TODO")
+
 @pytest.mark.forked
 def test_load_state_from_peers():
     num_calls = 0
@@ -411,7 +411,6 @@ def test_load_state_from_peers():
         instance.shutdown()
 
 
-@pytest.mark.skip("TODO")
 @pytest.mark.forked
 def test_load_state_priority():
     dht_instances = launch_dht_instances(4)
