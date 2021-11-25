@@ -582,10 +582,10 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                             download_key,
                             subkey=self.peer_id.to_bytes(),
                             value=self.state_sharing_priority if self.allow_state_sharing else None,
-                            expiration_time=get_dht_time() + self.declare_state_period,
+                            expiration_time=expiration_time,
                             return_future=True,
                         ),
-                        timeout=self.declare_state_period - self.request_timeout,
+                        timeout=expiration_time - get_dht_time(),
                     )
                 )
                 sharing_was_allowed = self.allow_state_sharing
