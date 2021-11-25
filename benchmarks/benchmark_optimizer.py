@@ -158,5 +158,5 @@ def benchmark_optimizer(args: TrainingArguments):
             peer.kill()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     benchmark_optimizer(TrainingArguments())
