@@ -286,7 +286,7 @@ class Optimizer(torch.optim.Optimizer):
                 self.scheduled_round = None
 
             swarm_not_empty = self.tracker.global_progress.num_peers > 1
-            began_averaging = False
+            began_averaging_gradients = False
 
             if swarm_not_empty:
                 try:
@@ -294,11 +294,11 @@ class Optimizer(torch.optim.Optimizer):
                         control=self.scheduled_round, reset_accumulators=True, wait=False
                     )
                     assert self.grad_averager.local_samples_accumulated == 0, "step should have reset accumulators"
-                    began_averaging = True
+                    began_averaging_gradients = True
                 except BaseException as e:
                     logger.exception(e)
 
-            if not began_averaging and self.scheduled_round is not None and not self.scheduled_round.done():
+            if not began_averaging_gradients and self.scheduled_round is not None and not self.scheduled_round.done():
                 logger.log(self.status_loglevel, f"Cancelled pre-scheduled averaging round")
                 self.scheduled_round.cancel()
                 self.scheduled_round = None
