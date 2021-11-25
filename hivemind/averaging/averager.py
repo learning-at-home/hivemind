@@ -238,7 +238,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             raise ValueError("State sharing priority is unused: averager in client mode cannot share its state.")
         else:
             old_value, self._state_sharing_priority.value = self._state_sharing_priority.value, value
-            if value != old_value:
+            if self.allow_state_sharing and value != old_value:
                 self._should_redeclare_state_sharing.set()
 
     @property
