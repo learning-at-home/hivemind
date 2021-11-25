@@ -29,7 +29,7 @@ class TrainingArguments:
     reuse_grad_buffers: bool = True
     delay_grad_averaging: bool = True
     delay_optimizer_step: bool = True
-    average_state_every: int = 3
+    average_state_every: int = 1
     use_amp: bool = False
 
     lr_base: float = 0.1
