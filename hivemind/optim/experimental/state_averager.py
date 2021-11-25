@@ -409,9 +409,12 @@ class TrainingStateAverager(DecentralizedAverager):
         Run the optimizer step, followed by a scheduler step and an averaging round, each stage is optional.
         This method is meant to be called in the background executor.
         """
+        began_running = False
         try:
             if wait_for_trigger is not None:
                 wait_for_trigger()
+            began_running = True
+
             if optimizer_step:
                 with self.lock_averaged_tensors if self.offload_optimizer or self.reuse_tensors else nullcontext():
                     logger.log(self.status_loglevel, f"Running optimizer step")
@@ -455,6 +458,8 @@ class TrainingStateAverager(DecentralizedAverager):
                         self._update_scheduler()
 
         except Exception as e:
+            if not began_running:
+                logger.error(f"Aborted {self.__class__.__name__}.step because wait_for_trigger raised exception.")
             logger.exception(e)
             self.finished_optimizer_step.set()
             self.finished_averaging_round.set()
