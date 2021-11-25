@@ -102,7 +102,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     _matchmaking: Matchmaking
     _pending_group_assembled: asyncio.Event
-    _should_declare_load_state: asyncio.Event
+    _state_updated: asyncio.Event
     _p2p: P2P
     serializer = MSGPackSerializer
 
@@ -243,7 +243,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     async def _trigger_declare_load_state(self):
         # note: previously tried to set mp.Event instead of this. Awaiting it in executor caused degradation in py39
-        self._should_declare_load_state.set()
+        self._state_updated.set()
 
     @property
     def peer_id(self) -> PeerID:
@@ -289,7 +289,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 if not self.client_mode:
                     asyncio.create_task(self._declare_for_download_periodically())
 
-                self._should_declare_load_state = asyncio.Event()
+                self._state_updated = asyncio.Event()
                 self._pending_group_assembled = asyncio.Event()
                 self._pending_group_assembled.set()
             except Exception as e:
@@ -512,7 +512,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         async for tensor, update in azip(as_aiter(*local_tensors), allreduce):
                             # all-reduce is performed asynchronously while iterating
                             tensor.add_(update, alpha=self._averaging_alpha)
-                            self._should_redeclare_state_sharing.set()
+                            self._state_updated.set()
 
                     else:
                         async for _ in allreduce:  # trigger all-reduce by iterating
@@ -586,11 +586,11 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 sharing_was_allowed = self.allow_state_sharing
 
             # report again either in state_declare_period or after the field was changed by the user
-            self._should_redeclare_state_sharing.clear()
-            await self._should_redeclare_state_sharing.wait(timeout=max(0.0, expiration_time - get_dht_time()))
-            await asyncio.get_event_loop().run_in_executor(
-               None, self._should_redeclare_state_sharing.wait,
-            )
+            self._state_updated.clear()
+            try:
+                await asyncio.wait_for(self._state_updated.wait(), timeout=max(0.0, expiration_time - get_dht_time()))
+            except asyncio.TimeoutError:
+                pass
 
     async def rpc_download_state(
         self, _request: averaging_pb2.DownloadRequest, _context: P2PContext
