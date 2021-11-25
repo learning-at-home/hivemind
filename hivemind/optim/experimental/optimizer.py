@@ -329,7 +329,7 @@ class Optimizer(torch.optim.Optimizer):
                 averaging_opts=dict(
                     scheduled_time=get_dht_time() + self.matchmaking_time, timeout=self.averaging_timeout
                 )
-                if swarm_not_empty
+                if swarm_not_empty and next_epoch % self.average_state_every == 0
                 else None,
             )
 
