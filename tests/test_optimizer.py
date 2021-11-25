@@ -225,7 +225,6 @@ def test_progress_tracker():
                     local_epoch = tracker.update_epoch(local_epoch + 1)
                     samples_accumulated = 0
 
-
         emas[index] = tracker.performance_ema.samples_per_second
         tracker.shutdown()
         dht.shutdown()
