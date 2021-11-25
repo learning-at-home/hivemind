@@ -411,6 +411,7 @@ def test_load_state_from_peers():
         instance.shutdown()
 
 
+@pytest.mark.skip(reason="TODO checking that it's not github actions")
 @pytest.mark.forked
 def test_load_state_priority():
     dht_instances = launch_dht_instances(5)
