@@ -429,21 +429,21 @@ def test_load_state_priority():
         averagers.append(averager)
 
     time.sleep(0.5)
-    metadata, tensors = averagers[0].load_state_from_peers()
+    metadata, tensors = averagers[0].load_state_from_peers(timeout=1)
     assert tensors[-1].item() == 3
 
-    metadata, tensors = averagers[3].load_state_from_peers()
+    metadata, tensors = averagers[3].load_state_from_peers(timeout=1)
     assert tensors[-1].item() == 4
 
     averagers[1].state_sharing_priority = 10
     time.sleep(0.2)
 
-    metadata, tensors = averagers[0].load_state_from_peers()
+    metadata, tensors = averagers[0].load_state_from_peers(timeout=1)
     assert tensors[-1].item() == 1
 
     averagers[1].allow_state_sharing = False
     averagers[3].allow_state_sharing = False
-    metadata, tensors = averagers[0].load_state_from_peers()
+    metadata, tensors = averagers[0].load_state_from_peers(timeout=1)
     assert tensors[-1].item() == 4
 
 
