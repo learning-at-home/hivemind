@@ -25,7 +25,7 @@ class TrainingArguments:
 
     num_peers: int = 8
     num_clients: int = 3
-    target_batch_size: int = 128
+    target_batch_size: int = 256
     reuse_grad_buffers: bool = True
     delay_grad_averaging: bool = True
     delay_optimizer_step: bool = True

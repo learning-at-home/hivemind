@@ -322,6 +322,7 @@ class TrainingStateAverager(DecentralizedAverager):
         if averaging_opts and not averaging_round:
             logger.warning(f"Averaging parameters not used because averaging_round=False: {averaging_opts}")
         if wait_for_trigger is not None:
+            assert optimizer_step or zero_grad or averaging_round, "trigger is only used for updating parameters"
             if not (self.reuse_tensors or self.custom_gradients):
                 # averager was asked to wait_for_trigger in background, but it is not clear which version of gradients
                 # should be used for optimizer step (e.g. the gradients that were present during the call to .step or
