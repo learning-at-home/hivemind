@@ -448,6 +448,8 @@ def test_load_state_priority():
 
     for averager in averagers:
         averager.shutdown()
+    for dht in dht_instances:
+        dht.shutdown()
 
 
 @pytest.mark.forked
