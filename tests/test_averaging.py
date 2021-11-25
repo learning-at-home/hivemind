@@ -446,6 +446,9 @@ def test_load_state_priority():
     metadata, tensors = averagers[0].load_state_from_peers(timeout=1)
     assert tensors[-1].item() == 4
 
+    for averager in averagers:
+        averager.shutdown()
+
 
 @pytest.mark.forked
 def test_getset_bits():
