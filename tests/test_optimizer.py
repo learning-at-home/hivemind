@@ -287,6 +287,7 @@ def test_progress_tracker():
     assert tracker.performance_ema.samples_per_second < 1e-9
 
 
+@pytest.mark.forked
 def test_optimizer(
     num_peers: int = 2,
     num_clients: int = 1,
