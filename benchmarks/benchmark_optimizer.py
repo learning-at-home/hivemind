@@ -77,7 +77,7 @@ def benchmark_optimizer(args: TrainingArguments):
         assert isinstance(model, torch.nn.Module), "model_arch must evaluate to a pytorch module"
 
         optimizer = Optimizer(
-            prefix=args.prefix,
+            run_id=args.prefix,
             target_batch_size=args.target_batch_size,
             batch_size_per_step=batch_size,
             params=model.parameters(),

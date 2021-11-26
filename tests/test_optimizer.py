@@ -290,7 +290,7 @@ def test_progress_tracker():
 def test_optimizer(
     num_peers: int = 1,
     num_clients: int = 0,
-    target_batch_size: int = 64,
+    target_batch_size: int = 32,
     total_epochs: int = 3,
     reuse_grad_buffers: bool = True,
     delay_grad_averaging: bool = True,
@@ -311,7 +311,7 @@ def test_optimizer(
         assert isinstance(model, torch.nn.Module), "model_arch must evaluate to a pytorch module"
 
         optimizer = Optimizer(
-            prefix="test_run",
+            run_id="test_run",
             target_batch_size=target_batch_size,
             batch_size_per_step=batch_size,
             params=model.parameters(),
@@ -334,7 +334,7 @@ def test_optimizer(
         prev_time = time.perf_counter()
 
         while optimizer.local_epoch < total_epochs:
-            time.sleep(max(0.0, prev_time + random.gauss(batch_time, 0.1) - time.perf_counter()))
+            time.sleep(max(0.0, prev_time + batch_time - time.perf_counter()))
             batch = torch.randint(0, len(features), (batch_size,))
 
             loss = F.mse_loss(model(features[batch]), targets[batch])
@@ -377,8 +377,8 @@ def test_optimizer(
     assert isinstance(optimizer, Optimizer)
     assert optimizer.local_epoch == optimizer.tracker.global_epoch == total_epochs
     expected_samples_accumulated = target_batch_size * total_epochs
-    assert expected_samples_accumulated <= total_samples_accumulated.value <= 2 * expected_samples_accumulated
-    assert 4 / 0.3 * 0.9 <= optimizer.tracker.performance_ema.samples_per_second <= 4 / 0.3 * 1.1
+    assert expected_samples_accumulated <= total_samples_accumulated.value <= expected_samples_accumulated * 1.2
+    assert 4 / 0.3 * 0.8 <= optimizer.tracker.performance_ema.samples_per_second <= 4 / 0.3 * 1.2
 
     assert not optimizer.state_averager.is_alive()
     assert not optimizer.grad_averager.is_alive()
