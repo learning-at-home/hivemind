@@ -93,7 +93,7 @@ documentation improvements to entirely new features, is appreciated.
 
 If you want to contribute to hivemind but don't know where to start, take a look at the
 unresolved [issues](https://github.com/learning-at-home/hivemind/issues). Open a new issue or
-join [our chat room](https://discord.gg/xC7ucM8j) in case you want to discuss new functionality or report a possible
+join [our chat room](https://discord.gg/uGugx9zYvN) in case you want to discuss new functionality or report a possible
 bug. Bug fixes are always welcome, but new features should be preferably discussed with maintainers beforehand.
 
 If you want to start contributing to the source code of hivemind, please see
