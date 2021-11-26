@@ -97,14 +97,15 @@ async def store_and_get_task(
 
         total_gets += len(get_result)
         for result in get_result:
-            attendees, expiration = result
-            if len(attendees.keys()) == successful_stores_per_iter:
-                get_ok = True
-                for key in attendees:
-                    if attendees[key][0] != store_values[key]:
-                        get_ok = False
-                        break
-                successful_gets_per_iter += get_ok
+            if result != None:
+                attendees, expiration = result
+                if len(attendees.keys()) == successful_stores_per_iter:
+                    get_ok = True
+                    for key in attendees:
+                        if attendees[key][0] != store_values[key]:
+                            get_ok = False
+                            break
+                    successful_gets_per_iter += get_ok
 
         successful_gets.append(successful_gets_per_iter)
         await asyncio.sleep(wait_after_iteration)
