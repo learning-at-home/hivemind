@@ -3,6 +3,7 @@ import asyncio
 import random
 import time
 import uuid
+from logging import shutdown
 from typing import Tuple
 
 import numpy as np
@@ -16,6 +17,30 @@ use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
 
 
+class NodeKiller:
+    """Auxiliary class that kills dht nodes over a pre-defined schedule"""
+
+    def __init__(self, shutdown_peers: list, shutdown_timestamps: list):
+        self.shutdown_peers = set(shutdown_peers)
+        self.shutdown_timestamps = shutdown_timestamps
+        self.current_iter = 0
+        self.timestamp_iter = 0
+        self.lock = asyncio.Lock()
+
+    async def check_and_kill(self):
+        async with self.lock:
+            if (
+                self.shutdown_timestamps != None
+                and self.timestamp_iter < len(self.shutdown_timestamps)
+                and self.current_iter == self.shutdown_timestamps[self.timestamp_iter]
+            ):
+                shutdown_peer = random.sample(self.shutdown_peers, 1)[0]
+                shutdown_peer.shutdown()
+                self.shutdown_peers.remove(shutdown_peer)
+                self.timestamp_iter += 1
+            self.current_iter += 1
+
+
 async def store_and_get_task(
     peers: list,
     total_num_rounds: int,
@@ -25,11 +50,8 @@ async def store_and_get_task(
     delay: float,
     expiration: float,
     latest: bool,
-    shutdown_peers: list,
-    shutdown_timestamps: list,
-    counters: list,
-    lock: asyncio.Lock,
-) -> Tuple[int, int, int, int]:
+    node_killer: NodeKiller,
+) -> Tuple[list, list, list, list, int, int]:
     """Iteratively choose random peers to store data onto the dht, then retreive with another random subset of peers"""
 
     total_stores = total_gets = 0
@@ -56,15 +78,7 @@ async def store_and_get_task(
             for peer, subkey in zip(store_peers, store_subkeys)
         ]
         store_result = await asyncio.gather(*store_tasks)
-        async with lock:
-            if (
-                shutdown_timestamps != None
-                and counters[1] < len(shutdown_peers)
-                and counters[0] == shutdown_timestamps[counters[1]]
-            ):
-                shutdown_peers[counters[1]].shutdown()
-                counters[1] += 1
-            counters[0] += 1
+        await node_killer.check_and_kill()
 
         store_times.append(time.perf_counter() - store_start)
 
@@ -95,20 +109,7 @@ async def store_and_get_task(
         successful_gets.append(successful_gets_per_iter)
         await asyncio.sleep(wait_after_iteration)
 
-    logger.info(
-        "Store wall time: "
-        + f"mean({np.mean(store_times):.3f}) std({np.std(store_times, ddof=1):.3f}) max({np.max(store_times):.3f}) "
-        + "Store success rate: "
-        + f"{sum(successful_stores) / total_stores * 100:.1f}% ({sum(successful_stores)}/{total_stores})"
-    )
-    logger.info(
-        "Get wall time: "
-        + f"mean({np.mean(get_times):.3f}) std({np.std(get_times, ddof=1):.3f}) max({np.max(get_times):.3f}) "
-        + "Get success rate: "
-        + f"{sum(successful_gets) / total_gets * 100:.1f}% ({sum(successful_gets)}/{total_gets})"
-    )
-
-    return sum(store_times), sum(get_times), sum(successful_gets), total_gets
+    return store_times, get_times, successful_stores, successful_gets, total_stores, total_gets
 
 
 async def benchmark_dht(
@@ -140,13 +141,13 @@ async def benchmark_dht(
     benchmark_started = time.perf_counter()
     logger.info("Creating store and get tasks...")
     shutdown_peers = random.sample(peers, min(int(failure_rate * num_peers), num_peers))
+    assert len(shutdown_peers) != len(peers)
     remaining_peers = list(set(peers) - set(shutdown_peers))
     shutdown_timestamps = random.sample(
         range(0, num_threads * total_num_rounds), min(len(shutdown_peers), num_threads * total_num_rounds)
     )
     shutdown_timestamps.sort()
-    counters = [0, 0]
-    lock = asyncio.Lock()
+    node_killer = NodeKiller(shutdown_peers, shutdown_timestamps)
     task_list = [
         asyncio.create_task(
             store_and_get_task(
@@ -158,10 +159,7 @@ async def benchmark_dht(
                 delay,
                 expiration,
                 latest,
-                shutdown_peers,
-                shutdown_timestamps,
-                counters,
-                lock,
+                node_killer,
             )
         )
         for _ in trange(num_threads)
@@ -169,26 +167,41 @@ async def benchmark_dht(
 
     store_and_get_result = await asyncio.gather(*task_list)
     benchmark_total_time = time.perf_counter() - benchmark_started
-    total_store_time = total_get_time = 0
-    total_successful_gets = total_gets = 0
+    total_store_times = []
+    total_get_times = []
+    total_successful_stores = []
+    total_successful_gets = []
+    total_stores = total_gets = 0
     for result in store_and_get_result:
-        store_time, get_time, successful_gets, gets = result
+        store_times, get_times, successful_stores, successful_gets, stores, gets = result
 
-        total_store_time += store_time
-        total_get_time += get_time
-        total_successful_gets += successful_gets
+        total_store_times.extend(store_times)
+        total_get_times.extend(get_times)
+        total_successful_stores.extend(successful_stores)
+        total_successful_gets.extend(successful_gets)
+        total_stores += stores
         total_gets += gets
 
     alive_peers = [peer.is_alive() for peer in peers]
     logger.info(
-        f"Average store time per worker: {total_store_time / num_threads} "
-        + f"Average get time per worker: {total_get_time / num_threads}"
+        f"Store wall time (sec.): mean({np.mean(total_store_times):.3f}) "
+        + f"std({np.std(total_store_times, ddof=1):.3f}) max({np.max(total_store_times):.3f})"
     )
     logger.info(
-        f"Total get succcess rate: {total_successful_gets / total_gets * 100:.1f}% "
-        + f"({total_successful_gets}/{total_gets})"
+        f"Get wall time (sec.): mean({np.mean(total_get_times):.3f}) "
+        + f"std({np.std(total_get_times, ddof=1):.3f}) max({np.max(total_get_times):.3f})"
     )
+    logger.info(f"Average store time per worker: {sum(total_store_times) / num_threads:.3f} sec.")
+    logger.info(f"Average get time per worker: {sum(total_get_times) / num_threads:.3f} sec.")
     logger.info(f"Total benchmark time: {benchmark_total_time:.5f} sec.")
+    logger.info(
+        "Store success rate: "
+        + f"{sum(total_successful_stores) / total_stores * 100:.1f}% ({sum(total_successful_stores)}/{total_stores})"
+    )
+    logger.info(
+        "Get success rate: "
+        + f"{sum(total_successful_gets) / total_gets * 100:.1f}% ({sum(total_successful_gets)}/{total_gets})"
+    )
     logger.info(f"Node survival rate: {len(alive_peers) / len(peers) * 100:.3f}%")
 
 
@@ -197,7 +210,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_peers", type=int, default=16, required=False)
     parser.add_argument("--initial_peers", type=int, default=4, required=False)
     parser.add_argument("--random_seed", type=int, default=30, required=False)
-    parser.add_argument("--num_threads", type=int, default=100, required=False)
+    parser.add_argument("--num_threads", type=int, default=10, required=False)
     parser.add_argument("--total_num_rounds", type=int, default=16, required=False)
     parser.add_argument("--num_store_peers", type=int, default=8, required=False)
     parser.add_argument("--num_get_peers", type=int, default=8, required=False)
