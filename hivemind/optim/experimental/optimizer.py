@@ -63,7 +63,7 @@ class Optimizer(torch.optim.Optimizer):
     :note: If you are using ColloptaborativeOptimizer with lr_scheduler, it is recommended to pass this scheduler
       explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
 
-    :param matchmaking_time: when looking for group, wait for peers to join for up to this many secodns
+    :param matchmaking_time: when looking for group, wait for peers to join for up to this many seconds
     :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
     :param load_state_timeout: wait for at most this many seconds before giving up on load_state_from_peers
     :param reuse_grad_buffers: if True, use model's .grad buffers for gradient accumulation.
