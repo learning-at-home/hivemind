@@ -288,8 +288,8 @@ def test_progress_tracker():
 
 @pytest.mark.forked
 def test_optimizer(
-    num_peers: int = 2,
-    num_clients: int = 1,
+    num_peers: int = 1,
+    num_clients: int = 0,
     target_batch_size: int = 64,
     total_epochs: int = 3,
     reuse_grad_buffers: bool = True,
