@@ -48,7 +48,7 @@ class Optimizer(torch.optim.Optimizer):
     - after accumulating the target batch size, all-reduce gradients with peers and perform optimizer step,
     - if, for any reason, your peer lags behind the rest of the swarm, it will load state from up-to-date peers.
 
-    :note: Hivemind.Optimizer can be used the same way any other pytorch optimizer, but there is one limitation:
+    :note: hivemind.Optimizer can be used the same way any other pytorch optimizer, but there is one limitation:
       learning rate schedulers, curriculum and other time-dependent features should use opt.global_step (and not the
       number of local forward-backward cycles). This is because any device can join midway through training, when
       other peers have already made some progress and changed their learning rate accordingly.
