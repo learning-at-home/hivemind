@@ -60,8 +60,8 @@ class Optimizer(torch.optim.Optimizer):
     :param optimizer: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
     :param params: optional, a list/tuple of parameters or structured param groups for the optimizer
     :param scheduler: if specified, use this scheduler to update optimizer learning rate
-    :note: If you are using ColloptaborativeOptimizer with lr_scheduler, it is recommended to pass this scheduler
-      explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
+    :note: If you are using hivemind.Optimizer with lr_scheduler, it is recommended to pass this scheduler
+      explicitly into this class. Otherwise, it may become non-synchronized between peers.
 
     :param matchmaking_time: when looking for group, wait for peers to join for up to this many seconds
     :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
