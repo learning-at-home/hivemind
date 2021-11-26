@@ -48,7 +48,7 @@ class Optimizer(torch.optim.Optimizer):
     - after accumulating the target batch size, all-reduce gradients with peers and perform optimizer step,
     - if, for any reason, your peer lags behind the rest of the swarm, it will load state from up-to-date peers.
 
-    :note: Hivemind.Optimizer can be used the same way any other pytorch optimizer, but there is one limitation:
+    :note: hivemind.Optimizer can be used the same way any other pytorch optimizer, but there is one limitation:
       learning rate schedulers, curriculum and other time-dependent features should use opt.global_step (and not the
       number of local forward-backward cycles). This is because any device can join midway through training, when
       other peers have already made some progress and changed their learning rate accordingly.
@@ -60,10 +60,10 @@ class Optimizer(torch.optim.Optimizer):
     :param optimizer: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
     :param params: optional, a list/tuple of parameters or structured param groups for the optimizer
     :param scheduler: if specified, use this scheduler to update optimizer learning rate
-    :note: If you are using ColloptaborativeOptimizer with lr_scheduler, it is recommended to pass this scheduler
-      explicitly into this class. Otherwise, scheduler may not be synchronized between peers.
+    :note: If you are using hivemind.Optimizer with lr_scheduler, it is recommended to pass this scheduler
+      explicitly into this class. Otherwise, it may become non-synchronized between peers.
 
-    :param matchmaking_time: when looking for group, wait for peers to join for up to this many secodns
+    :param matchmaking_time: when looking for group, wait for peers to join for up to this many seconds
     :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
     :param load_state_timeout: wait for at most this many seconds before giving up on load_state_from_peers
     :param reuse_grad_buffers: if True, use model's .grad buffers for gradient accumulation.
