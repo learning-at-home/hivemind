@@ -54,7 +54,7 @@ class Optimizer(torch.optim.Optimizer):
       other peers have already made some progress and changed their learning rate accordingly.
 
     :param dht: a running hivemind.DHT instance connected to other peers
-    :param run_id: a unique name of this experiment, used as a common prefix for all DHT keys
+    :param run_id: a unique identifier of this experiment, used as a common prefix for all DHT keys
     :param target_batch_size: perform optimizer step after all peers collectively accumulate this many samples
     :param batch_size_per_step: before each call to .step, user should accumulate gradients over this many samples
     :param optimizer: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
