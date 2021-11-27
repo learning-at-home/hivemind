@@ -437,7 +437,7 @@ class Optimizer(torch.optim.Optimizer):
                 assert grad_scaler.unscale_(self)
 
         if self.scheduled_grads is not None and (self.scheduled_grads.triggered or self.scheduled_grads.done()):
-            logger.log(self.status_loglevel, f"Discarding failed matchmaking results: {self.scheduled_grads}")
+            logger.debug(self.status_loglevel, f"Discarding previous matchmaking results: {self.scheduled_grads}")
             self.scheduled_grads = None
 
         began_averaging_gradients = False
