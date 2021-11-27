@@ -318,7 +318,7 @@ def test_optimizer(
             scheduler=partial(torch.optim.lr_scheduler.StepLR, gamma=0.5, step_size=1),
             dht=hivemind.DHT(initial_peers=dht.get_visible_maddrs(), client_mode=client_mode, start=True),
             tracker_opts=dict(private_key=RSAPrivateKey(), max_refresh_period=1.0),
-            averager_opts=dict(min_matchmaking_time=1.0, request_timeout=0.5),
+            averager_opts=dict(request_timeout=0.5),
             matchmaking_time=1.0,
             averaging_timeout=5.0,
             reuse_grad_buffers=reuse_grad_buffers,
