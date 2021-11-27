@@ -495,9 +495,6 @@ class Optimizer(torch.optim.Optimizer):
         eta_seconds_to_averaging = estimated_time - get_dht_time()
 
         if eta_seconds_to_averaging <= self.matchmaking_time:
-            if self.delay_state_averaging:
-                # wait for previous averaging to finish before starting a new one
-                self.state_averager.step(wait_for_delayed_updates=True)
             if self.scheduled_state is None or self.scheduled_state.triggered or self.scheduled_state.done():
 
                 min_matchmaking_time = self.state_averager.matchmaking_kwargs["min_matchmaking_time"]
