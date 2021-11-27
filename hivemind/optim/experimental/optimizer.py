@@ -493,7 +493,7 @@ class Optimizer(torch.optim.Optimizer):
         estimated_time = self.tracker.estimated_next_update_time
         estimated_time += self.delay_before_state_averaging.ema_seconds_per_sample
         estimated_time += self.state_averager.delay_before_averaging.ema_seconds_per_sample
-        eta_seconds_to_averaging = self.tracker.estimated_next_update_time - get_dht_time()
+        eta_seconds_to_averaging = estimated_time - get_dht_time()
 
         if eta_seconds_to_averaging <= self.matchmaking_time:
             if self.scheduled_state is None or self.scheduled_state.triggered or self.scheduled_state.done():
