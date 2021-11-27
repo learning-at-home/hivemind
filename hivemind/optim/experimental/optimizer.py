@@ -22,7 +22,7 @@ from hivemind.optim.experimental.state_averager import (
     TrainingStateAverager,
 )
 from hivemind.optim.grad_scaler import GradScaler
-from hivemind.utils import get_dht_time, get_logger, DHTExpiration
+from hivemind.utils import DHTExpiration, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 
