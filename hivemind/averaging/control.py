@@ -147,8 +147,10 @@ class StepControl(MPFuture):
 
     def __del__(self):
         if os.getpid() == self._origin_pid and not self.triggered:
-            logger.warning("Deleted an averaging StepControl, but the step was not triggered. This may cause other "
-                           "peers to fail an averaging round via TimeoutError.")
+            logger.warning(
+                "Deleted an averaging StepControl, but the step was not triggered. This may cause other "
+                "peers to fail an averaging round via TimeoutError."
+            )
         super().__del__()
 
     def cancel(self) -> bool:

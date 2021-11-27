@@ -476,7 +476,6 @@ class TrainingStateAverager(DecentralizedAverager):
         try:
             if averaging_round and averaging_control is None:
                 averaging_control = super().step(
-                    scheduled_time=get_dht_time() + self.delay_before_averaging.ema_seconds_per_sample,
                     gather=self.local_epoch,
                     require_trigger=True,
                     timeout=timeout,
