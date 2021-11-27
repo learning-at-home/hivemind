@@ -1,3 +1,4 @@
+import os
 import struct
 from enum import Enum
 from typing import Optional
@@ -145,7 +146,7 @@ class StepControl(MPFuture):
         self._data_for_gather, self._deadline, self._allow_retries = state["immutable_params"]
 
     def __del__(self):
-        if not self.triggered:
+        if os.getpid() == self._origin_pid and not self.triggered:
             logger.warning("Deleted an averaging StepControl, but the step was not triggered. This may cause other "
                            "peers to fail an averaging round via TimeoutError.")
         super().__del__()
