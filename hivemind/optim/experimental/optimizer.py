@@ -371,7 +371,7 @@ class Optimizer(torch.optim.Optimizer):
                 logger.log(self.status_loglevel, f"Beginning optimizer step #{self.local_epoch}")
                 began_averaging_gradients = self._begin_averaging_gradients(grad_scaler)
                 if not began_averaging_gradients:
-                    return  # failed to start gradient averaging due to an internal error
+                    pass  # failed to start gradient averaging due to an internal error
                 if self.delay_grad_averaging:
                     # if using delayed grad averaing, send this to state_averager as a pre-condition for optimizer step
                     wait_for_trigger = partial(self._average_gradients_and_load_into_optimizer, self.scheduled_grads)
@@ -435,7 +435,7 @@ class Optimizer(torch.optim.Optimizer):
                 logger.exception(e)
 
         if not began_averaging_gradients and self.scheduled_grads is not None and not self.scheduled_grads.done():
-            logger.log(self.status_loglevel, f"Cancelled pre-scheduled averaging round")
+            logger.log(self.status_loglevel, f"Cancelled pre-scheduled gradient averaging round")
             self.scheduled_grads.cancel()
             self.scheduled_grads = None
         return began_averaging_gradients
