@@ -578,7 +578,7 @@ def test_performance_ema_threadsafe(
     num_updates: int = 100,
     alpha: float = 0.05,
     bias_power: float = 0.7,
-    tolerance: float = 0.1,
+    tolerance: float = 0.05,
 ):
     def run_task(ema):
         task_size = random.randint(1, 4)
