@@ -411,6 +411,7 @@ class Optimizer(torch.optim.Optimizer):
             )
             if not should_average_state and self.scheduled_state is not None and not self.scheduled_state.done():
                 self.scheduled_state.cancel()
+                self.scheduled_state = None
 
             self.tracker.update_epoch(new_epoch=self.state_averager.local_epoch)
             self.scheduled_grads = self.scheduled_state = None
