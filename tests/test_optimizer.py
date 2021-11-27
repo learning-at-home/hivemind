@@ -1,6 +1,5 @@
 import ctypes
 import multiprocessing as mp
-import random
 import time
 from functools import partial
 
@@ -80,7 +79,7 @@ def test_grad_averager():
 @pytest.mark.forked
 @pytest.mark.parametrize(
     "offload_optimizer, reuse_tensors, sync_epoch_when_averaging",
-    [(False, False, False), (True, False, False), (False, True, True), (True, False, True)],
+    [(False, False, False), (True, True, False), (True, False, False), (False, True, True), (True, False, True)],
 )
 def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch_when_averaging: bool):
     dht1 = hivemind.DHT(start=True)
@@ -137,8 +136,8 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
     avgr1.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
     avgr2.step(increment_epoch=True, averaging_round=True, delay_averaging=True)
 
-    avgr1.step(wait_for_delayed_update=True)
-    avgr2.step(wait_for_delayed_update=True)
+    avgr1.step(wait_for_delayed_updates=True)
+    avgr2.step(wait_for_delayed_updates=True)
 
     assert torch.allclose(model1(x), model2(x)), "model parameters were not averaged correctly"
     assert torch.allclose(avgr1.optimizer.state_dict()["state"][0]["exp_avg_sq"], (stats1 + stats2) / 2)
@@ -383,4 +382,4 @@ def test_optimizer(
     assert not optimizer.state_averager.is_alive()
     assert not optimizer.grad_averager.is_alive()
     assert not optimizer.tracker.is_alive()
-    assert optimizer.scheduled_round is None or optimizer.scheduled_round.done()
+    assert optimizer.scheduled_grads is None or optimizer.scheduled_grads.done()

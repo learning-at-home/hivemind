@@ -114,7 +114,7 @@ class ProgressTracker(threading.Thread):
         metadata, _expiration = self.dht.get(self.training_progress_key, latest=True) or (None, -float("inf"))
         self.global_progress = self._parse_swarm_progress_data(metadata)
         self.lock_global_progress, self.global_state_updated = threading.Lock(), threading.Event()
-        self.should_report_progress, self.updated_progress_this_epoch = threading.Event(), threading.Event()
+        self.should_report_progress, self.fetched_global_progress_this_epoch = threading.Event(), threading.Event()
         self.shutdown_triggered, self.shutdown_complete = threading.Event(), threading.Event()
         super().__init__(name=f"{self.__class__.__name__}({self.prefix})", daemon=daemon)
         if start:
@@ -150,15 +150,20 @@ class ProgressTracker(threading.Thread):
             client_mode=self.client_mode,
         )
 
-    def report_local_progress(self, local_epoch: int, samples_accumulated: int):
+    def report_local_progress(self, local_epoch: int, samples_accumulated: int, update_global_samples: bool = True):
         """Update the number of locally accumulated samples and notify to other peers about this."""
         extra_samples = samples_accumulated - self.local_progress.samples_accumulated
+        if update_global_samples and local_epoch == self.local_progress.epoch == self.global_progress.epoch:
+            self.global_progress.samples_accumulated += extra_samples
+            # note: the above line can decrease the number of samples, e.g. if forced to reset due to overflow
+
         if extra_samples > 0:
             self.performance_ema.update(task_size=extra_samples)
             logger.debug(f"Updated performance EMA: {self.performance_ema.samples_per_second:.5f}")
         else:
             logger.debug("Resetting performance timestamp to current time (progress was reset)")
             self.performance_ema.reset_timer()
+
         self.local_progress = self._get_local_progress(local_epoch, samples_accumulated)
         self.should_report_progress.set()
 
@@ -178,7 +183,7 @@ class ProgressTracker(threading.Thread):
             self.global_progress.samples_accumulated = 0
             self.global_progress.eta_next_epoch = float("inf")
         self.report_local_progress(new_epoch, samples_accumulated=0)
-        self.updated_progress_this_epoch.clear()
+        self.fetched_global_progress_this_epoch.clear()
         return new_epoch
 
     def run(self):
@@ -257,7 +262,7 @@ class ProgressTracker(threading.Thread):
                         break
                     metadata = maybe_metadata.value if isinstance(maybe_metadata, ValueWithExpiration) else None
                     self.global_progress = self._parse_swarm_progress_data(metadata)
-                    self.updated_progress_this_epoch.set()
+                    self.fetched_global_progress_this_epoch.set()
 
         finally:
             logger.log(self.status_loglevel, f"No longer fetching {self.training_progress_key}.")
@@ -321,7 +326,7 @@ class ProgressTracker(threading.Thread):
         )
         logger.log(
             self.status_loglevel,
-            f"{self.prefix} accumulated {total_samples_accumulated} samples for iteration #{global_epoch} from "
+            f"{self.prefix} accumulated {total_samples_accumulated} samples for epoch #{global_epoch} from "
             f"{num_peers} peers. ETA {estimated_time_to_next_epoch:.2f} sec (refresh in {time_to_next_fetch:.2f} sec)",
         )
         return GlobalTrainingProgress(

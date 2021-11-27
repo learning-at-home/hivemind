@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 import os
 from functools import partial
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Sequence, Union
 
 import torch
 
 from hivemind.averaging.control import StepControl
+from hivemind.compression import CompressionBase, NoCompression
 from hivemind.dht import DHT
 from hivemind.optim.experimental.grad_averager import GradientAverager
 from hivemind.optim.experimental.progress_tracker import ProgressTracker
@@ -21,22 +22,25 @@ from hivemind.optim.experimental.state_averager import (
     TrainingStateAverager,
 )
 from hivemind.optim.grad_scaler import GradScaler
-from hivemind.utils import get_dht_time, get_logger
+from hivemind.utils import get_dht_time, get_logger, DHTExpiration
 
 logger = get_logger(__name__)
 
 
 class Optimizer(torch.optim.Optimizer):
     """
-    Hivemind Optimizer wraps your regular PyTorch Optimizer for training in a swarm of peers. It can be configured with
-     synchronous, delayed or asynchronous updates to trade between optimization guarantees and compute utilization.
+    Hivemind Optimizer wraps your regular PyTorch Optimizer for training collaboratively with peers.
+    By default, Optimizer is configured to be exactly **equivalent to synchronous training** with target_batch_size;
+    There are advanced options make training semi-asynchronous (delay_optimizer_step and delay_gradient_averaging)
+     or even fully asynchronous (local_updates=True). However, these options require careful tuning.
 
-    The Optimizer is meant as a drop-in replacement for your regular PyTorch code:
+    The Optimizer is meant as a drop-in replacement for your regular PyTorch Optimizer:
 
     >>> model = transformers.AutoModel("albert-xxlarge-v2")
     >>> dht = hivemind.DHT(initial_peers=INITIAL_PEERS, start=True)
-    >>> opt = hivemind.Optimizer(model.parameters(), optim_cls=torch.optim.Adam, run_id="run_42",
-    >>>                          target_batch_size=4096, batch_size_per_step=4)
+    >>> opt = hivemind.Optimizer(dht, run_id="run_42", optimizer=torch.optim.Adam, params=model.parameters(),
+    >>>                          target_batch_size=4096, batch_size_per_step=4)  # recommended way to create Optimizer
+    >>> # alternative: opt = hivemind.Optimizer(dht, run_id="run_42", optimizer=torch.optim.Adam(model.parameters())
     >>> while True:
     >>>     loss = compute_loss_on_batch(model, batch_size=4)
     >>>     opt.zero_grad()
@@ -44,33 +48,69 @@ class Optimizer(torch.optim.Optimizer):
     >>>     opt.step()  # <-- train collaboratively with any peers that use the same prefix (run_42)
 
     However, unlike regular optimizers, calling opt.step with hivemind.Optimizer can do one of the following:
-    - accumulate a minibatch of data towards the (global) target batch size without changing parameters (yet),
-    - after accumulating the target batch size, all-reduce gradients with peers and perform optimizer step,
-    - if, for any reason, your peer lags behind the rest of the swarm, it will load state from up-to-date peers.
+    - accumulate a minibatch of gradients towards the (global) target batch size, without updating parameters yet;
+    - after accumulating the target batch size, all-reduce gradients with peers and perform optimizer step;
+    - if your peer lags behind the rest of the swarm, it will download latest state from other peers;
 
     :note: hivemind.Optimizer can be used the same way any other pytorch optimizer, but there is one limitation:
-      learning rate schedulers, curriculum and other time-dependent features should use opt.global_step (and not the
-      number of local forward-backward cycles). This is because any device can join midway through training, when
-      other peers have already made some progress and changed their learning rate accordingly.
+      learning rate schedulers, curriculum and other **time-dependent features should depend on Optimizer.local_epoch**
+      (and not the number ot calls to opt.step). This is because peers are allowed to join midway through training,
+      when others have already made some progress and changed their learning rates accordingly.
 
     :param dht: a running hivemind.DHT instance connected to other peers
-    :param run_id: a unique identifier of this experiment, used as a common prefix for all DHT keys
-    :param target_batch_size: perform optimizer step after all peers collectively accumulate this many samples
+    :param run_id: a unique identifier of this training run, used as a common prefix for all DHT keys
+
+    :note: peers with the same run_id should *generally* train the same model and use the same optimizer configuration.
+      Some options can be safely changed by individual peers: `batch_size_per_step`, `client_mode`, `auxiliary`,
+      `reuse_grad_buffers`, `offload_optimizer`, and `verbose`. In some cases, other options may also be tuned
+      individually by each peer, but they should be changed with caution to avoid deadlocks or convergence issues.
+
+    :param target_batch_size: global batch size that must be accumulated before the swarm transitions to the next epoch
     :param batch_size_per_step: before each call to .step, user should accumulate gradients over this many samples
-    :param optimizer: a standard pytorch optimizer, preferably a large-batch one such as LAMB, LARS, etc.
-    :param params: optional, a list/tuple of parameters or structured param groups for the optimizer
-    :param scheduler: if specified, use this scheduler to update optimizer learning rate
-    :note: If you are using hivemind.Optimizer with lr_scheduler, it is recommended to pass this scheduler
-      explicitly into this class. Otherwise, it may become non-synchronized between peers.
+
+    :param optimizer: a callable(parameters) -> pytorch.optim.Optimizer or a pre-initialized PyTorch optimizer
+    :param params: parameters or param groups for the optimizer; required if optimizer is a callable(params)
+    :note: creating hivemind.Optimizer with params=model.parameters() and optimizer=lambda params: make_optim(params)
+      is required for advanced options: offload_optimizer, delay_optimizer_step and delay_grad_averaging.
+
+    :param scheduler: callable(optimizer) -> PyTorch LRScheduler or a pre-initialized PyTorch scheduler
+    :note: the learning rate scheduler will adjust learning rate based on collaboration-wide epoch, not the number of
+      local calls to optimizer.step; this is required to keep different peers synchronized.
 
     :param matchmaking_time: when looking for group, wait for peers to join for up to this many seconds
     :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
     :param load_state_timeout: wait for at most this many seconds before giving up on load_state_from_peers
     :param reuse_grad_buffers: if True, use model's .grad buffers for gradient accumulation.
       This is more memory efficient, but it requires that the user does *NOT* call model/opt zero_grad at all
-    :param average_state_every: average state (parameters, chosen opt statistics) with peers every this many epochs
-    :param delay_optimizer_step: if True, run optimizer step in background and apply results in a future step
-    :param client_mode: if True, runs training without incoming connections, in a firewall-compatible mode
+
+    :param offload_optimizer: offload the optimizer to host memory, saving GPU memory for parameters and gradients
+    :param delay_optimizer_step: run optimizer in background, apply results in future .step; requires offload_optimizer
+    :param delay_grad_averaging: average gradients in background; requires offload_optimizer and delay_optimizer_step
+    :note: offload_optimizer, delay_optimizer_step and delay_grad_averaging require that the optimizer is
+      created as follows: `hivemind.Optimizer(..., optimizer=callable_optimizer_factory, params=model.parameters())`
+
+    :param delay_state_averaging: if enabled (default), average parameters and extra tensors in a background thread;
+      if set to False, average parameters synchronously within the corresponding hivemind.Optimizer.step call.
+    :param average_state_every: average state (parameters, chosen opt statistics) with peers every this many **epochs**
+      This reduces the communication overhead increasing, but can cause parameters to diverge if too large
+    :note: The maximal average_state_every=num_epochs depends on how often peers diverge from each other. If peers
+      hardly ever skip averaging rounds, they can average state less frequently. Network failures, lossy gradient
+      compression and local_updates cause parameters to diverge faster and requires more frequent averaging.
+
+    :param use_local_updates: if enabled, peers will update parameters on each .step using local gradients;
+      if not enabled (default), accumulate gradients to target_batch_size, and then call .step with averaged gradients
+    :note: even if use_local_updates=True, learning rate scheduler will still be called once per target_batch_size.
+
+    :param client_mode: if True, this peer will not accept incoming connections (firewall-compatible mode)
+    :param auxiliary: if True, optimizer.step will only assist other peers in averaging (for cpu-only workers)
+    :note: client_mode=True and auxiliary=True are mutually exclusive; auxiliary also requires batch_size_per_step=None
+
+    :param grad_compression: compression strategy used for averaging gradients, default = no compression
+    :param state_averaging_compression: compression for averaging params and state tensors, default = no compression
+    :param load_state_compression: compression strategy for loading state from peers, default = no compression
+    :param average_opt_statistics: names of optimizer statistics from state dict that should be averaged with peers
+    :param extra_tensors: if specified, these extra tensors will also be averaged and shared in load_state_from_peers.
+
     :param averager_opts: additional keyword arguments forwarded to both GradientAverager and TrainingStateAverager
     :param tracker_opts: additional keyword arguments forwarded to ProgressTracker
     :param verbose: if True, report internal events such as accumilating gradients and running background tasks
@@ -97,12 +137,20 @@ class Optimizer(torch.optim.Optimizer):
         matchmaking_time: Optional[float] = 15.0,
         averaging_timeout: Optional[float] = 300.0,
         load_state_timeout: float = 600.0,
-        average_state_every: int = 1,
         reuse_grad_buffers: bool = False,
-        delay_grad_averaging: bool = False,
+        offload_optimizer: Optional[bool] = None,
         delay_optimizer_step: Optional[bool] = None,
+        delay_grad_averaging: bool = False,
+        delay_state_averaging: bool = True,
+        average_state_every: int = 1,
+        use_local_updates: bool = False,
         client_mode: bool = None,
         auxiliary: bool = False,
+        grad_compression: CompressionBase = NoCompression(),
+        state_averaging_compression: CompressionBase = NoCompression(),
+        load_state_compression: CompressionBase = NoCompression(),
+        average_opt_statistics: Sequence[str] = (),
+        extra_tensors: Sequence[torch.Tensor] = (),
         averager_opts: Optional[dict] = None,
         tracker_opts: Optional[dict] = None,
         shutdown_timeout: float = 5,
@@ -110,31 +158,65 @@ class Optimizer(torch.optim.Optimizer):
     ):
         client_mode = client_mode if client_mode is None else dht.client_mode
         delay_optimizer_step = delay_optimizer_step if delay_optimizer_step is not None else delay_grad_averaging
+        offload_optimizer = offload_optimizer if offload_optimizer is not None else (params is not None)
         assert not delay_grad_averaging or delay_optimizer_step, "delay_grad_averaging requires delay_optimizer_step"
         assert not (client_mode and auxiliary), "Client-mode peers cannot serve as auxiliaries"
         assert not auxiliary or batch_size_per_step is None, "Auxiliary peers should not accumulate batches"
+        if callable(optimizer) and params is not None:
+            if scheduler is not None and (not callable(scheduler) or isinstance(scheduler, LRSchedulerBase)):
+                raise ValueError("For this mode, please provide scheduler factory: callable(optimizer) -> scheduler")
+        elif all(hasattr(optimizer, attr) for attr in ("param_groups", "step", "zero_grad")):
+            if offload_optimizer or delay_optimizer_step or delay_grad_averaging:
+                raise ValueError(
+                    "To enable offload_optimizer or delayed updates, please initialize Optimizer as "
+                    "hivemind.Optimizer(..., params=params, optimizer=lambda params: create_opt(params)"
+                )
+        else:
+            raise ValueError(
+                "Please initialize the optimizer in one of the following two ways:\n"
+                "(A) hivemind.Optimizer(..., params=params, optimizer=lambda params: create_opt(params)\n"
+                "(B) hivemind.Optimizer(..., optimizer=pre_initialize_optimizer)"
+            )
+        if use_local_updates:
+            assert not reuse_grad_buffers, "if local_updates is True, gradients will not be accumulated"
+            assert not delay_grad_averaging, "if local_updates is True, gradients will not be averaged"
 
         self.dht, self.run_id, self.client_mode, self.auxiliary = dht, run_id, client_mode, auxiliary
         self.batch_size_per_step, self.target_batch_size = batch_size_per_step, target_batch_size
-        self.matchmaking_time, self.average_state_every = matchmaking_time, average_state_every
+        self.delay_state_averaging, self.average_state_every = delay_state_averaging, average_state_every
+        self.matchmaking_time, self.offload_optimizer = matchmaking_time, offload_optimizer
         self.delay_grad_averaging, self.delay_optimizer_step = delay_grad_averaging, delay_optimizer_step
         self.averaging_timeout, self.load_state_timeout = averaging_timeout, load_state_timeout
         self.shutdown_timeout = shutdown_timeout
 
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
-        self.scheduled_round: Optional[StepControl] = None
-        self.previous_round: Optional[StepControl] = None
+        self.scheduled_grads: Optional[StepControl] = None
+        self.scheduled_state: Optional[StepControl] = None
 
-        self.state_averager = self._make_state_averager(
-            optimizer=optimizer, params=params, scheduler=scheduler, **averager_opts or {}
-        )
-        self.grad_averager = self._make_gradient_averager(reuse_grad_buffers=reuse_grad_buffers, **averager_opts or {})
         self.tracker = self._make_progress_tracker(target_batch_size, **tracker_opts or {})
+        self.state_averager = self._make_state_averager(
+            optimizer=optimizer,
+            params=params,
+            scheduler=scheduler,
+            delta_rule_averaging=use_local_updates and self.delay_state_averaging,
+            compression=state_averaging_compression,
+            state_compression=load_state_compression,
+            average_opt_statistics=average_opt_statistics,
+            extra_tensors=extra_tensors,
+            **averager_opts or {},
+        )
+        if not use_local_updates:
+            self.grad_averager = self._make_gradient_averager(
+                reuse_grad_buffers=reuse_grad_buffers, compression=grad_compression, **averager_opts or {}
+            )
+        else:
+            self.grad_averager = None
+
         self._should_check_synchronization_on_update = True  # used in self.should_load_state_from_peers
         self._schema_hash = self._compute_schema_hash()
         self._parent_pid = os.getpid()
 
-        self._step_supports_amp_scaling = self.grad_averager.reuse_grad_buffers
+        self._step_supports_amp_scaling = reuse_grad_buffers
         # note: the line above is used by pytorch AMP GradScaler to enable custom behavior needed when reusing gradient
         # buffers over multiple steps (to avoid repeated unscaling). Without reuse_grad_buffers, this is not needed.
 
@@ -144,11 +226,11 @@ class Optimizer(torch.optim.Optimizer):
             prefix=f"{self.run_id}_state_averager",
             allreduce_timeout=self.averaging_timeout,
             shutdown_timeout=self.shutdown_timeout,
+            offload_optimizer=self.offload_optimizer,
+            custom_gradients=self.offload_optimizer,
             status_loglevel=self.status_loglevel,
             client_mode=self.client_mode,
             auxiliary=self.auxiliary,
-            offload_optimizer=True,
-            custom_gradients=True,
             start=True,
             **kwargs,
         )
@@ -166,12 +248,13 @@ class Optimizer(torch.optim.Optimizer):
             start=True,
             **kwargs,
         )
-        optimized_param_groups = self.state_averager.optimizer.param_groups
-        optimized_parameters = [param for group in optimized_param_groups for param in group["params"]]
-        with grad_averager.get_tensors() as averaged_gradients:
-            assert len(averaged_gradients) == len(optimized_parameters)
-            for opt_param, averaged_grad in zip(optimized_parameters, averaged_gradients):
-                opt_param.grad = averaged_grad
+        if self.offload_optimizer:
+            optimized_param_groups = self.state_averager.optimizer.param_groups
+            optimized_parameters = [param for group in optimized_param_groups for param in group["params"]]
+            with grad_averager.get_tensors() as averaged_gradients:
+                assert len(averaged_gradients) == len(optimized_parameters)
+                for opt_param, averaged_grad in zip(optimized_parameters, averaged_gradients):
+                    opt_param.grad = averaged_grad
         return grad_averager
 
     def _make_progress_tracker(self, target_batch_size: int, **kwargs) -> ProgressTracker:
@@ -189,7 +272,9 @@ class Optimizer(torch.optim.Optimizer):
         optimized_param_groups = self.state_averager.optimizer.param_groups
         optimized_parameters = [param for group in optimized_param_groups for param in group["params"]]
         param_shapes = tuple(tuple(param.shape) for param in optimized_parameters)
-        grad_ids = tuple(id(param.grad) for param in optimized_parameters)
+
+        # offloaded optimizer requires that gradient tensors are reused between iterations
+        grad_ids = tuple(id(param.grad) for param in optimized_parameters) if self.offload_optimizer else None
         return hash((grad_ids, param_shapes))
 
     def is_alive(self) -> bool:
@@ -199,25 +284,13 @@ class Optimizer(torch.optim.Optimizer):
     def local_epoch(self) -> int:
         return self.state_averager.local_epoch
 
-    def should_load_state_from_peers(self) -> bool:
-        """
-        If true, peer will discard local progress and attempt to download state from peers.
-        This method allows peer to continue training in two cases:
-         - peer is on the same epoch as other collaborators - keep training normally
-         - peer was on the same epoch and accumulated some grads, but some collaborators
-             have just transitioned to the next epoch - this peer should also transition.
+    @property
+    def use_local_updates(self) -> bool:
+        return self.grad_averager is None
 
-        :note: The latter case occurs due to the lack of network synchrony: the first peer that
-        detects enough samples will transition to the next step and start counting samples anew.
-        Some other peers may take time before they check with DHT and observe that
-          - the global epoch is technically one epoch ahead of the current one and
-          - the remaining (non-transitioned) peers no longer have target_batch_size between them
-        If this is the case, peer should transition to the next epoch and does *not* need to re-load state.
-        """
-        if self._should_check_synchronization_on_update and self.tracker.updated_progress_this_epoch.is_set():
-            self._should_check_synchronization_on_update = False
-            return self.local_epoch != self.tracker.global_epoch  # require exact synchronization once per step
-        return self.local_epoch < self.tracker.global_epoch - 1  # catch up if a peer just switched to next epoch
+    @property
+    def use_gradient_averaging(self) -> bool:
+        return self.grad_averager is not None
 
     def step(
         self,
@@ -241,6 +314,9 @@ class Optimizer(torch.optim.Optimizer):
             raise ValueError("Auxiliary peers should not have batch size, run closures, or use grad_scaler")
         batch_size = batch_size if batch_size is not None else self.batch_size_per_step
 
+        # if delayed updates finished before step, apply these updates; otherwise do nothing
+        self.state_averager.step(apply_delayed_updates=True)
+
         loss = None
         if closure is not None:
             with torch.enable_grad():
@@ -249,111 +325,180 @@ class Optimizer(torch.optim.Optimizer):
         if not self.auxiliary and self.should_load_state_from_peers():
             logger.log(self.status_loglevel, "Peer is out of sync.")
             self.load_state_from_peers()
-            return loss
+            return loss  # local gradients were computed with out-of-sync parameters, must start over
 
+        if self.use_gradient_averaging:
+            # accumulate gradients toward target batch size, then aggregate with peers and run optimizer
+            if not self.auxiliary:
+                grads_are_valid = self._check_and_accumulate_gradients(batch_size, grad_scaler)
+                if not grads_are_valid:
+                    return loss  # local gradients were reset due to overflow, must start over
+
+            self._maybe_schedule_gradient_averaging()
+            self._maybe_schedule_state_averaging()
+
+        else:
+            # use_local_updates=True: update parameters on every step independently of other peers
+            if not self.auxiliary:
+                if grad_scaler is not None:
+                    with grad_scaler.running_global_step():
+                        assert grad_scaler.unscale_(self)
+
+                new_samples_accumulated = self.tracker.local_progress.samples_accumulated + batch_size
+                self.tracker.report_local_progress(self.local_epoch, new_samples_accumulated)
+                self._maybe_schedule_state_averaging()
+
+                self.state_averager.step(
+                    increment_epoch=False,
+                    optimizer_step=True,
+                    delay_optimizer_step=self.delay_optimizer_step,
+                    grad_scaler=grad_scaler,
+                )
+
+        if self.tracker.ready_to_update_epoch:
+            self._update_global_epoch(grad_scaler)
+
+        return loss
+
+    def _update_global_epoch(self, grad_scaler: Optional[GradScaler]) -> None:
+        """Depending on the configuration: aggregate gradients and/or parameters, perform global optimizer step"""
+        assert self._schema_hash == self._compute_schema_hash(), "parameters or gradients changed during iteration"
+
+        with self.tracker.pause_updates():
+            wait_for_trigger = None
+
+            if self.use_gradient_averaging:
+                logger.log(self.status_loglevel, f"Beginning optimizer step #{self.local_epoch}")
+                began_averaging_gradients = self._begin_averaging_gradients(grad_scaler)
+                if not began_averaging_gradients:
+                    return  # failed to start gradient averaging due to an internal error
+                if self.delay_grad_averaging:
+                    # if using delayed grad averaing, send this to state_averager as a pre-condition for optimizer step
+                    wait_for_trigger = partial(self._average_gradients_and_load_into_optimizer, self.scheduled_grads)
+                else:
+                    # delay_grad_averaging=False, average gradients immediately
+                    self._average_gradients_and_load_into_optimizer(self.scheduled_grads)
+
+            next_epoch = max(self.local_epoch + 1, self.tracker.global_epoch)
+            swarm_not_empty = self.tracker.global_progress.num_peers > 1
+            should_perform_optimizer_step = not self.auxiliary and not self.use_local_updates
+            should_average_state = swarm_not_empty and next_epoch % self.average_state_every == 0
+
+            self.state_averager.step(
+                increment_epoch=True,
+                wait_for_trigger=wait_for_trigger,
+                optimizer_step=should_perform_optimizer_step,
+                delay_optimizer_step=self.delay_optimizer_step and should_perform_optimizer_step,
+                grad_scaler=grad_scaler,
+                averaging_round=should_average_state,
+                delay_averaging=self.delay_state_averaging and not self.auxiliary,
+                averaging_control=self.scheduled_state if should_average_state else None,
+                averaging_opts=dict(timeout=self.averaging_timeout) if should_average_state else None,
+            )
+
+            self.tracker.update_epoch(new_epoch=self.state_averager.local_epoch)
+            self.scheduled_grads = self.scheduled_state = None
+            self._should_check_synchronization_on_update = True
+            # the above line ensures that peers check for *strict* synchronization once per epoch
+
+            if not self.client_mode:
+                self.state_averager.state_sharing_priority = self.local_epoch
+
+            if self.use_gradient_averaging and not self.auxiliary:
+                self.grad_averager.reset_accumulated_grads_()
+                if not self.client_mode:
+                    self.grad_averager.state_sharing_priority = self.local_epoch
+
+            logger.log(self.status_loglevel, f"Transitioning to epoch {self.local_epoch}.")
+
+    def _begin_averaging_gradients(self, grad_scaler: Optional[GradScaler]) -> bool:
+        """Begin an all-reduce round to average gradients; return True if succeeded, False if failed"""
+        if grad_scaler is not None:
+            with grad_scaler.running_global_step():
+                assert grad_scaler.unscale_(self)
+
+        if self.scheduled_grads is not None and (self.scheduled_grads.triggered or self.scheduled_grads.done()):
+            logger.log(self.status_loglevel, f"Discarding failed matchmaking results: {self.scheduled_grads}")
+            self.scheduled_grads = None
+
+        began_averaging_gradients = False
+        if self.tracker.global_progress.num_peers > 1:
+            try:
+                self.scheduled_grads = self.grad_averager.step(
+                    control=self.scheduled_grads, reset_accumulators=True, wait=False
+                )
+                assert self.grad_averager.local_samples_accumulated == 0, "step should have reset accumulators"
+                began_averaging_gradients = True
+            except BaseException as e:
+                logger.exception(e)
+
+        if not began_averaging_gradients and self.scheduled_grads is not None and not self.scheduled_grads.done():
+            logger.log(self.status_loglevel, f"Cancelled pre-scheduled averaging round")
+            self.scheduled_grads.cancel()
+            self.scheduled_grads = None
+        return began_averaging_gradients
+
+    def _check_and_accumulate_gradients(self, batch_size: int, grad_scaler: Optional[GradScaler]) -> bool:
+        """Check if gradients are valid, accumulate and return True; otherwise, reset and return False"""
+        assert not self.use_local_updates and not self.auxiliary
         if grad_scaler is not None and not grad_scaler.are_grads_finite(self):
             logger.log(self.status_loglevel, "Encountered incorrect value in fp16 grads, resetting local gradients")
             self.tracker.report_local_progress(self.local_epoch, samples_accumulated=0)
             self.grad_averager.reset_accumulated_grads_()
-            return loss
+            return False
 
-        if not self.auxiliary:
-            self.grad_averager.accumulate_grads_(batch_size)
-            self.tracker.report_local_progress(self.local_epoch, self.grad_averager.local_samples_accumulated)
-            self.state_averager.step(apply_delayed_updates=True)
+        self.grad_averager.accumulate_grads_(batch_size)
+        self.tracker.report_local_progress(self.local_epoch, self.grad_averager.local_samples_accumulated)
+        return True
 
+    def _maybe_schedule_gradient_averaging(self) -> None:
+        """If next epoch is coming soon, schedule the next gradient averaging round at the estimated end of epoch"""
+        assert self.use_gradient_averaging
         if self.tracker.estimated_next_update_time - get_dht_time() <= self.matchmaking_time:
-            if self.scheduled_round is None or self.scheduled_round.triggered or self.scheduled_round.done():
+            if self.scheduled_grads is None or self.scheduled_grads.triggered or self.scheduled_grads.done():
                 if self.delay_grad_averaging:
                     # wait for previous averaging to finish before starting a new one
-                    self.state_averager.step(wait_for_delayed_update=True)
+                    self.state_averager.step(wait_for_delayed_updates=True)
 
                 eta_seconds = self.tracker.estimated_next_update_time - get_dht_time()
                 eta_seconds = max(eta_seconds, self.grad_averager.matchmaking_kwargs["min_matchmaking_time"])
-                logger.log(self.status_loglevel, f"Pre-scheduling next averaging round in {eta_seconds:.2f}s.")
+                logger.log(self.status_loglevel, f"Pre-scheduling gradient averaging round in {eta_seconds:.2f}s.")
                 scheduled_time = self.tracker.estimated_next_update_time
                 if self.client_mode:
                     scheduled_time = get_dht_time() + self.averaging_timeout
-                self.scheduled_round = self.grad_averager.schedule_step(scheduled_time, timeout=self.averaging_timeout)
+                self.scheduled_grads = self.grad_averager.schedule_step(scheduled_time, timeout=self.averaging_timeout)
 
-        if not self.tracker.ready_to_update_epoch:
-            return loss
+    def _maybe_schedule_state_averaging(self) -> None:
+        """If next epoch is coming soon, schedule the next state averaging at estimated parameter averaging start"""
+        next_epoch = max(self.local_epoch + 1, self.tracker.global_epoch)
+        if next_epoch % self.average_state_every != 0:
+            return  # averaging is not performed at this epoch
 
-        assert self._schema_hash == self._compute_schema_hash(), "parameters or gradients changed during iteration"
+        estimated_time = self.tracker.estimated_next_update_time
+        estimated_time += self.state_averager.delay_before_averaging.ema_seconds_per_sample
+        eta_seconds_to_averaging = self.tracker.estimated_next_update_time - get_dht_time()
 
-        with self.tracker.pause_updates():
-            # note: we do not need to replace grads because we explicitly load grads into the optimizer
-
-            logger.log(self.status_loglevel, f"Beginning global optimizer step #{self.tracker.global_epoch}")
-
-            if grad_scaler is not None:
-                with grad_scaler.running_global_step():
-                    assert grad_scaler.unscale_(self)
-
-            if self.scheduled_round is not None and self.scheduled_round.triggered or self.scheduled_round.done():
-                logger.log(self.status_loglevel, f"Discarding failed matchmaking results: {self.scheduled_round}")
-                self.scheduled_round = None
-
-            swarm_not_empty = self.tracker.global_progress.num_peers > 1
-            began_averaging_gradients = False
-            if swarm_not_empty:
-                try:
-                    self.scheduled_round = self.grad_averager.step(
-                        control=self.scheduled_round, reset_accumulators=True, wait=False
-                    )
-                    assert self.grad_averager.local_samples_accumulated == 0, "step should have reset accumulators"
-                    began_averaging_gradients = True
-                except BaseException as e:
-                    logger.exception(e)
-
-            if not began_averaging_gradients and self.scheduled_round is not None and not self.scheduled_round.done():
-                logger.log(self.status_loglevel, f"Cancelled pre-scheduled averaging round")
-                self.scheduled_round.cancel()
-                self.scheduled_round = None
-
-            if not self.delay_grad_averaging:
-                self._average_gradients_and_load_into_optimizer(self.scheduled_round)
-
-            next_epoch = max(self.local_epoch + 1, self.tracker.global_epoch)
-
-            self.state_averager.step(
-                increment_epoch=True,
-                optimizer_step=not self.auxiliary,
-                delay_optimizer_step=self.delay_optimizer_step,
-                averaging_round=swarm_not_empty and next_epoch % self.average_state_every == 0,
-                delay_averaging=not self.auxiliary,
-                grad_scaler=grad_scaler,
-                wait_for_trigger=partial(self._average_gradients_and_load_into_optimizer, self.scheduled_round)
-                if self.delay_grad_averaging
-                else None,
-                averaging_opts=dict(
-                    scheduled_time=get_dht_time() + self.matchmaking_time, timeout=self.averaging_timeout
+        if eta_seconds_to_averaging <= self.matchmaking_time:
+            if self.scheduled_state is None or self.scheduled_state.triggered or self.scheduled_state.done():
+                min_matchmaking_time = self.state_averager.matchmaking_kwargs["min_matchmaking_time"]
+                actual_seconds = max(eta_seconds_to_averaging, min_matchmaking_time)
+                logger.log(self.status_loglevel, f"Pre-scheduling state averaging round in {actual_seconds:.2f}s.")
+                if self.client_mode:
+                    estimated_time = get_dht_time() + self.averaging_timeout
+                self.scheduled_state = self.state_averager.schedule_step(
+                    estimated_time, gather=next_epoch, timeout=self.averaging_timeout
                 )
-                if swarm_not_empty and next_epoch % self.average_state_every == 0
-                else None,
-            )
-
-            if not self.auxiliary:
-                self.grad_averager.reset_accumulated_grads_()
-                self.tracker.update_epoch(new_epoch=self.state_averager.local_epoch)
-                self._should_check_synchronization_on_update = True
-
-            if not self.client_mode:
-                self.grad_averager.state_sharing_priority = self.local_epoch
-                self.state_averager.state_sharing_priority = self.local_epoch
-
-            logger.log(self.status_loglevel, f"Transitioning to epoch {self.local_epoch}.")
-        return loss
 
     def _average_gradients_and_load_into_optimizer(self, maybe_step_control: Optional[StepControl]):
         """Run gradient averaging; on success, feed averaged gradients into optimizer; else, use local gradients"""
-        assert maybe_step_control is None or maybe_step_control.triggered
+        assert self.use_gradient_averaging and maybe_step_control is None or maybe_step_control.triggered
         averaged_gradients = False
 
         try:
             if maybe_step_control is not None:
                 group_info = maybe_step_control.result(self.averaging_timeout)
                 logger.log(self.status_loglevel, f"Averaged gradients with {len(group_info)} peers")
+                self._load_averaged_gradients_into_optimizer_()
                 averaged_gradients = True
             else:
                 logger.log(self.status_loglevel, f"Skipped averaging: there are no other peers")
@@ -363,28 +508,65 @@ class Optimizer(torch.optim.Optimizer):
         if not averaged_gradients:
             logger.log(self.status_loglevel, f"Proceeding with local gradients")
             self.grad_averager.load_accumulators_into_averager_()
+            self._load_averaged_gradients_into_optimizer_()
+
+    def _load_averaged_gradients_into_optimizer_(self):
+        """If required, load averaged gradients into optimizer; otherwise simply notify grad averager"""
+        assert self.use_gradient_averaging
+
+        if self.offload_optimizer:
+            pass  # averaged gradients are already baked into optimizer, see _make_gradient_averager
+        else:
+            # copy averaged gradients into optimizer .grad buffers
+            optimized_param_groups = self.state_averager.optimizer.param_groups
+            optimized_parameters = [param for group in optimized_param_groups for param in group["params"]]
+            with torch.no_grad(), self.grad_averager.get_tensors() as averaged_gradients:
+                assert len(averaged_gradients) == len(optimized_parameters)
+                for opt_param, averaged_grad in zip(optimized_parameters, averaged_gradients):
+                    opt_param.grad.copy_(averaged_grad, non_blocking=True)
 
         self.grad_averager.notify_used_averaged_gradients()
 
     def zero_grad(self, set_to_none: bool = False):
         """Reset gradients from model. If these gradients are reused for accumulators, raise an error."""
-        if self.grad_averager.reuse_grad_buffers:
+        if self.use_gradient_averaging and self.grad_averager.reuse_grad_buffers:
             raise ValueError(
                 f"When running {self.__class__.__name__} with reuse_grad_buffers=True, user should never "
                 f"call zero_grad manually. Gradients will be refreshed internally."
             )
-        for param in self.grad_averager.parameters:
-            if param.grad is None:
-                pass
-            elif set_to_none:
-                param.grad = None
-            else:
-                param.grad.zero_()
+        for param_group in self.param_groups:
+            for param in param_group["params"]:
+                if param.grad is None:
+                    pass
+                elif set_to_none:
+                    param.grad = None
+                else:
+                    param.grad.zero_()
+
+    def should_load_state_from_peers(self) -> bool:
+        """
+        If true, peer will discard local progress and attempt to download state from peers.
+        This method allows peer to continue training in two cases:
+         - peer is on the same epoch as other collaborators - keep training normally
+         - peer was on the same epoch and accumulated some grads, but some collaborators
+             have just transitioned to the next epoch - this peer should also transition.
+
+        :note: The latter case occurs due to the lack of network synchrony: the first peer that
+        detects enough samples will transition to the next step and start counting samples anew.
+        Some other peers may take time before they check with DHT and observe that
+          - the global epoch is technically one epoch ahead of the current one and
+          - the remaining (non-transitioned) peers no longer have target_batch_size between them
+        If this is the case, peer should transition to the next epoch and does *not* need to re-load state.
+        """
+        if self._should_check_synchronization_on_update and self.tracker.fetched_global_progress_this_epoch.is_set():
+            self._should_check_synchronization_on_update = False
+            return self.local_epoch != self.tracker.global_epoch  # require exact synchronization once per step
+        return self.local_epoch < self.tracker.global_epoch - 1  # catch up if a peer just switched to next epoch
 
     def load_state_from_peers(self, **kwargs):
         """Attempt to fetch the newest collaboration state from other peers"""
-        if self.scheduled_round is not None and not self.scheduled_round.done():
-            self.scheduled_round.cancel()
+        if self.scheduled_grads is not None and not self.scheduled_grads.done():
+            self.scheduled_grads.cancel()
 
         with self.tracker.pause_updates():
             while True:
@@ -402,10 +584,22 @@ class Optimizer(torch.optim.Optimizer):
                 self.state_averager.local_epoch = self.tracker.global_epoch
 
             self.tracker.report_local_progress(local_epoch=self.local_epoch, samples_accumulated=0)
-            self.grad_averager.reset_accumulated_grads_()
+
             if not self.client_mode:
-                self.grad_averager.state_sharing_priority = self.local_epoch
                 self.state_averager.state_sharing_priority = self.local_epoch
+
+            self._cancel_scheduled_averaging()
+
+            if self.use_gradient_averaging:
+                self.grad_averager.reset_accumulated_grads_()
+                if not self.client_mode:
+                    self.grad_averager.state_sharing_priority = self.local_epoch
+
+    def _cancel_scheduled_averaging(self):
+        if self.scheduled_grads is not None and not self.scheduled_grads.done():
+            self.scheduled_grads.cancel()
+        if self.scheduled_state is not None and not self.scheduled_state.done():
+            self.scheduled_state.cancel()
 
     def state_dict(self) -> dict:
         state_dict = self.state_averager.optimizer.state_dict()
@@ -448,11 +642,13 @@ class Optimizer(torch.optim.Optimizer):
 
     def shutdown(self):
         logger.debug("Sending goodbye to peers...")
+        self._cancel_scheduled_averaging()
         self.tracker.shutdown(self.shutdown_timeout)
-        logger.debug("Shutting down averager...")
-        self.state_averager.step(wait_for_delayed_update=True)
+        logger.debug("Shutting down averagers...")
+        self.state_averager.step(wait_for_delayed_updates=True)
         self.state_averager.shutdown()
-        self.grad_averager.shutdown()
+        if self.use_gradient_averaging:
+            self.grad_averager.shutdown()
         logger.debug(f"{self.__class__.__name__} is shut down.")
 
     def __del__(self):
