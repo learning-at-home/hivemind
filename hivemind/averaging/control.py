@@ -144,6 +144,12 @@ class StepControl(MPFuture):
         self._trigger, self._cancel, self._shared_buffer = state["_trigger"], state["_cancel"], state["_shared_buffer"]
         self._data_for_gather, self._deadline, self._allow_retries = state["immutable_params"]
 
+    def __del__(self):
+        if not self.triggered:
+            logger.warning("Deleted an averaging StepControl, but the step was not triggered. This may cause other "
+                           "peers to fail an averaging round via TimeoutError.")
+        super().__del__()
+
     def cancel(self) -> bool:
         if self._trigger is not None:
             self._trigger.cancel()
