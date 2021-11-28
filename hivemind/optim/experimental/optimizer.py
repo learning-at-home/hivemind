@@ -35,7 +35,7 @@ class Optimizer(torch.optim.Optimizer):
     There are advanced options make training semi-asynchronous (delay_optimizer_step and delay_gradient_averaging)
     or even fully asynchronous (local_updates=True). However, these options require careful tuning.
 
-    :example:
+    :example: The Optimizer can be used as a drop-in replacement for your regular PyTorch Optimizer:
 
     >>> model = transformers.AutoModel("albert-xxlarge-v2")
     >>> dht = hivemind.DHT(initial_peers=INITIAL_PEERS, start=True)
