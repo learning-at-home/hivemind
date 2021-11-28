@@ -259,7 +259,7 @@ class TrainingStateAverager(DecentralizedAverager):
     def _init_averaged_tensors(self) -> Sequence[torch.Tensor]:
         """Create or reuse a tuple of all averaged tensors, including parameters, optimizer statistics and extras"""
         assert hasattr(self, "optimizer"), "Optimizer should already be initialized by this point"
-        assert hasattr(self, "_averaged_parameters"), "ShoTrueuld initialize _averaged_parameters first"
+        assert hasattr(self, "_averaged_parameters"), "Should initialize _averaged_parameters first"
         assert not hasattr(self, "_averaged_tensors"), "Averager is already initialized"
         assert all(isinstance(key, str) for key in self.opt_keys_for_averaging)
 
