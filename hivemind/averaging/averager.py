@@ -422,10 +422,13 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         await step.wait_for_trigger()
                     return group_info
                 except asyncio.CancelledError:
-                    await asyncio.wait({
-                        self._send_error_to_peer(peer_id, group_info.group_id, averaging_pb2.CANCELLED)
-                        for peer_id in group_info.peer_ids if peer_id != self.peer_id
-                    })
+                    await asyncio.wait(
+                        {
+                            self._send_error_to_peer(peer_id, group_info.group_id, averaging_pb2.CANCELLED)
+                            for peer_id in group_info.peer_ids
+                            if peer_id != self.peer_id
+                        }
+                    )
                     raise
 
             while not step.done():
