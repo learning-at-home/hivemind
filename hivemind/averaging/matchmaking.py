@@ -88,9 +88,11 @@ class Matchmaking:
     async def looking_for_group(self, step_control: StepControl):
         async with self.lock_looking_for_group:
             assert self.step_control is None
-            self.step_control = step_control
-            yield
-            self.step_control = None
+            try:
+                self.step_control = step_control
+                yield
+            finally:
+                self.step_control = None
 
     @property
     def is_looking_for_group(self):

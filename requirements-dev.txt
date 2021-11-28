@@ -4,6 +4,7 @@ pytest-asyncio
 pytest-cov
 tqdm
 scikit-learn
+torchvision
 black==21.6b0
 isort
 psutil

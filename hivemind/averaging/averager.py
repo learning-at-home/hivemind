@@ -35,6 +35,7 @@ from hivemind.proto import averaging_pb2
 from hivemind.utils import MPFuture, TensorDescriptor, get_logger
 from hivemind.utils.asyncio import (
     achain,
+    afirst,
     aiter_with_timeout,
     anext,
     as_aiter,
@@ -413,11 +414,28 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             step.attach(trigger, cancel)
             future_for_init.set_result((trigger, cancel))
 
+            async def find_peers_or_notify_cancel():
+                group_info = await self._matchmaking.look_for_group(step)
+                try:
+                    if not step.triggered:
+                        step.stage = AveragingStage.AWAITING_TRIGGER
+                        await step.wait_for_trigger()
+                    return group_info
+                except asyncio.CancelledError:
+                    await asyncio.wait(
+                        {
+                            self._send_error_to_peer(peer_id, group_info.group_id, averaging_pb2.CANCELLED)
+                            for peer_id in group_info.peer_ids
+                            if peer_id != self.peer_id
+                        }
+                    )
+                    raise
+
             while not step.done():
                 try:
                     self._pending_group_assembled.clear()
                     step.stage = AveragingStage.LOOKING_FOR_GROUP
-                    matchmaking_task = asyncio.create_task(self._matchmaking.look_for_group(step))
+                    matchmaking_task = asyncio.create_task(find_peers_or_notify_cancel())
                     check_cancel_task = asyncio.create_task(step.wait_for_cancel())
 
                     await asyncio.wait({matchmaking_task, check_cancel_task}, return_when=asyncio.FIRST_COMPLETED)
@@ -428,12 +446,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         check_cancel_task.cancel()
 
                     group_info = await matchmaking_task
+
                     if group_info is None:
                         raise AllreduceException("Averaging step failed: could not find a group.")
-
-                    if not step.triggered:
-                        step.stage = AveragingStage.AWAITING_TRIGGER
-                        await step.wait_for_trigger()
 
                     step.stage = AveragingStage.RUNNING_ALLREDUCE
 
@@ -477,6 +492,14 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         " Please report this to hivemind issues."
                     )
                 )
+
+    async def _send_error_to_peer(self, peer_id: PeerID, group_id: GroupID, code: averaging_pb2.MessageCode):
+        try:
+            error = averaging_pb2.AveragingData(group_id=group_id, code=code)
+            stub = type(self).get_stub(self._p2p, peer_id, namespace=self.prefix)
+            await afirst(await stub.rpc_aggregate_part(as_aiter(error)))
+        except Exception as e:
+            logger.debug(f"Caught {e} when sending error {averaging_pb2.MessageCode.Name(code)} to {peer_id}.")
 
     async def _run_allreduce(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
         """Run All-Reduce in a given group and update tensors in place, return gathered metadata"""
