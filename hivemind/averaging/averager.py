@@ -422,10 +422,11 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         await step.wait_for_trigger()
                     return group_info
                 except asyncio.CancelledError:
-                    return asyncio.wait(
+                    await asyncio.wait({
                         self._send_error_to_peer(peer_id, group_info.group_id, averaging_pb2.CANCELLED)
-                        for peer_id in group_info.peer_ids
-                    )
+                        for peer_id in group_info.peer_ids if peer_id != self.peer_id
+                    })
+                    raise
 
             while not step.done():
                 try:
@@ -490,8 +491,12 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 )
 
     async def _send_error_to_peer(self, peer_id: PeerID, group_id: GroupID, code: averaging_pb2.MessageCode):
-        error = averaging_pb2.AveragingData(group_id=group_id, code=code)
-        await afirst(await self._get_peer_stub(peer_id).rpc_aggregate_part(as_aiter(error)))
+        try:
+            error = averaging_pb2.AveragingData(group_id=group_id, code=code)
+            stub = type(self).get_stub(self._p2p, peer_id, namespace=self.prefix)
+            await afirst(await stub.rpc_aggregate_part(as_aiter(error)))
+        except Exception as e:
+            logger.debug(f"Caught {e} when sending error {averaging_pb2.MessageCode.Name(code)} to {peer_id}.")
 
     async def _run_allreduce(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
         """Run All-Reduce in a given group and update tensors in place, return gathered metadata"""

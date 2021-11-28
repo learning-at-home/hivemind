@@ -123,6 +123,7 @@ class TrainingStateAverager(DecentralizedAverager):
         self.finished_optimizer_step = threading.Event()
         self.finished_averaging_round = threading.Event()
         self.lock_optimizer = threading.Lock()
+        self.lock_averaging = threading.Lock()
         self.pending_updates = set()
 
         super().__init__(
@@ -509,23 +510,24 @@ class TrainingStateAverager(DecentralizedAverager):
                 self.finished_optimizer_step.set()
 
             if averaging_round:
-                if not self.reuse_tensors:
-                    self._load_local_tensors_into_averager_()
-                if self.delta_rule_averaging:
-                    # remember tensors before averaging, update by (new_averaged_tensors - old_averaged_tensors)
-                    with torch.no_grad(), self.get_tensors() as averaged_tensors:
-                        self._old_tensors = tuple(x.cpu().clone() for x in averaged_tensors)
+                with self.lock_averaging:
+                    if not self.reuse_tensors:
+                        self._load_local_tensors_into_averager_()
+                    if self.delta_rule_averaging:
+                        # remember tensors before averaging, update by (new_averaged_tensors - old_averaged_tensors)
+                        with torch.no_grad(), self.get_tensors() as averaged_tensors:
+                            self._old_tensors = tuple(x.cpu().clone() for x in averaged_tensors)
 
-                self.delay_before_averaging.update(task_size=1, interval=time.perf_counter() - start_time)
-                try:
-                    averaging_control.allow_allreduce()
-                    gathered = averaging_control.result(timeout=timeout)
-                    logger.log(self.status_loglevel, f"Averaged parameters with {len(gathered)} peers")
-                except BaseException as e:
-                    logger.log(self.status_loglevel, f"Averaging failed with {type(e)}")
-                    gathered = {}
+                    self.delay_before_averaging.update(task_size=1, interval=time.perf_counter() - start_time)
+                    try:
+                        averaging_control.allow_allreduce()
+                        gathered = averaging_control.result(timeout=timeout)
+                        logger.log(self.status_loglevel, f"Averaged parameters with {len(gathered)} peers")
+                    except BaseException as e:
+                        logger.log(self.status_loglevel, f"Averaging failed with {type(e)}")
+                        gathered = {}
 
-                self.finished_averaging_round.set()
+                    self.finished_averaging_round.set()
 
                 if self.sync_epoch_when_averaging:
                     old_epoch = self.local_epoch
@@ -588,6 +590,10 @@ class TrainingStateAverager(DecentralizedAverager):
                 for local_tensor, new_tensor, old_tensor in zip(local_tensors, averaged_tensors, self._old_tensors):
                     delta = torch.sub(new_tensor, old_tensor, out=old_tensor)  # using old tensors as buffers
                     local_tensor.add_(delta.to(device=local_tensor.device, dtype=local_tensor.dtype))
+
+    @property
+    def averaging_in_progress(self) -> bool:
+        return self.lock_averaging.locked()
 
     def get_current_state(self):
         """
