@@ -685,15 +685,15 @@ class Optimizer(torch.optim.Optimizer):
         return f"{self.__class__.__name__}(prefix={self.run_id}, epoch={self.local_epoch})"
 
     def shutdown(self):
-        logger.debug("Sending goodbye to peers...")
+        logger.log(self.status_loglevel, "Sending goodbye to peers...")
         self.tracker.shutdown(self.shutdown_timeout)
         self.state_averager.step(wait_for_delayed_updates=True)
         self._finish_background_averaging()
-        logger.debug("Shutting down averagers...")
+        logger.log(self.status_loglevel, "Shutting down averagers...")
         self.state_averager.shutdown()
         if self.use_gradient_averaging:
             self.grad_averager.shutdown()
-        logger.debug(f"{self.__class__.__name__} is shut down.")
+        logger.log(self.status_loglevel, f"{self.__class__.__name__} is shut down.")
 
     def __del__(self):
         if self._parent_pid == os.getpid() and self.is_alive():
