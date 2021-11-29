@@ -352,7 +352,7 @@ class Optimizer(torch.optim.Optimizer):
         :param closure: A closure that reevaluates the model and returns the loss.
         :param batch_size: optional override for batch_size_per_step from init.
         :param grad_scaler: if amp is enabled, this **must** be a hivemind-aware gradient scaler.
-        :note: this .step is more complex than normal pytorch optimizers in several key ways. See __init__ for details.
+        :note: this .step is different from normal pytorch optimizers in several key ways. See __init__ for details.
         """
         if grad_scaler is not None and not isinstance(grad_scaler, GradScaler):
             raise ValueError("hivemind.Optimizer requires a hivemind-aware gradient scaler (hivemind.GradScaler)")
