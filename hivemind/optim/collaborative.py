@@ -245,7 +245,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.averager.local_step = self.collaboration_state.optimizer_step
             logger.log(self.status_loglevel, f"Catching up with collaboration step {self.local_step}.")
 
-        if grad_scaler is not None and not grad_scaler.are_grads_finite(self.opt):
+        if grad_scaler is not None and not grad_scaler.are_grads_finite(self):
             logger.log(self.status_loglevel, "Encountered incorrect value in fp16 grads, resetting local gradients")
             self.local_samples_accumulated = self.local_steps_accumulated = 0
             self.reset_accumulated_grads_()
@@ -310,7 +310,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
 
             if grad_scaler is not None:
                 with grad_scaler.running_global_step():
-                    assert grad_scaler.step(self.opt)
+                    assert grad_scaler.step(self)
             else:
                 self.opt.step()
 
@@ -320,9 +320,13 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             self.averager.local_step = current_step + 1
             self.collaboration_state_updated.set()
             self.update_scheduler()
+
             if grad_scaler is not None:
                 with grad_scaler.running_global_step():
                     assert grad_scaler.update()
+
+            if not self.averager.client_mode:
+                self.averager.state_sharing_priority = self.local_step
 
         logger.log(self.status_loglevel, f"Optimizer step: done!")
 

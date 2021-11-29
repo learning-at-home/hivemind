@@ -83,7 +83,7 @@ class ProgressTracker(threading.Thread):
         *,
         client_mode: Optional[bool] = None,
         min_refresh_period: float = 0.5,
-        max_refresh_period: float = 30,
+        max_refresh_period: float = 10,
         default_refresh_period: float = 3,
         expected_drift_peers: float = 3,
         expected_drift_rate: float = 0.2,
@@ -114,7 +114,7 @@ class ProgressTracker(threading.Thread):
         metadata, _expiration = self.dht.get(self.training_progress_key, latest=True) or (None, -float("inf"))
         self.global_progress = self._parse_swarm_progress_data(metadata)
         self.lock_global_progress, self.global_state_updated = threading.Lock(), threading.Event()
-        self.should_report_progress = threading.Event()
+        self.should_report_progress, self.fetched_global_progress_this_epoch = threading.Event(), threading.Event()
         self.shutdown_triggered, self.shutdown_complete = threading.Event(), threading.Event()
         super().__init__(name=f"{self.__class__.__name__}({self.prefix})", daemon=daemon)
         if start:
@@ -150,15 +150,20 @@ class ProgressTracker(threading.Thread):
             client_mode=self.client_mode,
         )
 
-    def report_local_progress(self, local_epoch: int, samples_accumulated: int):
+    def report_local_progress(self, local_epoch: int, samples_accumulated: int, update_global_samples: bool = True):
         """Update the number of locally accumulated samples and notify to other peers about this."""
         extra_samples = samples_accumulated - self.local_progress.samples_accumulated
+        if update_global_samples and local_epoch == self.local_progress.epoch == self.global_progress.epoch:
+            self.global_progress.samples_accumulated += extra_samples
+            # note: the above line can decrease the number of samples, e.g. if forced to reset due to overflow
+
         if extra_samples > 0:
             self.performance_ema.update(task_size=extra_samples)
             logger.debug(f"Updated performance EMA: {self.performance_ema.samples_per_second:.5f}")
         else:
             logger.debug("Resetting performance timestamp to current time (progress was reset)")
             self.performance_ema.reset_timer()
+
         self.local_progress = self._get_local_progress(local_epoch, samples_accumulated)
         self.should_report_progress.set()
 
@@ -178,6 +183,7 @@ class ProgressTracker(threading.Thread):
             self.global_progress.samples_accumulated = 0
             self.global_progress.eta_next_epoch = float("inf")
         self.report_local_progress(new_epoch, samples_accumulated=0)
+        self.fetched_global_progress_this_epoch.clear()
         return new_epoch
 
     def run(self):
@@ -189,6 +195,7 @@ class ProgressTracker(threading.Thread):
     async def _progress_reporter(self):
         """Periodically publish metadata and the current number of samples accumulated towards the next epoch"""
         last_report_time = -float("inf")
+        store_task = None
         try:
             while not self.shutdown_triggered.is_set():
                 wait_timeout = max(0.0, last_report_time + self.metadata_expiration - get_dht_time())
@@ -203,21 +210,42 @@ class ProgressTracker(threading.Thread):
                 local_progress = self.local_progress
                 last_report_time = get_dht_time()
 
-                await self.dht.store(
-                    key=self.training_progress_key,
-                    subkey=self._local_public_key,
-                    value=local_progress.dict(),
-                    expiration_time=last_report_time + self.metadata_expiration,
-                    return_future=True,
+                store_task = asyncio.create_task(
+                    asyncio.wait_for(
+                        self.dht.store(
+                            key=self.training_progress_key,
+                            subkey=self._local_public_key,
+                            value=local_progress.dict(),
+                            expiration_time=last_report_time + self.metadata_expiration,
+                            return_future=True,
+                        ),
+                        timeout=self.metadata_expiration,
+                    )
                 )
         finally:
             logger.log(self.status_loglevel, f"No longer reporting progress for {self.prefix}.")
+            if store_task is not None:
+                store_task.cancel()
 
     async def _progress_fetcher(self):
         """
         Periodically check the training progress from all peers. Trigger update after target_batch_size total samples
         """
         loop = asyncio.get_event_loop()
+        shutdown_checker = asyncio.create_task(
+            asyncio.wait_for(loop.run_in_executor(None, self.shutdown_triggered.wait), None)
+        )
+
+        async def _fetch_progress_unless_shutdown_triggered():
+            """Fetch progress, avoid deadlocks if DHT was shut down before this get finished."""
+            getter = asyncio.create_task(
+                asyncio.wait_for(self.dht.get(self.training_progress_key, latest=True, return_future=True), None)
+            )
+            await asyncio.wait({getter, shutdown_checker}, return_when=asyncio.FIRST_COMPLETED)
+            if self.shutdown_triggered.is_set():
+                return
+            return await getter
+
         try:
             while not self.shutdown_triggered.is_set():
                 time_to_next_update = max(0.0, self.global_progress.next_fetch_time - get_dht_time())
@@ -229,9 +257,13 @@ class ProgressTracker(threading.Thread):
                     continue
 
                 async with enter_asynchronously(self.lock_global_progress):
-                    progress_entry = await self.dht.get(self.training_progress_key, latest=True, return_future=True)
-                    metadata = progress_entry.value if isinstance(progress_entry, ValueWithExpiration) else None
+                    maybe_metadata = await _fetch_progress_unless_shutdown_triggered()
+                    if self.shutdown_triggered.is_set():
+                        break
+                    metadata = maybe_metadata.value if isinstance(maybe_metadata, ValueWithExpiration) else None
                     self.global_progress = self._parse_swarm_progress_data(metadata)
+                    self.fetched_global_progress_this_epoch.set()
+
         finally:
             logger.log(self.status_loglevel, f"No longer fetching {self.training_progress_key}.")
 
@@ -294,7 +326,7 @@ class ProgressTracker(threading.Thread):
         )
         logger.log(
             self.status_loglevel,
-            f"{self.prefix} accumulated {total_samples_accumulated} samples for iteration #{global_epoch} from "
+            f"{self.prefix} accumulated {total_samples_accumulated} samples for epoch #{global_epoch} from "
             f"{num_peers} peers. ETA {estimated_time_to_next_epoch:.2f} sec (refresh in {time_to_next_fetch:.2f} sec)",
         )
         return GlobalTrainingProgress(
@@ -307,15 +339,16 @@ class ProgressTracker(threading.Thread):
             next_fetch_time=current_time + time_to_next_fetch,
         )
 
-    def shutdown(self):
+    def shutdown(self, timeout: Optional[float] = None):
         """Permanently disable all tracking activity"""
         self.shutdown_triggered.set()
         self.should_report_progress.set()
         self.global_state_updated.set()
-        self.shutdown_complete.wait()
+        self.shutdown_complete.wait(timeout)
         self.dht.store(
             self.training_progress_key,
             subkey=self._local_public_key,
             value=None,
             expiration_time=get_dht_time() + self.metadata_expiration,
+            return_future=True,
         )

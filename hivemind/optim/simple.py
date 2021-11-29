@@ -86,6 +86,10 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
             if self.local_step % self.averaging_step_period == 0:
                 self.update_event.set()
             self.averager.pending_updates_done.wait()
+
+            if not self.averager.client_mode:
+                self.averager.state_sharing_priority = get_dht_time()
+
             return loss
         finally:
             self.lock_parameters.acquire()
