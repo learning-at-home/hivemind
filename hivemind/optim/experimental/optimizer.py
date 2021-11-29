@@ -40,7 +40,7 @@ class Optimizer(torch.optim.Optimizer):
 
     >>> model = transformers.AutoModel("albert-xxlarge-v2")
     >>> dht = hivemind.DHT(initial_peers=INITIAL_PEERS, start=True)
-    >>> opt = hivemind.Optimizer(dht, run_id="run_42", params=model.parameters(),
+    >>> opt = hivemind.Optimizer(dht=dht, run_id="run_42", params=model.parameters(),
     >>>                          optimizer=lambda params: torch.optim.Adam(params, **other_options),
     >>>                          target_batch_size=4096, batch_size_per_step=4)
     >>> while True:
