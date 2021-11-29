@@ -178,7 +178,7 @@ opt.load_state_from_peers()
 
 Congrats, you've just started a pocket-sized experiment with decentralized deep learning!
 
-However, this is just the basics of what hivemind can do. In [this example](https://github.com/learning-at-home/hivemind/tree/master/examples/albert),
+However, this is only the basics of what hivemind can do. In [this example](https://github.com/learning-at-home/hivemind/tree/master/examples/albert),
 we show how to use a more advanced version of DecentralizedOptimizer to collaboratively train a large Transformer over the internet.
 
 If you want to learn more about each individual component,
