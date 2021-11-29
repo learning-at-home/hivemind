@@ -67,7 +67,7 @@ opt = hivemind.Optimizer(
 # Note: if you intend to use GPU, switch to it only after the decentralized optimizer is created
 with tqdm() as progressbar:
     while True:
-        for x_batch, y_batch in torch.utils.data.DataLoader(trainset, shuffle=True, batch_size=4):
+        for x_batch, y_batch in torch.utils.data.DataLoader(trainset, shuffle=True, batch_size=32):
             opt.zero_grad()
             loss = F.cross_entropy(model(x_batch), y_batch)
             loss.backward()
