@@ -29,9 +29,9 @@
 
 .. raw:: html
 
-  CollaborativeOptimizer is a legacy version of hivemind.Optimizer. __For new projects, please use hivemind.Optimizer__.
+  CollaborativeOptimizer is a legacy version of hivemind.Optimizer. <b>For new projects please use hivemind.Optimizer</b>.
   Currently, hivemind.Optimizer supports all the features of CollaborativeOptimizer and then some.
-  CollaborativeOptimizer will still be supported for awhile, but will eventually be deprecated.
+  CollaborativeOptimizer will still be supported for a while, but eventually it will be deprecated.
   <br><br>
 
 
