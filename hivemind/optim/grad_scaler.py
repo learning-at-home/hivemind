@@ -21,10 +21,14 @@ class GradScaler(TorchGradScaler):
     :note: if not using reuse_grad_buffers=True, one can and *should* train normally without this class, e.g. using
       standard PyTorch AMP or Apex. This custom GradScaler is more memory-efficient, but requires custom training code.
 
-    GradScaler removes several:
+    hivemind.GradScaler makes 3 modifications to the regular PyTorch AMP:
+
     - bypass .unscale_ and .update calls in order to accumulate gradients over several steps
     - limit increasing gradient scale to only immediately after global optimizer steps
-    - allow training with some or all master parameters in fp16
+    - allow training with some or master parameters in float16
+
+    :note: The above modiffications will be enabled automatically. One can (and should) use hivemind.GradScaler exactly
+      as regular ``torch.amp.GradScaler``.
     """
 
     def __init__(self, *args, **kwargs):
