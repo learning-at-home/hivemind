@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 
 class Optimizer(torch.optim.Optimizer):
     """
-    Hivemind Optimizer wraps your regular PyTorch Optimizer for training collaboratively with peers.
+    hivemind.Optimizer wraps your regular PyTorch Optimizer for training collaboratively with peers.
 
     By default, Optimizer is configured to be exactly **equivalent to synchronous training** with target_batch_size.
     There are advanced options make training semi-asynchronous (delay_optimizer_step and delay_gradient_averaging)
