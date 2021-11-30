@@ -1,0 +1,35 @@
+name: Benchmarks
+
+on: [ push, pull_request ]
+
+
+jobs:
+  run_benchmarks:
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: Key-v1-3.9-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Build hivemind
+        run: |
+          pip install .
+      - name: Benchmark
+        run: |
+          cd benchmarks
+          python benchmark_throughput.py --preset minimalistic
+          python benchmark_tensor_compression.py
+          python benchmark_dht.py
