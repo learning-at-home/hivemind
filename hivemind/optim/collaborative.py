@@ -229,7 +229,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         :note: this .step is different from normal pytorch optimizers in several key ways. See __init__ for details.
         """
         if grad_scaler is not None and not isinstance(grad_scaler, HivemindGradScaler):
-            raise ValueError("CollaborativeOptimizer requires a hivemind-aware gradient scaler (HivemindGradScaler).")
+            raise ValueError("CollaborativeOptimizer requires a hivemind-aware gradient scaler (HivemindGradScaler)")
         if self.batch_size_per_step is None:
             if batch_size is None:
                 raise ValueError("Please either set batch_size_per_step parameter at init or when calling .step")
@@ -238,12 +238,12 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
         batch_size = batch_size if batch_size is not None else self.batch_size_per_step
 
         if not self.is_synchronized and not self.is_within_tolerance:
-            logger.log(self.status_loglevel, "Peer is out of sync.")
+            logger.log(self.status_loglevel, "Peer is out of sync")
             self.load_state_from_peers()
             return
         elif not self.is_synchronized and self.is_within_tolerance:
             self.averager.local_step = self.collaboration_state.optimizer_step
-            logger.log(self.status_loglevel, f"Catching up with collaboration step {self.local_step}.")
+            logger.log(self.status_loglevel, f"Catching up with collaboration step {self.local_step}")
 
         if grad_scaler is not None and not grad_scaler.are_grads_finite(self):
             logger.log(self.status_loglevel, "Encountered incorrect value in fp16 grads, resetting local gradients")
@@ -300,12 +300,12 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                                 logger.warning(f"Peer {peer} sent malformed data about current step: {peer_step}")
 
                 except BaseException as e:
-                    logger.log(self.status_loglevel, f"Skipped averaging: averaging round failed with {repr(e)}.")
+                    logger.log(self.status_loglevel, f"Skipped averaging: averaging round failed with {repr(e)}")
 
             else:
                 logger.log(
                     self.status_loglevel,
-                    f"Skipped averaging: collaboration consists of " f"{self.collaboration_state.num_peers} peer(s).",
+                    f"Skipped averaging: collaboration consists of " f"{self.collaboration_state.num_peers} peer(s)",
                 )
 
             if grad_scaler is not None:
@@ -361,7 +361,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
                         else:
                             logger.warning(f"Peer {peer} sent malformed data about current step: {peer_step}")
             except BaseException as e:
-                logger.log(self.status_loglevel, f"Skipped averaging: averaging round failed with {repr(e)}.")
+                logger.log(self.status_loglevel, f"Skipped averaging: averaging round failed with {repr(e)}")
 
             self.collaboration_state.register_step(current_step + 1)
             self.averager.local_step = current_step + 1
@@ -548,7 +548,7 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
             value=None,
             expiration_time=get_dht_time() + self.metadata_expiration,
         )
-        logger.debug(f"{self.__class__.__name__} is shut down.")
+        logger.debug(f"{self.__class__.__name__} is shut down")
 
     def __del__(self):
         self.shutdown()
