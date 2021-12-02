@@ -64,7 +64,7 @@ class Optimizer(torch.optim.Optimizer):
       Like in PyTorch LR Scheduler, **epoch does not necessarily correspond to a full pass over the training data.**
       At the end of epoch, peers perform synchronous actions such as averaging gradients for a global optimizer update,
       updating the learning rate scheduler or simply averaging parameters (if using local updates).
-      The purpose of this is to ensure that changing the number of peers does not reqire changing hyperparameters.
+      The purpose of this is to ensure that changing the number of peers does not require changing hyperparameters.
       For instance, if the number of peers doubles, they will run all-reduce more frequently to adjust for faster training.
 
     :Configuration guide: This guide will help you set up your first collaborative training run. It covers the most
