@@ -59,13 +59,13 @@ class Optimizer(torch.optim.Optimizer):
     ``optimizer.local_epoch`` (and not the number ot calls to opt.step). Otherwise, peers that joined training late
     may end up having different learning rates. To do so automatically, specify ``scheduler=...`` parameter below.
 
-    :Note: hivemind.Optimizer uses the term ``epoch`` to describe intervals between synchronizations. One epoch
+    :What is an epoch?: Optimizer uses the term ``epoch`` to describe intervals between synchronizations. One epoch
       coresponds to processing certain number of training samples (``target_batch_size``) in total across all peers.
       Like in PyTorch LR Scheduler, **epoch does not necessarily correspond to a full pass over the training data.**
       At the end of epoch, peers perform synchronous actions such as averaging gradients for a global optimizer update,
-      (or just averaging parameters if using local updates). This ensures that adding or removing peers does not affect
-      per-epoch convergence. For instance, if the number of peers doubles, they will run all-reduce more frequently
-      to adjust for faster training.
+      updating the learning rate scheduler or simply averaging parameters (if using local updates).
+      The purpose of this is to ensure that changing the number of peers does not reqire changing hyperparameters.
+      For instance, if the number of peers doubles, they will run all-reduce more frequently to adjust for faster training.
 
     :Configuration guide: This guide will help you set up your first collaborative training run. It covers the most
       important basic options, but ignores features that require significant changes to the training code.
