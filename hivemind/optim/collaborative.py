@@ -58,8 +58,8 @@ class TrainingProgressSchema(BaseModel):
 class CollaborativeOptimizer(DecentralizedOptimizerBase):
     """
     :note: **For new projects please use hivemind.Optimizer**. CollaborativeOptimizer is an older version of that.
-      Currently, hivemind.Optimizer supports all the features of CollaborativeOptimizer and then some.
-      CollaborativeOptimizer will still be supported for a while, but eventually it will be deprecated.
+      Currently, hivemind.Optimizer supports all the features of CollaborativeOptimizer and a many advanced ones.
+      CollaborativeOptimizer will still be supported for a while, but it will be deprecated eventually.
 
     An optimizer that performs model updates after collaboratively accumulating a target (large) batch size across peers
 
