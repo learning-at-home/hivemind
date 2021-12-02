@@ -40,9 +40,8 @@ class Optimizer(torch.optim.Optimizer):
 
     >>> model = transformers.AutoModel("albert-xxlarge-v2")
     >>> dht = hivemind.DHT(initial_peers=INITIAL_PEERS, start=True)
-    >>> opt = hivemind.Optimizer(dht=dht, run_id="run_42", params=model.parameters(),
-    >>>                          optimizer=lambda params: torch.optim.Adam(params, **other_options),
-    >>>                          target_batch_size=4096, batch_size_per_step=4)
+    >>> opt = hivemind.Optimizer(dht=dht, run_id="run_42", batch_size_per_step=4, target_batch_size=4096,
+    >>>                          params=model.parameters(), optimizer=lambda params: torch.optim.Adam(params))
     >>> while True:
     >>>     loss = compute_loss_on_batch(model, batch_size=4)
     >>>     opt.zero_grad()
@@ -67,8 +66,6 @@ class Optimizer(torch.optim.Optimizer):
       (or just averaging parameters if using local updates). This ensures that adding or removing peers does not affect
       per-epoch convergence. For instance, if the number of peers doubles, they will run all-reduce more frequently
       to adjust for faster training.
-
-
 
     :Configuration guide: This guide will help you set up your first collaborative training run. It covers the most
       important basic options, but ignores features that require significant changes to the training code.
