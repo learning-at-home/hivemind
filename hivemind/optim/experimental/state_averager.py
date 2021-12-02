@@ -162,7 +162,7 @@ class TrainingStateAverager(DecentralizedAverager):
         """Create a new tensor for averaging or reuse the existing one"""
         if self.reuse_tensors and not force_copy:
             if source_tensor.device != torch.device("cpu"):
-                raise ValueError("reuse_tensors is only supported if all averaged tensors are on CPU.")
+                raise ValueError("reuse_tensors is only supported if all averaged tensors are on CPU")
             if not source_tensor.is_shared():
                 source_tensor.share_memory_()
             return source_tensor
@@ -369,7 +369,7 @@ class TrainingStateAverager(DecentralizedAverager):
                 # the possibly different gradients when wait_for_trigger has finished).
                 raise ValueError(
                     "wait_for_trigger is a low-level option that requires manual gradient manipulation. "
-                    "If you know what you're doing, please refer to the comments in the source code for details."
+                    "If you know what you're doing, please refer to the comments in the source code for details"
                 )
         output = None
 
@@ -578,7 +578,7 @@ class TrainingStateAverager(DecentralizedAverager):
         """Copy averaged tensors into their respective local tensors"""
         assert not self.reuse_tensors, "No need to update averaged tensors since they reuse the same memory"
         if self.delta_rule_averaging and self._old_tensors is None:
-            logger.warning("Using delta_rule_averaging, but old tensors were not found. Averaging may have failed.")
+            logger.warning("Using delta_rule_averaging, but old tensors were not found. Averaging may have failed")
         with self.get_tensors() as averaged_tensors:
             local_tensors = list(self._local_tensors())
             assert len(local_tensors) == len(averaged_tensors), "Tensor structure changed during training"
@@ -646,7 +646,7 @@ class TrainingStateAverager(DecentralizedAverager):
         loaded_parameters_and_extras = flat_tensors[:num_parameters_and_extras]
         loaded_opt_tensors = flat_tensors[num_parameters_and_extras:]
         if num_parameters_and_extras != len(loaded_parameters_and_extras):
-            logger.error("Failed to load state from peer, received parameters, extras or metadata.")
+            logger.error("Failed to load state from peer, received parameters, extras or metadata")
             return
 
         with torch.no_grad(), self.lock_averaged_tensors:
