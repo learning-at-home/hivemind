@@ -60,7 +60,7 @@ class Optimizer(torch.optim.Optimizer):
     may end up having different learning rates. To do so automatically, specify ``scheduler=...`` parameter below.
 
     :Note: hivemind.Optimizer uses the term ``epoch`` to describe intervals between synchronizations. One epoch
-      coresponds to processing certain number of training samples (`target_batch_size`) in total across all peers.
+      coresponds to processing certain number of training samples (``target_batch_size``) in total across all peers.
       Like in PyTorch LR Scheduler, **epoch does not necessarily correspond to a full pass over the training data.**
       At the end of epoch, peers perform synchronous actions such as averaging gradients for a global optimizer update,
       (or just averaging parameters if using local updates). This ensures that adding or removing peers does not affect
