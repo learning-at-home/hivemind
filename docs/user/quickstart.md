@@ -142,7 +142,7 @@ opt = hivemind.Optimizer(
 
 opt.load_state_from_peers()
 
-# Note: if you intend to use GPU, switch to it only after the decentralized optimizer is created
+# Note: if you intend to use GPU, switch to it only after the optimizer is created
 with tqdm() as progressbar:
     while True:
         for x_batch, y_batch in torch.utils.data.DataLoader(trainset, shuffle=True, batch_size=32):
@@ -183,7 +183,7 @@ we show how to use a more advanced version of DecentralizedOptimizer to collabor
 
 If you want to learn more about each individual component,
 - Learn how to use `hivemind.DHT` using this basic [DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html),
-- Learn the underlying math behind DecentralizedOptimizer in
-  [(Li et al. 2020)](https://arxiv.org/abs/2005.00124) and [(Ryabinin et al. 2021)](https://arxiv.org/abs/2103.03239).
+- Learn the underlying math behind hivemind.Optimizer in [Diskin et al., (2021)](https://arxiv.org/abs/2106.10207), 
+  [Li et al. (2020)](https://arxiv.org/abs/2005.00124) and [Ryabinin et al. (2021)](https://arxiv.org/abs/2103.03239).
 - Read about setting up Mixture-of-Experts training in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
  
