@@ -468,7 +468,7 @@ class Optimizer(torch.optim.Optimizer):
                 averaging_opts=dict(timeout=self.averaging_timeout) if should_average_state else None,
             )
 
-            if not should_average_state and self.scheduled_state is not None and not self.scheduled_state.triggered:
+            if not should_average_state and self.scheduled_state is not None and not self.scheduled_state.done():
                 self.scheduled_state.cancel()
             self.scheduled_state = None
 
