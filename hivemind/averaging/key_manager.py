@@ -34,7 +34,7 @@ class GroupKeyManager:
     ):
         assert all(bit in "01" for bit in initial_group_bits)
         if target_group_size is not None and not is_power_of_two(target_group_size):
-            logger.warning("It is recommended to set target_group_size to a power of 2.")
+            logger.warning("It is recommended to set target_group_size to a power of 2")
 
         self.dht, self.prefix, self.group_bits = dht, prefix, initial_group_bits
         self.target_group_size = target_group_size
@@ -80,7 +80,7 @@ class GroupKeyManager:
         assert is_valid_group(group_key), f"Group key {group_key} is invalid, must follow {GROUP_PATTERN}"
         result = await self.dht.get(group_key, latest=True, return_future=True)
         if result is None or not isinstance(result.value, dict):
-            logger.debug(f"Allreduce group not found: {group_key}, creating new group.")
+            logger.debug(f"Allreduce group not found: {group_key}, creating new group")
             return []
         averagers = []
         for key, looking_for_group in result.value.items():

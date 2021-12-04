@@ -65,6 +65,9 @@ class CompressionBase(ABC):
         """Estimate the compression ratio without doing the actual compression; lower ratio = better compression"""
         ...
 
+    def __repr__(self):
+        return f"hivemind.{self.__class__.__name__}()"
+
 
 class NoCompression(CompressionBase):
     """A dummy compression strategy that preserves the original tensor as is."""
