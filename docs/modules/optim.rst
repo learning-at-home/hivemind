@@ -3,7 +3,10 @@
 
 .. raw:: html
 
-  This module contains decentralized optimizers that wrap regular pytorch optimizers to collaboratively train a shared model. Depending on the exact type, optimizer may average model parameters with peers, exchange gradients, or follow a more complicated distributed training strategy.
+  This module contains decentralized optimizers that wrap your regular PyTorch Optimizer to train with peers.
+  Depending on the exact configuration, Optimizer may perform large synchronous updates equivalent,
+  or perform asynchrnous local updates and average model parameters.
+
   <br><br>
 
 .. automodule:: hivemind.optim.experimental.optimizer
@@ -13,7 +16,7 @@
 ----------------------
 
 .. autoclass:: Optimizer
-   :members: step, zero_grad, load_state_from_peers, param_groups, shutdown
+   :members: step, local_epoch, zero_grad, load_state_from_peers, param_groups, shutdown
    :member-order: bysource
 
 .. currentmodule:: hivemind.optim.grad_scaler
@@ -23,13 +26,6 @@
 
 **CollaborativeOptimizer**
 --------------------------
-
-.. raw:: html
-
-  CollaborativeOptimizer is a legacy version of hivemind.Optimizer. **For new projects, please use hivemind.Optimizer.**
-  Currently, hivemind.Optimizer supports all the features of CollaborativeOptimizer and then some.
-  CollaborativeOptimizer will still be supported for awhile, but will eventually be deprecated.
-  <br><br>
 
 
 .. automodule:: hivemind.optim.collaborative
