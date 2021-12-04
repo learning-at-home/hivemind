@@ -29,7 +29,7 @@ def main():
                         help="specify the exact list of expert uids to create. Use either this or num_experts"
                              " and expert_pattern, not both")
     parser.add_argument('--expert_cls', type=str, default='ffn', required=False,
-                        help="expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop'.")
+                        help="expert type from test_utils.layers, e.g. 'ffn', 'transformer', 'det_dropout' or 'nop'")
     parser.add_argument('--hidden_dim', type=int, default=1024, required=False, help='main dimension for expert_cls')
 
     parser.add_argument('--num_handlers', type=int, default=None, required=False,

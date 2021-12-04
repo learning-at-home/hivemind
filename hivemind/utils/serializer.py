@@ -35,7 +35,7 @@ class MSGPackSerializer(SerializerBase):
                 getattr(wrapped_type, "unpackb", None)
             ), f"Every ext_type must have 2 methods: packb(self) -> bytes and classmethod unpackb(cls, bytes)"
             if type_code in cls._ext_type_codes:
-                logger.warning(f"{cls.__name__}: type {type_code} is already registered, overwriting.")
+                logger.warning(f"{cls.__name__}: type {type_code} is already registered, overwriting")
             cls._ext_type_codes[type_code], cls._ext_types[wrapped_type] = wrapped_type, type_code
             return wrapped_type
 
@@ -60,7 +60,7 @@ class MSGPackSerializer(SerializerBase):
         elif type_code == cls._TUPLE_EXT_TYPE_CODE:
             return tuple(msgpack.unpackb(data, ext_hook=cls._decode_ext_types, raw=False))
 
-        logger.warning(f"Unknown ExtType code: {type_code}, leaving it as is.")
+        logger.warning(f"Unknown ExtType code: {type_code}, leaving it as is")
         return data
 
     @classmethod
