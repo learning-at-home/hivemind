@@ -294,7 +294,7 @@ class AllReduceRunner(ServicerBase):
             logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
             for peer_id, mode in zip(self.ordered_peer_ids, self.modes):
                 if peer_id != self.peer_id and mode != AveragingMode.CLIENT:
-                    pending_tasks.add(asyncio.ensure_future(self._send_error_to_peer(peer_id, code)))
+                    pending_tasks.add(asyncio.create_task(self._send_error_to_peer(peer_id, code)))
 
         if not self._future.done():
             if cancel:
