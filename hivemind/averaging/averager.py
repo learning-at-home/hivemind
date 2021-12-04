@@ -468,7 +468,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     MatchmakingException,
                     AssertionError,
                     StopAsyncIteration,
-                    GeneratorExit,
                     asyncio.CancelledError,
                     asyncio.InvalidStateError,
                     P2PHandlerError,
