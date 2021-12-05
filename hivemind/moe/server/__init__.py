@@ -333,7 +333,7 @@ def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[hivemind.End
         if runner.is_alive():
             logger.info("Server failed to shutdown gracefully, terminating it the hard way...")
             runner.kill()
-            logger.info("Server terminated.")
+            logger.info("Server terminated")
 
 
 def _server_runner(pipe, *args, **kwargs):
@@ -353,4 +353,4 @@ def _server_runner(pipe, *args, **kwargs):
         logger.info("Shutting down server...")
         server.shutdown()
         server.join()
-        logger.info("Server shut down.")
+        logger.info("Server shut down")

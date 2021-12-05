@@ -202,10 +202,10 @@ class ProgressTracker(threading.Thread):
                 logger.debug(f"Will report progress again in {wait_timeout} seconds or on user command")
                 await asyncio.get_event_loop().run_in_executor(None, self.should_report_progress.wait, wait_timeout)
                 if self.should_report_progress.is_set():
-                    logger.debug(f"Progress update triggered by report_local_progress.")
+                    logger.debug(f"Progress update triggered by report_local_progress")
                     self.should_report_progress.clear()
                 else:
-                    logger.debug(f"Progress update triggered by metadata_expiration.")
+                    logger.debug(f"Progress update triggered by metadata_expiration")
 
                 local_progress = self.local_progress
                 last_report_time = get_dht_time()
@@ -223,7 +223,7 @@ class ProgressTracker(threading.Thread):
                     )
                 )
         finally:
-            logger.log(self.status_loglevel, f"No longer reporting progress for {self.prefix}.")
+            logger.log(self.status_loglevel, f"No longer reporting progress for {self.prefix}")
             if store_task is not None:
                 store_task.cancel()
 
@@ -265,7 +265,7 @@ class ProgressTracker(threading.Thread):
                     self.fetched_global_progress_this_epoch.set()
 
         finally:
-            logger.log(self.status_loglevel, f"No longer fetching {self.training_progress_key}.")
+            logger.log(self.status_loglevel, f"No longer fetching {self.training_progress_key}")
 
     def _parse_swarm_progress_data(self, metadata: TrainingProgressSchema) -> GlobalTrainingProgress:
         """Read performance statistics reported by peers, estimate progress towards next batch"""

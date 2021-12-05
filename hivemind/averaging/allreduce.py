@@ -245,7 +245,7 @@ class AllReduceRunner(ServicerBase):
         else:
             error_code = averaging_pb2.MessageCode.Name(request.code)
             logger.debug(f"{self} - peer {context.remote_id} sent {error_code}, allreduce cannot continue")
-            self.finalize(exception=AllreduceException(f"peer {context.remote_id} sent {error_code}."))
+            self.finalize(exception=AllreduceException(f"Peer {context.remote_id} sent {error_code}"))
             yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
     def _check_reasons_to_reject(self, request: averaging_pb2.AveragingData) -> Optional[averaging_pb2.AveragingData]:

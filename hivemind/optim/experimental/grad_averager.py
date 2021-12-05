@@ -119,7 +119,7 @@ class GradientAverager(DecentralizedAverager):
         if self._accumulators_used_in_step and self.warn:
             logger.warning(
                 "[warn=True] Gradient accumulators were not reset since the last averaging round. Please "
-                "call .reset_accumulated_grads_ after every step or use .step(reset_accumulators=True)."
+                "call .reset_accumulated_grads_ after every step or use .step(reset_accumulators=True)"
             )
             self._accumulators_used_in_step = False  # warn once per round
         if self._anchor_batch_size is None:
@@ -168,12 +168,12 @@ class GradientAverager(DecentralizedAverager):
         if control is None:
             control = self.schedule_step(timeout=timeout, **kwargs)
         elif len(kwargs) > 0:
-            raise RuntimeError(f"Averaging with a pre-scheduled group, parameters {kwargs} will have no effect.")
-        assert not control.triggered, f"This {type(control)} instance was already used."
+            raise RuntimeError(f"Averaging with a pre-scheduled group, parameters {kwargs} will have no effect")
+        assert not control.triggered, f"This {type(control)} instance was already used"
         if self._new_averaged_grads and self.warn:
             logger.warning(
-                "[warn=True] Starting new averaging round, but previous round results were not used."
-                "This may be a sign of incorrect optimizer behavior."
+                "[warn=True] Starting new averaging round, but previous round results were not used. "
+                "This may be a sign of incorrect optimizer behavior"
             )
 
         self.load_accumulators_into_averager_()

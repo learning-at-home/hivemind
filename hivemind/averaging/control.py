@@ -84,7 +84,7 @@ class StepControl(MPFuture):
         if self.began_allreduce:
             logger.warning("Changing scheduled time has no effect after all-reduce has already started")
         if scheduled_time >= self.deadline:
-            logger.warning("Changing scheduled time to after deadline, averaging will likely fail due to timeout.")
+            logger.warning("Changing scheduled time to after deadline, averaging will likely fail due to timeout")
         struct.pack_into("d", self._shared_buffer[StepControl._SCHEDULED_TIME].numpy().data, 0, float(scheduled_time))
 
     @property

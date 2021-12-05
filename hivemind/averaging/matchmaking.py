@@ -384,7 +384,7 @@ class Matchmaking:
             for peer_id in ordered_peer_ids
         )
 
-        logger.debug(f"{self.peer_id} - assembled group of {len(ordered_peer_ids)} peers.")
+        logger.debug(f"{self.peer_id} - assembled group of {len(ordered_peer_ids)} peers")
         group_info = GroupInfo(group_id, tuple(ordered_peer_ids), gathered)
         await self.group_key_manager.update_key_on_group_assembled(group_info, is_leader=True)
         self.assembled_group.set_result(group_info)
@@ -401,7 +401,7 @@ class Matchmaking:
         assert self.peer_id in ordered_peer_ids, "Leader sent us group_peer_ids that does not contain us!"
         assert len(ordered_peer_ids) == len(msg.gathered)
 
-        logger.debug(f"{self.peer_id} - follower assembled group with leader {leader}.")
+        logger.debug(f"{self.peer_id} - follower assembled group with leader {leader}")
         group_info = GroupInfo(group_id, tuple(ordered_peer_ids), tuple(msg.gathered))
         await self.group_key_manager.update_key_on_group_assembled(group_info)
         self.assembled_group.set_result(group_info)

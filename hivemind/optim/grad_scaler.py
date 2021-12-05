@@ -63,7 +63,7 @@ class GradScaler(TorchGradScaler):
         if self._is_running_global_step:
             with self._lock:
                 if self._is_ready_to_update:
-                    logger.warning("Please call grad_scaler.update() after each step.")
+                    logger.warning("Please call grad_scaler.update() after each step")
                 assert not isinstance(optimizer, (hivemind.Optimizer, hivemind.DecentralizedOptimizerBase))
                 assert (
                     self._per_optimizer_states[id(optimizer)]["stage"] == OptState.UNSCALED

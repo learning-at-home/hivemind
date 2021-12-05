@@ -15,6 +15,9 @@ if _env_colors is not None:
 else:
     use_colors = sys.stderr.isatty()
 
+_env_log_caller = os.getenv("HIVEMIND_ALWAYS_LOG_CALLER")
+always_log_caller = _env_log_caller is not None and _env_log_caller.lower() == "true"
+
 
 class HandlerMode(Enum):
     NOWHERE = 0
@@ -65,8 +68,12 @@ class CustomFormatter(logging.Formatter):
             record.created = record.origin_created
             record.msecs = (record.created - int(record.created)) * 1000
 
-        if not hasattr(record, "caller"):
-            record.caller = f"{record.name}.{record.funcName}:{record.lineno}"
+        if record.levelno != logging.INFO or always_log_caller:
+            if not hasattr(record, "caller"):
+                record.caller = f"{record.name}.{record.funcName}:{record.lineno}"
+            record.caller_block = f" [{TextStyle.BOLD}{record.caller}{TextStyle.RESET}]"
+        else:
+            record.caller_block = ""
 
         # Aliases for the format argument
         record.levelcolor = self._LEVEL_TO_COLOR[record.levelno]
@@ -84,7 +91,7 @@ def _initialize_if_necessary():
             return
 
         formatter = CustomFormatter(
-            fmt="{asctime}.{msecs:03.0f} [{bold}{levelcolor}{levelname}{reset}] [{bold}{caller}{reset}] {message}",
+            fmt="{asctime}.{msecs:03.0f} [{bold}{levelcolor}{levelname}{reset}]{caller_block} {message}",
             style="{",
             datefmt="%b %d %H:%M:%S",
         )

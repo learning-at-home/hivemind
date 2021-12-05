@@ -380,7 +380,7 @@ class Optimizer(torch.optim.Optimizer):
                 loss = closure()
 
         if not self.auxiliary and self.should_load_state_from_peers():
-            logger.log(self.status_loglevel, "Peer is out of sync.")
+            logger.log(self.status_loglevel, "Peer is out of sync")
             self.load_state_from_peers()
             return loss  # local gradients were computed with out-of-sync parameters, must start over
 
@@ -484,7 +484,7 @@ class Optimizer(torch.optim.Optimizer):
                 if not self.client_mode:
                     self.grad_averager.state_sharing_priority = self.local_epoch
 
-            logger.log(self.status_loglevel, f"Transitioning to epoch {self.local_epoch}.")
+            logger.log(self.status_loglevel, f"Transitioning to epoch {self.local_epoch}")
 
     def _begin_averaging_gradients(self, grad_scaler: Optional[GradScaler]) -> bool:
         """Begin an all-reduce round to average gradients; return True if succeeded, False if failed"""
@@ -540,7 +540,7 @@ class Optimizer(torch.optim.Optimizer):
 
                 eta_seconds = self.tracker.estimated_next_update_time - get_dht_time()
                 eta_seconds = max(eta_seconds, self.grad_averager.matchmaking_kwargs["min_matchmaking_time"])
-                logger.log(self.status_loglevel, f"Pre-scheduling gradient averaging round in {eta_seconds:.2f}s.")
+                logger.log(self.status_loglevel, f"Pre-scheduling gradient averaging round in {eta_seconds:.2f} sec")
                 self.scheduled_grads = self.grad_averager.schedule_step(timeout=self.averaging_timeout)
 
     def _maybe_schedule_state_averaging(self) -> None:
@@ -562,7 +562,7 @@ class Optimizer(torch.optim.Optimizer):
 
                 min_matchmaking_time = self.state_averager.matchmaking_kwargs["min_matchmaking_time"]
                 actual_seconds = max(eta_seconds_to_averaging, min_matchmaking_time)
-                logger.log(self.status_loglevel, f"Pre-scheduling state averaging round in {actual_seconds:.2f}s.")
+                logger.log(self.status_loglevel, f"Pre-scheduling state averaging round in {actual_seconds:.2f} sec")
                 self.scheduled_state = self.state_averager.schedule_step(
                     gather=next_epoch, timeout=self.averaging_timeout
                 )
@@ -610,7 +610,7 @@ class Optimizer(torch.optim.Optimizer):
         if self.use_gradient_averaging and self.grad_averager.reuse_grad_buffers:
             raise ValueError(
                 f"When running {self.__class__.__name__} with reuse_grad_buffers=True, user should never "
-                f"call zero_grad manually. Gradients will be refreshed internally."
+                f"call zero_grad manually. Gradients will be refreshed internally"
             )
         for param_group in self.param_groups:
             for param in param_group["params"]:
@@ -666,7 +666,7 @@ class Optimizer(torch.optim.Optimizer):
                     continue
 
             if self.tracker.global_epoch - 1 <= self.local_epoch < self.tracker.global_epoch:
-                logger.log(self.status_loglevel, f"Catching up with collaboration step {self.tracker.global_epoch}.")
+                logger.log(self.status_loglevel, f"Catching up with collaboration step {self.tracker.global_epoch}")
                 self.state_averager.local_epoch = self.tracker.global_epoch
 
             self.tracker.report_local_progress(local_epoch=self.local_epoch, samples_accumulated=0)
@@ -711,8 +711,8 @@ class Optimizer(torch.optim.Optimizer):
 
     def add_param_group(self, param_group: dict) -> None:
         raise ValueError(
-            f"{self.__class__.__name__} does not support calling add_param_group after creation."
-            f"Please provide all parameter groups at init."
+            f"{self.__class__.__name__} does not support calling add_param_group after creation. "
+            f"Please provide all parameter groups at init"
         )
 
     def __repr__(self):
@@ -746,7 +746,7 @@ class Optimizer(torch.optim.Optimizer):
         self.state_averager.shutdown()
         if self.use_gradient_averaging:
             self.grad_averager.shutdown()
-        logger.log(self.status_loglevel, f"{self.__class__.__name__} is shut down.")
+        logger.log(self.status_loglevel, f"{self.__class__.__name__} is shut down")
 
     def __del__(self):
         if self._parent_pid == os.getpid() and self.is_alive():

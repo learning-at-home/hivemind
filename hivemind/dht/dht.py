@@ -151,7 +151,7 @@ class DHT(mp.Process):
             self._outer_pipe.send(("_shutdown", [], {}))
             self.join(self.shutdown_timeout)
             if self.is_alive():
-                logger.warning("DHT did not shut down within the grace period; terminating it the hard way.")
+                logger.warning("DHT did not shut down within the grace period; terminating it the hard way")
                 self.terminate()
 
     async def _shutdown(self):
