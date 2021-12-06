@@ -83,12 +83,12 @@ class ProgressTracker(threading.Thread):
         *,
         client_mode: Optional[bool] = None,
         min_refresh_period: float = 0.5,
-        max_refresh_period: float = 10,
+        max_refresh_period: float = 30,
         default_refresh_period: float = 3,
         expected_drift_peers: float = 3,
         expected_drift_rate: float = 0.2,
         performance_ema_alpha: float = 0.1,
-        metadata_expiration: float = 30.0,
+        metadata_expiration: float = 60.0,
         status_loglevel: int = logging.DEBUG,
         private_key: Optional[RSAPrivateKey] = None,
         daemon: bool = True,
@@ -198,7 +198,7 @@ class ProgressTracker(threading.Thread):
         store_task = None
         try:
             while not self.shutdown_triggered.is_set():
-                wait_timeout = max(0.0, last_report_time + self.metadata_expiration - get_dht_time())
+                wait_timeout = max(0.0, last_report_time - get_dht_time() + self.metadata_expiration / 2)
                 logger.debug(f"Will report progress again in {wait_timeout} seconds or on user command")
                 await asyncio.get_event_loop().run_in_executor(None, self.should_report_progress.wait, wait_timeout)
                 if self.should_report_progress.is_set():
