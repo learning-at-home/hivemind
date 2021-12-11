@@ -83,7 +83,7 @@ class ProgressTracker(threading.Thread):
         *,
         client_mode: Optional[bool] = None,
         min_refresh_period: float = 0.5,
-        max_refresh_period: float = 30,
+        max_refresh_period: float = 10,
         default_refresh_period: float = 3,
         expected_drift_peers: float = 3,
         expected_drift_rate: float = 0.2,
@@ -352,3 +352,7 @@ class ProgressTracker(threading.Thread):
             expiration_time=get_dht_time() + self.metadata_expiration,
             return_future=True,
         )
+
+    def __del__(self):
+        if self.is_alive():
+            self.shutdown()
