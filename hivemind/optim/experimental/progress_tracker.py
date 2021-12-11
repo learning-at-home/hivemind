@@ -352,3 +352,7 @@ class ProgressTracker(threading.Thread):
             expiration_time=get_dht_time() + self.metadata_expiration,
             return_future=True,
         )
+
+    def __del__(self):
+        if self.is_alive():
+            self.shutdown()
