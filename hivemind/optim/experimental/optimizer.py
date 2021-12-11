@@ -427,6 +427,8 @@ class Optimizer(torch.optim.Optimizer):
 
             if self.use_gradient_averaging:
                 logger.log(self.status_loglevel, f"Beginning optimizer step #{self.local_epoch}")
+                self.state_averager.step(wait_for_delayed_updates=True)
+
                 began_averaging_gradients = self._begin_averaging_gradients(grad_scaler)
                 if not began_averaging_gradients:
                     pass  # failed to start gradient averaging due to an internal error
@@ -534,10 +536,6 @@ class Optimizer(torch.optim.Optimizer):
         assert self.use_gradient_averaging
         if self.tracker.estimated_next_update_time - get_dht_time() <= self.matchmaking_time:
             if self.scheduled_grads is None or self.scheduled_grads.triggered or self.scheduled_grads.done():
-                if self.delay_grad_averaging:
-                    # wait for previous averaging to finish before starting a new one
-                    self.state_averager.step(wait_for_delayed_updates=True)
-
                 eta_seconds = self.tracker.estimated_next_update_time - get_dht_time()
                 eta_seconds = max(eta_seconds, self.grad_averager.matchmaking_kwargs["min_matchmaking_time"])
                 logger.log(self.status_loglevel, f"Pre-scheduling gradient averaging round in {eta_seconds:.2f} sec")
