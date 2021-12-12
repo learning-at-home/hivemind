@@ -123,10 +123,9 @@ class TensorPartContainer:
         a given peer failed to aggregate a certain part, use our local part instead, keep track of failed parts
         """
         while self._outputs_registered_by_peer[peer_index] < self.num_parts_by_peer[peer_index]:
-            part_and_info = self._input_parts_by_peer[peer_index][len(self._output_parts_by_peer[peer_index])]
-            self._output_parts_by_peer[peer_index].append(part_and_info[0])
-            self._outputs_registered_by_peer[peer_index] += 1
-            self._output_part_available[peer_index].set()
+            part_index = len(self._output_parts_by_peer[peer_index])
+            part_and_info = self._input_parts_by_peer[peer_index][part_index]
+            self.register_processed_part(peer_index, part_index, part_and_info[0])
 
     async def iterate_output_tensors(self) -> AsyncIterable[torch.Tensor]:
         """iterate over the outputs of averaging (whether they are average, delta or other aggregation result)"""
