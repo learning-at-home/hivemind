@@ -11,8 +11,6 @@ from hivemind.proto import averaging_pb2
 from hivemind.utils import get_logger
 from hivemind.utils.asyncio import (
     achain,
-    aenumerate,
-    afirst,
     amap_in_executor,
     anext,
     as_aiter,
@@ -181,7 +179,7 @@ class AllReduceRunner(ServicerBase):
         await asyncio.sleep(self.sender_timeout)
         async with self.banlock:
             for peer_id in self.sender_peer_ids:
-                if peer_id not in self.active_senders:
+                if peer_id not in self.active_senders and peer_id not in self.banned_senders:
                     sender_index = self.sender_peer_ids.index(peer_id)
                     self.banned_senders.add(peer_id)
                     self.tensor_part_reducer.on_sender_failed(sender_index)
@@ -206,18 +204,27 @@ class AllReduceRunner(ServicerBase):
 
                 if self.should_delay_results(self.peer_id):
                     await done_sending.wait()
-                if self.reducer_timeout is not None:
-                    stream = aiter_with_timeout(stream, self.reducer_timeout)
 
                 part_index = 0
-                async for averaged_part_delta, msg in amap_in_executor(
-                        lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg),
-                        stream,
+
+                def _try_deserialize(msg):
+                    if msg.code != averaging_pb2.AVERAGED_PART:
+                        return AllreduceException(f"Peer {peer_id} sent {averaging_pb2.MessageCode.Name(msg.code)}")
+                    try:
+                        return deserialize_torch_tensor(msg.tensor_part), msg
+                    except Exception as e:
+                        return e, msg
+
+                async for delta_or_error, msg in amap_in_executor(
+                        _try_deserialize,
+                        aiter_with_timeout(stream, self.reducer_timeout),
                         max_prefetch=self.tensor_part_container.prefetch,
                 ):
                     if code is None:
                         code = msg.code
-                    self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part_delta)
+                    if not isinstance(delta_or_error, torch.Tensor):
+                        raise AllreduceException(f"Failed to deserialize chunk from {peer_index}: {delta_or_error}")
+                    self.tensor_part_container.register_processed_part(peer_index, part_index, delta_or_error)
                     part_index += 1
 
                 if code != averaging_pb2.AVERAGED_PART:
@@ -227,7 +234,6 @@ class AllReduceRunner(ServicerBase):
                 if part_index != self.tensor_part_container.num_parts_by_peer[peer_index]:
                     raise AllreduceException(f"peer {peer_id} sent {part_index} parts, but we expected "
                                              f"{self.tensor_part_container.num_parts_by_peer[peer_index]}")
-
             except BaseException as e:
                 logger.warning(f"Caught {repr(e)} when communicating to {peer_id}")
                 self.tensor_part_container.register_failed_reducer(peer_index)
@@ -257,10 +263,11 @@ class AllReduceRunner(ServicerBase):
 
         elif request.code == averaging_pb2.PART_FOR_AVERAGING:
             sender_index = self.sender_peer_ids.index(context.remote_id)
+            stream = aiter_with_timeout(achain(as_aiter(request), stream), self.sender_timeout)
             try:
                 self.active_senders.add(context.remote_id)
                 if not self.should_delay_results(context.remote_id):
-                    async for msg in self._accumulate_parts_streaming(achain(as_aiter(request), stream), sender_index):
+                    async for msg in self._accumulate_parts_streaming(stream, sender_index):
                         yield msg
 
                 else:
@@ -269,10 +276,8 @@ class AllReduceRunner(ServicerBase):
 
                     async def _accumulate_parts():
                         try:
-                            inputs_aiter = attach_event_on_finished(achain(as_aiter(request), stream), done_receiving)
-                            if self.sender_timeout is not None:
-                                inputs_aiter = aiter_with_timeout(inputs_aiter, self.sender_timeout)
-                            async for msg in self._accumulate_parts_streaming(inputs_aiter, sender_index):
+                            async for msg in self._accumulate_parts_streaming(
+                                    attach_event_on_finished(stream, done_receiving), sender_index):
                                 delayed_results.put_nowait(msg)
                         finally:
                             delayed_results.put_nowait(None)
@@ -291,16 +296,18 @@ class AllReduceRunner(ServicerBase):
             except Exception as e:
                 logger.warning(f"Caught {repr(e)} when communicating with {context.remote_id}")
                 async with self.banlock:
-                    self.banned_senders.add(context.remote_id)
-                    self.tensor_part_reducer.on_sender_failed(sender_index)
+                    if context.remote_id not in self.banned_senders:
+                        self.banned_senders.add(context.remote_id)
+                        self.tensor_part_reducer.on_sender_failed(sender_index)
                 yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
         else:
             error_code = averaging_pb2.MessageCode.Name(request.code)
             logger.debug(f"{self} - peer {context.remote_id} sent {error_code}")
             sender_index = self.sender_peer_ids.index(context.remote_id)
             async with self.banlock:
-                self.banned_senders.add(context.remote_id)
-                self.tensor_part_reducer.on_sender_failed(sender_index)
+                if context.remote_id not in self.banned_senders:
+                    self.banned_senders.add(context.remote_id)
+                    self.tensor_part_reducer.on_sender_failed(sender_index)
             yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
     def _check_reasons_to_reject(
@@ -335,19 +342,14 @@ class AllReduceRunner(ServicerBase):
                 yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
         finally:
             if part_index != self.tensor_part_reducer.num_parts:
-                print(end=f'@!@{sender_index=}, {part_index=}, {self.tensor_part_reducer.num_parts=} \n')
+                async with self.banlock:
+                    if self.sender_peer_ids[sender_index] not in self.banned_senders:
+                        self.banned_senders.add(self.sender_peer_ids[sender_index])
+                        self.tensor_part_reducer.on_sender_failed(sender_index)
 
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):
         """finish or terminate AllReduceRunner, propagate any errors / cancellations to peers."""
         assert not cancel or not exception, "finalize accepts either exception or cancel, but not both"
-        if cancel or exception:
-            # propagate error to peers
-            if cancel or isinstance(exception, asyncio.CancelledError):
-                code = averaging_pb2.CANCELLED
-            else:
-                code = averaging_pb2.INTERNAL_ERROR
-            logger.debug(f"{self} - notifying peers about {averaging_pb2.MessageCode.Name(code)}")
-
         if not self._future.done():
             if cancel:
                 logger.debug(f"{self} - cancelled")
