@@ -52,6 +52,10 @@ class AllReduceRunner(ServicerBase):
       (the actual number of values by peer will be nearly proportional, but there are no exact guarantees)
     :param modes: AveragingMode for each peer in ordered_peer_ids (normal, client-only or auxiliary)
     :param gathered: additional user-defined data collected from this group
+    :param sender_timeout: during all_reduce, any sender that fails to send tensor chunk within this many seconds from
+      previous chunk will be marked as failed and excluded from averaging. default: equal to next_chunk_timeout
+    :param reducer_timeout: during all_reduce, any reducer that fails to send results chunk within this many seconds
+      from previous chunk will be marked as failed and excluded from averaging. default: 2 x sender_timeout
     :param kwargs: additional parameters (e.g. part_size_bytes) will be passed to TensorPartContainer
     :note: Full-mode peers send and receive tensor parts concurrently, assuming a full-duplex TCP stream. In turn,
       non-averaging peers receive results only after they finish sending, which helps them avoid
@@ -71,12 +75,17 @@ class AllReduceRunner(ServicerBase):
         peer_fractions: Tuple[float, ...],
         modes: Optional[Sequence[AveragingMode]] = None,
         gathered: Optional[Dict[PeerID, Any]] = None,
-        next_chunk_timeout: Optional[float] = None,
+        sender_timeout: Optional[float] = None,
+        reducer_timeout: Optional[float] = None,
         **kwargs,
     ):
         self._p2p = p2p
         self.peer_id = p2p.peer_id
         assert self.peer_id in ordered_peer_ids, "peer_id is not a part of the group"
+        if reducer_timeout is not None:
+            if sender_timeout is None or reducer_timeout <= sender_timeout:
+                raise ValueError("If reducer_timeout is enabled, sender_timeout must be shorter than reducer_timeout. "
+                                 "Otherwise, there is a chance that reducers will be banned while they await senders.")
 
         if not issubclass(servicer_type, ServicerBase):
             raise TypeError("`servicer_type` is expected to be a ServicerBase subclass")
@@ -103,7 +112,7 @@ class AllReduceRunner(ServicerBase):
             if mode != AveragingMode.AUX:
                 self.sender_peer_ids.append(peer_id)
 
-        self.next_chunk_timeout = next_chunk_timeout
+        self.sender_timeout, self.reducer_timeout = sender_timeout, reducer_timeout
         self.active_senders: Set[PeerID] = {self.peer_id}  # peers that began sending data via rpc_aggregate_part
         self.banned_senders: Set[PeerID] = set()  # peers that did not send data by next_chunk_timeout
         self.banlock = asyncio.Lock()
@@ -138,7 +147,7 @@ class AllReduceRunner(ServicerBase):
     async def run(self) -> AsyncIterator[torch.Tensor]:
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""
         pending_tasks = set()
-        if self.next_chunk_timeout is not None:
+        if self.sender_timeout is not None:
             asyncio.create_task(self._handle_missing_senders())
         try:
             if len(self.sender_peer_ids) == 0:
@@ -168,8 +177,8 @@ class AllReduceRunner(ServicerBase):
 
     async def _handle_missing_senders(self):
         """Detect senders that should have sent tensors for averaging, but did not send anything within timeout"""
-        assert self.next_chunk_timeout is not None
-        await asyncio.sleep(self.next_chunk_timeout)
+        assert self.sender_timeout is not None
+        await asyncio.sleep(self.sender_timeout)
         async with self.banlock:
             for peer_id in self.sender_peer_ids:
                 if peer_id not in self.active_senders:
@@ -197,25 +206,27 @@ class AllReduceRunner(ServicerBase):
 
                 if self.should_delay_results(self.peer_id):
                     await done_sending.wait()
-                if self.next_chunk_timeout is not None:
-                    stream = aiter_with_timeout(stream, self.next_chunk_timeout)
+                if self.reducer_timeout is not None:
+                    stream = aiter_with_timeout(stream, self.reducer_timeout)
 
-                async for part_index, (averaged_part_delta, msg) in aenumerate(
-                    amap_in_executor(
+                part_index = 0
+                async for averaged_part_delta, msg in amap_in_executor(
                         lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg),
                         stream,
                         max_prefetch=self.tensor_part_container.prefetch,
-                    )
                 ):
                     if code is None:
                         code = msg.code
                     self.tensor_part_container.register_processed_part(peer_index, part_index, averaged_part_delta)
+                    part_index += 1
+
                 if code != averaging_pb2.AVERAGED_PART:
                     raise AllreduceException(
                         f"peer {peer_id} returned {averaging_pb2.MessageCode.Name(code)} "
-                        f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}"
-                        f", allreduce failed"
-                    )
+                        f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}")
+                if part_index != self.tensor_part_container.num_parts_by_peer[peer_index]:
+                    raise AllreduceException(f"peer {peer_id} sent {part_index} parts, but we expected "
+                                             f"{self.tensor_part_container.num_parts_by_peer[peer_index]}")
 
             except BaseException as e:
                 logger.warning(f"Caught {repr(e)} when communicating to {peer_id}")
@@ -259,8 +270,8 @@ class AllReduceRunner(ServicerBase):
                     async def _accumulate_parts():
                         try:
                             inputs_aiter = attach_event_on_finished(achain(as_aiter(request), stream), done_receiving)
-                            if self.next_chunk_timeout is not None:
-                                inputs_aiter = aiter_with_timeout(inputs_aiter, self.next_chunk_timeout)
+                            if self.sender_timeout is not None:
+                                inputs_aiter = aiter_with_timeout(inputs_aiter, self.sender_timeout)
                             async for msg in self._accumulate_parts_streaming(inputs_aiter, sender_index):
                                 delayed_results.put_nowait(msg)
                         finally:
@@ -305,22 +316,26 @@ class AllReduceRunner(ServicerBase):
             return averaging_pb2.AveragingData(code=averaging_pb2.PROTOCOL_VIOLATION)
 
     async def _accumulate_parts_streaming(self, stream: AsyncIterator[averaging_pb2.AveragingData], sender_index: int):
-        loop = asyncio.get_event_loop()
-        async for part_index, (tensor_part, weight, part_compression) in aenumerate(
-            amap_in_executor(
+        part_index = 0
+        try:
+            loop = asyncio.get_event_loop()
+            async for tensor_part, weight, part_compression in amap_in_executor(
                 lambda msg: (deserialize_torch_tensor(msg.tensor_part), msg.weight, msg.tensor_part.compression),
                 stream,
                 max_prefetch=self.tensor_part_container.prefetch,
-            )
-        ):
-            averaged_part = await self.tensor_part_reducer.accumulate_part(
-                sender_index, part_index, tensor_part, weight=weight
-            )
+            ):
+                averaged_part = await self.tensor_part_reducer.accumulate_part(
+                    sender_index, part_index, tensor_part, weight=weight
+                )
+                part_index += 1
 
-            serialized_delta = await loop.run_in_executor(
-                None, lambda: serialize_torch_tensor(averaged_part - tensor_part, part_compression)
-            )
-            yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
+                serialized_delta = await loop.run_in_executor(
+                    None, lambda: serialize_torch_tensor(averaged_part - tensor_part, part_compression)
+                )
+                yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
+        finally:
+            if part_index != self.tensor_part_reducer.num_parts:
+                print(end=f'@!@{sender_index=}, {part_index=}, {self.tensor_part_reducer.num_parts=} \n')
 
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):
         """finish or terminate AllReduceRunner, propagate any errors / cancellations to peers."""

@@ -122,8 +122,8 @@ class TensorPartContainer:
         """
         a given peer failed to aggregate a certain part, use our local part instead, keep track of failed parts
         """
-        while len(self._output_parts_by_peer[peer_index]) != len(self._input_parts_by_peer[peer_index]):
-            part_and_info = self._input_parts_by_peer[peer_index][self._outputs_registered_by_peer[peer_index]]
+        while self._outputs_registered_by_peer[peer_index] < self.num_parts_by_peer[peer_index]:
+            part_and_info = self._input_parts_by_peer[peer_index][len(self._output_parts_by_peer[peer_index])]
             self._output_parts_by_peer[peer_index].append(part_and_info[0])
             self._outputs_registered_by_peer[peer_index] += 1
             self._output_part_available[peer_index].set()
@@ -160,8 +160,6 @@ class TensorPartContainer:
         if not self.finished.is_set():
             for peer_index in range(self.group_size):
                 self._inputs_consumed_by_peer[peer_index] = True
-                self._input_parts_by_peer[peer_index].clear()
-                self._output_parts_by_peer[peer_index].clear()
                 self._output_part_available[peer_index].set()
             self._outputs_consumed = True
             self.finished.set()
