@@ -177,6 +177,8 @@ def test_fault_tolerance(fault0: Fault.NONE, fault1: Fault.NONE):
         if all(fault == Fault.FAIL_SENDING for fault in (fault0, fault1)):
             assert fault0 != Fault.FAIL_REDUCING and fault1 != Fault.FAIL_REDUCING
             assert abs(diff[: len(diff) // 2]).max() < 1e-5
+        elif any(fault == Fault.CANCEL for fault in (fault0, fault1)):
+            pass  # late cancel may result in an arbitrary mix of averaging results with and without the cancelled peer
         elif fault0 == Fault.NONE:  # only peer1 in client mode may have failed
             assert abs(diff).max() < 1e-5
         else:
