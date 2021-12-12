@@ -121,6 +121,7 @@ async def amap_in_executor(
         except BaseException as e:
             await queue.put(e)  # note: there is no chance that iterables
             raise
+
     task = asyncio.create_task(_put_items())
     try:
         future_or_exception = await queue.get()

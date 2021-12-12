@@ -183,7 +183,7 @@ class TensorPartReducer:
         self.finished = asyncio.Event()
 
         self.num_parts_received = [0 for _ in range(self.num_senders)]
-        self.sender_failed_after = [float('inf') for _ in range(self.num_senders)]
+        self.sender_failed_after = [float("inf") for _ in range(self.num_senders)]
         self.current_senders = self.num_senders
 
         self.reset_accumulators()

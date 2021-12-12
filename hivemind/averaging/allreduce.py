@@ -1,6 +1,6 @@
 import asyncio
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Type, Set
+from typing import Any, AsyncIterator, Dict, Optional, Sequence, Set, Tuple, Type
 
 import torch
 
@@ -11,10 +11,11 @@ from hivemind.proto import averaging_pb2
 from hivemind.utils import get_logger
 from hivemind.utils.asyncio import (
     achain,
+    aiter_with_timeout,
     amap_in_executor,
     anext,
     as_aiter,
-    attach_event_on_finished, aiter_with_timeout,
+    attach_event_on_finished,
 )
 
 # flavour types
@@ -82,8 +83,10 @@ class AllReduceRunner(ServicerBase):
         assert self.peer_id in ordered_peer_ids, "peer_id is not a part of the group"
         if reducer_timeout is not None:
             if sender_timeout is None or reducer_timeout <= sender_timeout:
-                raise ValueError("If reducer_timeout is enabled, sender_timeout must be shorter than reducer_timeout. "
-                                 "Otherwise, there is a chance that reducers will be banned while they await senders.")
+                raise ValueError(
+                    "If reducer_timeout is enabled, sender_timeout must be shorter than reducer_timeout. "
+                    "Otherwise, there is a chance that reducers will be banned while they await senders."
+                )
 
         if not issubclass(servicer_type, ServicerBase):
             raise TypeError("`servicer_type` is expected to be a ServicerBase subclass")
@@ -216,9 +219,9 @@ class AllReduceRunner(ServicerBase):
                         return e, msg
 
                 async for delta_or_error, msg in amap_in_executor(
-                        _try_deserialize,
-                        aiter_with_timeout(stream, self.reducer_timeout),
-                        max_prefetch=self.tensor_part_container.prefetch,
+                    _try_deserialize,
+                    aiter_with_timeout(stream, self.reducer_timeout),
+                    max_prefetch=self.tensor_part_container.prefetch,
                 ):
                     if code is None:
                         code = msg.code
@@ -230,10 +233,13 @@ class AllReduceRunner(ServicerBase):
                 if code != averaging_pb2.AVERAGED_PART:
                     raise AllreduceException(
                         f"peer {peer_id} returned {averaging_pb2.MessageCode.Name(code)} "
-                        f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}")
+                        f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}"
+                    )
                 if part_index != self.tensor_part_container.num_parts_by_peer[peer_index]:
-                    raise AllreduceException(f"peer {peer_id} sent {part_index} parts, but we expected "
-                                             f"{self.tensor_part_container.num_parts_by_peer[peer_index]}")
+                    raise AllreduceException(
+                        f"peer {peer_id} sent {part_index} parts, but we expected "
+                        f"{self.tensor_part_container.num_parts_by_peer[peer_index]}"
+                    )
             except BaseException as e:
                 logger.warning(f"Caught {repr(e)} when communicating to {peer_id}")
                 self.tensor_part_container.register_failed_reducer(peer_index)
@@ -277,7 +283,8 @@ class AllReduceRunner(ServicerBase):
                     async def _accumulate_parts():
                         try:
                             async for msg in self._accumulate_parts_streaming(
-                                    attach_event_on_finished(stream, done_receiving), sender_index):
+                                attach_event_on_finished(stream, done_receiving), sender_index
+                            ):
                                 delayed_results.put_nowait(msg)
                         finally:
                             delayed_results.put_nowait(None)
@@ -311,8 +318,8 @@ class AllReduceRunner(ServicerBase):
             yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
 
     def _check_reasons_to_reject(
-            self, request: averaging_pb2.AveragingData, context: P2PContext
-        ) -> Optional[averaging_pb2.AveragingData]:
+        self, request: averaging_pb2.AveragingData, context: P2PContext
+    ) -> Optional[averaging_pb2.AveragingData]:
         if request.group_id != self.group_id:
             return averaging_pb2.AveragingData(code=averaging_pb2.BAD_GROUP_ID)
         elif self._future.cancelled():

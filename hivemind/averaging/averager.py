@@ -204,7 +204,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             part_size_bytes=part_size_bytes,
             min_vector_size=min_vector_size,
             sender_timeout=sender_timeout,
-            reducer_timeout=reducer_timeout
+            reducer_timeout=reducer_timeout,
         )
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
@@ -434,20 +434,10 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
             async def find_peers_or_notify_cancel():
                 group_info = await self._matchmaking.look_for_group(step)
-                try:
-                    if not step.triggered:
-                        step.stage = AveragingStage.AWAITING_TRIGGER
-                        await step.wait_for_trigger()
-                    return group_info
-                except asyncio.CancelledError:
-                    await asyncio.wait(
-                        {
-                            self._send_error_to_peer(peer_id, group_info.group_id, averaging_pb2.CANCELLED)
-                            for peer_id in group_info.peer_ids
-                            if peer_id != self.peer_id
-                        }
-                    )
-                    raise
+                if not step.triggered:
+                    step.stage = AveragingStage.AWAITING_TRIGGER
+                    await step.wait_for_trigger()
+                return group_info
 
             while not step.done():
                 try:
@@ -512,14 +502,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         " Please report this to hivemind issues."
                     )
                 )
-
-    async def _send_error_to_peer(self, peer_id: PeerID, group_id: GroupID, code: averaging_pb2.MessageCode):
-        try:
-            error = averaging_pb2.AveragingData(group_id=group_id, code=code)
-            stub = type(self).get_stub(self._p2p, peer_id, namespace=self.prefix)
-            await afirst(await stub.rpc_aggregate_part(as_aiter(error)))
-        except Exception as e:
-            logger.debug(f"Caught {e} when sending error {averaging_pb2.MessageCode.Name(code)} to {peer_id}")
 
     async def _run_allreduce(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
         """Run All-Reduce in a given group and update tensors in place, return gathered metadata"""
