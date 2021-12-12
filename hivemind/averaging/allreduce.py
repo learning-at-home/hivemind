@@ -209,7 +209,7 @@ class AllReduceRunner(ServicerBase):
 
                 def _try_deserialize(msg):
                     if msg.code != averaging_pb2.AVERAGED_PART:
-                        return AllreduceException(f"Peer {peer_id} sent {averaging_pb2.MessageCode.Name(msg.code)}")
+                        return AllreduceException(f"{peer_id} sent {averaging_pb2.MessageCode.Name(msg.code)}"), msg
                     try:
                         return deserialize_torch_tensor(msg.tensor_part), msg
                     except Exception as e:

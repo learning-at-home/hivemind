@@ -56,10 +56,10 @@ class PeerID:
         return f"<libp2p.peer.id.ID ({self.to_base58()})>"
 
     def __str__(self):
-        return self.to_base58()[-8:]
+        return self.to_base58()
 
     def pretty(self):
-        return self.to_base58()[-8:]
+        return self.to_base58()
 
     def to_string(self):
         return self.to_base58()
