@@ -10,7 +10,7 @@ import torch
 
 from hivemind.compression import CompressionBase, CompressionInfo, NoCompression
 from hivemind.proto import runtime_pb2
-from hivemind.utils.asyncio import amap_in_executor
+from hivemind.utils.asyncio import amap_in_executor, as_aiter
 
 T = TypeVar("T")
 DEFAULT_PART_SIZE_BYTES = 2 ** 19
@@ -91,7 +91,6 @@ class TensorPartContainer:
         assert not self._inputs_consumed_by_peer[peer_index], "input parts of a given peer are already deallocated."
         self._inputs_consumed_by_peer[peer_index] = True
         input_parts = tuple(part for part, compression in self._input_parts_by_peer[peer_index])
-        self._input_parts_by_peer[peer_index].clear()
         return input_parts
 
     @torch.no_grad()
@@ -99,13 +98,9 @@ class TensorPartContainer:
         """iterate serialized tensor parts for a peer at a given index. Run serialization in background."""
         assert not self._inputs_consumed_by_peer[peer_index], "input parts of a given peer are already deallocated."
         self._inputs_consumed_by_peer[peer_index] = True
-
-        async def _aiterate_parts():
-            for _ in range(self.num_parts_by_peer[peer_index]):
-                yield self._input_parts_by_peer[peer_index].popleft()
-
+        parts_aiter = as_aiter(*self._input_parts_by_peer[peer_index])
         async for serialized_part in amap_in_executor(
-            lambda x_and_info: self.compression.compress(*x_and_info), _aiterate_parts(), max_prefetch=self.prefetch
+            lambda x_and_info: self.compression.compress(*x_and_info), parts_aiter, max_prefetch=self.prefetch
         ):
             yield serialized_part
 
@@ -122,6 +117,16 @@ class TensorPartContainer:
         self._output_parts_by_peer[peer_index].append(part)
         self._outputs_registered_by_peer[peer_index] += 1
         self._output_part_available[peer_index].set()
+
+    def register_failed_reducer(self, peer_index: int):
+        """
+        a given peer failed to aggregate a certain part, use our local part instead, keep track of failed parts
+        """
+        while len(self._output_parts_by_peer[peer_index]) != len(self._input_parts_by_peer[peer_index]):
+            part_and_info = self._input_parts_by_peer[peer_index][self._outputs_registered_by_peer[peer_index]]
+            self._output_parts_by_peer[peer_index].append(part_and_info[0])
+            self._outputs_registered_by_peer[peer_index] += 1
+            self._output_part_available[peer_index].set()
 
     async def iterate_output_tensors(self) -> AsyncIterable[torch.Tensor]:
         """iterate over the outputs of averaging (whether they are average, delta or other aggregation result)"""
@@ -178,11 +183,16 @@ class TensorPartReducer:
         self.denominator = 0.0  # total weight accumulated from all peers for current part
         self.current_part_future = asyncio.Future()
         self.finished = asyncio.Event()
+
+        self.num_parts_received = [0 for _ in range(self.num_senders)]
+        self.sender_failed_after = [float('inf') for _ in range(self.num_senders)]
+        self.current_senders = self.num_senders
+
         self.reset_accumulators()
 
     def reset_accumulators(self):
         """(re)create averaging buffers for the next part in line, prepopulate with local tensor part"""
-        assert self.current_part_accumulated_from == self.num_senders or self.current_part_index == -1
+        assert self.current_part_accumulated_from == self.current_senders or self.current_part_index == -1
         if self.current_part_index >= self.num_parts - 1:
             self.finalize()
             return
@@ -190,6 +200,7 @@ class TensorPartReducer:
         self.current_part_index += 1
         self.current_part_accumulated_from = 0
         self.current_part_future = asyncio.Future()
+        self.current_senders = sum(self.current_part_index < failed_index for failed_index in self.sender_failed_after)
         self.accumulator = torch.zeros(self.part_shapes[self.current_part_index])
         self.denominator = 0.0
 
@@ -199,6 +210,7 @@ class TensorPartReducer:
         """Add vector part to accumulator, wait for all other vectors to be added, then return the average part"""
         assert 0 <= sender_index < self.num_senders, "invalid sender index"
         assert 0 <= part_index < self.num_parts, "invalid part index"
+        self.num_parts_received[sender_index] += 1
 
         while part_index > self.current_part_index:
             # wait for previous parts to finish processing ...
@@ -209,15 +221,25 @@ class TensorPartReducer:
 
         current_part_future = self.current_part_future
 
-        self.accumulator.add_(tensor_part, alpha=weight)
-        self.current_part_accumulated_from += 1
-        self.denominator += weight
+        if part_index < self.sender_failed_after[sender_index]:
+            self.accumulator.add_(tensor_part, alpha=weight)
+            self.current_part_accumulated_from += 1
+            self.denominator += weight
 
-        assert self.current_part_accumulated_from <= self.num_senders
-        if self.current_part_accumulated_from == self.num_senders:
-            current_part_future.set_result(self.accumulator.div_(self.denominator))
-            self.reset_accumulators()
+            assert self.current_part_accumulated_from <= self.current_senders
+            if self.current_part_accumulated_from == self.current_senders:
+                current_part_future.set_result(self.accumulator.div_(self.denominator))
+                self.reset_accumulators()
         return await current_part_future
+
+    def on_sender_failed(self, sender_index: int):
+        """Exclude that sender's data for averaging any parts that it did not submit yet."""
+        self.sender_failed_after[sender_index] = self.num_parts_received[sender_index]
+        if self.current_part_index == self.num_parts_received[sender_index]:
+            self.current_senders -= 1
+            if self.current_part_accumulated_from == self.current_senders:
+                self.current_part_future.set_result(self.accumulator.div_(self.denominator))
+                self.reset_accumulators()
 
     def finalize(self):
         if not self.finished.is_set():
@@ -225,6 +247,11 @@ class TensorPartReducer:
                 self.current_part_future.cancel()
                 del self.accumulator
             self.finished.set()
+
+            if self.num_parts != 0 and self.num_senders != 0:
+                parts_expected, parts_received = (self.num_parts * self.num_senders), sum(self.num_parts_received)
+                if parts_expected != parts_received:
+                    print(f"Reducer: {parts_received / parts_expected * 100:.1f}% of tensors received successfully.")
 
     def __del__(self):
         self.finalize()

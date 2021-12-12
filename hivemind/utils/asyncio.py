@@ -114,20 +114,26 @@ async def amap_in_executor(
     queue = asyncio.Queue(max_prefetch)
 
     async def _put_items():
-        async for args in azip(*iterables):
-            await queue.put(loop.run_in_executor(executor, func, *args))
-        await queue.put(None)
-
+        try:
+            async for args in azip(*iterables):
+                await queue.put(loop.run_in_executor(executor, func, *args))
+            await queue.put(None)
+        except BaseException as e:
+            await queue.put(e)  # note: there is no chance that iterables
+            raise
     task = asyncio.create_task(_put_items())
     try:
-        future = await queue.get()
-        while future is not None:
-            yield await future
-            future = await queue.get()
+        future_or_exception = await queue.get()
+        while future_or_exception is not None:
+            if isinstance(future_or_exception, BaseException):
+                raise future_or_exception
+            yield await future_or_exception
+            future_or_exception = await queue.get()
         await task
     finally:
-        if not task.done():
-            task.cancel()
+        task.cancel()
+        if task.done() and not task.cancelled():
+            task.exception()
 
 
 async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: float) -> AsyncIterator[T]:
