@@ -133,8 +133,6 @@ async def amap_in_executor(
         await task
     finally:
         task.cancel()
-        if task.done() and not task.cancelled():
-            task.exception()
 
 
 async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: Optional[float]) -> AsyncIterator[T]:
