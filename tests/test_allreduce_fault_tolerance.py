@@ -126,6 +126,7 @@ class FaultyAllReduceRunner(AllReduceRunner):
         (Fault.FAIL_SENDING, Fault.FAIL_SENDING),
         (Fault.FAIL_SENDING, Fault.FAIL_BEFORE),
         (Fault.FAIL_SENDING, Fault.FAIL_REDUCING),
+        (Fault.FAIL_REDUCING, Fault.FAIL_REDUCING),
         (Fault.NONE, Fault.CANCEL),
     ],
 )
@@ -181,6 +182,8 @@ def test_fault_tolerance(fault0: Fault, fault1: Fault):
         if all(fault == Fault.FAIL_SENDING for fault in (fault0, fault1)):
             assert fault0 != Fault.FAIL_REDUCING and fault1 != Fault.FAIL_REDUCING
             assert abs(diff[: len(diff) // 2]).max() < 1e-5
+        elif all(fault == Fault.FAIL_REDUCING for fault in (fault0, fault1)):
+            assert (abs(diff[: len(diff) // 2]) < 1e-5).numpy().mean() > 0.5
         elif any(fault == Fault.CANCEL for fault in (fault0, fault1)):
             pass  # late cancel may result in an arbitrary mix of averaging results with and without the cancelled peer
         elif fault0 == Fault.NONE:  # only peer1 in client mode may have failed
