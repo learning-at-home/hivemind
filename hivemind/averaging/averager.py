@@ -92,7 +92,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
     :param sender_timeout: during all_reduce, any sender that fails to send tensor chunk within this many seconds from
       previous chunk will be marked as failed and excluded from averaging. default: equal to next_chunk_timeout
     :param reducer_timeout: during all_reduce, any reducer that fails to send results chunk within this many seconds
-      from previous chunk will be marked as failed and excluded from averaging. default: 2 x sender_timeout
+      from previous chunk will be marked as failed and excluded from averaging. default: 2 * sender_timeout
     :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
 
     Example:
