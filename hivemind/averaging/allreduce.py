@@ -261,16 +261,16 @@ class AllReduceRunner(ServicerBase):
         self, stream: AsyncIterator[averaging_pb2.AveragingData], context: P2PContext
     ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """a peer sends us a part of his tensor; we should average it with other peers and return the difference"""
-        request: averaging_pb2.AveragingData = await anext(stream)
-        reason_to_reject = self._check_reasons_to_reject(request, context)
-        if reason_to_reject:
-            yield reason_to_reject
-            return
+        try:
+            request: averaging_pb2.AveragingData = await asyncio.wait_for(anext(stream), self.sender_timeout)
+            reason_to_reject = self._check_reasons_to_reject(request, context)
+            if reason_to_reject:
+                yield reason_to_reject
+                return
 
-        elif request.code == averaging_pb2.PART_FOR_AVERAGING:
-            sender_index = self.sender_peer_ids.index(context.remote_id)
-            stream = aiter_with_timeout(achain(as_aiter(request), stream), self.sender_timeout)
-            try:
+            elif request.code == averaging_pb2.PART_FOR_AVERAGING:
+                sender_index = self.sender_peer_ids.index(context.remote_id)
+                stream = aiter_with_timeout(achain(as_aiter(request), stream), self.sender_timeout)
                 self.active_senders.add(context.remote_id)
                 if not self.should_delay_results(context.remote_id):
                     async for msg in self._accumulate_parts_streaming(stream, sender_index):
@@ -300,22 +300,25 @@ class AllReduceRunner(ServicerBase):
                         yield next_result
                     await accumulate_task
 
-            except Exception as e:
-                logger.warning(f"Caught {repr(e)} when communicating with {context.remote_id}")
+            else:
+                error_code = averaging_pb2.MessageCode.Name(request.code)
+                logger.debug(f"{self} - peer {context.remote_id} sent {error_code}")
+                sender_index = self.sender_peer_ids.index(context.remote_id)
                 async with self.banlock:
                     if context.remote_id not in self.banned_senders:
                         self.banned_senders.add(context.remote_id)
                         self.tensor_part_reducer.on_sender_failed(sender_index)
                 yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
-        else:
-            error_code = averaging_pb2.MessageCode.Name(request.code)
-            logger.debug(f"{self} - peer {context.remote_id} sent {error_code}")
-            sender_index = self.sender_peer_ids.index(context.remote_id)
+        except BaseException as e:
             async with self.banlock:
                 if context.remote_id not in self.banned_senders:
                     self.banned_senders.add(context.remote_id)
                     self.tensor_part_reducer.on_sender_failed(sender_index)
-            yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
+            if isinstance(e, Exception):
+                logger.warning(f"Caught {repr(e)} when communicating with {context.remote_id}")
+                yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
+            else:
+                raise  # CancelledError, StopIteration and similar
 
     def _check_reasons_to_reject(
         self, request: averaging_pb2.AveragingData, context: P2PContext
