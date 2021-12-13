@@ -261,6 +261,8 @@ class AllReduceRunner(ServicerBase):
         self, stream: AsyncIterator[averaging_pb2.AveragingData], context: P2PContext
     ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """a peer sends us a part of his tensor; we should average it with other peers and return the difference"""
+        sender_index = self.sender_peer_ids.index(context.remote_id)
+
         try:
             request: averaging_pb2.AveragingData = await asyncio.wait_for(anext(stream), self.sender_timeout)
             reason_to_reject = self._check_reasons_to_reject(request, context)
@@ -269,7 +271,6 @@ class AllReduceRunner(ServicerBase):
                 return
 
             elif request.code == averaging_pb2.PART_FOR_AVERAGING:
-                sender_index = self.sender_peer_ids.index(context.remote_id)
                 stream = aiter_with_timeout(achain(as_aiter(request), stream), self.sender_timeout)
                 self.active_senders.add(context.remote_id)
                 if not self.should_delay_results(context.remote_id):
