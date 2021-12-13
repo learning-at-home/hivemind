@@ -196,7 +196,6 @@ class AllReduceRunner(ServicerBase):
 
         else:
             try:
-                code = None
                 done_sending = asyncio.Event()
                 inputs_aiter = attach_event_on_finished(self._generate_input_for_peer(peer_index), done_sending)
                 stream = await self._get_peer_stub(peer_id).rpc_aggregate_part(inputs_aiter)
