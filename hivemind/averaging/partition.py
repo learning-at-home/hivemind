@@ -186,13 +186,13 @@ class TensorPartReducer:
 
         self.num_parts_received = [0 for _ in range(self.num_senders)]
         self.sender_failed_after = [float("inf") for _ in range(self.num_senders)]
-        self.current_senders = self.num_senders
+        self.num_current_senders = self.num_senders
 
         self.reset_accumulators()
 
     def reset_accumulators(self):
         """(re)create averaging buffers for the next part in line, prepopulate with local tensor part"""
-        assert self.current_part_accumulated_from == self.current_senders or self.current_part_index == -1
+        assert self.current_part_accumulated_from == self.num_current_senders or self.current_part_index == -1
         if self.current_part_index >= self.num_parts - 1:
             self.finalize()
             return
@@ -200,7 +200,7 @@ class TensorPartReducer:
         self.current_part_index += 1
         self.current_part_accumulated_from = 0
         self.current_part_future = asyncio.Future()
-        self.current_senders = sum(self.current_part_index < failed_index for failed_index in self.sender_failed_after)
+        self.num_current_senders = sum(self.current_part_index < failed_index for failed_index in self.sender_failed_after)
         self.accumulator = torch.zeros(self.part_shapes[self.current_part_index])
         self.denominator = 0.0
 
@@ -226,8 +226,8 @@ class TensorPartReducer:
             self.current_part_accumulated_from += 1
             self.denominator += weight
 
-            assert self.current_part_accumulated_from <= self.current_senders
-            if self.current_part_accumulated_from == self.current_senders:
+            assert self.current_part_accumulated_from <= self.num_current_senders
+            if self.current_part_accumulated_from == self.num_current_senders:
                 current_part_future.set_result(self.accumulator.div_(self.denominator))
                 self.reset_accumulators()
         return await current_part_future
@@ -236,8 +236,8 @@ class TensorPartReducer:
         """Exclude that sender's data for averaging any parts that it did not submit yet."""
         self.sender_failed_after[sender_index] = self.num_parts_received[sender_index]
         if self.current_part_index == self.num_parts_received[sender_index]:
-            self.current_senders -= 1
-            if self.current_part_accumulated_from == self.current_senders:
+            self.num_current_senders -= 1
+            if self.current_part_accumulated_from == self.num_current_senders:
                 self.current_part_future.set_result(self.accumulator.div_(self.denominator))
                 self.reset_accumulators()
 
