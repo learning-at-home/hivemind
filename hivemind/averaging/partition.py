@@ -247,7 +247,8 @@ class TensorPartReducer:
             self.finished.set()
 
             if self.num_parts != 0 and self.num_senders != 0:
-                parts_expected, parts_received = (self.num_parts * self.num_senders), sum(self.num_parts_received)
+                parts_expected = self.num_parts * self.num_senders
+                parts_received = sum(self.num_parts_received)
                 if parts_expected != parts_received:
                     logger.info(f"Reducer: received {parts_received / parts_expected * 100:.1f}% of tensors.")
 
