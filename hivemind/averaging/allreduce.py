@@ -82,10 +82,10 @@ class AllReduceRunner(ServicerBase):
         self.peer_id = p2p.peer_id
         assert self.peer_id in ordered_peer_ids, "peer_id is not a part of the group"
         if reducer_timeout is not None and (sender_timeout is None or reducer_timeout <= sender_timeout):
-                raise ValueError(
-                    "If reducer_timeout is enabled, sender_timeout must be shorter than reducer_timeout. "
-                    "Otherwise, there is a chance that reducers will be banned while they await senders."
-                )
+            raise ValueError(
+                "If reducer_timeout is enabled, sender_timeout must be shorter than reducer_timeout. "
+                "Otherwise, there is a chance that reducers will be banned while they await senders."
+            )
 
         if not issubclass(servicer_type, ServicerBase):
             raise TypeError("`servicer_type` is expected to be a ServicerBase subclass")
