@@ -186,7 +186,8 @@ class TensorPartReducer:
 
         self.num_parts_received = [0 for _ in range(self.num_senders)]
         self.sender_failed_after = [float("inf") for _ in range(self.num_senders)]
-        self.num_current_senders = self.num_senders
+        self.\
+            num_current_senders = self.num_senders
 
         self.reset_accumulators()
 
@@ -225,11 +226,7 @@ class TensorPartReducer:
             self.accumulator.add_(tensor_part, alpha=weight)
             self.current_part_accumulated_from += 1
             self.denominator += weight
-
-            assert self.current_part_accumulated_from <= self.num_current_senders
-            if self.current_part_accumulated_from == self.num_current_senders:
-                current_part_future.set_result(self.accumulator.div_(self.denominator))
-                self.reset_accumulators()
+            self.check_current_part_finished()
         return await current_part_future
 
     def on_sender_failed(self, sender_index: int):
@@ -237,9 +234,13 @@ class TensorPartReducer:
         self.sender_failed_after[sender_index] = self.num_parts_received[sender_index]
         if self.current_part_index == self.num_parts_received[sender_index]:
             self.num_current_senders -= 1
-            if self.current_part_accumulated_from == self.num_current_senders:
-                self.current_part_future.set_result(self.accumulator.div_(self.denominator))
-                self.reset_accumulators()
+            self.check_current_part_finished()
+
+    def check_current_part_finished(self):
+        assert self.current_part_accumulated_from <= self.num_current_senders
+        if self.current_part_accumulated_from == self.num_current_senders:
+            self.current_part_future.set_result(self.accumulator.div_(self.denominator))
+            self.reset_accumulators()
 
     def finalize(self):
         if not self.finished.is_set():
