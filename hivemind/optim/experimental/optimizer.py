@@ -255,7 +255,7 @@ class Optimizer(torch.optim.Optimizer):
         )
         if not use_local_updates:
             self.grad_averager = self._make_gradient_averager(
-                reuse_grad_buffers=reuse_grad_buffers, compression=grad_compression, **averager_opts or {},
+                reuse_grad_buffers=reuse_grad_buffers, compression=grad_compression, **averager_opts or {}
             )
         else:
             self.grad_averager = None
