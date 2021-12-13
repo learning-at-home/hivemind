@@ -211,23 +211,14 @@ class AllReduceRunner(ServicerBase):
                         raise AllreduceException(f"{peer_id} sent {averaging_pb2.MessageCode.Name(msg.code)}")
                     return deserialize_torch_tensor(msg.tensor_part), msg
 
-                async for delta_or_error, msg in amap_in_executor(
+                async for delta, msg in amap_in_executor(
                     _try_deserialize,
                     aiter_with_timeout(stream, self.reducer_timeout),
                     max_prefetch=self.tensor_part_container.prefetch,
                 ):
-                    if code is None:
-                        code = msg.code
-                    if not isinstance(delta_or_error, torch.Tensor):
-                        raise AllreduceException(f"Failed to deserialize chunk from {peer_index}: {delta_or_error}")
-                    self.tensor_part_container.register_processed_part(peer_index, part_index, delta_or_error)
+                    self.tensor_part_container.register_processed_part(peer_index, part_index, delta)
                     part_index += 1
 
-                if code != averaging_pb2.AVERAGED_PART:
-                    raise AllreduceException(
-                        f"peer {peer_id} returned {averaging_pb2.MessageCode.Name(code)} "
-                        f"instead of {averaging_pb2.MessageCode.Name(averaging_pb2.AVERAGED_PART)}"
-                    )
                 if part_index != self.tensor_part_container.num_parts_by_peer[peer_index]:
                     raise AllreduceException(
                         f"peer {peer_id} sent {part_index} parts, but we expected "
