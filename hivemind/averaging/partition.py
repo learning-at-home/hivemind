@@ -186,8 +186,7 @@ class TensorPartReducer:
 
         self.num_parts_received = [0 for _ in range(self.num_senders)]
         self.sender_failed_after = [float("inf") for _ in range(self.num_senders)]
-        self.\
-            num_current_senders = self.num_senders
+        self.num_current_senders = self.num_senders
 
         self.reset_accumulators()
 
@@ -201,7 +200,9 @@ class TensorPartReducer:
         self.current_part_index += 1
         self.current_part_accumulated_from = 0
         self.current_part_future = asyncio.Future()
-        self.num_current_senders = sum(self.current_part_index < failed_index for failed_index in self.sender_failed_after)
+        self.num_current_senders = sum(
+            self.current_part_index < failed_index for failed_index in self.sender_failed_after
+        )
         self.accumulator = torch.zeros(self.part_shapes[self.current_part_index])
         self.denominator = 0.0
 
