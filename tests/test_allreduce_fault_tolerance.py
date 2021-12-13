@@ -99,7 +99,6 @@ class FaultyAllReduceRunner(AllReduceRunner):
             async for message in super().rpc_aggregate_part(stream, context):
                 yield message
 
-
     async def _generate_input_for_peer(self, peer_index: int) -> AsyncIterator[averaging_pb2.AveragingData]:
         parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
 
@@ -130,7 +129,7 @@ class FaultyAllReduceRunner(AllReduceRunner):
         (Fault.NONE, Fault.CANCEL),
     ],
 )
-def test_fault_tolerance(fault0: Fault.NONE, fault1: Fault.NONE):
+def test_fault_tolerance(fault0: Fault, fault1: Fault):
     def _make_tensors():
         return [torch.rand(16, 1024), -torch.rand(3, 8192), 2 * torch.randn(4, 4, 4), torch.randn(1024, 1024)]
 
