@@ -126,6 +126,7 @@ class FaultyAllReduceRunner(AllReduceRunner):
         (Fault.FAIL_SENDING, Fault.FAIL_SENDING),
         (Fault.FAIL_SENDING, Fault.FAIL_BEFORE),
         (Fault.FAIL_SENDING, Fault.FAIL_REDUCING),
+        (Fault.FAIL_REDUCING, Fault.FAIL_REDUCING),
         (Fault.NONE, Fault.CANCEL),
     ],
 )
