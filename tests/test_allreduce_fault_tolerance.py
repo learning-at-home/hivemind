@@ -126,7 +126,6 @@ class FaultyAllReduceRunner(AllReduceRunner):
         (Fault.FAIL_SENDING, Fault.FAIL_SENDING),
         (Fault.FAIL_SENDING, Fault.FAIL_BEFORE),
         (Fault.FAIL_SENDING, Fault.FAIL_REDUCING),
-        (Fault.FAIL_REDUCING, Fault.FAIL_REDUCING),
         (Fault.NONE, Fault.CANCEL),
     ],
 )
@@ -166,6 +165,11 @@ def test_fault_tolerance(fault0: Fault, fault1: Fault):
     ref_tensors = [ref_numerator / ref_denominator for ref_numerator in ref_numerators]
     flat_ref = torch.cat(list(map(torch.flatten, ref_tensors)))
 
+    flat_local_tensors = []
+    for averager in averagers:
+        with averager.get_tensors() as tensors:
+            flat_local_tensors.append(torch.cat(list(map(torch.flatten, tensors))))
+
     futures = [averager.step(timeout=5, wait=False, allow_retries=False) for averager in averagers]
     for i, averager in enumerate(averagers):
         if averager.fault == Fault.CANCEL:
@@ -174,22 +178,26 @@ def test_fault_tolerance(fault0: Fault, fault1: Fault):
     for future in futures[2:]:
         assert future.result()
 
-    for averager in averagers[2:]:
+    for averager, prev_local_tensors in zip(averagers[2:], flat_local_tensors[2:]):
         with averager.get_tensors() as tensors:
             flat_tensors = torch.cat(list(map(torch.flatten, tensors)))
-        diff = flat_ref - flat_tensors
+
+        diff_with_reference = abs(flat_ref - flat_tensors)
 
         if all(fault == Fault.FAIL_SENDING for fault in (fault0, fault1)):
             assert fault0 != Fault.FAIL_REDUCING and fault1 != Fault.FAIL_REDUCING
-            assert abs(diff[: len(diff) // 2]).max() < 1e-5
+            assert diff_with_reference[: len(diff_with_reference) // 2].max() < 1e-5
         elif all(fault == Fault.FAIL_REDUCING for fault in (fault0, fault1)):
-            assert (abs(diff[: len(diff) // 2]) < 1e-5).numpy().mean() > 0.5
+            diff_to_reference = abs(flat_ref - flat_tensors)
+            diff_to_local = abs(prev_local_tensors - flat_tensors)
+            assert (diff_with_reference < 1e-5).numpy().mean() > 0.5
+            assert torch.all(torch.minimum(diff_to_reference, diff_to_local) < 1e-5).item()
         elif any(fault == Fault.CANCEL for fault in (fault0, fault1)):
             pass  # late cancel may result in an arbitrary mix of averaging results with and without the cancelled peer
         elif fault0 == Fault.NONE:  # only peer1 in client mode may have failed
-            assert abs(diff).max() < 1e-5
+            assert diff_with_reference.max() < 1e-5
         else:
-            assert (abs(diff) < 1e-5).numpy().mean() > 0.5
+            assert (diff_with_reference < 1e-5).numpy().mean() > 0.5
 
     for averager in averagers:
         averager.shutdown()
