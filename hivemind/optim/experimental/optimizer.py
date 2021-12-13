@@ -432,7 +432,8 @@ class Optimizer(torch.optim.Optimizer):
 
             if self.use_gradient_averaging:
                 logger.log(self.status_loglevel, f"Beginning optimizer step #{self.local_epoch}")
-                self.state_averager.step(wait_for_delayed_updates=True)
+                if self.delay_optimizer_step:
+                    self.state_averager.step(wait_for_delayed_updates=True)
 
                 began_averaging_gradients = self._begin_averaging_gradients(grad_scaler)
                 if not began_averaging_gradients:
