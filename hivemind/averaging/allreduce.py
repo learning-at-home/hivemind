@@ -172,7 +172,7 @@ class AllReduceRunner(ServicerBase):
             for task in pending_tasks:
                 task.cancel()
                 if task.done() and not task.cancelled():
-                    logger.debug(f"Task {task} failed with {task.exception()}.")
+                    logger.debug(f"Task {task} failed with {task.exception()}", exc_info=True)
             self.finalize(exception=e)
             raise
 
