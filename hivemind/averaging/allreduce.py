@@ -149,7 +149,7 @@ class AllReduceRunner(ServicerBase):
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""
         pending_tasks = set()
         if self.sender_timeout is not None:
-            asyncio.create_task(self._handle_missing_senders())
+            pending_tasks.add(asyncio.create_task(self._handle_missing_senders()))
         try:
             if len(self.sender_peer_ids) == 0:
                 logger.debug(f"{self} - finished all-reduce early: all peers are auxiliaries ({self.modes})")
