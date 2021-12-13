@@ -161,6 +161,8 @@ class TensorPartContainer:
             for peer_index in range(self.group_size):
                 self._inputs_consumed_by_peer[peer_index] = True
                 self._output_part_available[peer_index].set()
+                self._input_parts_by_peer[peer_index].clear()
+                self._output_parts_by_peer[peer_index].clear()
             self._outputs_consumed = True
             self.finished.set()
 
