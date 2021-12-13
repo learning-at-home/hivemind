@@ -14,7 +14,7 @@ from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.matchmaking import MatchmakingException
 from hivemind.proto import averaging_pb2
-from hivemind.utils.asyncio import as_aiter, azip, enter_asynchronously, aenumerate
+from hivemind.utils.asyncio import aenumerate, as_aiter, azip, enter_asynchronously
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
