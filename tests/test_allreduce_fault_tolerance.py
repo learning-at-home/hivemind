@@ -14,7 +14,7 @@ from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.matchmaking import MatchmakingException
 from hivemind.proto import averaging_pb2
-from hivemind.utils.asyncio import as_aiter, azip, enter_asynchronously
+from hivemind.utils.asyncio import as_aiter, azip, enter_asynchronously, aenumerate
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -88,12 +88,17 @@ class FaultyAllReduceRunner(AllReduceRunner):
 
     async def rpc_aggregate_part(self, stream, context) -> AsyncIterator[averaging_pb2.AveragingData]:
         if self.fault == Fault.FAIL_REDUCING:
+            async for i, message in aenumerate(super().rpc_aggregate_part(stream, context)):
+                yield message
+                if i > 1:
+                    break
             yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
         elif self.fault == Fault.CANCEL:
             yield averaging_pb2.AveragingData(code=averaging_pb2.CANCELLED)
         else:
             async for message in super().rpc_aggregate_part(stream, context):
                 yield message
+
 
     async def _generate_input_for_peer(self, peer_index: int) -> AsyncIterator[averaging_pb2.AveragingData]:
         parts_aiter = self.tensor_part_container.iterate_input_parts_for(peer_index)
