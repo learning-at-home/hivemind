@@ -119,17 +119,17 @@ async def amap_in_executor(
                 await queue.put(loop.run_in_executor(executor, func, *args))
             await queue.put(None)
         except BaseException as e:
-            await queue.put(e)
+            future = asyncio.Future()
+            future.set_exception(e)
+            await queue.put(future)
             raise
 
     task = asyncio.create_task(_put_items())
     try:
-        future_or_exception = await queue.get()
-        while future_or_exception is not None:
-            if isinstance(future_or_exception, BaseException):
-                raise future_or_exception
-            yield await future_or_exception
-            future_or_exception = await queue.get()
+        future = await queue.get()
+        while future is not None:
+            yield await future
+            future = await queue.get()
         await task
     finally:
         task.cancel()
