@@ -180,12 +180,9 @@ class AllReduceRunner(ServicerBase):
         """Detect senders that should have sent tensors for averaging, but did not send anything within timeout"""
         assert self.sender_timeout is not None
         await asyncio.sleep(self.sender_timeout)
-        async with self.banlock:
-            for peer_id in self.sender_peer_ids:
-                if peer_id not in self.active_senders and peer_id not in self.banned_senders:
-                    sender_index = self.sender_peer_ids.index(peer_id)
-                    self.banned_senders.add(peer_id)
-                    self.tensor_part_reducer.on_sender_failed(sender_index)
+        for peer_id in self.sender_peer_ids:
+            if peer_id not in self.active_senders and peer_id not in self.banned_senders:
+                await self._ban_sender(peer_id)
 
     async def _communicate_with_peer(self, peer_id: PeerID):
         """Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors"""
@@ -302,24 +299,22 @@ class AllReduceRunner(ServicerBase):
                     await accumulate_task
 
             else:
-                error_code = averaging_pb2.MessageCode.Name(request.code)
-                logger.debug(f"{self} - peer {context.remote_id} sent {error_code}")
-                sender_index = self.sender_peer_ids.index(context.remote_id)
-                async with self.banlock:
-                    if context.remote_id not in self.banned_senders:
-                        self.banned_senders.add(context.remote_id)
-                        self.tensor_part_reducer.on_sender_failed(sender_index)
                 yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
+                raise AllreduceException(f"{context.remote_id} sent {averaging_pb2.MessageCode.Name(request.code)}")
+
         except BaseException as e:
-            async with self.banlock:
-                if context.remote_id not in self.banned_senders:
-                    self.banned_senders.add(context.remote_id)
-                    self.tensor_part_reducer.on_sender_failed(sender_index)
+            await self._ban_sender(context.remote_id)
             if isinstance(e, Exception):
                 logger.warning(f"Caught {repr(e)} when communicating with {context.remote_id}")
                 yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
             else:
                 raise  # CancelledError, StopIteration and similar
+
+    async def _ban_sender(self, peer_id: PeerID):
+        async with self.banlock:
+            if peer_id not in self.banned_senders:
+                self.banned_senders.add(peer_id)
+                self.tensor_part_reducer.on_sender_failed(self.sender_peer_ids.index(peer_id))
 
     def _check_reasons_to_reject(
         self, request: averaging_pb2.AveragingData, context: P2PContext
@@ -353,10 +348,7 @@ class AllReduceRunner(ServicerBase):
                 yield averaging_pb2.AveragingData(code=averaging_pb2.AVERAGED_PART, tensor_part=serialized_delta)
         finally:
             if part_index != self.tensor_part_reducer.num_parts:
-                async with self.banlock:
-                    if self.sender_peer_ids[sender_index] not in self.banned_senders:
-                        self.banned_senders.add(self.sender_peer_ids[sender_index])
-                        self.tensor_part_reducer.on_sender_failed(sender_index)
+                await self._ban_sender(self.sender_peer_ids[sender_index])
 
     def finalize(self, *, cancel: bool = False, exception: Optional[BaseException] = None):
         """finish or terminate AllReduceRunner, propagate any errors / cancellations to peers."""
