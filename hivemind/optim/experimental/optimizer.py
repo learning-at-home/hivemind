@@ -175,6 +175,7 @@ class Optimizer(torch.optim.Optimizer):
         matchmaking_time: Optional[float] = 15.0,
         averaging_timeout: Optional[float] = 60.0,
         allreduce_timeout: Optional[float] = None,
+        next_chunk_timeout: Optional[float] = None,
         load_state_timeout: float = 600.0,
         reuse_grad_buffers: bool = False,
         offload_optimizer: Optional[bool] = None,
@@ -200,6 +201,7 @@ class Optimizer(torch.optim.Optimizer):
         delay_optimizer_step = delay_optimizer_step if delay_optimizer_step is not None else delay_grad_averaging
         offload_optimizer = offload_optimizer if offload_optimizer is not None else (params is not None)
         allreduce_timeout = allreduce_timeout if allreduce_timeout is not None else averaging_timeout
+        next_chunk_timeout = next_chunk_timeout if next_chunk_timeout is not None else matchmaking_time
         assert not delay_grad_averaging or delay_optimizer_step, "delay_grad_averaging requires delay_optimizer_step"
         assert not (client_mode and auxiliary), "Client-mode peers cannot serve as auxiliaries"
         assert not auxiliary or batch_size_per_step is None, "Auxiliary peers should not accumulate batches"
@@ -230,6 +232,7 @@ class Optimizer(torch.optim.Optimizer):
 
         self.averaging_timeout, self.allreduce_timeout = averaging_timeout, allreduce_timeout
         self.load_state_timeout, self.shutdown_timeout = load_state_timeout, shutdown_timeout
+        self.next_chunk_timeout = next_chunk_timeout
 
         self.status_loglevel = logging.INFO if verbose else logging.DEBUG
         self.scheduled_grads: Optional[StepControl] = None
@@ -279,6 +282,7 @@ class Optimizer(torch.optim.Optimizer):
             offload_optimizer=self.offload_optimizer,
             custom_gradients=self.offload_optimizer,
             status_loglevel=self.status_loglevel,
+            next_chunk_timeout=self.next_chunk_timeout,
             client_mode=self.client_mode,
             auxiliary=self.auxiliary,
             start=True,
@@ -294,6 +298,7 @@ class Optimizer(torch.optim.Optimizer):
             min_matchmaking_time=self.matchmaking_time,
             allreduce_timeout=self.allreduce_timeout,
             shutdown_timeout=self.shutdown_timeout,
+            next_chunk_timeout=self.next_chunk_timeout,
             client_mode=self.client_mode,
             auxiliary=self.auxiliary,
             start=True,
@@ -427,6 +432,9 @@ class Optimizer(torch.optim.Optimizer):
 
             if self.use_gradient_averaging:
                 logger.log(self.status_loglevel, f"Beginning optimizer step #{self.local_epoch}")
+                if self.delay_optimizer_step:
+                    self.state_averager.step(wait_for_delayed_updates=True)
+
                 began_averaging_gradients = self._begin_averaging_gradients(grad_scaler)
                 if not began_averaging_gradients:
                     pass  # failed to start gradient averaging due to an internal error
@@ -534,10 +542,6 @@ class Optimizer(torch.optim.Optimizer):
         assert self.use_gradient_averaging
         if self.tracker.estimated_next_update_time - get_dht_time() <= self.matchmaking_time:
             if self.scheduled_grads is None or self.scheduled_grads.triggered or self.scheduled_grads.done():
-                if self.delay_grad_averaging:
-                    # wait for previous averaging to finish before starting a new one
-                    self.state_averager.step(wait_for_delayed_updates=True)
-
                 eta_seconds = self.tracker.estimated_next_update_time - get_dht_time()
                 eta_seconds = max(eta_seconds, self.grad_averager.matchmaking_kwargs["min_matchmaking_time"])
                 logger.log(self.status_loglevel, f"Pre-scheduling gradient averaging round in {eta_seconds:.2f} sec")
@@ -545,12 +549,13 @@ class Optimizer(torch.optim.Optimizer):
 
     def _maybe_schedule_state_averaging(self) -> None:
         """If next epoch is coming soon, schedule the next state averaging at estimated parameter averaging start"""
-        return
         next_epoch = max(self.local_epoch + 1, self.tracker.global_epoch)
         if next_epoch % self.average_state_every != 0:
             return  # averaging is not performed at this epoch
         if self.state_averager.averaging_in_progress:
             return  # previous run is still in progress
+        if self.delay_before_state_averaging.num_updates == 0:
+            return  # not enough data to accurately pre-schedule
 
         estimated_time = self.tracker.estimated_next_update_time
         estimated_time += self.delay_before_state_averaging.ema_seconds_per_sample

@@ -60,11 +60,11 @@ class GradScaler(TorchGradScaler):
                 return False
 
     def step(self, optimizer: TorchOptimizer, *args, **kwargs) -> bool:
-        if self._is_running_global_step:
+        if self._is_running_global_step and not isinstance(optimizer, hivemind.Optimizer):
+            # ^-- invoked privately within hivemind optimizer
             with self._lock:
                 if self._is_ready_to_update:
                     logger.warning("Please call grad_scaler.update() after each step")
-                assert not isinstance(optimizer, (hivemind.Optimizer, hivemind.DecentralizedOptimizerBase))
                 assert (
                     self._per_optimizer_states[id(optimizer)]["stage"] == OptState.UNSCALED
                 ), "InternalError: Optimizer should have called .unscale internally before invoking grad_scaler.step."
@@ -75,7 +75,6 @@ class GradScaler(TorchGradScaler):
                 self._is_ready_to_update = True
                 return True
         else:
-            assert isinstance(optimizer, (hivemind.Optimizer, hivemind.DecentralizedOptimizerBase))
             super().step(optimizer)
             self._optimizer_states_to_reset.add(id(optimizer))
             return False
