@@ -187,7 +187,6 @@ class AllReduceRunner(ServicerBase):
 
     async def _handle_missing_senders(self):
         """Detect senders that should have sent tensors for averaging, but did not send anything within timeout"""
-        assert self.sender_timeout is not None
         try:
             await asyncio.wait_for(self.all_senders_started.wait(), self.sender_timeout)
         except asyncio.TimeoutError:
