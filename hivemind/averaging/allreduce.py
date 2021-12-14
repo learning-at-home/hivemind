@@ -170,6 +170,7 @@ class AllReduceRunner(ServicerBase):
         except BaseException as e:
             self.finalize(exception=e)
             raise
+
         finally:
             for task in pending_tasks:
                 task.cancel()
