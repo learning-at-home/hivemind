@@ -140,7 +140,8 @@ async def amap_in_executor(
             logger.debug(f"Caught {e} while iterating over inputs", exc_info=True)
         while not queue.empty():
             future = queue.get_nowait()
-            future.cancel()
+            if future is not None:
+                future.cancel()
 
 
 async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: Optional[float]) -> AsyncIterator[T]:
