@@ -114,6 +114,7 @@ class AllReduceRunner(ServicerBase):
 
         self.sender_timeout, self.reducer_timeout = sender_timeout, reducer_timeout
         self.active_senders: Set[PeerID] = {self.peer_id}  # peers that began sending data via rpc_aggregate_part
+        self.all_senders_started = asyncio.Event()
         self.banned_senders: Set[PeerID] = set()  # peers that did not send data by next_chunk_timeout
         self.banlock = asyncio.Lock()
 
@@ -146,9 +147,8 @@ class AllReduceRunner(ServicerBase):
 
     async def run(self) -> AsyncIterator[torch.Tensor]:
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""
-        pending_tasks = set()
-        if self.sender_timeout is not None:
-            pending_tasks.add(asyncio.create_task(self._handle_missing_senders()))
+        handle_missing_senders = asyncio.create_task(self._handle_missing_senders())
+        pending_tasks = {handle_missing_senders}
         try:
             if len(self.sender_peer_ids) == 0:
                 logger.debug(f"{self} - finished all-reduce early: all peers are auxiliaries ({self.modes})")
@@ -161,6 +161,9 @@ class AllReduceRunner(ServicerBase):
 
                 async for averaged_tensor_delta in self.tensor_part_container.iterate_output_tensors():
                     yield averaged_tensor_delta  # delta = averaged_tensor - original_tensor
+
+                await handle_missing_senders  # wait for all senders to open a connection or fail(timeout).
+                # If we do not wait, some client-only senders may open connection too late and get BAD_GROUP_ID'd
                 self.finalize()
 
             else:  # auxiliary peer
@@ -185,10 +188,12 @@ class AllReduceRunner(ServicerBase):
     async def _handle_missing_senders(self):
         """Detect senders that should have sent tensors for averaging, but did not send anything within timeout"""
         assert self.sender_timeout is not None
-        await asyncio.sleep(self.sender_timeout)
-        for peer_id in self.sender_peer_ids:
-            if peer_id not in self.active_senders and peer_id not in self.banned_senders:
-                await self._ban_sender(peer_id)
+        try:
+            await asyncio.wait_for(self.all_senders_started.wait(), self.sender_timeout)
+        except asyncio.TimeoutError:
+            for peer_id in self.sender_peer_ids:
+                if peer_id not in self.active_senders and peer_id not in self.banned_senders:
+                    await self._ban_sender(peer_id)
 
     async def _communicate_with_peer(self, peer_id: PeerID):
         """Send a part of local tensors and metadata to a single peer, receive the average for that part of tensors"""
@@ -264,6 +269,8 @@ class AllReduceRunner(ServicerBase):
             elif request.code == averaging_pb2.PART_FOR_AVERAGING:
                 stream = aiter_with_timeout(achain(as_aiter(request), stream), self.sender_timeout)
                 self.active_senders.add(context.remote_id)
+                if len(self.active_senders) == len(self.sender_peer_ids):
+                    self.all_senders_started.set()
                 if not self.should_delay_results(context.remote_id):
                     async for msg in self._accumulate_parts_streaming(stream, sender_index):
                         yield msg
