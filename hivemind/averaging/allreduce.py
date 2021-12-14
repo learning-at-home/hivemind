@@ -123,9 +123,6 @@ class AllReduceRunner(ServicerBase):
         if len(self.active_senders) == len(self.sender_peer_ids):
             self.all_senders_started.set()
 
-
-
-
         peer_id_index = self.ordered_peer_ids.index(self.peer_id)
         self.tensor_part_container = TensorPartContainer(tensors, peer_fractions, return_deltas=True, **kwargs)
         self.parts_for_local_averaging = self.tensor_part_container.get_raw_input_parts(peer_id_index)
