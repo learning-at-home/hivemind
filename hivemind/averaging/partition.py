@@ -47,6 +47,7 @@ class TensorPartContainer:
         self.local_tensors, self.peer_fractions, self.group_size = tensors, peer_fractions, len(peer_fractions)
         self.compression, self.part_size_bytes, self.tensor_infos = compression, part_size_bytes, tensor_infos
         self.total_size = sum(tensor.numel() for tensor in tensors)
+        self.failed_size = 0
         self.return_deltas = return_deltas
         self.prefetch = prefetch
 
@@ -131,6 +132,7 @@ class TensorPartContainer:
             part_and_info = self._input_parts_by_peer[peer_index][part_index]
             part_result_or_delta = torch.zeros_like(part_and_info[0]) if self.return_deltas else part_and_info[0]
             self.register_processed_part(peer_index, part_index, part_result_or_delta)
+            self.failed_size += part_result_or_delta.numel()
 
     async def iterate_output_tensors(self) -> AsyncIterable[torch.Tensor]:
         """iterate over the outputs of averaging (whether they are average, delta or other aggregation result)"""
@@ -167,6 +169,8 @@ class TensorPartContainer:
                 self._output_part_available[peer_index].set()
                 self._input_parts_by_peer[peer_index].clear()
                 self._output_parts_by_peer[peer_index].clear()
+            if self.failed_size != 0:
+                logger.warning(f"Averaging: received {1. - self.failed_size / self.total_size * 100:.1}% of results")
             self._outputs_consumed = True
             self.finished.set()
 
@@ -258,7 +262,7 @@ class TensorPartReducer:
                 parts_expected = self.num_parts * self.num_senders
                 parts_received = sum(self.num_parts_received)
                 if parts_expected != parts_received:
-                    logger.info(f"Reducer: received {parts_received / parts_expected * 100:.1f}% of tensors")
+                    logger.info(f"Reducer: received {parts_received / parts_expected * 100:.1f}% of input tensors")
 
     def __del__(self):
         self.finalize()
