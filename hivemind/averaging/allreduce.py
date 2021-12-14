@@ -170,8 +170,12 @@ class AllReduceRunner(ServicerBase):
         except BaseException as e:
             for task in pending_tasks:
                 task.cancel()
-                if task.done() and not task.cancelled():
-                    logger.debug(f"Task {task} failed with {task.exception()}", exc_info=True)
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as inner_exc:
+                    logger.debug(f"Task {task} failed with {inner_exc}", exc_info=True)
             self.finalize(exception=e)
             raise
 
