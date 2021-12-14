@@ -147,8 +147,12 @@ class AllReduceRunner(ServicerBase):
 
     async def run(self) -> AsyncIterator[torch.Tensor]:
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""
-        handle_missing_senders = asyncio.create_task(self._handle_missing_senders())
-        pending_tasks = {handle_missing_senders}
+        pending_tasks = set()
+
+        if self.tensor_part_container.num_parts_by_peer[self.ordered_peer_ids.index(self.peer_id)] != 0:
+            handle_missing_senders = asyncio.create_task(self._handle_missing_senders())
+            pending_tasks.add(handle_missing_senders)
+
         try:
             if len(self.sender_peer_ids) == 0:
                 logger.debug(f"{self} - finished all-reduce early: all peers are auxiliaries ({self.modes})")
@@ -257,6 +261,9 @@ class AllReduceRunner(ServicerBase):
     ) -> AsyncIterator[averaging_pb2.AveragingData]:
         """a peer sends us a part of his tensor; we should average it with other peers and return the difference"""
         sender_index = self.sender_peer_ids.index(context.remote_id)
+        self.active_senders.add(context.remote_id)
+        if len(self.active_senders) == len(self.sender_peer_ids):
+            self.all_senders_started.set()
 
         try:
             request: averaging_pb2.AveragingData = await asyncio.wait_for(anext(stream), self.sender_timeout)
@@ -267,9 +274,6 @@ class AllReduceRunner(ServicerBase):
 
             elif request.code == averaging_pb2.PART_FOR_AVERAGING:
                 stream = aiter_with_timeout(achain(as_aiter(request), stream), self.sender_timeout)
-                self.active_senders.add(context.remote_id)
-                if len(self.active_senders) == len(self.sender_peer_ids):
-                    self.all_senders_started.set()
                 if not self.should_delay_results(context.remote_id):
                     async for msg in self._accumulate_parts_streaming(stream, sender_index):
                         yield msg
