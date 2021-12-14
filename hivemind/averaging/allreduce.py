@@ -113,10 +113,18 @@ class AllReduceRunner(ServicerBase):
                 self.sender_peer_ids.append(peer_id)
 
         self.sender_timeout, self.reducer_timeout = sender_timeout, reducer_timeout
-        self.active_senders: Set[PeerID] = {self.peer_id}  # peers that began sending data via rpc_aggregate_part
         self.all_senders_started = asyncio.Event()
         self.banned_senders: Set[PeerID] = set()  # peers that did not send data by next_chunk_timeout
         self.banlock = asyncio.Lock()
+
+        self.active_senders: Set[PeerID] = set()  # peers that began sending data via rpc_aggregate_part
+        if self.peer_id in self.sender_peer_ids:
+            self.active_senders.add(self.peer_id)
+        if len(self.active_senders) == len(self.sender_peer_ids):
+            self.all_senders_started.set()
+
+
+
 
         peer_id_index = self.ordered_peer_ids.index(self.peer_id)
         self.tensor_part_container = TensorPartContainer(tensors, peer_fractions, return_deltas=True, **kwargs)
