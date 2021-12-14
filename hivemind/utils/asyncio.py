@@ -130,9 +130,12 @@ async def amap_in_executor(
         while future is not None:
             yield await future
             future = await queue.get()
-        await task
     finally:
         task.cancel()
+        try:
+            await task
+        except Exception as e:
+            logger.debug(f"Caught {e} while iterating over inputs", exc_info=True)
 
 
 async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: Optional[float]) -> AsyncIterator[T]:
