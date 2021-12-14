@@ -169,11 +169,12 @@ class AllReduceRunner(ServicerBase):
 
         except BaseException as e:
             self.finalize(exception=e)
+            for task in pending_tasks:
+                task.cancel()
             raise
 
         finally:
             for task in pending_tasks:
-                task.cancel()
                 try:
                     await task
                 except asyncio.CancelledError:
@@ -230,7 +231,8 @@ class AllReduceRunner(ServicerBase):
                         f"{self.tensor_part_container.num_parts_by_peer[peer_index]}"
                     )
             except BaseException as e:
-                logger.warning(f"Caught {repr(e)} when communicating to {peer_id}")
+                if isinstance(e, Exception):
+                    logger.warning(f"Caught {repr(e)} when communicating to {peer_id}")
                 self.tensor_part_container.register_failed_reducer(peer_index)
                 raise
 
