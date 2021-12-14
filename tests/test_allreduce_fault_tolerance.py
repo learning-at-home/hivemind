@@ -24,7 +24,9 @@ class Fault(Enum):
     NONE = auto()
     FAIL_BEFORE = auto()
     FAIL_SENDING = auto()
+    SLOW_SENDING = auto()
     FAIL_REDUCING = auto()
+    SLOW_REDUCING = auto()
     CANCEL = auto()
 
 
@@ -87,12 +89,16 @@ class FaultyAllReduceRunner(AllReduceRunner):
         super().__init__(*args, **kwargs)
 
     async def rpc_aggregate_part(self, stream, context) -> AsyncIterator[averaging_pb2.AveragingData]:
-        if self.fault == Fault.FAIL_REDUCING:
+        if self.fault in (Fault.FAIL_REDUCING, Fault.SLOW_REDUCING):
             async for i, message in aenumerate(super().rpc_aggregate_part(stream, context)):
                 yield message
-                if i > 1:
-                    break
-            yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
+                if i == 2:
+                    if self.fault == Fault.FAIL_SENDING:
+                        yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
+                        break
+                    else:
+                        await asyncio.sleep(10)
+
         elif self.fault == Fault.CANCEL:
             yield averaging_pb2.AveragingData(code=averaging_pb2.CANCELLED)
         else:
@@ -109,10 +115,13 @@ class FaultyAllReduceRunner(AllReduceRunner):
             tensor_part=first_part,
             weight=self.weight,
         )
-        if self.fault == Fault.FAIL_SENDING:
+        if self.fault in (Fault.FAIL_SENDING, Fault.SLOW_SENDING):
             last_reducer_index = self.group_size - 1 - (self.tensor_part_container.num_parts_by_peer[-1] == 0)
             if peer_index == last_reducer_index:
-                raise Exception("Oops, I failed!")
+                if self.fault == Fault.FAIL_SENDING:
+                    raise Exception("Oops, I failed!")
+                else:
+                    await asyncio.sleep(10)
         async for part in parts_aiter:
             yield averaging_pb2.AveragingData(tensor_part=part, weight=self.weight)
 
@@ -123,9 +132,9 @@ class FaultyAllReduceRunner(AllReduceRunner):
     [
         (Fault.NONE, Fault.FAIL_BEFORE),
         (Fault.FAIL_BEFORE, Fault.FAIL_BEFORE),
-        (Fault.FAIL_SENDING, Fault.FAIL_SENDING),
+        (Fault.SLOW_SENDING, Fault.FAIL_SENDING),
         (Fault.FAIL_SENDING, Fault.FAIL_BEFORE),
-        (Fault.FAIL_SENDING, Fault.FAIL_REDUCING),
+        (Fault.SLOW_REDUCING, Fault.FAIL_SENDING),
         (Fault.FAIL_REDUCING, Fault.FAIL_REDUCING),
         (Fault.NONE, Fault.CANCEL),
     ],
@@ -185,10 +194,10 @@ def test_fault_tolerance(fault0: Fault, fault1: Fault):
 
         diff_with_reference = abs(flat_ref - flat_tensors)
 
-        if all(fault == Fault.FAIL_SENDING for fault in (fault0, fault1)):
+        if all(fault == (Fault.FAIL_SENDING, Fault.SLOW_SENDING) for fault in (fault0, fault1)):
             assert fault0 != Fault.FAIL_REDUCING and fault1 != Fault.FAIL_REDUCING
             assert diff_with_reference[: len(diff_with_reference) // 2].max() < 1e-5
-        elif all(fault == Fault.FAIL_REDUCING for fault in (fault0, fault1)):
+        elif all(fault in (Fault.FAIL_REDUCING, Fault.SLOW_REDUCING) for fault in (fault0, fault1)):
             diff_to_reference = abs(flat_ref - flat_tensors)
             diff_to_local = abs(prev_local_tensors - flat_tensors)
             assert (diff_with_reference < 1e-5).numpy().mean() > 0.5
