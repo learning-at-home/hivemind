@@ -134,6 +134,8 @@ async def amap_in_executor(
         task.cancel()
         try:
             await task
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             logger.debug(f"Caught {e} while iterating over inputs", exc_info=True)
 
