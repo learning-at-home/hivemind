@@ -168,6 +168,9 @@ class AllReduceRunner(ServicerBase):
                 self.finalize()
 
         except BaseException as e:
+            self.finalize(exception=e)
+            raise
+        finally:
             for task in pending_tasks:
                 task.cancel()
                 try:
@@ -176,8 +179,6 @@ class AllReduceRunner(ServicerBase):
                     pass
                 except Exception as inner_exc:
                     logger.debug(f"Task {task} failed with {inner_exc}", exc_info=True)
-            self.finalize(exception=e)
-            raise
 
     async def _handle_missing_senders(self):
         """Detect senders that should have sent tensors for averaging, but did not send anything within timeout"""
