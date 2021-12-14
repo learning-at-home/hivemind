@@ -149,6 +149,7 @@ class AllReduceRunner(ServicerBase):
         """Run all-reduce, return differences between averaged and original tensors as they are computed"""
         pending_tasks = set()
 
+        handle_missing_senders = None
         if self.tensor_part_container.num_parts_by_peer[self.ordered_peer_ids.index(self.peer_id)] != 0:
             handle_missing_senders = asyncio.create_task(self._handle_missing_senders())
             pending_tasks.add(handle_missing_senders)
@@ -166,8 +167,9 @@ class AllReduceRunner(ServicerBase):
                 async for averaged_tensor_delta in self.tensor_part_container.iterate_output_tensors():
                     yield averaged_tensor_delta  # delta = averaged_tensor - original_tensor
 
-                await handle_missing_senders  # wait for all senders to open a connection or fail(timeout).
-                # If we do not wait, some client-only senders may open connection too late and get BAD_GROUP_ID'd
+                if handle_missing_senders is not None:
+                    await handle_missing_senders  # wait for all senders to open a connection or fail(timeout).
+                    # If we do not wait, some client-only senders may open connection too late and get BAD_GROUP_ID'd
                 self.finalize()
 
             else:  # auxiliary peer
