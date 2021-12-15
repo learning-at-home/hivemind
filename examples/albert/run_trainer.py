@@ -183,7 +183,7 @@ class CollaborativeCallback(transformers.TrainerCallback):
 
 
 class NoOpScheduler(LRSchedulerBase):
-    """Dummy scheduler for transformers.Trainer. The real scheduler is defined in CollaborativeOptimizer.scheduler"""
+    """Dummy scheduler for transformers.Trainer. The real scheduler is defined in Optimizer.scheduler"""
 
     def get_lr(self):
         return [group["lr"] for group in self.optimizer.param_groups]
@@ -255,6 +255,7 @@ def main():
         optimizer=opt,
         scheduler=scheduler,
         grad_compression=Float16Compression(),
+        state_averaging_compression=Float16Compression(),
         averager_opts={"bandwidth": collaboration_args.bandwidth, **asdict(averager_args)},
         client_mode=collaboration_args.client_mode,
         verbose=True,
