@@ -116,14 +116,14 @@ async def amap_in_executor(
     async def _put_items():
         try:
             async for args in azip(*iterables):
-                await queue.put(loop.run_in_executor(executor, func, *args))
-            await queue.put(None)
+                queue.put_nowait(loop.run_in_executor(executor, func, *args))
+            queue.put_nowait(None)
         except GeneratorExit:
             raise
         except BaseException as e:
             future = asyncio.Future()
             future.set_exception(e)
-            await queue.put(future)
+            queue.put_nowait(future)
             raise
 
     task = asyncio.create_task(_put_items())
@@ -133,17 +133,19 @@ async def amap_in_executor(
             yield await future
             future = await queue.get()
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            logger.debug(f"Caught {e} while iterating over inputs", exc_info=True)
+        awaitables = [task]
         while not queue.empty():
             future = queue.get_nowait()
             if future is not None:
-                future.cancel()
+                awaitables.append(future)
+        for coro in awaitables:
+            coro.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.debug(f"Caught {e} while iterating over inputs", exc_info=True)
 
 
 async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: Optional[float]) -> AsyncIterator[T]:
