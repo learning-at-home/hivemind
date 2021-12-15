@@ -116,14 +116,14 @@ async def amap_in_executor(
     async def _put_items():
         try:
             async for args in azip(*iterables):
-                queue.put_nowait(loop.run_in_executor(executor, func, *args))
-            queue.put_nowait(None)
+                await queue.put(loop.run_in_executor(executor, func, *args))
+            await queue.put(None)
         except GeneratorExit:
             raise
         except BaseException as e:
             future = asyncio.Future()
             future.set_exception(e)
-            queue.put_nowait(future)
+            await queue.put(future)
             raise
 
     task = asyncio.create_task(_put_items())
