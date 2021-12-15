@@ -118,7 +118,9 @@ async def amap_in_executor(
             async for args in azip(*iterables):
                 await queue.put(loop.run_in_executor(executor, func, *args))
             await queue.put(None)
-        except Exception as e:
+        except GeneratorExit:
+            raise
+        except BaseException as e:
             future = asyncio.Future()
             future.set_exception(e)
             await queue.put(future)
