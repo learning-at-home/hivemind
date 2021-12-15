@@ -1,3 +1,5 @@
+from warnings import warn
+
 import torch
 
 from hivemind.dht import DHT
@@ -8,6 +10,12 @@ class DecentralizedOptimizerBase(torch.optim.Optimizer):
 
     def __init__(self, opt: torch.optim.Optimizer, dht: DHT):
         self.opt, self.dht = opt, dht
+        warn(
+            "DecentralizedOptimizerBase and its subclasses have been deprecated and will be removed "
+            "in hivemind 1.1.0. Use hivemind.Optimizer instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     @property
     def state(self):
