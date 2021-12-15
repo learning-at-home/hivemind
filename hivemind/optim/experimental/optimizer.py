@@ -290,7 +290,7 @@ class Optimizer(torch.optim.Optimizer):
         )
 
     def _make_gradient_averager(self, **kwargs) -> GradientAverager:
-        assert hasattr(self, "state_averager"), "must initialize state averager first"
+        assert hasattr(self, "_state_averager"), "must initialize state averager first"
         grad_averager = GradientAverager(
             dht=self.dht,
             prefix=f"{self.run_id}_grad_averager",
