@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 
-import os
 import pickle
 import sys
 from dataclasses import asdict
-from pathlib import Path
 
 import torch
 import transformers
@@ -208,10 +206,11 @@ def main():
         )
         sys.exit(1)
 
-    model = get_model(training_args, config, tokenizer)
+    model = AlbertForPreTraining(config)
+    model.resize_token_embeddings(len(tokenizer))
     model.to(training_args.device)
 
-    tokenized_datasets = load_from_disk(Path(dataset_args.dataset_path))
+    tokenized_datasets = load_from_disk(dataset_args.dataset_path)
     # This data collator will take care of randomly masking the tokens.
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer)
 
@@ -314,11 +313,7 @@ def main():
 
     # Training
     if training_args.do_train:
-        latest_checkpoint_dir = max(
-            Path(training_args.output_dir).glob("checkpoint*"), default=None, key=os.path.getctime
-        )
-
-        trainer.train(model_path=latest_checkpoint_dir)
+        trainer.train(resume_from_checkpoint=True)
 
 
 if __name__ == "__main__":
