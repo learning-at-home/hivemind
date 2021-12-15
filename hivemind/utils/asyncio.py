@@ -138,7 +138,7 @@ async def amap_in_executor(
         for coro in awaitables:
             coro.cancel()
             try:
-                await task
+                await coro
             except BaseException as e:
                 if isinstance(e, Exception):
                     logger.debug(f"Caught {e} while iterating over inputs", exc_info=True)
