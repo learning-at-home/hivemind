@@ -242,7 +242,7 @@ class AllReduceRunner(ServicerBase):
                     )
             except BaseException as e:
                 if isinstance(e, Exception):
-                    logger.debug(f"Caught {repr(e)} when communicating to {peer_id}")
+                    logger.debug(f"Caught {repr(e)} when communicating to {peer_id}", exc_info=True)
                 self.tensor_part_container.register_failed_reducer(peer_index)
                 raise
 
@@ -311,7 +311,7 @@ class AllReduceRunner(ServicerBase):
         except BaseException as e:
             await self._ban_sender(context.remote_id)
             if isinstance(e, Exception):
-                logger.debug(f"Caught {repr(e)} when communicating with {context.remote_id}")
+                logger.debug(f"Caught {repr(e)} when communicating with {context.remote_id}", exc_info=True)
                 yield averaging_pb2.AveragingData(code=averaging_pb2.INTERNAL_ERROR)
             else:
                 raise  # CancelledError, StopIteration and similar
