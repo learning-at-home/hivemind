@@ -464,7 +464,10 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         step.set_result(
                             await asyncio.wait_for(
                                 self._run_allreduce(
-                                    group_info, tensor_infos=self.tensor_infos, weight=step.weight, **self.allreduce_kwargs
+                                    group_info,
+                                    tensor_infos=self.tensor_infos,
+                                    weight=step.weight,
+                                    **self.allreduce_kwargs,
                                 ),
                                 timeout=self._allreduce_timeout,
                             )
