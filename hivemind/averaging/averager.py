@@ -7,6 +7,7 @@ import contextlib
 import ctypes
 import multiprocessing as mp
 import os
+import random
 import threading
 import weakref
 from dataclasses import asdict
@@ -30,10 +31,12 @@ from hivemind.compression import (
 )
 from hivemind.dht import DHT, DHTID
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, ServicerBase
+from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure, DispatchFailure
 from hivemind.proto import averaging_pb2
 from hivemind.utils import MPFuture, TensorDescriptor, get_logger
 from hivemind.utils.asyncio import (
     achain,
+    afirst,
     aiter_with_timeout,
     anext,
     as_aiter,
@@ -67,7 +70,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
     :param compression: optionally compress tensors with this compression algorithm before running all-reduce
     :param state_compression: a separate compression strategy for load_state_from_peers (default = no compression)
     :param tensor_infos: CompressionInfo for each respective tensor; this determines how the tensor will be comressed
-    :param allreduce_timeout: spend at most this many seconds for allreduce (after group is formed)
     :param averaging_alpha: optional "learning rate" for averaging. If specified, local parameters will be shifted
       towards the (estimated) average by this coefficient. By default, local parameters are set equal to average.
     :param request_timeout: when looking for group, wait for a response from leader for at most this many seconds.
@@ -84,6 +86,13 @@ class DecentralizedAverager(mp.Process, ServicerBase):
     :param allow_state_sharing: if set to True, other peers can download this peer's state. Can be overwritten
       with averager.allow_state_sharing = True / False
     :param declare_state_period: re-declare averager as a donor for load_state_from_peers every this many seconds
+    :param allreduce_timeout: spend at most this many seconds for allreduce (after group is formed)
+    :param next_chunk_timeout: during all-reduce and load_state_from_peers, if peer does not send next data chunk in
+      this number of seconds, consider it failed and proceed with remaining peers. default: no timeout
+    :param sender_timeout: during all_reduce, any sender that fails to send tensor chunk within this many seconds from
+      previous chunk will be marked as failed and excluded from averaging. default: equal to next_chunk_timeout
+    :param reducer_timeout: during all_reduce, any reducer that fails to send results chunk within this many seconds
+      from previous chunk will be marked as failed and excluded from averaging. default: 2 * sender_timeout
     :param shutdown_timeout: when calling .shutdown, wait for up to this many seconds before terminating
 
     Example:
@@ -112,7 +121,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         *,
         start: bool,
         prefix: str,
-        target_group_size: int,
+        target_group_size: Optional[int] = None,
         min_group_size: int = 2,
         initial_group_bits: str = "",
         averaging_expiration: Optional[float] = None,
@@ -121,6 +130,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         averaging_alpha: float = 1.0,
         part_size_bytes: int = DEFAULT_PART_SIZE_BYTES,
         allreduce_timeout: Optional[float] = None,
+        next_chunk_timeout: Optional[float] = None,
+        sender_timeout: Optional[float] = None,
+        reducer_timeout: Optional[float] = None,
         compression: CompressionBase = NoCompression(),
         state_compression: CompressionBase = NoCompression(),
         tensor_infos: Optional[Sequence[CompressionInfo]] = None,
@@ -137,8 +149,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         assert bandwidth is None or (
             bandwidth >= 0 and np.isfinite(np.float32(bandwidth))
         ), "bandwidth must be a non-negative float32"
-        if not is_power_of_two(target_group_size):
-            logger.warning("It is recommended to set target_group_size to a power of 2.")
         assert all(bit in "01" for bit in initial_group_bits)
         assert not client_mode or not auxiliary, "auxiliary peers must accept incoming connections"
 
@@ -153,6 +163,11 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         if client_mode is None:
             client_mode = dht.client_mode
+        if sender_timeout is None:
+            sender_timeout = next_chunk_timeout
+        if reducer_timeout is None:
+            reducer_timeout = 2 * sender_timeout if sender_timeout is not None else None
+
         self.client_mode = client_mode
 
         self._parent_pid = os.getpid()
@@ -166,13 +181,13 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         self._averaged_tensors = tuple(averaged_tensors)
         self.lock_averaged_tensors = mp.Lock()
-        self.last_updated: DHTExpiration = -float("inf")
         for tensor in self._averaged_tensors:
             assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
             tensor.share_memory_()
         self.total_size = sum(map(torch.Tensor.numel, self._averaged_tensors))
         self.schema_hash = compute_schema_hash(self._averaged_tensors)
         self.shutdown_timeout = shutdown_timeout
+        self.next_chunk_timeout = next_chunk_timeout
         self.bandwidth = bandwidth
 
         self.matchmaking_kwargs = dict(
@@ -188,6 +203,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             compression=compression,
             part_size_bytes=part_size_bytes,
             min_vector_size=min_vector_size,
+            sender_timeout=sender_timeout,
+            reducer_timeout=reducer_timeout,
         )
         self._averaging_alpha, self._allreduce_timeout = averaging_alpha, allreduce_timeout
         self._running_groups: Dict[GroupID, AllReduceRunner] = {}  # one or more assembled groups that run all-reduce
@@ -195,6 +212,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)  # a control pipe used to communicate with daemon
 
         self._allow_state_sharing = mp.Value(ctypes.c_bool, 0)
+        self._state_sharing_priority = mp.Value(ctypes.c_double, 0)
+
         if allow_state_sharing is None:
             allow_state_sharing = not client_mode and not auxiliary
         self.allow_state_sharing = allow_state_sharing
@@ -221,9 +240,29 @@ class DecentralizedAverager(mp.Process, ServicerBase):
     @allow_state_sharing.setter
     def allow_state_sharing(self, value: bool):
         if value and self.client_mode:
-            raise ValueError("Cannot allow state sharing: averager in client mode cannot share its state.")
+            raise ValueError("Cannot allow state sharing: averager in client mode cannot share its state")
         else:
-            self._allow_state_sharing.value = value
+            old_value, self._allow_state_sharing.value = self._allow_state_sharing.value, value
+            if value != old_value:
+                self._outer_pipe.send(("_trigger_declare_load_state", [], {}))
+
+    @property
+    def state_sharing_priority(self) -> float:
+        """Others will preferentially downloading state from peers with highest priority."""
+        return float(self._state_sharing_priority.value)
+
+    @state_sharing_priority.setter
+    def state_sharing_priority(self, value: float):
+        if value and self.client_mode:
+            raise ValueError("State sharing priority is unused: averager in client mode cannot share its state")
+        else:
+            old_value, self._state_sharing_priority.value = self._state_sharing_priority.value, value
+            if self.allow_state_sharing and value != old_value:
+                self._outer_pipe.send(("_trigger_declare_load_state", [], {}))
+
+    async def _trigger_declare_load_state(self):
+        # note: previously tried to set mp.Event instead of this. Awaiting it in executor caused degradation in py39
+        self._state_updated.set()
 
     @property
     def peer_id(self) -> PeerID:
@@ -257,7 +296,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 if not self.client_mode:
                     await self.add_p2p_handlers(self._p2p, namespace=self.prefix)
                 else:
-                    logger.debug(f"The averager is running in client mode.")
+                    logger.debug("The averager is running in client mode")
 
                 self._matchmaking = Matchmaking(
                     self._p2p,
@@ -318,7 +357,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             self._inner_pipe.send(("_SHUTDOWN", None))  # shut down background thread in master
             self.join(self.shutdown_timeout)
             if self.is_alive():
-                logger.warning("Averager did not shut down within the grace period; terminating it the hard way.")
+                logger.warning("Averager did not shut down within the grace period; terminating it the hard way")
                 self.terminate()
         else:
             logger.exception("Averager shutdown has no effect: the process is already not alive")
@@ -359,7 +398,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         :returns: on success, update averaged_tensors and return group info; on failure, return None
         """
         if self.mode == AveragingMode.AUX and weight is not None:
-            logger.warning("Averager is running in auxiliary mode, weight is unused.")
+            logger.warning("Averager is running in auxiliary mode, weight is unused")
         if scheduled_time is None:
             scheduled_time = get_dht_time() + self.matchmaking_kwargs["min_matchmaking_time"]
         if weight is None:
@@ -379,31 +418,45 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             data_for_gather=data_for_gather,
         )
 
-        future_for_trigger = MPFuture()
-        self._outer_pipe.send(("_step", [], dict(step=step, future_for_trigger=future_for_trigger)))
-        step.attach_trigger(future_for_trigger.result())
+        future_for_init = MPFuture()
+        self._outer_pipe.send(("_step", [], dict(step=step, future_for_init=future_for_init)))
+        step.attach(*future_for_init.result())
 
         if not require_trigger:
             step.allow_allreduce()
         return step.result() if wait else step
 
-    async def _step(self, *, step: StepControl, future_for_trigger: MPFuture):
+    async def _step(self, *, step: StepControl, future_for_init: MPFuture):
         try:
-            trigger = MPFuture()
-            step.attach_trigger(trigger)
-            future_for_trigger.set_result(trigger)
+            trigger, cancel = MPFuture(), MPFuture()
+            step.attach(trigger, cancel)
+            future_for_init.set_result((trigger, cancel))
+
+            async def find_peers_or_notify_cancel():
+                group_info = await self._matchmaking.look_for_group(step)
+                if not step.triggered:
+                    step.stage = AveragingStage.AWAITING_TRIGGER
+                    await step.wait_for_trigger()
+                return group_info
 
             while not step.done():
                 try:
                     self._pending_group_assembled.clear()
                     step.stage = AveragingStage.LOOKING_FOR_GROUP
-                    group_info = await self._matchmaking.look_for_group(step)
-                    if group_info is None:
-                        raise AllreduceException("Averaging step failed: could not find a group.")
+                    matchmaking_task = asyncio.create_task(find_peers_or_notify_cancel())
+                    check_cancel_task = asyncio.create_task(step.wait_for_cancel())
 
-                    if not step.triggered:
-                        step.stage = AveragingStage.AWAITING_TRIGGER
-                        await step.wait_for_trigger()
+                    await asyncio.wait({matchmaking_task, check_cancel_task}, return_when=asyncio.FIRST_COMPLETED)
+                    if step.cancelled():
+                        matchmaking_task.cancel()
+                        raise asyncio.CancelledError()
+                    else:
+                        check_cancel_task.cancel()
+
+                    group_info = await matchmaking_task
+
+                    if group_info is None:
+                        raise AllreduceException("Averaging step failed: could not find a group")
 
                     step.stage = AveragingStage.RUNNING_ALLREDUCE
 
@@ -425,10 +478,14 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     asyncio.CancelledError,
                     asyncio.InvalidStateError,
                     P2PHandlerError,
+                    DispatchFailure,
+                    ControlFailure,
                 ) as e:
-                    if not step.allow_retries or get_dht_time() >= step.deadline:
-                        logger.exception(e)
-                        step.set_exception(e)
+                    if step.done() or not step.allow_retries or get_dht_time() >= step.deadline:
+                        if not step.cancelled():
+                            logger.exception(e)
+                        if not step.done():
+                            step.set_exception(e)
                     else:
                         logger.warning(f"{self.__class__.__name__} caught {repr(e)}, retrying")
 
@@ -477,11 +534,11 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
                 with self.register_allreduce_group(group_info.group_id, allreduce):
                     if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
-                        async for tensor, update in azip(as_aiter(*local_tensors), allreduce):
+                        iter_results = allreduce.run()
+                        async for tensor, update in azip(as_aiter(*local_tensors), iter_results):
                             # all-reduce is performed asynchronously while iterating
                             tensor.add_(update, alpha=self._averaging_alpha)
-                            self.last_updated = get_dht_time()
-                            self._state_updated.set()
+                        self._state_updated.set()
 
                     else:
                         async for _ in allreduce:  # trigger all-reduce by iterating
@@ -489,7 +546,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
                 return allreduce.gathered
         except BaseException as e:
-            logger.exception(e)
+            if isinstance(e, Exception):
+                logger.exception(e)
             raise MatchmakingException(f"Unable to run All-Reduce: {e}")
 
     @contextlib.contextmanager
@@ -540,24 +598,29 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     async def _declare_for_download_periodically(self):
         download_key = f"{self._matchmaking.group_key_manager.prefix}.all_averagers"
+        sharing_was_allowed = self.allow_state_sharing
         while True:
-            if self.allow_state_sharing:
-                self._state_updated.clear()
-                expiration_time = get_dht_time() + self.declare_state_period
+            expiration_time = get_dht_time() + self.declare_state_period
+            if self.allow_state_sharing or sharing_was_allowed:
+                # notify either if sharing is allowed or if it was just switched off (to overwrite previous message)
                 asyncio.create_task(
                     asyncio.wait_for(
                         self.dht.store(
                             download_key,
                             subkey=self.peer_id.to_bytes(),
-                            value=self.last_updated,
+                            value=self.state_sharing_priority if self.allow_state_sharing else None,
                             expiration_time=expiration_time,
                             return_future=True,
                         ),
-                        timeout=expiration_time - self.request_timeout,
+                        timeout=expiration_time - get_dht_time(),
                     )
                 )
+                sharing_was_allowed = self.allow_state_sharing
+
+            # report again either in state_declare_period or after the field was changed by the user
+            self._state_updated.clear()
             try:
-                await asyncio.wait_for(self._state_updated.wait(), self.declare_state_period - self.request_timeout)
+                await asyncio.wait_for(self._state_updated.wait(), timeout=max(0.0, expiration_time - get_dht_time()))
             except asyncio.TimeoutError:
                 pass
 
@@ -618,17 +681,19 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         return future.result(timeout=timeout) if wait else future
 
     async def _load_state_from_peers(self, future: MPFuture, timeout: Optional[float] = None):
+        if timeout is not None:
+            timeout = self.next_chunk_timeout if self.next_chunk_timeout is not None else self.request_timeout
         try:
             key_manager = self._matchmaking.group_key_manager
             peer_priority, _ = self.dht.get(f"{key_manager.prefix}.all_averagers", latest=True) or ({}, None)
             peer_priority = {
-                PeerID(peer_id): float(info.value)
+                PeerID(peer_id): (float(info.value), random.random())  # using randomness as a tie breaker
                 for peer_id, info in peer_priority.items()
                 if isinstance(info, ValueWithExpiration) and isinstance(info.value, (float, int))
             }
 
             if not isinstance(peer_priority, dict) or len(peer_priority) == 0:
-                logger.info(f"Averager could not load state from peers: peer dict empty or corrupted {peer_priority}.")
+                logger.info(f"Averager could not load state from peers: peer dict empty or corrupted {peer_priority}")
                 future.set_result(None)
                 return
 
@@ -641,7 +706,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         stream = await stub.rpc_download_state(averaging_pb2.DownloadRequest())
                         current_tensor_parts, tensors = [], []
 
-                        async for message in aiter_with_timeout(stream, timeout=timeout or self.request_timeout):
+                        async for message in aiter_with_timeout(stream, timeout=timeout):
                             if message.metadata:
                                 metadata = self.serializer.loads(message.metadata)
                             if message.tensor_part.dtype and current_tensor_parts:
@@ -653,7 +718,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                             tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
 
                         if not metadata:
-                            logger.debug(f"Peer {peer} did not send its state.")
+                            logger.debug(f"Peer {peer} did not send its state")
                             continue
 
                         logger.info(f"Finished downloading state from {peer}")
@@ -695,11 +760,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         except Exception as e:
             if not future.done():
                 future.set_exception(e)
-
-
-def is_power_of_two(n):
-    """Check whether n is a power of 2"""
-    return (n != 0) and (n & (n - 1) == 0)
 
 
 def _background_thread_fetch_current_state(

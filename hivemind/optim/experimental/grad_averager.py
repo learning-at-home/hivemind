@@ -6,7 +6,7 @@ import torch
 import hivemind
 from hivemind.averaging import DecentralizedAverager
 from hivemind.averaging.control import StepControl
-from hivemind.utils import DHTExpiration, get_logger
+from hivemind.utils import DHTExpiration, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 
@@ -80,7 +80,7 @@ class GradientAverager(DecentralizedAverager):
         if reuse_grad_buffers and accumulate_grads_on is not None:
             logger.warning("Setting 'accumulate_grads_on' has no effect if reuse_grad_buffers=True")
         client_mode = client_mode if client_mode is not None else dht.client_mode
-        self._parameters = tuple(parameters)
+        self.parameters = tuple(parameters)
         self.reuse_grad_buffers = reuse_grad_buffers
         self.warn = warn
         self.local_samples_accumulated = 0
@@ -102,7 +102,7 @@ class GradientAverager(DecentralizedAverager):
 
     def _grads_from_parameters(self) -> Iterator[torch.Tensor]:
         """gradient buffers associated with parameters"""
-        for param in self._parameters:
+        for param in self.parameters:
             if param.grad is None:
                 param.grad = torch.zeros_like(param)
             yield param.grad
@@ -119,7 +119,7 @@ class GradientAverager(DecentralizedAverager):
         if self._accumulators_used_in_step and self.warn:
             logger.warning(
                 "[warn=True] Gradient accumulators were not reset since the last averaging round. Please "
-                "call .reset_accumulated_grads_ after every step or use .step(reset_accumulators=True)."
+                "call .reset_accumulated_grads_ after every step or use .step(reset_accumulators=True)"
             )
             self._accumulators_used_in_step = False  # warn once per round
         if self._anchor_batch_size is None:
@@ -152,6 +152,7 @@ class GradientAverager(DecentralizedAverager):
         weight: Optional[float] = None,
         reset_accumulators: bool = True,
         control: Optional[StepControl] = None,
+        timeout: Optional[float] = None,
         wait: bool = True,
         **kwargs,
     ):
@@ -161,33 +162,34 @@ class GradientAverager(DecentralizedAverager):
         :param weight: overrides the averaging weight; by default, weight equals the number of accumulated samples
         :param reset_accumulators: by default, set local gradient accumulators to zeros after averaging succeeds
         :param control: reuse a pre-arranged group of peers (or a matchmaking in progress) from averager.schedule_step
+        :param timeout: if specified, await for averaging round for at most this number of seconds (if wait=True)
         :param wait: if True, await for the step to finish (or fail), otherwise run all-reduce in background
         """
         if control is None:
-            control = self.schedule_step(**kwargs)
+            control = self.schedule_step(timeout=timeout, **kwargs)
         elif len(kwargs) > 0:
-            RuntimeError(f"Averaging with a pre-scheduled group, parameters {kwargs} will have no effect.")
-        assert not control.triggered, f"This {type(control)} instance was already used."
-        self._load_accumulators_into_averager_()
+            raise RuntimeError(f"Averaging with a pre-scheduled group, parameters {kwargs} will have no effect")
+        assert not control.triggered, f"This {type(control)} instance was already used"
+        if self._new_averaged_grads and self.warn:
+            logger.warning(
+                "[warn=True] Starting new averaging round, but previous round results were not used. "
+                "This may be a sign of incorrect optimizer behavior"
+            )
+
+        self.load_accumulators_into_averager_()
         self._accumulators_used_in_step = True
         self._new_averaged_grads = True
 
         control.weight = self.local_samples_accumulated if weight is None else weight
         if reset_accumulators:
             self.reset_accumulated_grads_()
-
         control.allow_allreduce()
-        return control.result() if wait else control
+
+        return control.result(timeout) if wait else control
 
     @torch.no_grad()
-    def _load_accumulators_into_averager_(self):
+    def load_accumulators_into_averager_(self):
         """load locally accumulated gradients into the averager for aggregation"""
-        if self._new_averaged_grads and self.warn:
-            logger.warning(
-                "[warn=True] Starting new averaging round, but previous round results were not used."
-                "This may be a sign of incorrect optimizer behavior."
-            )
-            self._new_averaged_grads = False  # warn once per round
         # divide locally accumulated gradients by the number of times they were accumulated
         grad_scale = (1.0 / self.local_times_accumulated) if self.local_times_accumulated != 0 else 0.0
         with self.get_tensors() as averaged_grads:
@@ -206,14 +208,19 @@ class GradientAverager(DecentralizedAverager):
     @contextlib.contextmanager
     @torch.no_grad()
     def use_averaged_gradients(self):
+        """Substitute model's main gradients with averaged gradients (does not respect device placement)"""
         self._new_averaged_grads = False
         with self.get_tensors() as averaged_grads:
+            assert len(averaged_grads) == len(self.parameters)
             try:
-                assert len(averaged_grads) == len(self._parameters)
-                old_grads = [param.grad for param in self._parameters]
-                for param, new_grad in zip(self._parameters, averaged_grads):
+                old_grads = [param.grad for param in self.parameters]
+                for param, new_grad in zip(self.parameters, averaged_grads):
                     param.grad = new_grad
-                yield
+                yield averaged_grads
             finally:
-                for param, old_grad in zip(self._parameters, old_grads):
+                for param, old_grad in zip(self.parameters, old_grads):
                     param.grad = old_grad
+
+    def notify_used_averaged_gradients(self):
+        """Notify averager that the results of a previous averaging round are accounted for"""
+        self._new_averaged_grads = False

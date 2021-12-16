@@ -717,7 +717,7 @@ class DHTNode:
         """Add key to a refresh queue, refresh at :refresh_time: or later"""
         if self.cache_refresh_task is None or self.cache_refresh_task.done() or self.cache_refresh_task.cancelled():
             self.cache_refresh_task = asyncio.create_task(self._refresh_stale_cache_entries())
-            logger.debug("Spawned cache refresh task.")
+            logger.debug("Spawned cache refresh task")
         earliest_key, earliest_item = self.cache_refresh_queue.top()
         if earliest_item is None or refresh_time < earliest_item.expiration_time:
             self.cache_refresh_evt.set()  # if we new element is now earliest, notify the cache queue

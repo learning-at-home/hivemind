@@ -114,9 +114,15 @@ async def amap_in_executor(
     queue = asyncio.Queue(max_prefetch)
 
     async def _put_items():
-        async for args in azip(*iterables):
-            await queue.put(loop.run_in_executor(executor, func, *args))
-        await queue.put(None)
+        try:
+            async for args in azip(*iterables):
+                await queue.put(loop.run_in_executor(executor, func, *args))
+            await queue.put(None)
+        except Exception as e:
+            future = asyncio.Future()
+            future.set_exception(e)
+            await queue.put(future)
+            raise
 
     task = asyncio.create_task(_put_items())
     try:
@@ -124,13 +130,21 @@ async def amap_in_executor(
         while future is not None:
             yield await future
             future = await queue.get()
-        await task
     finally:
-        if not task.done():
-            task.cancel()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.debug(f"Caught {e} while iterating over inputs", exc_info=True)
+        while not queue.empty():
+            future = queue.get_nowait()
+            if future is not None:
+                future.cancel()
 
 
-async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: float) -> AsyncIterator[T]:
+async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: Optional[float]) -> AsyncIterator[T]:
     """Iterate over an async iterable, raise TimeoutError if another portion of data does not arrive within timeout"""
     # based on https://stackoverflow.com/a/50245879
     iterator = iterable.__aiter__()

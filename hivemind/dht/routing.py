@@ -217,7 +217,7 @@ class KBucket:
 
     def __delitem__(self, node_id: DHTID):
         if not (node_id in self.nodes_to_peer_id or node_id in self.replacement_nodes):
-            raise KeyError(f"KBucket does not contain node id={node_id}.")
+            raise KeyError(f"KBucket does not contain node id={node_id}")
 
         if node_id in self.replacement_nodes:
             del self.replacement_nodes[node_id]

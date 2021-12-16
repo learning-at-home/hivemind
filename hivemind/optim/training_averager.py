@@ -101,7 +101,7 @@ class TrainingAverager(DecentralizedAverager):
                 self.pending_updates_done.clear()
                 with data_lock, self.get_tensors() as averaged_tensors:
                     if len(averaged_tensors) != len(local_tensors):
-                        raise RuntimeError("The number of optimized parameters should not change.")
+                        raise RuntimeError("The number of optimized parameters should not change")
 
                     if use_old_local_tensors:
                         # since tensors might have changed, we subtract old_local_tensor and add averaged. This prevents

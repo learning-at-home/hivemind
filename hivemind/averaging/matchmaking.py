@@ -16,6 +16,7 @@ from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.key_manager import GroupKey, GroupKeyManager
 from hivemind.dht import DHT, DHTID, DHTExpiration
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, ServicerBase
+from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure, DispatchFailure
 from hivemind.proto import averaging_pb2
 from hivemind.utils import TimedStorage, get_dht_time, get_logger, timed_storage
 from hivemind.utils.asyncio import anext, cancel_and_wait
@@ -44,7 +45,7 @@ class Matchmaking:
         *,
         servicer_type: Type[ServicerBase],
         prefix: str,
-        target_group_size: int,
+        target_group_size: Optional[int],
         min_group_size: int,
         min_matchmaking_time: float,
         request_timeout: float,
@@ -88,9 +89,11 @@ class Matchmaking:
     async def looking_for_group(self, step_control: StepControl):
         async with self.lock_looking_for_group:
             assert self.step_control is None
-            self.step_control = step_control
-            yield
-            self.step_control = None
+            try:
+                self.step_control = step_control
+                yield
+            finally:
+                self.step_control = None
 
     @property
     def is_looking_for_group(self):
@@ -225,7 +228,10 @@ class Matchmaking:
                     if suggested_leader != self.peer_id:
                         logger.debug(f"{self} - leader disbanded group and redirected us to {suggested_leader}")
                         self.current_leader = None
-                        await stream.aclose()
+                        try:
+                            await stream.aclose()
+                        except RuntimeError as e:
+                            logger.debug(e, exc_info=True)
                         return await self._request_join_group(suggested_leader)
                 logger.debug(f"{self} - leader disbanded group")
                 return None
@@ -235,15 +241,18 @@ class Matchmaking:
         except asyncio.TimeoutError:
             logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             return None
-        except (P2PHandlerError, StopAsyncIteration) as e:
-            logger.exception(f"{self} - failed to request potential leader {leader}:")
+        except (P2PHandlerError, ControlFailure, DispatchFailure, StopAsyncIteration) as e:
+            logger.debug(f"{self} - failed to request potential leader {leader}:")
             return None
 
         finally:
             self.was_accepted_to_group.clear()
             self.current_leader = None
             if stream is not None:
-                await stream.aclose()
+                try:
+                    await stream.aclose()
+                except RuntimeError as e:
+                    logger.debug(e, exc_info=True)
 
     def get_request_expiration_time(self) -> float:
         """Returns the averager's current expiration time, which is used to send join requests to leaders"""
@@ -267,7 +276,11 @@ class Matchmaking:
                 self.current_followers[context.remote_id] = request
                 yield averaging_pb2.MessageFromLeader(code=averaging_pb2.ACCEPTED)
 
-                if len(self.current_followers) + 1 >= self.target_group_size and not self.assembled_group.done():
+                if (
+                    self.target_group_size is not None
+                    and len(self.current_followers) + 1 >= self.target_group_size
+                    and not self.assembled_group.done()
+                ):
                     # outcome 1: we have assembled a full group and are ready for allreduce
                     await self.leader_assemble_group()
 
@@ -353,7 +366,7 @@ class Matchmaking:
             )
         elif context.remote_id == self.peer_id or context.remote_id in self.current_followers:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.DUPLICATE_PEER_ID)
-        elif len(self.current_followers) + 1 >= self.target_group_size:
+        elif self.target_group_size is not None and len(self.current_followers) + 1 >= self.target_group_size:
             return averaging_pb2.MessageFromLeader(code=averaging_pb2.GROUP_IS_FULL)
         else:
             return None
@@ -372,7 +385,7 @@ class Matchmaking:
             for peer_id in ordered_peer_ids
         )
 
-        logger.debug(f"{self.peer_id} - assembled group of {len(ordered_peer_ids)} peers.")
+        logger.debug(f"{self.peer_id} - assembled group of {len(ordered_peer_ids)} peers")
         group_info = GroupInfo(group_id, tuple(ordered_peer_ids), gathered)
         await self.group_key_manager.update_key_on_group_assembled(group_info, is_leader=True)
         self.assembled_group.set_result(group_info)
@@ -389,7 +402,7 @@ class Matchmaking:
         assert self.peer_id in ordered_peer_ids, "Leader sent us group_peer_ids that does not contain us!"
         assert len(ordered_peer_ids) == len(msg.gathered)
 
-        logger.debug(f"{self.peer_id} - follower assembled group with leader {leader}.")
+        logger.debug(f"{self.peer_id} - follower assembled group with leader {leader}")
         group_info = GroupInfo(group_id, tuple(ordered_peer_ids), tuple(msg.gathered))
         await self.group_key_manager.update_key_on_group_assembled(group_info)
         self.assembled_group.set_result(group_info)

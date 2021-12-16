@@ -238,7 +238,7 @@ class _RemoteCallMany(torch.autograd.Function):
             pending_tasks, num_samples, k_min, forward_timeout, timeout_after_k_min, detect_anomalies
         )
         if len(responded_inds) < k_min:
-            raise TimeoutError(f"Forward pass: less than {k_min} responded within timeout.")
+            raise TimeoutError(f"Forward pass: less than {k_min} responded within timeout")
 
         if not isinstance(info["outputs_schema"], tuple):
             outputs_schema = (info["outputs_schema"],)
@@ -330,7 +330,7 @@ class _RemoteCallMany(torch.autograd.Function):
             pending_tasks, num_samples, backward_k_min, backward_timeout, timeout_after_k_min, detect_anomalies
         )
         if len(survivor_inds) < backward_k_min:
-            raise TimeoutError(f"Backward pass: less than {backward_k_min} experts responded within timeout.")
+            raise TimeoutError(f"Backward pass: less than {backward_k_min} experts responded within timeout")
 
         # assemble responses
         batch_inds, expert_inds = map(
