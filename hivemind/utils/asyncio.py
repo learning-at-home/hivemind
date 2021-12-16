@@ -106,7 +106,7 @@ async def cancel_and_wait(awaitable: Awaitable) -> bool:
 async def amap_in_executor(
     func: Callable[..., T],
     *iterables: AsyncIterable,
-    max_prefetch: Optional[int] = None,
+    max_prefetch: int = 1,
     executor: Optional[ThreadPoolExecutor] = None,
 ) -> AsyncIterator[T]:
     """iterate from an async iterable in a background thread, yield results to async iterable"""
@@ -122,7 +122,6 @@ async def amap_in_executor(
             future = asyncio.Future()
             future.set_exception(e)
             await queue.put(future)
-            raise
 
     task = asyncio.create_task(_put_items())
     try:
@@ -131,17 +130,19 @@ async def amap_in_executor(
             yield await future
             future = await queue.get()
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            logger.debug(f"Caught {e} while iterating over inputs", exc_info=True)
+        awaitables = [task]
         while not queue.empty():
             future = queue.get_nowait()
             if future is not None:
-                future.cancel()
+                awaitables.append(future)
+        for coro in awaitables:
+            coro.cancel()
+            try:
+                await coro
+            except BaseException as e:
+                if isinstance(e, Exception):
+                    logger.debug(f"Caught {e} while iterating over inputs", exc_info=True)
+                # note: we do not reraise here because it is already in the finally clause
 
 
 async def aiter_with_timeout(iterable: AsyncIterable[T], timeout: Optional[float]) -> AsyncIterator[T]:
