@@ -11,10 +11,10 @@ import torch.nn.functional as F
 
 import hivemind
 from hivemind.averaging.control import AveragingStage
-from hivemind.optim.experimental.grad_averager import GradientAverager
-from hivemind.optim.experimental.optimizer import Optimizer
-from hivemind.optim.experimental.progress_tracker import ProgressTracker
-from hivemind.optim.experimental.state_averager import TrainingStateAverager
+from hivemind.optim.grad_averager import GradientAverager
+from hivemind.optim.optimizer import Optimizer
+from hivemind.optim.progress_tracker import ProgressTracker
+from hivemind.optim.state_averager import TrainingStateAverager
 from hivemind.utils.crypto import RSAPrivateKey
 
 
@@ -374,12 +374,12 @@ def test_optimizer(
         peer.join()
 
     assert isinstance(optimizer, Optimizer)
-    assert optimizer.local_epoch == optimizer._tracker.global_epoch == total_epochs
+    assert optimizer.local_epoch == optimizer.tracker.global_epoch == total_epochs
     expected_samples_accumulated = target_batch_size * total_epochs
     assert expected_samples_accumulated <= total_samples_accumulated.value <= expected_samples_accumulated * 1.2
-    assert 4 / 0.3 * 0.8 <= optimizer._tracker.performance_ema.samples_per_second <= 4 / 0.3 * 1.2
+    assert 4 / 0.3 * 0.8 <= optimizer.tracker.performance_ema.samples_per_second <= 4 / 0.3 * 1.2
 
-    assert not optimizer._state_averager.is_alive()
+    assert not optimizer.state_averager.is_alive()
     assert not optimizer.grad_averager.is_alive()
-    assert not optimizer._tracker.is_alive()
+    assert not optimizer.tracker.is_alive()
     assert optimizer.scheduled_grads is None or optimizer.scheduled_grads.done()

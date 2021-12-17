@@ -11,9 +11,9 @@ import torch
 from hivemind.averaging.control import AveragingStage, StepControl
 from hivemind.compression import CompressionBase, NoCompression
 from hivemind.dht import DHT
-from hivemind.optim.experimental.grad_averager import GradientAverager
-from hivemind.optim.experimental.progress_tracker import LocalTrainingProgress, ProgressTracker
-from hivemind.optim.experimental.state_averager import (
+from hivemind.optim.grad_averager import GradientAverager
+from hivemind.optim.progress_tracker import LocalTrainingProgress, ProgressTracker
+from hivemind.optim.state_averager import (
     LRSchedulerBase,
     OptimizerFactory,
     Parameters,
@@ -238,10 +238,10 @@ class Optimizer(torch.optim.Optimizer):
         self.scheduled_grads: Optional[StepControl] = None
         self.scheduled_state: Optional[StepControl] = None
 
-        self._tracker = self._make_progress_tracker(
+        self.tracker = self._make_progress_tracker(
             target_batch_size, performance_ema_alpha=performance_ema_alpha, **tracker_opts or {}
         )
-        self._state_averager = self._make_state_averager(
+        self.state_averager = self._make_state_averager(
             optimizer=optimizer,
             params=params,
             scheduler=scheduler,
@@ -290,11 +290,11 @@ class Optimizer(torch.optim.Optimizer):
         )
 
     def _make_gradient_averager(self, **kwargs) -> GradientAverager:
-        assert hasattr(self, "_state_averager"), "must initialize state averager first"
+        assert hasattr(self, "state_averager"), "must initialize state averager first"
         grad_averager = GradientAverager(
             dht=self.dht,
             prefix=f"{self.run_id}_grad_averager",
-            parameters=self._state_averager.main_parameters,
+            parameters=self.state_averager.main_parameters,
             min_matchmaking_time=self.matchmaking_time,
             allreduce_timeout=self.allreduce_timeout,
             shutdown_timeout=self.shutdown_timeout,
@@ -305,7 +305,7 @@ class Optimizer(torch.optim.Optimizer):
             **kwargs,
         )
         if self.offload_optimizer:
-            optimized_param_groups = self._state_averager.optimizer.param_groups
+            optimized_param_groups = self.state_averager.optimizer.param_groups
             optimized_parameters = [param for group in optimized_param_groups for param in group["params"]]
             with grad_averager.get_tensors() as averaged_gradients:
                 assert len(averaged_gradients) == len(optimized_parameters)
@@ -325,7 +325,7 @@ class Optimizer(torch.optim.Optimizer):
         )
 
     def _compute_schema_hash(self) -> int:
-        optimized_param_groups = self._state_averager.optimizer.param_groups
+        optimized_param_groups = self.state_averager.optimizer.param_groups
         optimized_parameters = [param for group in optimized_param_groups for param in group["params"]]
         param_shapes = tuple(tuple(param.shape) for param in optimized_parameters)
 
@@ -334,7 +334,7 @@ class Optimizer(torch.optim.Optimizer):
         return hash((grad_ids, param_shapes))
 
     def is_alive(self) -> bool:
-        return self._state_averager.is_alive()
+        return self.state_averager.is_alive()
 
     @property
     def local_epoch(self) -> int:
@@ -343,11 +343,11 @@ class Optimizer(torch.optim.Optimizer):
         automatically re-synchronize by downloading state from another peer.
         An epoch corresponds to accumulating target_batch_size across all active devices.
         """
-        return self._state_averager.local_epoch
+        return self.state_averager.local_epoch
 
     @property
     def local_progress(self) -> LocalTrainingProgress:
-        return self._tracker.local_progress
+        return self.tracker.local_progress
 
     @property
     def use_local_updates(self) -> bool:
@@ -381,7 +381,7 @@ class Optimizer(torch.optim.Optimizer):
         batch_size = batch_size if batch_size is not None else self.batch_size_per_step
 
         # if delayed updates finished before step, apply these updates; otherwise do nothing
-        self._state_averager.step(apply_delayed_updates=True)
+        self.state_averager.step(apply_delayed_updates=True)
 
         loss = None
         if closure is not None:
@@ -410,18 +410,18 @@ class Optimizer(torch.optim.Optimizer):
                     with grad_scaler.running_global_step():
                         assert grad_scaler.unscale_(self)
 
-                new_samples_accumulated = self._tracker.local_progress.samples_accumulated + batch_size
-                self._tracker.report_local_progress(self.local_epoch, new_samples_accumulated)
+                new_samples_accumulated = self.tracker.local_progress.samples_accumulated + batch_size
+                self.tracker.report_local_progress(self.local_epoch, new_samples_accumulated)
                 self._maybe_schedule_state_averaging()
 
-                self._state_averager.step(
+                self.state_averager.step(
                     increment_epoch=False,
                     optimizer_step=True,
                     delay_optimizer_step=self.delay_optimizer_step,
                     grad_scaler=grad_scaler,
                 )
 
-        if self._tracker.ready_to_update_epoch:
+        if self.tracker.ready_to_update_epoch:
             self._update_global_epoch(grad_scaler)
 
         return loss
@@ -431,13 +431,13 @@ class Optimizer(torch.optim.Optimizer):
         assert self._schema_hash == self._compute_schema_hash(), "parameters or gradients changed during iteration"
         _epoch_start_time = time.perf_counter()
 
-        with self._tracker.pause_updates():
+        with self.tracker.pause_updates():
             wait_for_trigger = None
 
             if self.use_gradient_averaging:
                 logger.log(self.status_loglevel, f"Beginning optimizer step #{self.local_epoch}")
                 if self.delay_optimizer_step:
-                    self._state_averager.step(wait_for_delayed_updates=True)
+                    self.state_averager.step(wait_for_delayed_updates=True)
 
                 began_averaging_gradients = self._begin_averaging_gradients(grad_scaler)
                 if not began_averaging_gradients:
@@ -449,13 +449,13 @@ class Optimizer(torch.optim.Optimizer):
                     # delay_grad_averaging=False, average gradients immediately
                     self._average_gradients_and_load_into_optimizer(self.scheduled_grads)
 
-            next_epoch = max(self.local_epoch + 1, self._tracker.global_epoch)
-            swarm_not_empty = self._tracker.global_progress.num_peers > 1
+            next_epoch = max(self.local_epoch + 1, self.tracker.global_epoch)
+            swarm_not_empty = self.tracker.global_progress.num_peers > 1
             should_perform_optimizer_step = not self.auxiliary and not self.use_local_updates
             should_average_state = (
                 swarm_not_empty
                 and next_epoch % self.average_state_every == 0
-                and not self._state_averager.averaging_in_progress
+                and not self.state_averager.averaging_in_progress
             )
 
             if should_average_state and self.scheduled_state is not None:
@@ -468,7 +468,7 @@ class Optimizer(torch.optim.Optimizer):
                     self.scheduled_state = None
                 self.delay_before_state_averaging.update(task_size=1, interval=time.perf_counter() - _epoch_start_time)
 
-            self._state_averager.step(
+            self.state_averager.step(
                 increment_epoch=True,
                 wait_for_trigger=wait_for_trigger,
                 optimizer_step=should_perform_optimizer_step,
@@ -484,12 +484,12 @@ class Optimizer(torch.optim.Optimizer):
                 self.scheduled_state.cancel()
             self.scheduled_state = None
 
-            self._tracker.update_epoch(new_epoch=self._state_averager.local_epoch)
+            self.tracker.update_epoch(new_epoch=self.state_averager.local_epoch)
             self._should_check_synchronization_on_update = True
             # the above line ensures that peers check for *strict* synchronization once per epoch
 
             if not self.client_mode:
-                self._state_averager.state_sharing_priority = self.local_epoch
+                self.state_averager.state_sharing_priority = self.local_epoch
 
             if self.use_gradient_averaging and not self.auxiliary:
                 self.grad_averager.reset_accumulated_grads_()
@@ -513,7 +513,7 @@ class Optimizer(torch.optim.Optimizer):
             )
             self.scheduled_grads = None
 
-        elif self._tracker.global_progress.num_peers > 1:
+        elif self.tracker.global_progress.num_peers > 1:
             try:
                 self.scheduled_grads = self.grad_averager.step(
                     control=self.scheduled_grads, reset_accumulators=True, wait=False
@@ -533,45 +533,45 @@ class Optimizer(torch.optim.Optimizer):
         assert not self.use_local_updates and not self.auxiliary
         if grad_scaler is not None and not grad_scaler.are_grads_finite(self):
             logger.log(self.status_loglevel, "Encountered incorrect value in fp16 grads, resetting local gradients")
-            self._tracker.report_local_progress(self.local_epoch, samples_accumulated=0)
+            self.tracker.report_local_progress(self.local_epoch, samples_accumulated=0)
             self.grad_averager.reset_accumulated_grads_()
             return False
 
         self.grad_averager.accumulate_grads_(batch_size)
-        self._tracker.report_local_progress(self.local_epoch, self.grad_averager.local_samples_accumulated)
+        self.tracker.report_local_progress(self.local_epoch, self.grad_averager.local_samples_accumulated)
         return True
 
     def _maybe_schedule_gradient_averaging(self) -> None:
         """If next epoch is coming soon, schedule the next gradient averaging round at the estimated end of epoch"""
         assert self.use_gradient_averaging
-        if self._tracker.estimated_next_update_time - get_dht_time() <= self.matchmaking_time:
+        if self.tracker.estimated_next_update_time - get_dht_time() <= self.matchmaking_time:
             if self.scheduled_grads is None or self.scheduled_grads.triggered or self.scheduled_grads.done():
-                eta_seconds = self._tracker.estimated_next_update_time - get_dht_time()
+                eta_seconds = self.tracker.estimated_next_update_time - get_dht_time()
                 eta_seconds = max(eta_seconds, self.grad_averager.matchmaking_kwargs["min_matchmaking_time"])
                 logger.log(self.status_loglevel, f"Pre-scheduling gradient averaging round in {eta_seconds:.2f} sec")
                 self.scheduled_grads = self.grad_averager.schedule_step(timeout=self.averaging_timeout)
 
     def _maybe_schedule_state_averaging(self) -> None:
         """If next epoch is coming soon, schedule the next state averaging at estimated parameter averaging start"""
-        next_epoch = max(self.local_epoch + 1, self._tracker.global_epoch)
+        next_epoch = max(self.local_epoch + 1, self.tracker.global_epoch)
         if next_epoch % self.average_state_every != 0:
             return  # averaging is not performed at this epoch
-        if self._state_averager.averaging_in_progress:
+        if self.state_averager.averaging_in_progress:
             return  # previous run is still in progress
         if self.delay_before_state_averaging.num_updates == 0:
             return  # not enough data to accurately pre-schedule
 
-        estimated_time = self._tracker.estimated_next_update_time
+        estimated_time = self.tracker.estimated_next_update_time
         estimated_time += self.delay_before_state_averaging.ema_seconds_per_sample
-        estimated_time += self._state_averager.delay_before_averaging.ema_seconds_per_sample
+        estimated_time += self.state_averager.delay_before_averaging.ema_seconds_per_sample
         eta_seconds_to_averaging = estimated_time - get_dht_time()
 
         if eta_seconds_to_averaging <= self.matchmaking_time:
             if self.scheduled_state is None or self.scheduled_state.triggered or self.scheduled_state.done():
-                min_matchmaking_time = self._state_averager.matchmaking_kwargs["min_matchmaking_time"]
+                min_matchmaking_time = self.state_averager.matchmaking_kwargs["min_matchmaking_time"]
                 actual_seconds = max(eta_seconds_to_averaging, min_matchmaking_time)
                 logger.log(self.status_loglevel, f"Pre-scheduling state averaging round in {actual_seconds:.2f} sec")
-                self.scheduled_state = self._state_averager.schedule_step(
+                self.scheduled_state = self.state_averager.schedule_step(
                     gather=next_epoch, timeout=self.averaging_timeout
                 )
 
@@ -604,7 +604,7 @@ class Optimizer(torch.optim.Optimizer):
             pass  # averaged gradients are already baked into optimizer, see _make_gradient_averager
         else:
             # copy averaged gradients into optimizer .grad buffers
-            optimized_param_groups = self._state_averager.optimizer.param_groups
+            optimized_param_groups = self.state_averager.optimizer.param_groups
             optimized_parameters = [param for group in optimized_param_groups for param in group["params"]]
             with torch.no_grad(), self.grad_averager.get_tensors() as averaged_gradients:
                 assert len(averaged_gradients) == len(optimized_parameters)
@@ -644,10 +644,10 @@ class Optimizer(torch.optim.Optimizer):
           - the remaining (non-transitioned) peers no longer have target_batch_size between them
         If this is the case, peer should transition to the next epoch and does *not* need to re-load state.
         """
-        if self._should_check_synchronization_on_update and self._tracker.fetched_global_progress_this_epoch.is_set():
+        if self._should_check_synchronization_on_update and self.tracker.fetched_global_progress_this_epoch.is_set():
             self._should_check_synchronization_on_update = False
-            return self.local_epoch == self._tracker.global_epoch  # require exact synchronization once per step
-        return self.local_epoch >= self._tracker.global_epoch - 1  # catch up if a peer just switched to next epoch
+            return self.local_epoch == self.tracker.global_epoch  # require exact synchronization once per step
+        return self.local_epoch >= self.tracker.global_epoch - 1  # catch up if a peer just switched to next epoch
 
     def load_state_from_peers(self, **kwargs):
         """
@@ -660,12 +660,12 @@ class Optimizer(torch.optim.Optimizer):
         if self.scheduled_grads is not None and not self.scheduled_grads.done():
             self._tag_along_with_zero_weight(self.scheduled_grads)
             self.scheduled_grads = None
-        self._state_averager.step(wait_for_delayed_updates=True)
+        self.state_averager.step(wait_for_delayed_updates=True)
 
-        with self._tracker.pause_updates():
+        with self.tracker.pause_updates():
             while True:
                 try:
-                    self._state_averager.load_state_from_peers(timeout=self.load_state_timeout, **kwargs)
+                    self.state_averager.load_state_from_peers(timeout=self.load_state_timeout, **kwargs)
                     break
                 except KeyboardInterrupt:
                     raise
@@ -673,14 +673,14 @@ class Optimizer(torch.optim.Optimizer):
                     logger.exception(f"Failed to load state from peers: {e}, retrying ...")
                     continue
 
-            if self._tracker.global_epoch - 1 <= self.local_epoch < self._tracker.global_epoch:
-                logger.log(self.status_loglevel, f"Catching up with collaboration step {self._tracker.global_epoch}")
-                self._state_averager.local_epoch = self._tracker.global_epoch
+            if self.tracker.global_epoch - 1 <= self.local_epoch < self.tracker.global_epoch:
+                logger.log(self.status_loglevel, f"Catching up with collaboration step {self.tracker.global_epoch}")
+                self.state_averager.local_epoch = self.tracker.global_epoch
 
-            self._tracker.report_local_progress(local_epoch=self.local_epoch, samples_accumulated=0)
+            self.tracker.report_local_progress(local_epoch=self.local_epoch, samples_accumulated=0)
 
             if not self.client_mode:
-                self._state_averager.state_sharing_priority = self.local_epoch
+                self.state_averager.state_sharing_priority = self.local_epoch
 
             if self.use_gradient_averaging:
                 self.grad_averager.reset_accumulated_grads_()
@@ -688,33 +688,33 @@ class Optimizer(torch.optim.Optimizer):
                     self.grad_averager.state_sharing_priority = self.local_epoch
 
     def state_dict(self) -> dict:
-        state_dict = self._state_averager.optimizer.state_dict()
+        state_dict = self.state_averager.optimizer.state_dict()
         state_dict["state"]["local_epoch"] = self.local_epoch
         return state_dict
 
     def load_state_dict(self, state_dict: dict):
         if "local_epoch" in state_dict["state"]:
-            self._state_averager.local_epoch = state_dict["state"].pop("local_epoch")
-        return self._state_averager.optimizer.load_state_dict(state_dict)
+            self.state_averager.local_epoch = state_dict["state"].pop("local_epoch")
+        return self.state_averager.optimizer.load_state_dict(state_dict)
 
     @property
     def state(self):
-        return dict(self._state_averager.optimizer.state, local_epoch=self.local_epoch)
+        return dict(self.state_averager.optimizer.state, local_epoch=self.local_epoch)
 
     @property
     def opt(self) -> TorchOptimizer:
-        return self._state_averager.optimizer
+        return self.state_averager.optimizer
 
     @property
     def param_groups(self) -> ParamGroups:
         next_index = 0
-        param_groups = tuple(dict(param_group) for param_group in self._state_averager.optimizer.param_groups)
+        param_groups = tuple(dict(param_group) for param_group in self.state_averager.optimizer.param_groups)
         for param_group in param_groups:
             num_params = len(param_group["params"])
-            main_params_for_group = self._state_averager.main_parameters[next_index : next_index + num_params]
+            main_params_for_group = self.state_averager.main_parameters[next_index: next_index + num_params]
             param_group["params"] = main_params_for_group
             next_index += num_params
-        assert next_index == len(self._state_averager.main_parameters)
+        assert next_index == len(self.state_averager.main_parameters)
         return param_groups
 
     def add_param_group(self, param_group: dict) -> None:
@@ -741,8 +741,8 @@ class Optimizer(torch.optim.Optimizer):
 
     def shutdown(self):
         logger.log(self.status_loglevel, "Sending goodbye to peers...")
-        self._tracker.shutdown(self.shutdown_timeout)
-        self._state_averager.step(wait_for_delayed_updates=True)
+        self.tracker.shutdown(self.shutdown_timeout)
+        self.state_averager.step(wait_for_delayed_updates=True)
         for scheduled_round in self.scheduled_grads, self.scheduled_state:
             if scheduled_round is not None:
                 if scheduled_round.stage == AveragingStage.LOOKING_FOR_GROUP:
@@ -751,7 +751,7 @@ class Optimizer(torch.optim.Optimizer):
                     self._tag_along_with_zero_weight(scheduled_round)
 
         logger.log(self.status_loglevel, "Shutting down averagers...")
-        self._state_averager.shutdown()
+        self.state_averager.shutdown()
         if self.use_gradient_averaging:
             self.grad_averager.shutdown()
         logger.log(self.status_loglevel, f"{self.__class__.__name__} is shut down")

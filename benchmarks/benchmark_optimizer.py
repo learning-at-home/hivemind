@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Callable
 
-import numpy as np
 import torch
 import torchvision
 from torch import nn as nn
@@ -14,7 +13,7 @@ from torch.nn import functional as F
 from torch.utils.data import Dataset
 
 import hivemind
-from hivemind.optim.experimental.optimizer import Optimizer
+from hivemind.optim.optimizer import Optimizer
 from hivemind.utils.crypto import RSAPrivateKey
 
 
