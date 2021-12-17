@@ -20,7 +20,13 @@ from hivemind import DHT, Float16Compression, Optimizer, get_dht_time
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
 
 import utils
-from arguments import AlbertTrainingArguments, AveragerArguments, CollaborationArguments, DatasetArguments
+from arguments import (
+    AlbertTrainingArguments,
+    AveragerArguments,
+    CollaborationArguments,
+    DatasetArguments,
+    ProgressTrackerArguments,
+)
 
 use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
@@ -203,8 +209,16 @@ class NoOpScheduler(LRSchedulerBase):
 
 
 def main():
-    parser = HfArgumentParser((AlbertTrainingArguments, DatasetArguments, CollaborationArguments, AveragerArguments))
-    training_args, dataset_args, collaboration_args, averager_args = parser.parse_args_into_dataclasses()
+    parser = HfArgumentParser(
+        (
+            AlbertTrainingArguments,
+            DatasetArguments,
+            CollaborationArguments,
+            AveragerArguments,
+            ProgressTrackerArguments,
+        )
+    )
+    training_args, dataset_args, collaboration_args, averager_args, tracker_args = parser.parse_args_into_dataclasses()
 
     logger.info(f"Found {len(collaboration_args.initial_peers)} initial peers: {collaboration_args.initial_peers}")
     if len(collaboration_args.initial_peers) == 0:
@@ -247,17 +261,20 @@ def main():
 
     adjusted_target_batch_size = collaboration_args.target_batch_size - collaboration_args.batch_size_lead
 
-    collaborative_optimizer = Optimizer(
+    optimizer = Optimizer(
         dht=dht,
         run_id=collaboration_args.experiment_prefix,
         target_batch_size=adjusted_target_batch_size,
         batch_size_per_step=total_batch_size_per_step,
         optimizer=opt,
         scheduler=scheduler,
+        matchmaking_time=collaboration_args.matchmaking_time,
+        averaging_timeout=collaboration_args.averaging_timeout,
         grad_compression=Float16Compression(),
         state_averaging_compression=Float16Compression(),
-        averager_opts={"bandwidth": collaboration_args.bandwidth, **asdict(averager_args)},
         client_mode=collaboration_args.client_mode,
+        averager_opts={"bandwidth": collaboration_args.bandwidth, **asdict(averager_args)},
+        tracker_opts=asdict(tracker_args),
         verbose=True,
     )
 
@@ -274,11 +291,11 @@ def main():
         data_collator=data_collator,
         train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
         eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
-        optimizers=(collaborative_optimizer, NoOpScheduler(collaborative_optimizer)),
+        optimizers=(optimizer, NoOpScheduler(optimizer)),
         callbacks=[
             CollaborativeCallback(
                 dht,
-                collaborative_optimizer,
+                optimizer,
                 model,
                 local_public_key,
                 collaboration_args.statistics_expiration,

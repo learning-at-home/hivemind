@@ -154,7 +154,7 @@ class Optimizer(torch.optim.Optimizer):
 
     :param averager_opts: additional keyword arguments forwarded to both GradientAverager and TrainingStateAverager
     :param tracker_opts: additional keyword arguments forwarded to ProgressTracker
-    :param performance_ema_alpha: moving average alpha  in ProgressTracer, TrainingStateAverager and Optimizer
+    :param performance_ema_alpha: moving average alpha in ProgressTracker, TrainingStateAverager and Optimizer
     :param verbose: if True, report internal events such as accumilating gradients and running background tasks
 
     :note: in a large-scale training, peers will inevitably fail and you will see error messages. hivemind.Optimizer
@@ -388,7 +388,7 @@ class Optimizer(torch.optim.Optimizer):
             with torch.enable_grad():
                 loss = closure()
 
-        if not self.auxiliary and not self._should_load_state_from_peers():
+        if not self.auxiliary and self._should_load_state_from_peers():
             logger.log(self.status_loglevel, "Peer is out of sync")
             self.load_state_from_peers()
             return loss  # local gradients were computed with out-of-sync parameters, must start over
