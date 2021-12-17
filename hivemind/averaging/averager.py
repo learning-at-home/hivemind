@@ -725,7 +725,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         future.set_result((metadata, tensors))
                         return
                     except Exception as e:
-                        logger.exception(f"Failed to download state from {peer} - {repr(e)}")
+                        logger.warning(f"Failed to download state from {peer}")
+                        logger.debug(f"Failed to download state from {peer} - {repr(e)}", exc_info=True)
 
         finally:
             if not future.done():
