@@ -12,6 +12,7 @@ from hivemind.averaging.control import AveragingStage, StepControl
 from hivemind.compression import CompressionBase, NoCompression
 from hivemind.dht import DHT
 from hivemind.optim.grad_averager import GradientAverager
+from hivemind.optim.grad_scaler import GradScaler
 from hivemind.optim.progress_tracker import LocalTrainingProgress, ProgressTracker
 from hivemind.optim.state_averager import (
     LRSchedulerBase,
@@ -22,7 +23,6 @@ from hivemind.optim.state_averager import (
     TorchOptimizer,
     TrainingStateAverager,
 )
-from hivemind.optim.grad_scaler import GradScaler
 from hivemind.utils import PerformanceEMA, get_dht_time, get_logger
 
 logger = get_logger(__name__)
@@ -715,7 +715,7 @@ class Optimizer(torch.optim.Optimizer):
         param_groups = tuple(dict(param_group) for param_group in self.state_averager.optimizer.param_groups)
         for param_group in param_groups:
             num_params = len(param_group["params"])
-            main_params_for_group = self.state_averager.main_parameters[next_index: next_index + num_params]
+            main_params_for_group = self.state_averager.main_parameters[next_index : next_index + num_params]
             param_group["params"] = main_params_for_group
             next_index += num_params
         assert next_index == len(self.state_averager.main_parameters)
