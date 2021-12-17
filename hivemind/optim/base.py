@@ -13,7 +13,7 @@ class DecentralizedOptimizerBase(torch.optim.Optimizer):
         warn(
             "DecentralizedOptimizerBase and its subclasses have been deprecated and will be removed "
             "in hivemind 1.1.0. Use hivemind.Optimizer instead",
-            DeprecationWarning,
+            FutureWarning,
             stacklevel=2,
         )
 
