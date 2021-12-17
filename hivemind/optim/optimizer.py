@@ -388,7 +388,7 @@ class Optimizer(torch.optim.Optimizer):
             with torch.enable_grad():
                 loss = closure()
 
-        if not self.auxiliary and not self.is_synchronized_with_peers():
+        if not self.auxiliary and not self._should_load_state_from_peers():
             logger.log(self.status_loglevel, "Peer is out of sync")
             self.load_state_from_peers()
             return loss  # local gradients were computed with out-of-sync parameters, must start over
@@ -629,9 +629,9 @@ class Optimizer(torch.optim.Optimizer):
                 else:
                     param.grad.zero_()
 
-    def is_synchronized_with_peers(self) -> bool:
+    def _should_load_state_from_peers(self) -> bool:
         """
-        If false, peer will discard local progress and attempt to download state from peers.
+        If true, peer will discard local progress and attempt to download state from peers.
         This method allows peer to continue training in two cases:
          - peer is on the same epoch as other collaborators - keep training normally
          - peer was on the same epoch and accumulated some grads, but some collaborators
@@ -646,8 +646,12 @@ class Optimizer(torch.optim.Optimizer):
         """
         if self._should_check_synchronization_on_update and self.tracker.fetched_global_progress_this_epoch.is_set():
             self._should_check_synchronization_on_update = False
-            return self.local_epoch == self.tracker.global_epoch  # require exact synchronization once per step
-        return self.local_epoch >= self.tracker.global_epoch - 1  # catch up if a peer just switched to next epoch
+            return self.local_epoch != self.tracker.global_epoch  # require exact synchronization once per step
+        return self.local_epoch < self.tracker.global_epoch - 1  # catch up if a peer just switched to next epoch
+
+    def is_synchronized_with_peers(self) -> bool:
+        """Checks whether the current peer is up-to-date with others in terms of the epoch (step) number."""
+        return self.local_epoch >= self.tracker.global_epoch - 1
 
     def load_state_from_peers(self, **kwargs):
         """
