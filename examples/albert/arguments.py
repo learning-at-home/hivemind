@@ -76,7 +76,7 @@ class AveragerArguments:
 
 
 @dataclass
-class CollaborativeOptimizerArguments:
+class OptimizerArguments:
     target_batch_size: int = field(
         default=4096,
         metadata={"help": "Perform optimizer step after all peers collectively accumulate this many samples"},
@@ -96,7 +96,7 @@ class CollaborativeOptimizerArguments:
 
 
 @dataclass
-class CollaborationArguments(CollaborativeOptimizerArguments, BaseTrainingArguments):
+class CollaborationArguments(OptimizerArguments, BaseTrainingArguments):
     statistics_expiration: float = field(
         default=600, metadata={"help": "Statistics will be removed if not updated in this many seconds"}
     )
