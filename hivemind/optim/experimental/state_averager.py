@@ -157,7 +157,7 @@ class TrainingStateAverager(DecentralizedAverager):
         if params_no_grad >= params_with_grad:
             logging.warning("The majority of parameters have requires_grad=False, but they are still synchronized"
                             " with peers. If these parameters are frozen (not updated), please do not feed them into "
-                            "the optimizer at all in order to avoid communication overhead.")
+                            "the optimizer at all in order to avoid communication overhead. Proceeding anyway.")
 
         return param_groups, parameters, parameter_names
 
