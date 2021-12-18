@@ -48,7 +48,7 @@ class PowerEFGradientAverager(GradientAverager):
     def __init__(
         self,
         parameters: Iterable[torch.nn.Parameter],
-        rank: int,
+        averager_rank: int,
         *,
         dht: hivemind.DHT,
         prefix: str,
@@ -58,7 +58,7 @@ class PowerEFGradientAverager(GradientAverager):
         warn: bool = True,
         **kwargs,
     ):
-        self.rank = rank
+        self.rank = averager_rank
         self.parameters = tuple(parameters)
         self._uncompressed_gradients = set(i for i, grad in enumerate(self._grads_from_parameters()) if len(tuple(grad.size())) == 1)
         self._gs = list(

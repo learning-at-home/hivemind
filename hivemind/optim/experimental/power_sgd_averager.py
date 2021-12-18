@@ -49,20 +49,20 @@ class PowerSGDGradientAverager(PowerEFGradientAverager):
     def __init__(
         self,
         parameters: Iterable[torch.nn.Parameter],
-        rank: int,
+        averager_rank: int,
         *,
         dht: hivemind.DHT,
         prefix: str,
-        local_updates: bool = False,
+        averager_local_ef: bool = False,
         reuse_grad_buffers: bool = False,
         accumulate_grads_on: Optional[torch.device] = None,
         client_mode: bool = None,
         warn: bool = True,
         **kwargs,
     ):
-        self.rank = rank
+        self.rank = averager_rank
         self.parameters = tuple(parameters)
-        self._local_updates = local_updates
+        self._local_ef = averager_local_ef
         self._uncompressed_gradients = set(i for i, grad in enumerate(self._grads_from_parameters()) if len(tuple(grad.size())) == 1)
         self._ms = list(
             torch.zeros_like(grad, device=accumulate_grads_on)
@@ -83,7 +83,7 @@ class PowerSGDGradientAverager(PowerEFGradientAverager):
 
         super().__init__(
             self.parameters,
-            rank=rank,
+            averager_rank=averager_rank,
             dht=dht,
             prefix=prefix,
             reuse_grad_buffers=reuse_grad_buffers,
@@ -183,7 +183,7 @@ class PowerSGDGradientAverager(PowerEFGradientAverager):
                 for p, local_p, q, local_q, m, g in zip(ps, local_ps, self._qs, local_qs, self._ms, self._gs):
                     new_g = torch.matmul(p, q.t()).reshape(g.size())
                     g.copy_(new_g)
-                    sub_g = torch.matmul(local_p, local_q.t()).reshape(g.size()) if self._local_updates else new_g
+                    sub_g = torch.matmul(local_p, local_q.t()).reshape(g.size()) if self._local_ef else new_g
                     torch.sub(m, sub_g, out=m)
 
                 return allreduce1.gathered
