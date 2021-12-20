@@ -11,10 +11,10 @@ import torch.nn.functional as F
 
 import hivemind
 from hivemind.averaging.control import AveragingStage
-from hivemind.optim.experimental.grad_averager import GradientAverager
-from hivemind.optim.experimental.optimizer import Optimizer
-from hivemind.optim.experimental.progress_tracker import ProgressTracker
-from hivemind.optim.experimental.state_averager import TrainingStateAverager
+from hivemind.optim.grad_averager import GradientAverager
+from hivemind.optim.optimizer import Optimizer
+from hivemind.optim.progress_tracker import ProgressTracker
+from hivemind.optim.state_averager import TrainingStateAverager
 from hivemind.utils.crypto import RSAPrivateKey
 
 
