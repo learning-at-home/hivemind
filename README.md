@@ -14,7 +14,7 @@ large model on hundreds of computers from different universities, companies, and
 
 ## Live Demo
 
-Check out our NeurIPS 2021 demonstration ["Training Transformers Together"](https://training-transformers-together.github.io/) to see hivemind in action, join an ongoing collaborative training, and learn more about the technologies behind it!
+Check out our NeurIPS 2021 demonstration ["Training Transformers Together"](https://training-transformers-together.github.io/) to see hivemind in action, join an ongoing collaborative experiment, and learn more about the technologies behind it!
 
 ## Key Features
 
