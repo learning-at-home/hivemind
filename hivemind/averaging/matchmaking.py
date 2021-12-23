@@ -23,7 +23,6 @@ from hivemind.utils import TimedStorage, get_dht_time, get_logger, timed_storage
 from hivemind.utils.asyncio import anext, cancel_and_wait
 
 logger = get_logger(__name__)
-logger.level == logging.DEBUG
 
 
 class Matchmaking:
@@ -187,7 +186,6 @@ class Matchmaking:
         :note: this function does not guarantee that your group leader is the same as :leader: parameter
           The originally specified leader can disband group and redirect us to a different leader
         """
-        print("REQUESTING", leader)
         assert self.is_looking_for_group and self.current_leader is None
         stream: Optional[AsyncIterator[averaging_pb2.MessageFromLeader]] = None
         try:
@@ -242,10 +240,10 @@ class Matchmaking:
             logger.debug(f"{self} - unexpected message from leader: {averaging_pb2.MessageCode.Name(message.code)}")
             return None
         except asyncio.TimeoutError:
-            logger.info(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
+            logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             return None
         except (P2PHandlerError, ControlFailure, DispatchFailure, StopAsyncIteration) as e:
-            logger.info(f"{self} - failed to request potential leader {leader}: {repr(e)}", exc_info=True)
+            logger.debug(f"{self} - failed to request potential leader {leader}: {repr(e)}", exc_info=True)
             return None
 
         finally:
