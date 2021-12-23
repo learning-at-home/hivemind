@@ -5,12 +5,9 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import contextlib
-import logging
 import random
 from math import isfinite
 from typing import AsyncIterator, Dict, Optional, Set, Tuple, Type
-
-import numpy as np
 
 from hivemind.averaging.control import StepControl
 from hivemind.averaging.group_info import GroupInfo
