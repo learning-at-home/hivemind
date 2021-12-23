@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import contextlib
+import logging
 import random
 from math import isfinite
 from typing import AsyncIterator, Dict, Optional, Set, Tuple, Type
@@ -22,6 +23,7 @@ from hivemind.utils import TimedStorage, get_dht_time, get_logger, timed_storage
 from hivemind.utils.asyncio import anext, cancel_and_wait
 
 logger = get_logger(__name__)
+logger.level == logging.DEBUG
 
 
 class Matchmaking:
@@ -185,6 +187,7 @@ class Matchmaking:
         :note: this function does not guarantee that your group leader is the same as :leader: parameter
           The originally specified leader can disband group and redirect us to a different leader
         """
+        print("REQUESTING", leader)
         assert self.is_looking_for_group and self.current_leader is None
         stream: Optional[AsyncIterator[averaging_pb2.MessageFromLeader]] = None
         try:
