@@ -9,8 +9,6 @@ import random
 from math import isfinite
 from typing import AsyncIterator, Dict, Optional, Set, Tuple, Type
 
-import numpy as np
-
 from hivemind.averaging.control import StepControl
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.key_manager import GroupKey, GroupKeyManager
@@ -242,7 +240,7 @@ class Matchmaking:
             logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             return None
         except (P2PHandlerError, ControlFailure, DispatchFailure, StopAsyncIteration) as e:
-            logger.debug(f"{self} - failed to request potential leader {leader}:")
+            logger.debug(f"{self} - failed to request potential leader {leader}: {repr(e)}", exc_info=True)
             return None
 
         finally:
