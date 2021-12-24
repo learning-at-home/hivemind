@@ -343,9 +343,12 @@ class AllReduceRunner(ServicerBase):
                 stream,
                 max_prefetch=self.tensor_part_container.prefetch,
             ):
-                averaged_part = await self.tensor_part_reducer.accumulate_part(
-                    sender_index, part_index, tensor_part, weight=weight
-                )
+                async with self.banlock:
+                    if self.sender_peer_ids[sender_index] in self.banned_senders:
+                        break
+                    averaged_part = await self.tensor_part_reducer.accumulate_part(
+                        sender_index, part_index, tensor_part, weight=weight
+                    )
                 part_index += 1
 
                 serialized_delta = await loop.run_in_executor(
