@@ -4,7 +4,7 @@ from typing import Any, AsyncIterator, Dict, Optional, Sequence, Set, Tuple, Typ
 
 import torch
 
-from hivemind.averaging.partition import AllreduceException, TensorPartContainer, TensorPartReducer
+from hivemind.averaging.partition import AllreduceException, TensorPartContainer, TensorPartReducer, BannedException
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase, StubBase
 from hivemind.proto import averaging_pb2
@@ -343,13 +343,13 @@ class AllReduceRunner(ServicerBase):
                 stream,
                 max_prefetch=self.tensor_part_container.prefetch,
             ):
-                async with self.banlock:
-                    if self.sender_peer_ids[sender_index] in self.banned_senders:
-                        break
+                try:
                     averaged_part = await self.tensor_part_reducer.accumulate_part(
                         sender_index, part_index, tensor_part, weight=weight
                     )
-                part_index += 1
+                    part_index += 1
+                except BannedException:
+                    break  # sender was banned, we no longer need to aggregate it
 
                 serialized_delta = await loop.run_in_executor(
                     None, lambda: serialize_torch_tensor(averaged_part - tensor_part, part_compression)
