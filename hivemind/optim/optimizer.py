@@ -12,8 +12,8 @@ from hivemind.averaging.control import AveragingStage, StepControl
 from hivemind.compression import CompressionBase, NoCompression
 from hivemind.dht import DHT
 from hivemind.optim.grad_averager import GradientAverager
-from hivemind.optim.power_ef_averager import PowerEFGradientAverager
 from hivemind.optim.grad_scaler import GradScaler
+from hivemind.optim.power_ef_averager import PowerEFGradientAverager
 from hivemind.optim.progress_tracker import LocalTrainingProgress, ProgressTracker
 from hivemind.optim.state_averager import (
     LRSchedulerBase,
@@ -248,7 +248,8 @@ class Optimizer(torch.optim.Optimizer):
             assert len(extra_tensors) == 0
             grad_extra_tensors = [
                 torch.zeros_like(param, device="cpu")
-                for param_group in optimizer.param_groups for param in param_group["params"]
+                for param_group in optimizer.param_groups
+                for param in param_group["params"]
             ]
             for tensor in grad_extra_tensors:
                 if tensor is not None:
@@ -272,7 +273,7 @@ class Optimizer(torch.optim.Optimizer):
                 reuse_grad_buffers=reuse_grad_buffers,
                 grad_rank_averager=grad_rank_averager,
                 compression=grad_compression,
-                **grad_averager_opts or {}
+                **grad_averager_opts or {},
             )
         else:
             self.grad_averager = None
