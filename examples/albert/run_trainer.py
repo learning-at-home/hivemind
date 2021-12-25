@@ -202,8 +202,10 @@ def main():
     try:
         tokenizer = AlbertTokenizerFast.from_pretrained(dataset_args.tokenizer_path, cache_dir=dataset_args.cache_dir)
     except OSError:
-        logger.fatal(f"No tokenizer data found in {dataset_args.tokenizer_path}, "
-                     f"please run ./tokenize_wikitext103.py before running this")
+        logger.fatal(
+            f"No tokenizer data found in {dataset_args.tokenizer_path}, "
+            f"please run ./tokenize_wikitext103.py before running this"
+        )
         sys.exit(1)
 
     model = get_model(training_args, config, tokenizer)
