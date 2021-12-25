@@ -9,8 +9,8 @@
 
   <br><br>
 
-.. automodule:: hivemind.optim.experimental.optimizer
-.. currentmodule:: hivemind.optim.experimental.optimizer
+.. automodule:: hivemind.optim.optimizer
+.. currentmodule:: hivemind.optim.optimizer
 
 **hivemind.Optimizer**
 ----------------------
