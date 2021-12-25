@@ -349,6 +349,7 @@ class AllReduceRunner(ServicerBase):
                     )
                     part_index += 1
                 except BannedException:
+                    logger.debug(f"Sender {sender_index} is already banned")
                     break  # sender was banned, we no longer need to aggregate it
 
                 serialized_delta = await loop.run_in_executor(
