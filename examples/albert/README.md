@@ -9,7 +9,7 @@ using `hivemind.CollaborativeOptimizer` to exchange information between peers.
 
 * Install hivemind: `pip install git+https://github.com/learning-at-home/hivemind.git`
 * Dependencies: `pip install -r requirements.txt`
-* Preprocess data: `python tokenize_wikitext103.py`
+* Preprocess data: `./tokenize_wikitext103.py`
 * Upload the data to a publicly available location or ask volunteers to preprocess it locally
 
 ## Running an experiment
@@ -20,7 +20,7 @@ Run the first DHT peer to welcome trainers and record training statistics (e.g.,
 
 - In this example, we use [wandb.ai](https://wandb.ai/site) to plot training metrics. If you're unfamiliar with Weights
   & Biases, here's a [quickstart tutorial](https://docs.wandb.ai/quickstart).
-- Run `python run_training_monitor.py --wandb_project YOUR_WANDB_PROJECT`
+- Run `./run_training_monitor.py --wandb_project YOUR_WANDB_PROJECT`
 
   - `YOUR_EXPERIMENT_NAME` must be a unique name of this training run, e.g. `my-albert-v1`. It cannot contain `.`
     due to naming conventions.
@@ -28,7 +28,7 @@ Run the first DHT peer to welcome trainers and record training statistics (e.g.,
     same project name.
 
 ```
-$ python run_training_monitor.py --wandb_project Demo-run
+$ ./run_training_monitor.py --wandb_project Demo-run
 Oct 14 16:26:36.083 [INFO] [utils.log_visible_maddrs:47] Running a DHT peer. To connect other peers to this one over the Internet,
 use --initial_peers /ip4/1.2.3.4/tcp/1337/p2p/XXXX /ip4/1.2.3.4/udp/31337/quic/p2p/XXXX
 Oct 14 16:26:36.083 [INFO] [utils.log_visible_maddrs:50] Full list of visible multiaddresses: ...
@@ -57,7 +57,7 @@ To join the collaboration with a GPU trainer,
   (see [default paths](./arguments.py#L117-L134) for reference)
 - Run:
   ```bash
-  python run_trainer.py \
+  ./run_trainer.py \
       --initial_peers ONE_OR_MORE_PEERS \
       --logging_first_step --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs
   ```
@@ -169,7 +169,7 @@ Here's an example of a full trainer script for Google Colab:
 !pip install transformers datasets sentencepiece torch_optimizer==0.1.0
 !git clone https://github.com/learning-at-home/hivemind && cd hivemind && pip install -e .
 !curl -L YOUR_HOSTED_DATA | tar xzf -
-!ulimit -n 4096 && python ./hivemind/examples/albert/run_trainer.py \
+!ulimit -n 4096 && ./hivemind/examples/albert/run_trainer.py \
     --initial_peers ONE_OR_MORE_PEERS \
     --logging_dir ./logs --logging_first_step --output_dir ./outputs --overwrite_output_dir \
     --client_mode --averaging_expiration 10 --batch_size_lead 300 --gradient_accumulation_steps 1
