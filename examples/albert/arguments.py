@@ -7,8 +7,7 @@ from transformers import TrainingArguments
 @dataclass
 class BaseTrainingArguments:
     experiment_prefix: str = field(
-        default='albert',
-        metadata={"help": "A unique 'name' of this experiment, used to store metadata on the DHT"}
+        default="albert", metadata={"help": "A unique 'name' of this experiment, used to store metadata on the DHT"}
     )
     initial_peers: List[str] = field(
         default_factory=list,
