@@ -9,7 +9,7 @@ using `hivemind.CollaborativeOptimizer` to exchange information between peers.
 
 * Install hivemind: `pip install git+https://github.com/learning-at-home/hivemind.git`
 * Dependencies: `pip install -r requirements.txt`
-* Preprocess data: `python tokenize_wikitext103.py`
+* Preprocess data: `./tokenize_wikitext103.py`
 * Upload the data to a publicly available location or ask volunteers to preprocess it locally
 
 ## Running an experiment
@@ -20,18 +20,16 @@ Run the first DHT peer to welcome trainers and record training statistics (e.g.,
 
 - In this example, we use [wandb.ai](https://wandb.ai/site) to plot training metrics. If you're unfamiliar with Weights
   & Biases, here's a [quickstart tutorial](https://docs.wandb.ai/quickstart).
-- Run `python run_training_monitor.py --experiment_prefix YOUR_EXPERIMENT_NAME --wandb_project YOUR_WANDB_PROJECT`
+- Run `./run_training_monitor.py --wandb_project YOUR_WANDB_PROJECT`
 
-  - `YOUR_EXPERIMENT_NAME` must be a unique name of this training run, e.g. `my-albert-v1`. It cannot contain `.`
-    due to naming conventions.
   - `YOUR_WANDB_PROJECT` is a name of wandb project used to track training metrics. Multiple experiments can have the
     same project name.
 
 ```
-$ python run_training_monitor.py --experiment_prefix my-albert-v1 --wandb_project Demo-run
-Oct 14 16:26:36.083 [INFO] [utils.log_visible_maddrs:47] Running a DHT peer. To connect other peers to this one over the Internet,
+$ ./run_training_monitor.py --wandb_project Demo-run
+Oct 14 16:26:36.083 [INFO] Running a DHT peer. To connect other peers to this one over the Internet,
 use --initial_peers /ip4/1.2.3.4/tcp/1337/p2p/XXXX /ip4/1.2.3.4/udp/31337/quic/p2p/XXXX
-Oct 14 16:26:36.083 [INFO] [utils.log_visible_maddrs:50] Full list of visible multiaddresses: ...
+Oct 14 16:26:36.083 [INFO] Full list of visible multiaddresses: ...
 wandb: Currently logged in as: XXX (use `wandb login --relogin` to force relogin)
 wandb: Tracking run with wandb version 0.10.32
 wandb: Syncing run dry-mountain-2
@@ -39,12 +37,12 @@ wandb:  View project at https://wandb.ai/XXX/Demo-run
 wandb:  View run at https://wandb.ai/XXX/Demo-run/runs/YYY
 wandb: Run data is saved locally in /path/to/run/data
 wandb: Run `wandb offline` to turn off syncing.
-Oct 14 16:26:41.064 [INFO] [optim.collaborative._fetch_state:448] Found no active peers: None
-Oct 14 16:26:44.068 [INFO] [optim.collaborative._fetch_state:448] Found no active peers: None
+Oct 14 16:26:41.064 [INFO] Found no active peers: None
+Oct 14 16:26:44.068 [INFO] Found no active peers: None
 ...
-Oct 14 16:37:37.246 [INFO] [__main__.<module>:209] Step #1  loss = 11.05164
-Oct 14 16:39:37.441 [INFO] [__main__.<module>:209] Step #2  loss = 11.03771
-Oct 14 16:40:37.541 [INFO] [__main__.<module>:209] Step #3  loss = 11.02886
+Oct 14 16:37:37.246 [INFO] Step #1  loss = 11.05164
+Oct 14 16:39:37.441 [INFO] Step #2  loss = 11.03771
+Oct 14 16:40:37.541 [INFO] Step #3  loss = 11.02886
 ```
 
 ### GPU trainers
@@ -57,8 +55,8 @@ To join the collaboration with a GPU trainer,
   (see [default paths](./arguments.py#L117-L134) for reference)
 - Run:
   ```bash
-  python run_trainer.py \
-      --experiment_prefix YOUR_EXPERIMENT_NAME --initial_peers ONE_OR_MORE_PEERS \
+  ./run_trainer.py \
+      --initial_peers ONE_OR_MORE_PEERS \
       --logging_first_step --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs
   ```
 
@@ -89,16 +87,18 @@ See the ["Tips and tricks"](#tips-and-tricks) section for more information on se
 As the peer begins training, it will periodically report training logs in the following form:
 
 ```
-... [INFO] [...] my-albert-v1 accumulated 448 samples from 17 peers for step #0. ETA 18.88 sec (refresh in 15.73 sec)
-... [INFO] [...] my-albert-v1 accumulated 4096 samples from 16 peers for step #0. ETA 0.00 sec (refresh in 0.50 sec)
-... [INFO] [optim.collaborative.step:283] Averaged tensors successfully with 17 peers
-... [INFO] [optim.collaborative.step:317] Optimizer step: done!
-Oct 14 18:58:03.750 [INFO] [__main__.on_step_end:141] Step 1
-Oct 14 18:58:03.750 [INFO] [__main__.on_step_end:142] Your current contribution: 892 samples
-Oct 14 18:58:03.750 [INFO] [__main__.on_step_end:143] Local loss: 11.023
+Dec 28 00:15:31.482 [INFO] albert accumulated 4056 samples for epoch #0 from 2 peers. ETA 0.75 sec (refresh in 0.50 sec)
+Dec 28 00:15:31.990 [INFO] albert accumulated 4072 samples for epoch #0 from 2 peers. ETA 0.24 sec (refresh in 0.50 sec)
+...
+Dec 28 00:15:32.857 [INFO] Step #1
+Dec 28 00:15:32.857 [INFO] Your current contribution: 2144 samples
+Dec 28 00:15:32.857 [INFO] Performance: 20.924 samples/sec
+Dec 28 00:15:32.857 [INFO] Local loss: 11.06709
+Dec 28 00:15:33.580 [INFO] Averaged gradients with 2 peers
+Dec 28 00:15:38.336 [INFO] Averaged parameters with 2 peers
 ```
 
-__Sanity check:__ a healthy peer will periodically report `Averaged tensors successfully with [N > 1]` peers.
+__Sanity check:__ a healthy peer will periodically report `Averaged gradients/parameters with [N > 1]` peers.
 
 For convenience, you can view (and share!) the learning curves of your collaborative experiments in wandb:
 
@@ -169,8 +169,8 @@ Here's an example of a full trainer script for Google Colab:
 !pip install transformers datasets sentencepiece torch_optimizer==0.1.0
 !git clone https://github.com/learning-at-home/hivemind && cd hivemind && pip install -e .
 !curl -L YOUR_HOSTED_DATA | tar xzf -
-!ulimit -n 4096 && python ./hivemind/examples/albert/run_trainer.py \
-    --experiment_prefix YOUR_EXPERIMENT_NAME --initial_peers ONE_OR_MORE_PEERS \
+!ulimit -n 4096 && ./hivemind/examples/albert/run_trainer.py \
+    --initial_peers ONE_OR_MORE_PEERS \
     --logging_dir ./logs --logging_first_step --output_dir ./outputs --overwrite_output_dir \
     --client_mode --averaging_expiration 10 --batch_size_lead 300 --gradient_accumulation_steps 1
 ```
