@@ -87,16 +87,18 @@ See the ["Tips and tricks"](#tips-and-tricks) section for more information on se
 As the peer begins training, it will periodically report training logs in the following form:
 
 ```
-... [INFO] albert accumulated 448 samples from 17 peers for step #0. ETA 18.88 sec (refresh in 15.73 sec)
-... [INFO] albert accumulated 4096 samples from 16 peers for step #0. ETA 0.00 sec (refresh in 0.50 sec)
-... [INFO] Averaged tensors successfully with 17 peers
-... [INFO] Optimizer step: done!
-Oct 14 18:58:03.750 [INFO] Step 1
-Oct 14 18:58:03.750 [INFO] Your current contribution: 892 samples
-Oct 14 18:58:03.750 [INFO] Local loss: 11.023
+Dec 28 00:15:31.482 [INFO] albert accumulated 4056 samples for epoch #0 from 2 peers. ETA 0.75 sec (refresh in 0.50 sec)
+Dec 28 00:15:31.990 [INFO] albert accumulated 4072 samples for epoch #0 from 2 peers. ETA 0.24 sec (refresh in 0.50 sec)
+...
+Dec 28 00:15:32.857 [INFO] Step #1
+Dec 28 00:15:32.857 [INFO] Your current contribution: 2144 samples
+Dec 28 00:15:32.857 [INFO] Performance: 20.924 samples/sec
+Dec 28 00:15:32.857 [INFO] Local loss: 11.06709
+Dec 28 00:15:33.580 [INFO] Averaged gradients with 2 peers
+Dec 28 00:15:38.336 [INFO] Averaged parameters with 2 peers
 ```
 
-__Sanity check:__ a healthy peer will periodically report `Averaged tensors successfully with [N > 1]` peers.
+__Sanity check:__ a healthy peer will periodically report `Averaged gradients/parameters with [N > 1]` peers.
 
 For convenience, you can view (and share!) the learning curves of your collaborative experiments in wandb:
 
