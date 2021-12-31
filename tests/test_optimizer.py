@@ -2,6 +2,7 @@ import ctypes
 import multiprocessing as mp
 import time
 from functools import partial
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -11,7 +12,8 @@ import torch.nn.functional as F
 
 import hivemind
 from hivemind.averaging.control import AveragingStage
-from hivemind.optim.grad_averager import GradientAverager
+from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFactory
+from hivemind.optim.power_ef_averager import PowerEFGradientAverager
 from hivemind.optim.optimizer import Optimizer
 from hivemind.optim.progress_tracker import ProgressTracker
 from hivemind.optim.state_averager import TrainingStateAverager
@@ -286,7 +288,15 @@ def test_progress_tracker():
 
 
 @pytest.mark.forked
+@pytest.mark.parametrize(
+    "grad_averager",
+    [
+        (GradientAverager.get_factory(),),
+        (PowerEFGradientAverager.get_factory(averager_rank=1),)
+    ],
+)
 def test_optimizer(
+    grad_averager: GradientAveragerFactory,
     num_peers: int = 1,
     num_clients: int = 0,
     target_batch_size: int = 32,
@@ -305,7 +315,11 @@ def test_optimizer(
 
     def run_trainer(batch_size: int, batch_time: float, client_mode: bool):
         nonlocal optimizer
-        model = nn.Linear(5, 1)
+        model = nn.Sequential(
+            nn.Linear(5, 5),
+            nn.ReLU(),
+            nn.Linear(5, 1),
+        )
 
         assert isinstance(model, torch.nn.Module), "model_arch must evaluate to a pytorch module"
 
@@ -326,6 +340,7 @@ def test_optimizer(
             delay_optimizer_step=delay_optimizer_step,
             average_state_every=average_state_every,
             client_mode=client_mode,
+            grad_averager=GradientAverager,
             verbose=False,
         )
         optimizer.load_state_from_peers()

@@ -1,5 +1,5 @@
 import contextlib
-from typing import Iterable, Iterator, Optional, Sequence
+from typing import Any, Callable, Union, Iterable, Iterator, Optional, Sequence, Type, TypeVar
 
 import torch
 
@@ -9,6 +9,10 @@ from hivemind.averaging.control import StepControl
 from hivemind.utils import DHTExpiration, get_dht_time, get_logger
 
 logger = get_logger(__name__)
+
+
+TGradientAverager = TypeVar('TGradientAverager', bound='GradientAverager')
+GradientAveragerFactory = Callable[[Type[TGradientAverager], Any], TGradientAverager]
 
 
 class GradientAverager(DecentralizedAverager):
@@ -75,7 +79,7 @@ class GradientAverager(DecentralizedAverager):
         accumulate_grads_on: Optional[torch.device] = None,
         client_mode: bool = None,
         warn: bool = True,
-        grad_extra_tensors: Sequence[torch.Tensor] = (),
+        averaged_grads: Sequence[torch.Tensor] = (),
         **kwargs,
     ):
         if reuse_grad_buffers and accumulate_grads_on is not None:
@@ -96,9 +100,7 @@ class GradientAverager(DecentralizedAverager):
         self._new_averaged_grads = False
 
         with torch.no_grad():
-            if grad_extra_tensors:
-                averaged_grads = grad_extra_tensors
-            else:
+            if not averaged_grads:
                 averaged_grads = tuple(
                     grad.detach().cpu().clone().share_memory_() for grad in self._grads_from_parameters()
                 )
@@ -228,3 +230,9 @@ class GradientAverager(DecentralizedAverager):
     def notify_used_averaged_gradients(self):
         """Notify averager that the results of a previous averaging round are accounted for"""
         self._new_averaged_grads = False
+
+    @classmethod
+    def get_factory(cls, **kwargs1) -> GradientAveragerFactory:
+        def _factory(**kwargs2):
+            return cls(**kwargs1, **kwargs2)
+        return _factory

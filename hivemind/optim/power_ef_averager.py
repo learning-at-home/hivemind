@@ -58,7 +58,7 @@ class PowerEFGradientAverager(GradientAverager):
         client_mode: bool = None,
         warn: bool = True,
         min_comprasion_ratio: float = 0.5,
-        grad_extra_tensors: Sequence[torch.Tensor] = (),
+        averaged_grads: Optional[Sequence[torch.Tensor]] = None,
         **kwargs,
     ):
         self.rank = averager_rank
@@ -71,16 +71,18 @@ class PowerEFGradientAverager(GradientAverager):
                 self.rank * (grad.size(0) + np.prod(grad.size()[1:])) / np.prod(grad.size()) > 1 - min_comprasion_ratio
             )
         )
-        self._gradient_rests = list(torch.zeros_like(grad, device="cpu") for grad in self._grads_from_parameters())
+        self._gradient_residual = list(torch.zeros_like(grad, device="cpu") for grad in self._grads_from_parameters())
         self._qs = list(
             torch.rand((grad.reshape((grad.size(0), -1)).size(1), self.rank), device="cpu")
             for idx, grad in enumerate(self._grads_from_parameters())
             if idx not in self._uncompressed_gradients
         )
-        for tensor in self._qs + self._gradient_rests:
+        for tensor in self._qs + self._gradient_residual:
             if tensor is not None:
                 assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
                 tensor.share_memory_()
+
+        self.all_reduce_phases = (b".phase1", b".phase2")
 
         super().__init__(
             self.parameters,
@@ -90,7 +92,7 @@ class PowerEFGradientAverager(GradientAverager):
             accumulate_grads_on=accumulate_grads_on,
             client_mode=client_mode,
             warn=warn,
-            grad_extra_tensors=grad_extra_tensors,
+            averaged_grads=averaged_grads,
             **kwargs,
         )
 
@@ -98,17 +100,15 @@ class PowerEFGradientAverager(GradientAverager):
     def _register_allreduce_group(self, group_info: GroupInfo):
         """registers a given all-reduce runner to listen for incoming connections"""
         try:
-            self._running_groups[group_info.group_id + b".phase1"] = asyncio.Future()
-            self._running_groups[group_info.group_id + b".phase2"] = asyncio.Future()
+            for phase in self.all_reduce_phases:
+                self._running_groups[group_info.group_id + phase] = asyncio.Future()
             self._pending_groups_registered.set()
             yield
         finally:
-            maybe_future = self._running_groups.pop(group_info.group_id + b".phase1", None)
-            if maybe_future and not maybe_future.done():
-                logger.warning(f"All-reduce group {group_info.group_id + b'.phase1'} did not finish.")
-            maybe_future = self._running_groups.pop(group_info.group_id + b".phase2", None)
-            if maybe_future and not maybe_future.done():
-                logger.warning(f"All-reduce group {group_info.group_id + b'.phase2'} did not finish.")
+            for phase in self.all_reduce_phases:
+                maybe_future = self._running_groups.pop(group_info.group_id + phase, None)
+                if maybe_future and not maybe_future.done():
+                    logger.warning(f"All-reduce group {group_info.group_id + phase} did not finish.")
             self._pending_groups_registered.set()
 
     async def _run_allreduce(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
@@ -126,7 +126,7 @@ class PowerEFGradientAverager(GradientAverager):
             )
 
             async with enter_asynchronously(self.get_tensors()) as averaged_grads:
-                cs = [rest for idx, rest in enumerate(self._gradient_rests) if idx not in self._uncompressed_gradients]
+                cs = [rest for idx, rest in enumerate(self._gradient_residual) if idx not in self._uncompressed_gradients]
                 ps = [
                     torch.zeros((grad.size(0), self.rank), device="cpu")
                     for idx, grad in enumerate(averaged_grads)
@@ -135,13 +135,13 @@ class PowerEFGradientAverager(GradientAverager):
                 for p, q, rest in zip(ps, self._qs, cs):
                     torch.matmul(rest.reshape(-1, q.size(0)), q, out=p)
                 first_all_reduced = ps + [
-                    rest for idx, rest in enumerate(self._gradient_rests) if idx in self._uncompressed_gradients
+                    rest for idx, rest in enumerate(self._gradient_residual) if idx in self._uncompressed_gradients
                 ]
                 allreduce1 = AllReduceRunner(
                     p2p=self._p2p,
                     servicer_type=type(self),
                     prefix=self.prefix,
-                    group_id=group_info.group_id + b".phase1",
+                    group_id=group_info.group_id + self.all_reduce_phases[0],
                     tensors=first_all_reduced,
                     ordered_peer_ids=group_info.peer_ids,
                     peer_fractions=peer_fractions,
@@ -149,7 +149,7 @@ class PowerEFGradientAverager(GradientAverager):
                     modes=modes,
                     **kwargs,
                 )
-                self._running_groups[group_info.group_id + b".phase1"].set_result(allreduce1)
+                self._running_groups[group_info.group_id + self.all_reduce_phases[0]].set_result(allreduce1)
 
                 if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
                     async for tensor, update in azip(as_aiter(*first_all_reduced), allreduce1):
@@ -171,7 +171,7 @@ class PowerEFGradientAverager(GradientAverager):
                     p2p=self._p2p,
                     servicer_type=type(self),
                     prefix=self.prefix,
-                    group_id=group_info.group_id + b".phase2",
+                    group_id=group_info.group_id + self.all_reduce_phases[1],
                     tensors=self._qs,
                     ordered_peer_ids=group_info.peer_ids,
                     peer_fractions=peer_fractions,
@@ -179,7 +179,7 @@ class PowerEFGradientAverager(GradientAverager):
                     modes=modes,
                     **kwargs,
                 )
-                self._running_groups[group_info.group_id + b".phase2"].set_result(allreduce2)
+                self._running_groups[group_info.group_id + self.all_reduce_phases[1]].set_result(allreduce2)
 
                 if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
                     async for tensor, update in azip(as_aiter(*self._qs), allreduce2):
@@ -196,7 +196,7 @@ class PowerEFGradientAverager(GradientAverager):
                     new_c = torch.matmul(p, q.t())
                     c.copy_(new_c.reshape(c.size()))
 
-                for rest, grad in zip(self._gradient_rests, averaged_grads):
+                for rest, grad in zip(self._gradient_residual, averaged_grads):
                     torch.add(grad, rest, out=grad)
 
                 return allreduce1.gathered
@@ -212,8 +212,8 @@ class PowerEFGradientAverager(GradientAverager):
         # divide locally accumulated gradients by the number of times they were accumulated
         grad_scale = (1.0 / self.local_times_accumulated) if self.local_times_accumulated != 0 else 0.0
         with self.get_tensors() as averaged_grads:
-            for grad_acc, averaged_grad, rest in zip(self._grad_accumulators(), averaged_grads, self._gradient_rests):
-                torch.sub(grad_acc * grad_scale, averaged_grad, out=rest)
+            for grad_acc, averaged_grad, rest in zip(self._grad_accumulators(), averaged_grads, self._gradient_residual):
+                rest.copy_(grad_acc, non_blocking=False).mul_(grad_scale).sub_(averaged_grad)
 
 
 @torch.jit.script
