@@ -227,6 +227,9 @@ class TensorPartReducer:
             await asyncio.wait({self.current_part_future, self.finished.wait()}, return_when=asyncio.FIRST_COMPLETED)
             if self.finished.is_set():
                 raise AllreduceException(f"attempted to aggregate part in a finalized {self.__class__.__name__}")
+
+        if self.sender_failed_after[sender_index] != float("inf"):
+            raise BannedException(f"sender {sender_index} was banned in background")
         assert part_index == self.current_part_index
 
         current_part_future = self.current_part_future
@@ -241,6 +244,8 @@ class TensorPartReducer:
     def on_sender_failed(self, sender_index: int):
         """Exclude that sender's data for averaging any parts that it did not submit yet."""
         self.sender_failed_after[sender_index] = self.num_parts_received[sender_index]
+        if self.finished.is_set():
+            return
         if self.current_part_index == self.num_parts_received[sender_index]:
             self.num_current_senders -= 1
             self.check_current_part_finished()
@@ -270,3 +275,7 @@ class TensorPartReducer:
 
 class AllreduceException(Exception):
     """A special exception that is raised when allreduce can't continue normally (e.g. disconnected/protocol error)"""
+
+
+class BannedException(AllreduceException):
+    """An exception that indicates that a given sender was banned and will no longer be aggregated"""

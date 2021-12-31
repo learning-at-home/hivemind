@@ -195,6 +195,8 @@ class Optimizer(torch.optim.Optimizer):
         shutdown_timeout: float = 5,
         verbose: bool = False,
     ):
+        self._parent_pid = os.getpid()
+
         client_mode = client_mode if client_mode is None else dht.client_mode
         delay_optimizer_step = delay_optimizer_step if delay_optimizer_step is not None else delay_grad_averaging
         offload_optimizer = offload_optimizer if offload_optimizer is not None else (params is not None)
@@ -273,7 +275,6 @@ class Optimizer(torch.optim.Optimizer):
 
         self._should_check_synchronization_on_update = True  # used in self.should_load_state_from_peers
         self._schema_hash = self._compute_schema_hash()
-        self._parent_pid = os.getpid()
 
         self.delay_before_state_averaging = PerformanceEMA(alpha=performance_ema_alpha)
         # measures the average time from the beginning of self._update_global_epoch to the call to state_averager
