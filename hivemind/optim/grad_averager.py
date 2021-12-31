@@ -11,7 +11,7 @@ from hivemind.utils import DHTExpiration, get_dht_time, get_logger
 logger = get_logger(__name__)
 
 
-TGradientAverager = TypeVar('TGradientAverager', bound='GradientAverager')
+TGradientAverager = TypeVar("TGradientAverager", bound="GradientAverager")
 GradientAveragerFactory = Callable[[Type[TGradientAverager], Any], TGradientAverager]
 
 
@@ -235,4 +235,5 @@ class GradientAverager(DecentralizedAverager):
     def get_factory(cls, **kwargs1) -> GradientAveragerFactory:
         def _factory(**kwargs2):
             return cls(**kwargs1, **kwargs2)
+
         return _factory

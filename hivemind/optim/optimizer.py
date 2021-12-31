@@ -248,7 +248,8 @@ class Optimizer(torch.optim.Optimizer):
             assert grad_averager is not None, "Use external gradient buffers only with working gradient averager."
             averaged_grads = [
                 torch.zeros_like(param, device="cpu").share_memory_()
-                for param_group in params for param in param_group["params"]
+                for param_group in params
+                for param in param_group["params"]
             ]
             extra_tensors = [e for e in extra_tensors] + [ag for ag in averaged_grads]
         self.state_averager = self._make_state_averager(
@@ -265,9 +266,7 @@ class Optimizer(torch.optim.Optimizer):
         )
         if grad_averager:
             self.grad_averager = self._make_gradient_averager(
-                reuse_grad_buffers=reuse_grad_buffers,
-                grad_averager=grad_averager,
-                averaged_grads=averaged_grads
+                reuse_grad_buffers=reuse_grad_buffers, grad_averager=grad_averager, averaged_grads=averaged_grads
             )
         else:
             self.grad_averager = None

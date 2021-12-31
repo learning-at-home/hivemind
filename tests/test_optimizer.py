@@ -290,10 +290,7 @@ def test_progress_tracker():
 @pytest.mark.forked
 @pytest.mark.parametrize(
     "grad_averager",
-    [
-        (GradientAverager.get_factory(),),
-        (PowerEFGradientAverager.get_factory(averager_rank=1),)
-    ],
+    [(GradientAverager.get_factory(),), (PowerEFGradientAverager.get_factory(averager_rank=1),)],
 )
 def test_optimizer(
     grad_averager: GradientAveragerFactory,

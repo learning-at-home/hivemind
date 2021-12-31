@@ -126,7 +126,9 @@ class PowerEFGradientAverager(GradientAverager):
             )
 
             async with enter_asynchronously(self.get_tensors()) as averaged_grads:
-                cs = [rest for idx, rest in enumerate(self._gradient_residual) if idx not in self._uncompressed_gradients]
+                cs = [
+                    rest for idx, rest in enumerate(self._gradient_residual) if idx not in self._uncompressed_gradients
+                ]
                 ps = [
                     torch.zeros((grad.size(0), self.rank), device="cpu")
                     for idx, grad in enumerate(averaged_grads)
@@ -212,7 +214,9 @@ class PowerEFGradientAverager(GradientAverager):
         # divide locally accumulated gradients by the number of times they were accumulated
         grad_scale = (1.0 / self.local_times_accumulated) if self.local_times_accumulated != 0 else 0.0
         with self.get_tensors() as averaged_grads:
-            for grad_acc, averaged_grad, rest in zip(self._grad_accumulators(), averaged_grads, self._gradient_residual):
+            for grad_acc, averaged_grad, rest in zip(
+                self._grad_accumulators(), averaged_grads, self._gradient_residual
+            ):
                 rest.copy_(grad_acc, non_blocking=False).mul_(grad_scale).sub_(averaged_grad)
 
 
