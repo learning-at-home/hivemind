@@ -13,8 +13,8 @@ import torch.nn.functional as F
 import hivemind
 from hivemind.averaging.control import AveragingStage
 from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFactory
-from hivemind.optim.power_ef_averager import PowerEFGradientAverager
 from hivemind.optim.optimizer import Optimizer
+from hivemind.optim.power_ef_averager import PowerEFGradientAverager
 from hivemind.optim.progress_tracker import ProgressTracker
 from hivemind.optim.state_averager import TrainingStateAverager
 from hivemind.utils.crypto import RSAPrivateKey
