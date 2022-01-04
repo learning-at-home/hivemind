@@ -528,7 +528,7 @@ class Optimizer(torch.optim.Optimizer):
                 logger.log(self.status_loglevel, f"Tagging along for a pre-scheduled gradient averaging round")
                 self._tag_along_with_zero_weight(self.scheduled_grads)
             else:
-                logger.log(self.status_loglevel, f"Cancelling pre-scheduled averaging round: there are no other peers")
+                logger.log(self.status_loglevel, f"Skipping pre-scheduled averaging round: there are no other peers")
                 self.scheduled_grads.cancel()
             self.scheduled_grads = None
         return began_averaging_gradients
