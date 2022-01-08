@@ -4,7 +4,7 @@ from pathlib import Path
 import configargparse
 import torch
 
-from hivemind.moe.server import Server
+from hivemind.moe import Server
 from hivemind.moe.server.layers import schedule_name_to_scheduler
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils.limits import increase_file_limit
