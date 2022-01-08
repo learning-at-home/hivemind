@@ -38,7 +38,7 @@ class Server(threading.Thread):
     Server allows you to host "experts" - pytorch subnetworks used by Decentralized Mixture of Experts.
     After creation, a server should be started: see Server.run or Server.run_in_background.
 
-    A working server does 3 things:
+    A working server does two things:
      - processes incoming forward/backward requests via Runtime (created by the server)
      - publishes updates to expert status every :update_period: seconds
 
