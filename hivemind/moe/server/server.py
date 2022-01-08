@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+import random
 import threading
 from contextlib import contextmanager
 from functools import partial
@@ -11,11 +12,12 @@ import torch
 from multiaddr import Multiaddr
 
 from hivemind.dht import DHT
+from hivemind.moe import get_experts
 from hivemind.moe.server.checkpoints import CheckpointSaver, is_directory, load_experts
 from hivemind.moe.server.connection_handler import ConnectionHandler
 from hivemind.moe.server.dht_handler import DHTHandlerThread
 from hivemind.moe.server.expert_backend import ExpertBackend
-from hivemind.moe.server.expert_uid import generate_uids_from_pattern
+from hivemind.moe.server.expert_uid import UID_DELIMITER
 from hivemind.moe.server.layers import (
     add_custom_models_from_file,
     name_to_block,
@@ -26,7 +28,7 @@ from hivemind.moe.server.runtime import Runtime
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils.logging import get_logger
 from hivemind.utils.networking import Endpoint, get_free_port, get_port, replace_port
-from hivemind.utils.tensor_descr import BatchTensorDescriptor
+from hivemind.utils.tensor_descr import BatchTensorDescriptor, DUMMY_BATCH_SIZE
 
 logger = get_logger(__name__)
 
@@ -183,14 +185,14 @@ class Server(threading.Thread):
             uids_to_generate = num_experts - len(expert_uids)
             if uids_to_generate > 0:
                 logger.info(f"Generating {uids_to_generate} expert uids from pattern {expert_pattern}")
-                expert_uids.extend(generate_uids_from_pattern(uids_to_generate, expert_pattern, dht))
+                expert_uids.extend(_generate_uids(uids_to_generate, expert_pattern, dht))
 
         num_experts = len(expert_uids)
         num_handlers = num_handlers if num_handlers is not None else num_experts * 8
         optim_cls = optim_cls if optim_cls is not None else partial(torch.optim.SGD, lr=0.0)
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-        sample_input = name_to_input[expert_cls](3, hidden_dim)
+        sample_input = name_to_input[expert_cls](DUMMY_BATCH_SIZE, hidden_dim)
         if isinstance(sample_input, tuple):
             args_schema = tuple(BatchTensorDescriptor.from_tensor(arg, compression) for arg in sample_input)
         else:
@@ -353,3 +355,67 @@ def _server_runner(pipe, *args, **kwargs):
         server.shutdown()
         server.join()
         logger.info("Server shut down")
+
+
+def _generate_uids(
+    num_experts: int, expert_pattern: Optional[str], dht: Optional[DHT] = None, attempts_per_expert=10
+) -> List[str]:
+    """
+    Sample experts from a given pattern, remove duplicates.
+    :param num_experts: sample this many unique expert uids
+    :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]\
+     means "sample random experts between myprefix.0.0 and myprefix.255.255;
+    :param dht: if specified, uses this DHT to check that expert uids are not yet occupied by other peers
+    :param attempts_per_expert: give up if unable to generate a new expert uid after this many attempts per uid
+    :note: this method is not strictly process-safe. If several servers run it concurrently, they have
+     a small chance of sampling duplicate expert uids.
+    """
+    remaining_attempts = attempts_per_expert * num_experts
+    found_uids, attempted_uids = list(), set()
+
+    def _generate_uid():
+        if expert_pattern is None:
+            return f"expert{UID_DELIMITER}{attempts_per_expert * num_experts - remaining_attempts}"
+
+        uid = []
+        for block in expert_pattern.split(UID_DELIMITER):
+            try:
+                if "[" not in block and "]" not in block:
+                    uid.append(block)
+                elif block.startswith("[") and block.endswith("]") and ":" in block:
+                    slice_start, slice_end = map(int, block[1:-1].split(":"))
+                    uid.append(str(random.randint(slice_start, slice_end - 1)))
+                else:
+                    raise ValueError("Block must be either fixed or a range [from:to]")
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                raise ValueError(f"Expert pattern {expert_pattern} has invalid block {block}, {e}")
+        return UID_DELIMITER.join(uid)
+
+    while remaining_attempts > 0 and len(found_uids) < num_experts:
+
+        # 1. sample new expert uids at random
+        new_uids = []
+        while len(new_uids) + len(found_uids) < num_experts and remaining_attempts > 0:
+            new_uid = _generate_uid()
+            remaining_attempts -= 1
+            if new_uid not in attempted_uids:
+                attempted_uids.add(new_uid)
+                new_uids.append(new_uid)
+
+        # 2. look into DHT (if given) and remove duplicates
+        if dht is not None:
+            existing_expert_uids = {
+                found_expert.uid for found_expert in get_experts(dht, new_uids) if found_expert is not None
+            }
+            new_uids = [new_uid for new_uid in new_uids if new_uid not in existing_expert_uids]
+
+        found_uids += new_uids
+
+    if len(found_uids) != num_experts:
+        logger.warning(
+            f"Found only {len(found_uids)} out of {num_experts} free expert uids after "
+            f"{attempts_per_expert * num_experts} attempts"
+        )
+    return found_uids
