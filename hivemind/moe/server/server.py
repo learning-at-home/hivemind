@@ -28,7 +28,7 @@ from hivemind.moe.server.runtime import Runtime
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils.logging import get_logger
 from hivemind.utils.networking import Endpoint, get_free_port, get_port, replace_port
-from hivemind.utils.tensor_descr import BatchTensorDescriptor, DUMMY_BATCH_SIZE
+from hivemind.utils.tensor_descr import DUMMY_BATCH_SIZE, BatchTensorDescriptor
 
 logger = get_logger(__name__)
 
