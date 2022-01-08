@@ -41,7 +41,6 @@ class Server(threading.Thread):
     A working server does 3 things:
      - processes incoming forward/backward requests via Runtime (created by the server)
      - publishes updates to expert status every :update_period: seconds
-     - follows orders from HivemindController - if it exists
 
     :type dht: DHT or None. Server with dht=None will NOT be visible from DHT,
      but it will still support accessing experts directly with RemoteExpert(uid=UID, endpoint="IPADDR:PORT").
