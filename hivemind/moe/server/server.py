@@ -12,10 +12,9 @@ import torch
 from multiaddr import Multiaddr
 
 from hivemind.dht import DHT
-from hivemind.moe import get_experts
 from hivemind.moe.server.checkpoints import CheckpointSaver, is_directory, load_experts
 from hivemind.moe.server.connection_handler import ConnectionHandler
-from hivemind.moe.server.dht_handler import DHTHandlerThread
+from hivemind.moe.server.dht_handler import DHTHandlerThread, get_experts
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.moe.server.expert_uid import UID_DELIMITER
 from hivemind.moe.server.layers import (
