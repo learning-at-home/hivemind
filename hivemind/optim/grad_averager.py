@@ -1,4 +1,5 @@
 import contextlib
+import os
 from typing import Iterable, Iterator, Optional
 
 import torch
@@ -93,6 +94,7 @@ class GradientAverager(DecentralizedAverager):
             )
         self._accumulators_used_in_step = False
         self._new_averaged_grads = False
+        torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARING_STRATEGY", "file_system"))
 
         with torch.no_grad():
             averaged_grads = tuple(

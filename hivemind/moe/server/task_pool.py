@@ -19,6 +19,7 @@ from hivemind.utils.mpfuture import InvalidStateError, MPFuture
 
 logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))
+torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARING_STRATEGY", "file_system"))
 
 
 class TaskPoolBase(mp.context.ForkProcess, metaclass=ABCMeta):

@@ -178,7 +178,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         else:
             self.mode = AveragingMode.NODE
         self.daemon = daemon
-
+        torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARING_STRATEGY", "file_system"))
         self._averaged_tensors = tuple(averaged_tensors)
         self.lock_averaged_tensors = mp.Lock()
         for tensor in self._averaged_tensors:
