@@ -313,6 +313,8 @@ def test_many_futures():
     p.start()
 
     some_fork_futures = receiver.recv()
+
+    time.sleep(10)
     assert len(hivemind.MPFuture._active_futures) == 700
 
     for future in some_fork_futures:
@@ -323,6 +325,7 @@ def test_many_futures():
     evt.set()
     for future in main_futures:
         future.cancel()
+    time.sleep(10)
     assert len(hivemind.MPFuture._active_futures) == 0
     p.join()
 
