@@ -3,9 +3,12 @@ import numpy as np
 import pytest
 import torch
 
-import hivemind
-from hivemind.moe.client.expert import DUMMY
-from hivemind.moe.server import background_server, declare_experts, layers
+from hivemind.dht import DHT
+from hivemind.moe.client import RemoteExpert, RemoteMixtureOfExperts, RemoteSwitchMixtureOfExperts
+from hivemind.moe.client.moe import DUMMY, _RemoteCallMany
+from hivemind.moe.server import ExpertBackend, Server, background_server, declare_experts
+from hivemind.moe.server.layers import name_to_block
+from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 
 @pytest.mark.forked
@@ -16,11 +19,9 @@ def test_moe():
     with background_server(
         expert_uids=all_expert_uids, device="cpu", expert_cls="ffn", num_handlers=1, hidden_dim=16
     ) as (server_endpoint, dht_maddrs):
-        dht = hivemind.DHT(start=True, initial_peers=dht_maddrs)
+        dht = DHT(start=True, initial_peers=dht_maddrs)
 
-        dmoe = hivemind.RemoteMixtureOfExperts(
-            in_features=16, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix="ffn."
-        )
+        dmoe = RemoteMixtureOfExperts(in_features=16, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix="ffn.")
 
         for i in range(3):
             out = dmoe(torch.randn(10, 16))
@@ -35,9 +36,9 @@ def test_no_experts():
     with background_server(
         expert_uids=all_expert_uids, device="cpu", expert_cls="nop_delay", num_handlers=1, hidden_dim=16
     ) as (server_endpoint, dht_maddrs):
-        dht = hivemind.DHT(start=True, initial_peers=dht_maddrs)
+        dht = DHT(start=True, initial_peers=dht_maddrs)
 
-        dmoe = hivemind.RemoteSwitchMixtureOfExperts(
+        dmoe = RemoteSwitchMixtureOfExperts(
             in_features=16,
             grid_size=(4, 4, 4),
             dht=dht,
@@ -74,10 +75,10 @@ def test_call_many(hidden_dim=16):
     ) as (server_endpoint, _):
         inputs = torch.randn(4, hidden_dim, requires_grad=True)
         inputs_clone = inputs.clone().detach().requires_grad_(True)
-        e0, e1, e2, e3, e4 = [hivemind.RemoteExpert(f"expert.{i}", server_endpoint) for i in range(5)]
-        e5 = hivemind.RemoteExpert(f"thisshouldnotexist", "127.0.0.1:80")
+        e0, e1, e2, e3, e4 = [RemoteExpert(f"expert.{i}", server_endpoint) for i in range(5)]
+        e5 = RemoteExpert(f"thisshouldnotexist", "127.0.0.1:80")
 
-        mask, expert_outputs = hivemind.moe.client.moe._RemoteCallMany.apply(
+        mask, expert_outputs = _RemoteCallMany.apply(
             DUMMY,
             [[e0, e1, e2], [e2, e4], [e1, e5, e3], []],
             k_min,
@@ -130,8 +131,8 @@ def test_remote_module_call(hidden_dim=16):
         optim_cls=None,
         no_dht=True,
     ) as (server_endpoint, _):
-        real_expert = hivemind.RemoteExpert("expert.0", server_endpoint)
-        fake_expert = hivemind.RemoteExpert("oiasfjiasjf", server_endpoint)
+        real_expert = RemoteExpert("expert.0", server_endpoint)
+        fake_expert = RemoteExpert("oiasfjiasjf", server_endpoint)
 
         out1 = real_expert(torch.randn(1, hidden_dim))
         assert out1.shape == (1, hidden_dim)
@@ -152,12 +153,10 @@ def test_remote_module_call(hidden_dim=16):
 @pytest.mark.forked
 def test_beam_search_correctness():
     all_expert_uids = [f"ffn.{5 + i}.{10 + j}.{15 + k}" for i in range(10) for j in range(10) for k in range(10)]
-    dht = hivemind.DHT(start=True)
+    dht = DHT(start=True)
     assert all(declare_experts(dht, all_expert_uids, endpoint="fake-endpoint"))
 
-    dmoe = hivemind.RemoteMixtureOfExperts(
-        in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix="ffn."
-    )
+    dmoe = RemoteMixtureOfExperts(in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix="ffn.")
 
     for i in range(25):
         input = torch.randn(32)
@@ -174,7 +173,7 @@ def test_beam_search_correctness():
         # reference: independently find :beam_size: best experts with exhaustive search
         all_scores = dmoe.compute_expert_scores(
             [dim_scores.unsqueeze(0) for dim_scores in grid_scores],
-            [[hivemind.RemoteExpert(uid, "") for uid in all_expert_uids]],
+            [[RemoteExpert(uid, "") for uid in all_expert_uids]],
         )[0]
         true_best_scores = sorted(all_scores.cpu().detach().numpy(), reverse=True)[: len(chosen_experts)]
 
@@ -197,7 +196,7 @@ def test_determinism(hidden_dim=16):
         optim_cls=None,
         no_dht=True,
     ) as (server_endpoint, _):
-        expert = hivemind.RemoteExpert(uid=f"expert.0", endpoint=server_endpoint)
+        expert = RemoteExpert(uid=f"expert.0", endpoint=server_endpoint)
 
         out = expert(xx, mask)
         out_rerun = expert(xx, mask)
@@ -212,8 +211,8 @@ def test_determinism(hidden_dim=16):
 @pytest.mark.forked
 def test_compute_expert_scores():
     try:
-        dht = hivemind.DHT(start=True)
-        moe = hivemind.moe.RemoteMixtureOfExperts(
+        dht = DHT(start=True)
+        moe = RemoteMixtureOfExperts(
             dht=dht, in_features=16, grid_size=(40,), k_best=4, k_min=1, timeout_after_k_min=1, uid_prefix="expert."
         )
         gx, gy = torch.randn(4, 5, requires_grad=True), torch.randn(4, 3, requires_grad=True)
@@ -221,13 +220,11 @@ def test_compute_expert_scores():
         jj = [[2, 2, 1], [0, 1, 2, 0, 1], [0], [1, 2]]
         batch_experts = [
             [
-                hivemind.RemoteExpert(
-                    uid=f"expert.{ii[batch_i][expert_i]}.{jj[batch_i][expert_i]}", endpoint="[::]:1337"
-                )
+                RemoteExpert(uid=f"expert.{ii[batch_i][expert_i]}.{jj[batch_i][expert_i]}", endpoint="[::]:1337")
                 for expert_i in range(len(ii[batch_i]))
             ]
             for batch_i in range(len(ii))
-        ]  # note: these experts do not exists on server, we use them only to test moe compute_expert_scores
+        ]  # note: these experts do not exist on server, we use them only to test compute_expert_scores
         logits = moe.compute_expert_scores([gx, gy], batch_experts)
         torch.softmax(logits, dim=-1).norm(dim=-1).mean().backward()
         assert gx.grad.norm().item() > 0 and gy.grad.norm().item(), "compute_expert_scores didn't backprop"
@@ -247,25 +244,25 @@ def test_client_anomaly_detection():
 
     experts = {}
     for i in range(4):
-        expert = layers.name_to_block["ffn"](HID_DIM)
-        experts[f"expert.{i}"] = hivemind.ExpertBackend(
+        expert = name_to_block["ffn"](HID_DIM)
+        experts[f"expert.{i}"] = ExpertBackend(
             name=f"expert.{i}",
             expert=expert,
             optimizer=torch.optim.Adam(expert.parameters()),
-            args_schema=(hivemind.BatchTensorDescriptor(HID_DIM),),
-            outputs_schema=hivemind.BatchTensorDescriptor(HID_DIM),
+            args_schema=(BatchTensorDescriptor(HID_DIM),),
+            outputs_schema=BatchTensorDescriptor(HID_DIM),
             max_batch_size=16,
         )
 
     experts["expert.3"].expert.ffn.weight.data[0, 0] = float("nan")
 
-    dht = hivemind.DHT(start=True)
-    server = hivemind.moe.Server(dht, experts, num_connection_handlers=1)
+    dht = DHT(start=True)
+    server = Server(dht, experts, num_connection_handlers=1)
     server.start()
     try:
         server.ready.wait()
 
-        dmoe = hivemind.RemoteMixtureOfExperts(
+        dmoe = RemoteMixtureOfExperts(
             in_features=16, grid_size=(3,), dht=dht, k_best=3, uid_prefix="expert.", detect_anomalies=True
         )
 
@@ -282,7 +279,7 @@ def test_client_anomaly_detection():
         with pytest.raises(ValueError):
             inf_loss.backward()
 
-        dmoe = hivemind.RemoteMixtureOfExperts(
+        dmoe = RemoteMixtureOfExperts(
             in_features=16, grid_size=(4,), dht=dht, k_best=4, uid_prefix="expert.", detect_anomalies=True
         )
         output = dmoe(input)

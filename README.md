@@ -12,6 +12,10 @@ large model on hundreds of computers from different universities, companies, and
 
 ![img](https://i.imgur.com/GPxolxb.gif)
 
+## Live Demo
+
+Check out our NeurIPS 2021 demonstration ["Training Transformers Together"](https://training-transformers-together.github.io/) to see hivemind in action, join an ongoing collaborative experiment, and learn more about the technologies behind it!
+
 ## Key Features
 
 * Distributed training without a master node: Distributed Hash Table allows connecting computers in a decentralized

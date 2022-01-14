@@ -57,14 +57,14 @@ class TrainingProgressSchema(BaseModel):
 
 class CollaborativeOptimizer(DecentralizedOptimizerBase):
     """
-    :note: **For new projects please use hivemind.Optimizer**. CollaborativeOptimizer is an older version of that.
-      Currently, hivemind.Optimizer supports all the features of CollaborativeOptimizer and a many advanced ones.
-      CollaborativeOptimizer will still be supported for a while, but it will be deprecated eventually.
-
-    An optimizer that performs model updates after collaboratively accumulating a target (large) batch size across peers
+    An optimizer that performs model updates after collaboratively accumulating a target (large) batch size across peers.
 
     These optimizers use DHT to track how much progress did the collaboration make towards target batch size.
     Once enough samples were accumulated, optimizers will compute a weighted average of their statistics.
+
+    :note: **For new projects, please use hivemind.Optimizer**. CollaborativeOptimizer is an older version of that.
+      Currently, hivemind.Optimizer supports all the features of CollaborativeOptimizer and many advanced ones.
+      CollaborativeOptimizer will still be supported for a while, but it will be deprecated in v1.1.0.
 
     :note: This optimizer behaves unlike regular pytorch optimizers in two ways:
 

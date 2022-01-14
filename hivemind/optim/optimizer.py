@@ -11,9 +11,10 @@ import torch
 from hivemind.averaging.control import AveragingStage, StepControl
 from hivemind.compression import CompressionBase, NoCompression
 from hivemind.dht import DHT
-from hivemind.optim.experimental.grad_averager import GradientAverager
-from hivemind.optim.experimental.progress_tracker import ProgressTracker
-from hivemind.optim.experimental.state_averager import (
+from hivemind.optim.grad_averager import GradientAverager
+from hivemind.optim.grad_scaler import GradScaler
+from hivemind.optim.progress_tracker import LocalTrainingProgress, ProgressTracker
+from hivemind.optim.state_averager import (
     LRSchedulerBase,
     OptimizerFactory,
     Parameters,
@@ -22,7 +23,6 @@ from hivemind.optim.experimental.state_averager import (
     TorchOptimizer,
     TrainingStateAverager,
 )
-from hivemind.optim.grad_scaler import GradScaler
 from hivemind.utils import PerformanceEMA, get_dht_time, get_logger
 
 logger = get_logger(__name__)
@@ -154,7 +154,7 @@ class Optimizer(torch.optim.Optimizer):
 
     :param averager_opts: additional keyword arguments forwarded to both GradientAverager and TrainingStateAverager
     :param tracker_opts: additional keyword arguments forwarded to ProgressTracker
-    :param performance_ema_alpha: moving average alpha  in ProgressTracer, TrainingStateAverager and Optimizer
+    :param performance_ema_alpha: moving average alpha in ProgressTracker, TrainingStateAverager and Optimizer
     :param verbose: if True, report internal events such as accumilating gradients and running background tasks
 
     :note: in a large-scale training, peers will inevitably fail and you will see error messages. hivemind.Optimizer
@@ -197,6 +197,8 @@ class Optimizer(torch.optim.Optimizer):
         shutdown_timeout: float = 5,
         verbose: bool = False,
     ):
+        self._parent_pid = os.getpid()
+
         client_mode = client_mode if client_mode is None else dht.client_mode
         delay_optimizer_step = delay_optimizer_step if delay_optimizer_step is not None else delay_grad_averaging
         offload_optimizer = offload_optimizer if offload_optimizer is not None else (params is not None)
@@ -262,7 +264,6 @@ class Optimizer(torch.optim.Optimizer):
 
         self._should_check_synchronization_on_update = True  # used in self.should_load_state_from_peers
         self._schema_hash = self._compute_schema_hash()
-        self._parent_pid = os.getpid()
 
         self.delay_before_state_averaging = PerformanceEMA(alpha=performance_ema_alpha)
         # measures the average time from the beginning of self._update_global_epoch to the call to state_averager
@@ -346,6 +347,10 @@ class Optimizer(torch.optim.Optimizer):
         return self.state_averager.local_epoch
 
     @property
+    def local_progress(self) -> LocalTrainingProgress:
+        return self.tracker.local_progress
+
+    @property
     def use_local_updates(self) -> bool:
         return self.grad_averager is None
 
@@ -384,7 +389,7 @@ class Optimizer(torch.optim.Optimizer):
             with torch.enable_grad():
                 loss = closure()
 
-        if not self.auxiliary and self.should_load_state_from_peers():
+        if not self.auxiliary and self._should_load_state_from_peers():
             logger.log(self.status_loglevel, "Peer is out of sync")
             self.load_state_from_peers()
             return loss  # local gradients were computed with out-of-sync parameters, must start over
@@ -519,8 +524,12 @@ class Optimizer(torch.optim.Optimizer):
                 logger.exception(e)
 
         if not began_averaging_gradients and self.scheduled_grads is not None and not self.scheduled_grads.done():
-            logger.log(self.status_loglevel, f"Tagging along for a pre-scheduled gradient averaging round")
-            self._tag_along_with_zero_weight(self.scheduled_grads)
+            if self.tracker.global_progress.num_peers > 1:
+                logger.log(self.status_loglevel, f"Tagging along for a pre-scheduled gradient averaging round")
+                self._tag_along_with_zero_weight(self.scheduled_grads)
+            else:
+                logger.log(self.status_loglevel, f"Skipping pre-scheduled averaging round: there are no other peers")
+                self.scheduled_grads.cancel()
             self.scheduled_grads = None
         return began_averaging_gradients
 
@@ -564,7 +573,6 @@ class Optimizer(torch.optim.Optimizer):
 
         if eta_seconds_to_averaging <= self.matchmaking_time:
             if self.scheduled_state is None or self.scheduled_state.triggered or self.scheduled_state.done():
-
                 min_matchmaking_time = self.state_averager.matchmaking_kwargs["min_matchmaking_time"]
                 actual_seconds = max(eta_seconds_to_averaging, min_matchmaking_time)
                 logger.log(self.status_loglevel, f"Pre-scheduling state averaging round in {actual_seconds:.2f} sec")
@@ -626,7 +634,7 @@ class Optimizer(torch.optim.Optimizer):
                 else:
                     param.grad.zero_()
 
-    def should_load_state_from_peers(self) -> bool:
+    def _should_load_state_from_peers(self) -> bool:
         """
         If true, peer will discard local progress and attempt to download state from peers.
         This method allows peer to continue training in two cases:
@@ -645,6 +653,10 @@ class Optimizer(torch.optim.Optimizer):
             self._should_check_synchronization_on_update = False
             return self.local_epoch != self.tracker.global_epoch  # require exact synchronization once per step
         return self.local_epoch < self.tracker.global_epoch - 1  # catch up if a peer just switched to next epoch
+
+    def is_synchronized_with_peers(self) -> bool:
+        """Checks whether the current peer is up-to-date with others in terms of the epoch (step) number."""
+        return self.local_epoch >= self.tracker.global_epoch - 1
 
     def load_state_from_peers(self, **kwargs):
         """

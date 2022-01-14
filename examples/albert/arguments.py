@@ -7,7 +7,7 @@ from transformers import TrainingArguments
 @dataclass
 class BaseTrainingArguments:
     experiment_prefix: str = field(
-        metadata={"help": "A unique 'name' of this experiment, used to store metadata on the DHT"}
+        default="albert", metadata={"help": "A unique 'name' of this experiment, used to store metadata on the DHT"}
     )
     initial_peers: List[str] = field(
         default_factory=list,
@@ -45,12 +45,11 @@ class BaseTrainingArguments:
 
 @dataclass
 class AveragerArguments:
-    averaging_expiration: float = field(
-        default=5.0, metadata={"help": "Averaging group will wait for stragglers for at most this many seconds"}
-    )
-    averaging_timeout: float = field(
-        default=60.0, metadata={"help": "Give up on averaging step after this many seconds"}
-    )
+    target_group_size: int = field(default=256, metadata={"help": "Maximum group size for all-reduce"})
+
+
+@dataclass
+class ProgressTrackerArguments:
     min_refresh_period: float = field(
         default=0.5, metadata={"help": "Wait for at least this many seconds before fetching new collaboration state"}
     )
@@ -66,17 +65,13 @@ class AveragerArguments:
     expected_drift_rate: float = field(
         default=0.2, metadata={"help": "Trainer assumes that this fraction of current size can join per step"}
     )
-    performance_ema_alpha: float = field(
-        default=0.1, metadata={"help": "Uses this alpha for moving average estimate of samples per second"}
-    )
-    target_group_size: int = field(default=256, metadata={"help": "Maximum group size for all-reduce"})
     metadata_expiration: float = field(
         default=120, metadata={"help": "Peer's metadata will be removed if not updated in this many seconds"}
     )
 
 
 @dataclass
-class CollaborativeOptimizerArguments:
+class OptimizerArguments:
     target_batch_size: int = field(
         default=4096,
         metadata={"help": "Perform optimizer step after all peers collectively accumulate this many samples"},
@@ -93,10 +88,16 @@ class CollaborativeOptimizerArguments:
         default=100.0,
         metadata={"help": "Available network bandwidth, in mbps (used for load balancing in all-reduce)"},
     )
+    averaging_timeout: float = field(
+        default=60.0, metadata={"help": "Give up on averaging step after this many seconds"}
+    )
+    matchmaking_time: float = field(
+        default=5.0, metadata={"help": "When looking for group, wait for requests for at least this many seconds"}
+    )
 
 
 @dataclass
-class CollaborationArguments(CollaborativeOptimizerArguments, BaseTrainingArguments):
+class CollaborationArguments(OptimizerArguments, BaseTrainingArguments):
     statistics_expiration: float = field(
         default=600, metadata={"help": "Statistics will be removed if not updated in this many seconds"}
     )
