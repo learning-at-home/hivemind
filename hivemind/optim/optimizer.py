@@ -442,7 +442,8 @@ class Optimizer(torch.optim.Optimizer):
 
                 began_averaging_gradients = self._begin_averaging_gradients(grad_scaler)
                 if not began_averaging_gradients:
-                    pass  # failed to start gradient averaging due to an internal error
+                    # failed to start gradient averaging due to an internal error
+                    self.grad_averager.load_accumulators_into_averager_()
                 elif self.delay_grad_averaging:
                     # if using delayed grad averaing, send this to state_averager as a pre-condition for optimizer step
                     wait_for_trigger = partial(self._average_gradients_and_load_into_optimizer, self.scheduled_grads)
@@ -529,7 +530,7 @@ class Optimizer(torch.optim.Optimizer):
                 self._tag_along_with_zero_weight(self.scheduled_grads)
             else:
                 logger.log(self.status_loglevel, f"Skipping pre-scheduled averaging round: there are no other peers")
-                self.grad_averager.load_accumulators_into_averager_()
+                self._load_local_gradients_into_optimizer()
                 self.scheduled_grads.cancel()
             self.scheduled_grads = None
         return began_averaging_gradients
@@ -598,9 +599,7 @@ class Optimizer(torch.optim.Optimizer):
             logger.log(self.status_loglevel, f"Averaging gradients failed with {repr(e)}")
 
         if not averaged_gradients:
-            logger.log(self.status_loglevel, f"Proceeding with local gradients")
-            self.grad_averager.load_accumulators_into_averager_()
-            self._load_averaged_gradients_into_optimizer_()
+            self._load_local_gradients_into_optimizer()
 
     def _load_averaged_gradients_into_optimizer_(self):
         """If required, load averaged gradients into optimizer; otherwise simply notify grad averager"""
@@ -618,6 +617,13 @@ class Optimizer(torch.optim.Optimizer):
                     opt_param.grad.copy_(averaged_grad, non_blocking=True)
 
         self.grad_averager.notify_used_averaged_gradients()
+
+    def _load_local_gradients_into_optimizer(self):
+        """Fallback to using local gradients in the optimizer (instead of averaged gradients)"""
+        logger.log(self.status_loglevel, f"Proceeding with local gradients")
+        if self.offload_optimizer:
+            self.grad_averager.load_accumulators_into_averager_()
+        self._load_averaged_gradients_into_optimizer_()
 
     def zero_grad(self, set_to_none: bool = False):
         """Reset gradients from model. If reuse_grad_buffers=True, this will raise an error."""
