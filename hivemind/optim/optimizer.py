@@ -621,8 +621,7 @@ class Optimizer(torch.optim.Optimizer):
     def _load_local_gradients_into_optimizer(self):
         """Fallback to using local gradients in the optimizer (instead of averaged gradients)"""
         logger.log(self.status_loglevel, f"Proceeding with local gradients")
-        if self.offload_optimizer:
-            self.grad_averager.load_accumulators_into_averager_()
+        self.grad_averager.load_accumulators_into_averager_()
         self._load_averaged_gradients_into_optimizer_()
 
     def zero_grad(self, set_to_none: bool = False):
