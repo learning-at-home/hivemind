@@ -622,6 +622,9 @@ class Optimizer(torch.optim.Optimizer):
         """Fallback to using local gradients in the optimizer (instead of averaged gradients)"""
         logger.log(self.status_loglevel, f"Proceeding with local gradients")
         self.grad_averager.load_accumulators_into_averager_()
+        # note: we load gradients into grad_averager even though there is only one peer because of two reasons:
+        # - if offload_optimizer, then we must load gradients onto the CPU gradient buffers used by the optimizer
+        # - if not offload_optimizer, we must un-scale gradients (divide them by the number of accumulation steps)
         self._load_averaged_gradients_into_optimizer_()
 
     def zero_grad(self, set_to_none: bool = False):
