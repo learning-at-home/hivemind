@@ -6,12 +6,12 @@ from typing import Sequence
 import pytest
 import torch
 
-from hivemind import aenumerate
+from hivemind import Quantile8BitQuantization, aenumerate
 from hivemind.averaging.allreduce import AllReduceRunner, AveragingMode
 from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer
+from hivemind.compression import deserialize_torch_tensor
 from hivemind.p2p import P2P, StubBase
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils import deserialize_torch_tensor
 
 
 @pytest.mark.forked
@@ -83,7 +83,7 @@ async def test_partitioning_asynchronous():
     tensors = [torch.randn(2048, 2048), torch.randn(1024, 4096), torch.randn(4096, 1024), torch.randn(30_000, 1024)]
     peer_fractions = [0.4, 0.3, 0.2, 0.1]
 
-    partition = TensorPartContainer(tensors, peer_fractions, compression_type=CompressionType.QUANTILE_8BIT)
+    partition = TensorPartContainer(tensors, peer_fractions, compression=Quantile8BitQuantization())
     read_started, read_finished = asyncio.Event(), asyncio.Event()
 
     async def write_tensors():
@@ -187,7 +187,7 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
     group_id = random.getrandbits(160).to_bytes(length=20, byteorder="big")
 
     allreduce_protocols = []
-    for p2p in p2ps:
+    for i, p2p in enumerate(p2ps):
         allreduce_protocol = AllReduceRunner(
             p2p=p2p,
             servicer_type=AllReduceRunner,
@@ -197,7 +197,7 @@ async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions,
             ordered_peer_ids=peers,
             peer_fractions=peer_fractions,
             modes=peer_modes,
-            weights=averaging_weights,
+            weight=averaging_weights[i],
             part_size_bytes=part_size_bytes,
         )
         await allreduce_protocol.add_p2p_handlers(p2p)

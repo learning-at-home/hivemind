@@ -74,6 +74,12 @@ class PeerID:
         else:
             return False
 
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, PeerID):
+            raise TypeError(f"'<' not supported between instances of 'PeerID' and '{type(other)}'")
+
+        return self.to_base58() < other.to_base58()
+
     def __hash__(self) -> int:
         return hash(self._bytes)
 
@@ -124,6 +130,9 @@ class PeerInfo:
 
     def __str__(self):
         return f"{self.peer_id.pretty()} {','.join(str(a) for a in self.addrs)}"
+
+    def __repr__(self):
+        return f"PeerInfo(peer_id={repr(self.peer_id)}, addrs={repr(self.addrs)})"
 
 
 class InvalidAddrError(ValueError):

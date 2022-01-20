@@ -18,7 +18,7 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue, **kwargs):
         asyncio.set_event_loop(asyncio.new_event_loop())
     loop = asyncio.get_event_loop()
 
-    node = loop.run_until_complete(DHTNode.create(initial_peers=initial_peers, ping_n_attempts=10, **kwargs))
+    node = loop.run_until_complete(DHTNode.create(initial_peers=initial_peers, **kwargs))
     maddrs = loop.run_until_complete(node.get_visible_maddrs())
 
     info_queue.put((node.node_id, node.peer_id, maddrs))
@@ -94,7 +94,7 @@ def launch_dht_instances(n_peers: int, **kwargs) -> List[DHT]:
     initial_peers = dhts[0].get_visible_maddrs()
 
     dhts.extend(DHT(initial_peers=initial_peers, start=True, await_ready=False, **kwargs) for _ in range(n_peers - 1))
-    for instance in dhts[1:]:
-        instance.ready.wait()
+    for process in dhts[1:]:
+        process.wait_until_ready()
 
     return dhts

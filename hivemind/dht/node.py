@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import os
 import random
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -36,6 +37,9 @@ from hivemind.utils.auth import AuthorizerBase
 from hivemind.utils.timed_storage import DHTExpiration, TimedStorage, ValueWithExpiration
 
 logger = get_logger(__name__)
+
+
+DEFAULT_NUM_WORKERS = int(os.getenv("HIVEMIND_DHT_NUM_WORKERS", 4))
 
 
 class DHTNode:
@@ -110,14 +114,14 @@ class DHTNode:
         cache_refresh_before_expiry: float = 5,
         cache_on_store: bool = True,
         reuse_get_requests: bool = True,
-        num_workers: int = 1,
+        num_workers: int = DEFAULT_NUM_WORKERS,
         chunk_size: int = 16,
         blacklist_time: float = 5.0,
         backoff_rate: float = 2.0,
         client_mode: bool = False,
         record_validator: Optional[RecordValidatorBase] = None,
         authorizer: Optional[AuthorizerBase] = None,
-        validate: bool = True,
+        ensure_bootstrap_success: bool = True,
         strict: bool = True,
         **kwargs,
     ) -> DHTNode:
@@ -152,9 +156,10 @@ class DHTNode:
         :param chunk_size: maximum number of concurrent calls in get_many and cache refresh queue
         :param blacklist_time: excludes non-responsive peers from search for this many seconds (set 0 to disable)
         :param backoff_rate: blacklist time will be multiplied by :backoff_rate: for each successive non-response
-        :param validate: if True, use initial peers to validate that this node is accessible and synchronized
+        :param ensure_bootstrap_success: raise an error if node could not connect to initial peers (or vice versa)
+           If False, print a warning instead. It is recommended to keep this flag unless you know what you're doing.
         :param strict: if True, any error encountered in validation will interrupt the creation of DHTNode
-        :param client_mode: if False (default), this node will accept incoming requests as a full DHT "citzen"
+        :param client_mode: if False (default), this node will accept incoming requests as a full DHT "citizen"
           if True, this node will refuse any incoming requests, effectively being only a client
         :param record_validator: instance of RecordValidatorBase used for signing and validating stored records
         :param authorizer: instance of AuthorizerBase used for signing and validating requests and response
@@ -182,6 +187,8 @@ class DHTNode:
         if p2p is None:
             if not kwargs.get("use_ipfs"):
                 kwargs["initial_peers"] = initial_peers
+            if client_mode:
+                kwargs.setdefault("dht_mode", "client")
             p2p = await P2P.create(**kwargs)
             self._should_shutdown_p2p = True
         else:
@@ -216,7 +223,7 @@ class DHTNode:
             bootstrap_timeout = bootstrap_timeout if bootstrap_timeout is not None else wait_timeout
             start_time = get_dht_time()
             ping_tasks = set(
-                asyncio.create_task(self.protocol.call_ping(peer, validate=validate, strict=strict))
+                asyncio.create_task(self.protocol.call_ping(peer, validate=ensure_bootstrap_success, strict=strict))
                 for peer in initial_peers
             )
             finished_pings, unfinished_pings = await asyncio.wait(ping_tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -231,7 +238,11 @@ class DHTNode:
                 finished_pings |= finished_in_time
 
             if not finished_pings or all(ping.result() is None for ping in finished_pings):
-                logger.warning("DHTNode bootstrap failed: none of the initial_peers responded to a ping.")
+                message = "DHTNode bootstrap failed: none of the initial_peers responded to a ping."
+                if ensure_bootstrap_success:
+                    raise RuntimeError(f"{message} (set ensure_bootstrap_success=False to ignore)")
+                else:
+                    logger.warning(message)
 
             if strict:
                 for task in asyncio.as_completed(finished_pings):
@@ -706,7 +717,7 @@ class DHTNode:
         """Add key to a refresh queue, refresh at :refresh_time: or later"""
         if self.cache_refresh_task is None or self.cache_refresh_task.done() or self.cache_refresh_task.cancelled():
             self.cache_refresh_task = asyncio.create_task(self._refresh_stale_cache_entries())
-            logger.debug("Spawned cache refresh task.")
+            logger.debug("Spawned cache refresh task")
         earliest_key, earliest_item = self.cache_refresh_queue.top()
         if earliest_item is None or refresh_time < earliest_item.expiration_time:
             self.cache_refresh_evt.set()  # if we new element is now earliest, notify the cache queue

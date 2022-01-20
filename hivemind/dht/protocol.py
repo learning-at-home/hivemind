@@ -81,7 +81,7 @@ class DHTProtocol(ServicerBase):
 
     def __init__(self, *, _initialized_with_create=False):
         """Internal init method. Please use DHTProtocol.create coroutine to spawn new protocol instances"""
-        assert _initialized_with_create, " Please use DHTProtocol.create coroutine to spawn new protocol instances "
+        assert _initialized_with_create, "Please use DHTProtocol.create coroutine to spawn new protocol instances"
         super().__init__()
 
     def get_stub(self, peer: PeerID) -> AuthRPCWrapper:

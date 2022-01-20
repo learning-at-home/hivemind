@@ -18,6 +18,8 @@ from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARING_STRATEGY", "file_system"))
+
 # flavour types
 ResultType = TypeVar("ResultType")
 PID, UID, State, PipeEnd = int, int, str, mp.connection.Connection
@@ -53,7 +55,7 @@ class SharedBytes:
         """Create another shared byte value, represented as a scalar uint8 tensor"""
         with cls._lock:
             if cls._pid != os.getpid() or cls._buffer is None or cls._index >= len(cls._buffer):
-                buffer_size = os.environ.get("HIVEMIND_SHM_BUFFER_SIZE", 4096)
+                buffer_size = int(os.environ.get("HIVEMIND_SHM_BUFFER_SIZE", 16))
                 cls._pid = os.getpid()
                 cls._buffer = torch.empty([buffer_size], dtype=torch.uint8).share_memory_()
                 cls._index = 0
@@ -138,7 +140,9 @@ class MPFuture(base.Future, Generic[ResultType]):
         async def _event_setter():
             self._aio_event.set()
 
-        if self._loop.is_running() and running_loop == self._loop:
+        if self._loop.is_closed():
+            return  # do nothing, the loop is already closed
+        elif self._loop.is_running() and running_loop == self._loop:
             asyncio.create_task(_event_setter())
         elif self._loop.is_running() and running_loop != self._loop:
             asyncio.run_coroutine_threadsafe(_event_setter(), self._loop)
@@ -180,8 +184,10 @@ class MPFuture(base.Future, Generic[ResultType]):
                     future = future_ref()
 
                 if future is None:
-                    logger.debug(f"Ignoring update to future with uid={uid}: the future is already done or destroyed")
-                elif update_type == UpdateType.RESULT:
+                    # The MPFuture instance is already destroyed in this process
+                    # (the caller is not interested in the result)
+                    continue
+                if update_type == UpdateType.RESULT:
                     future.set_result(payload)
                 elif update_type == UpdateType.EXCEPTION:
                     future.set_exception(payload)
@@ -199,8 +205,8 @@ class MPFuture(base.Future, Generic[ResultType]):
         try:
             with MPFuture._update_lock if self._use_lock else nullcontext():
                 self._sender_pipe.send((self._uid, update_type, payload))
-        except (ConnectionError, BrokenPipeError, EOFError) as e:
-            logger.debug(f"No updates were sent: pipe to origin process was broken ({e}).", exc_info=True)
+        except (ConnectionError, BrokenPipeError, EOFError, OSError) as e:
+            logger.debug(f"No updates were sent: pipe to origin process was broken ({e})", exc_info=True)
 
     def set_result(self, result: ResultType):
         if os.getpid() == self._origin_pid:

@@ -8,10 +8,11 @@ import torch
 import hivemind
 import hivemind.averaging.averager
 from hivemind.averaging.allreduce import AveragingMode
+from hivemind.averaging.control import AveragingStage
 from hivemind.averaging.key_manager import GroupKeyManager
 from hivemind.averaging.load_balancing import load_balance_peers
+from hivemind.averaging.partition import AllreduceException
 from hivemind.p2p import PeerID
-from hivemind.proto.runtime_pb2 import CompressionType
 
 from test_utils.dht_swarms import launch_dht_instances
 
@@ -168,61 +169,6 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
         process.shutdown()
 
 
-@pytest.mark.forked
-def test_allreduce_compression():
-    """this test ensures that compression works correctly when multiple tensors have different compression types"""
-
-    tensors1 = [torch.linspace(0, 500, 1000) ** 0.5, torch.randn(1000)]
-    tensors2 = [torch.linspace(300, 800, 1000) ** 0.5, torch.randn(1000)]
-    results = {}
-
-    FLOAT16, UINT8 = CompressionType.FLOAT16, CompressionType.UNIFORM_8BIT
-
-    for compression_type_pair in [(FLOAT16, FLOAT16), (FLOAT16, UINT8), (UINT8, FLOAT16), (UINT8, UINT8)]:
-        dht_instances = launch_dht_instances(2)
-        averager1 = hivemind.averaging.DecentralizedAverager(
-            [x.clone() for x in tensors1],
-            dht=dht_instances[0],
-            compression_type=compression_type_pair,
-            client_mode=True,
-            target_group_size=2,
-            prefix="mygroup",
-            start=True,
-        )
-        averager2 = hivemind.averaging.DecentralizedAverager(
-            [x.clone() for x in tensors2],
-            dht=dht_instances[1],
-            compression_type=compression_type_pair,
-            target_group_size=2,
-            prefix="mygroup",
-            start=True,
-        )
-
-        for future in averager1.step(wait=False), averager2.step(wait=False):
-            future.result()
-
-        with averager1.get_tensors() as averaged_tensors:
-            results[compression_type_pair] = averaged_tensors
-
-        for instance in [averager1, averager2] + dht_instances:
-            instance.shutdown()
-
-    assert torch.allclose(results[UINT8, FLOAT16][0], results[UINT8, UINT8][0])
-    assert torch.allclose(results[UINT8, FLOAT16][1], results[FLOAT16, FLOAT16][1])
-    assert torch.allclose(results[UINT8, UINT8][1], results[FLOAT16, UINT8][1])
-    assert torch.allclose(results[FLOAT16, UINT8][0], results[FLOAT16, FLOAT16][0])
-
-    assert not torch.allclose(results[UINT8, FLOAT16][1], results[UINT8, UINT8][1])
-    assert not torch.allclose(results[UINT8, FLOAT16][0], results[FLOAT16, FLOAT16][0])
-    assert not torch.allclose(results[UINT8, UINT8][0], results[FLOAT16, UINT8][0])
-    assert not torch.allclose(results[FLOAT16, UINT8][1], results[FLOAT16, FLOAT16][1])
-
-    reference = [(tensors1[i] + tensors2[i]) / 2 for i in range(len(tensors1))]
-    for i in range(2):
-        assert 0 < torch.mean(torch.square(results[FLOAT16, FLOAT16][i] - reference[i])).item() <= 1e-5
-        assert 1e-5 < torch.mean(torch.square(results[UINT8, UINT8][i] - reference[i])).item() <= 1e-2
-
-
 def compute_mean_std(averagers, unbiased=True):
     results = []
     for averager in averagers:
@@ -363,9 +309,11 @@ def test_too_few_peers():
         )
         for i, dht in enumerate(dht_instances)
     ]
-    step_futures = [averager.step(wait=False) for averager in averagers]
+    step_futures = [averager.step(wait=False, timeout=2) for averager in averagers]
+
     for future in step_futures:
-        assert len(future.result()) == 2
+        with pytest.raises(AllreduceException):
+            future.result()
 
     for process in averagers + dht_instances:
         process.shutdown()
@@ -424,7 +372,6 @@ def test_load_state_from_peers():
         target_group_size=2,
     )
 
-    dht_instances[1].get("demo-run.all_averagers")
     averager2 = TestAverager(
         [torch.randn(3), torch.rand(5)],
         dht=dht_instances[1],
@@ -432,6 +379,8 @@ def test_load_state_from_peers():
         prefix="demo-run",
         target_group_size=2,
     )
+
+    time.sleep(0.5)
 
     assert num_calls == 0
     got_metadata, got_tensors = averager2.load_state_from_peers()
@@ -451,13 +400,56 @@ def test_load_state_from_peers():
 
     averager1.allow_state_sharing = False
     assert averager2.load_state_from_peers() is None
+
     averager1.allow_state_sharing = True
+    time.sleep(0.5)
     got_metadata, got_tensors = averager2.load_state_from_peers()
     assert num_calls == 3
     assert got_metadata == super_metadata
 
     for instance in [averager1, averager2] + dht_instances:
         instance.shutdown()
+
+
+@pytest.mark.forked
+def test_load_state_priority():
+    dht_instances = launch_dht_instances(4)
+
+    averagers = []
+    for i in range(4):
+        averager = hivemind.DecentralizedAverager(
+            [torch.randn(3), torch.rand(5), torch.tensor([i], dtype=torch.float32)],
+            dht=dht_instances[i],
+            start=True,
+            prefix="demo-run",
+            target_group_size=2,
+            allow_state_sharing=i != 1,
+        )
+        averager.state_sharing_priority = 5 - abs(2 - i)
+        averagers.append(averager)
+
+    time.sleep(0.5)
+    metadata, tensors = averagers[0].load_state_from_peers(timeout=1)
+    assert tensors[-1].item() == 2
+
+    metadata, tensors = averagers[2].load_state_from_peers(timeout=1)
+    assert tensors[-1].item() == 3
+
+    averagers[0].state_sharing_priority = 10
+    time.sleep(0.2)
+
+    metadata, tensors = averagers[2].load_state_from_peers(timeout=1)
+    assert tensors[-1].item() == 0
+
+    averagers[1].allow_state_sharing = False
+    averagers[2].allow_state_sharing = False
+    metadata, tensors = averagers[0].load_state_from_peers(timeout=1)
+    assert tensors[-1].item() == 3
+
+    for averager in averagers:
+        averager.shutdown()
+    for dht in dht_instances:
+        dht.shutdown()
 
 
 @pytest.mark.forked
@@ -475,6 +467,82 @@ def test_getset_bits():
 
 
 @pytest.mark.forked
+def test_averaging_trigger():
+    averagers = tuple(
+        hivemind.averaging.DecentralizedAverager(
+            averaged_tensors=[torch.randn(3)],
+            dht=dht,
+            min_matchmaking_time=0.5,
+            request_timeout=0.3,
+            prefix="mygroup",
+            initial_group_bits="",
+            start=True,
+        )
+        for dht in launch_dht_instances(4)
+    )
+
+    controls = []
+    for i, averager in enumerate(averagers):
+        controls.append(
+            averager.step(
+                wait=False,
+                scheduled_time=hivemind.get_dht_time() + 0.5,
+                weight=1.0,
+                require_trigger=i in (1, 2),
+            )
+        )
+
+    time.sleep(0.6)
+
+    c0, c1, c2, c3 = controls
+    assert not any(c.done() for c in controls)
+    assert c0.stage == AveragingStage.RUNNING_ALLREDUCE
+    assert c1.stage == AveragingStage.AWAITING_TRIGGER
+    assert c2.stage == AveragingStage.AWAITING_TRIGGER
+    assert c3.stage == AveragingStage.RUNNING_ALLREDUCE
+
+    c1.allow_allreduce()
+    c2.allow_allreduce()
+    time.sleep(0.5)
+    assert all(c.stage == AveragingStage.FINISHED for c in controls)
+    assert all(c.done() for c in controls)
+
+    # check that setting trigger twice does not raise error
+    c0.allow_allreduce()
+
+
+@pytest.mark.forked
+def test_averaging_cancel():
+    averagers = tuple(
+        hivemind.averaging.DecentralizedAverager(
+            averaged_tensors=[torch.randn(3)],
+            dht=dht,
+            min_matchmaking_time=0.5,
+            request_timeout=0.3,
+            client_mode=(i % 2 == 0),
+            prefix="mygroup",
+            start=True,
+        )
+        for i, dht in enumerate(launch_dht_instances(4))
+    )
+
+    step_controls = [averager.step(wait=False, scheduled_time=hivemind.get_dht_time() + 1) for averager in averagers]
+
+    time.sleep(0.1)
+    step_controls[0].cancel()
+    step_controls[1].cancel()
+
+    for i, control in enumerate(step_controls):
+        if i in (0, 1):
+            assert control.cancelled()
+        else:
+            assert control.result() is not None and len(control.result()) == 2
+
+    for averager in averagers:
+        averager.shutdown()
+
+
+@pytest.mark.forked
 def test_training_averager(n_steps: int = 10, n_dims: int = 16):
     torch.manual_seed(42)
 
@@ -487,7 +555,7 @@ def test_training_averager(n_steps: int = 10, n_dims: int = 16):
 
     x1 = torch.randn(n_dims, requires_grad=True)
     opt1 = torch.optim.Adam([x1], lr=0.05)
-    averager1 = hivemind.averaging.TrainingAverager(
+    averager1 = hivemind.TrainingAverager(
         opt1,
         average_gradients=True,
         average_parameters=True,
@@ -498,7 +566,7 @@ def test_training_averager(n_steps: int = 10, n_dims: int = 16):
 
     x2 = torch.randn(n_dims, requires_grad=True)
     opt2 = torch.optim.Adam([x2], lr=0.05)
-    averager2 = hivemind.averaging.TrainingAverager(
+    averager2 = hivemind.TrainingAverager(
         opt2,
         average_gradients=True,
         average_parameters=True,

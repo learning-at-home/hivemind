@@ -7,7 +7,7 @@ from hivemind import choose_ip_address
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import RecordValidatorBase
-from hivemind.utils.logging import get_logger
+from hivemind.utils.logging import TextStyle, get_logger
 
 logger = get_logger(__name__)
 
@@ -28,12 +28,6 @@ def make_validators(experiment_prefix: str) -> Tuple[List[RecordValidatorBase], 
     signature_validator = RSASignatureValidator()
     validators = [SchemaValidator(MetricSchema, prefix=experiment_prefix), signature_validator]
     return validators, signature_validator.local_public_key
-
-
-class TextStyle:
-    BOLD = "\033[1m"
-    BLUE = "\033[34m"
-    RESET = "\033[0m"
 
 
 def log_visible_maddrs(visible_maddrs: List[Multiaddr], only_p2p: bool) -> None:

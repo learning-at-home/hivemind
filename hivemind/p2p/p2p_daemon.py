@@ -1,21 +1,25 @@
 import asyncio
+import json
+import logging
 import os
 import secrets
 from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
+from datetime import datetime
 from importlib.resources import path
-from subprocess import Popen
-from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, Type, TypeVar, Union
 
+from google.protobuf.message import Message
 from multiaddr import Multiaddr
 
 import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
+from hivemind.p2p.p2p_daemon_bindings.control import DEFAULT_MAX_MSG_SIZE, P2PDaemonError, P2PHandlerError
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.proto.p2pd_pb2 import RPCError
-from hivemind.utils.asyncio import aiter, asingle
-from hivemind.utils.logging import get_logger
+from hivemind.utils.asyncio import as_aiter, asingle
+from hivemind.utils.logging import get_logger, golog_level_to_python, loglevel, python_level_to_golog
 
 logger = get_logger(__name__)
 
@@ -28,7 +32,6 @@ class P2PContext(object):
     handle_name: str
     local_id: PeerID
     remote_id: PeerID = None
-    remote_maddr: Multiaddr = None
 
 
 class P2P:
@@ -54,9 +57,9 @@ class P2P:
     END_OF_STREAM = RPCError()
 
     DHT_MODE_MAPPING = {
-        "dht": {"dht": 1},
-        "dht_server": {"dhtServer": 1},
-        "dht_client": {"dhtClient": 1},
+        "auto": {"dht": 1},
+        "server": {"dhtServer": 1},
+        "client": {"dhtClient": 1},
     }
     FORCE_REACHABILITY_MAPPING = {
         "public": {"forceReachabilityPublic": 1},
@@ -66,57 +69,63 @@ class P2P:
 
     def __init__(self):
         self.peer_id = None
+        self._client = None
         self._child = None
         self._alive = False
+        self._reader_task = None
         self._listen_task = None
-        self._server_stopped = asyncio.Event()
 
     @classmethod
     async def create(
         cls,
         initial_peers: Optional[Sequence[Union[Multiaddr, str]]] = None,
-        use_ipfs: bool = False,
-        host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ("/ip4/127.0.0.1/tcp/0",),
+        *,
         announce_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = None,
-        quic: bool = True,
-        tls: bool = True,
-        conn_manager: bool = True,
-        dht_mode: str = "dht_server",
-        force_reachability: Optional[str] = None,
-        nat_port_map: bool = True,
         auto_nat: bool = True,
+        conn_manager: bool = True,
+        dht_mode: str = "server",
+        force_reachability: Optional[str] = None,
+        host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ("/ip4/127.0.0.1/tcp/0",),
+        identity_path: Optional[str] = None,
+        idle_timeout: float = 30,
+        nat_port_map: bool = True,
+        quic: bool = False,
+        relay_hop_limit: int = 0,
+        startup_timeout: float = 15,
+        tls: bool = True,
+        use_auto_relay: bool = False,
+        use_ipfs: bool = False,
         use_relay: bool = True,
         use_relay_hop: bool = False,
         use_relay_discovery: bool = False,
-        use_auto_relay: bool = False,
-        relay_hop_limit: int = 0,
-        quiet: bool = True,
-        ping_n_attempts: int = 5,
-        ping_delay: float = 0.4,
+        persistent_conn_max_msg_size: int = DEFAULT_MAX_MSG_SIZE,
     ) -> "P2P":
         """
         Start a new p2pd process and connect to it.
         :param initial_peers: List of bootstrap peers
-        :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
-        :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
-        :param announce_maddrs: Visible multiaddrs that the peer will announce
-          for external connections from other p2p instances
-        :param quic: Enables the QUIC transport
-        :param tls: Enables TLS1.3 channel security protocol
-        :param conn_manager: Enables the Connection Manager
-        :param dht_mode: DHT mode (dht_client/dht_server/dht)
-        :param force_reachability: Force reachability mode (public/private)
-        :param nat_port_map: Enables NAT port mapping
         :param auto_nat: Enables the AutoNAT service
+        :param announce_maddrs: Visible multiaddrs that the peer will announce
+                                for external connections from other p2p instances
+        :param conn_manager: Enables the Connection Manager
+        :param dht_mode: libp2p DHT mode (auto/client/server).
+                         Defaults to "server" to make collaborations work in local networks.
+                         Details: https://pkg.go.dev/github.com/libp2p/go-libp2p-kad-dht#ModeOpt
+        :param force_reachability: Force reachability mode (public/private)
+        :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
+        :param identity_path: Path to a pre-generated private key file. If defined, makes the peer ID deterministic.
+                              May be generated using ``./p2p-keygen`` from ``go-libp2p-daemon``.
+        :param idle_timeout: kill daemon if client has been idle for a given number of
+                             seconds before opening persistent streams
+        :param nat_port_map: Enables NAT port mapping
+        :param quic: Enables the QUIC transport
+        :param relay_hop_limit: sets the hop limit for hop relays
+        :param startup_timeout: raise a P2PDaemonError if the daemon does not start in ``startup_timeout`` seconds
+        :param tls: Enables TLS1.3 channel security protocol
+        :param use_auto_relay: enables autorelay
+        :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
         :param use_relay: enables circuit relay
         :param use_relay_hop: enables hop for relay
         :param use_relay_discovery: enables passive discovery for relay
-        :param use_auto_relay: enables autorelay
-        :param relay_hop_limit: sets the hop limit for hop relays
-        :param quiet: make the daemon process quiet
-        :param ping_n_attempts: try to ping the daemon with this number of attempts after starting it
-        :param ping_delay: wait for ``ping_delay * (2 ** (k - 1))`` seconds before the k-th attempt to ping the daemon
-          (in particular, wait for ``ping_delay`` seconds before the first attempt)
         :return: a wrapper for the p2p daemon
         """
 
@@ -131,6 +140,11 @@ class P2P:
         socket_uid = secrets.token_urlsafe(8)
         self._daemon_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pd-{socket_uid}.sock")
         self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pclient-{socket_uid}.sock")
+        if announce_maddrs is not None:
+            for addr in announce_maddrs:
+                addr = Multiaddr(addr)
+                if ("tcp" in addr and addr["tcp"] == "0") or ("udp" in addr and addr["udp"] == "0"):
+                    raise ValueError("Please specify an explicit port in announce_maddrs: port 0 is not supported")
 
         need_bootstrap = bool(initial_peers) or use_ipfs
         process_kwargs = cls.DHT_MODE_MAPPING.get(dht_mode, {"dht": 0})
@@ -142,51 +156,54 @@ class P2P:
         ]:
             if value:
                 process_kwargs[param] = self._maddrs_to_str(value)
+        if identity_path is not None:
+            process_kwargs["id"] = identity_path
 
         proc_args = self._make_process_args(
             str(p2pd_path),
-            listen=self._daemon_listen_maddr,
-            quic=quic,
-            tls=tls,
-            connManager=conn_manager,
-            natPortMap=nat_port_map,
-            autonat=auto_nat,
-            relay=use_relay,
-            relayHop=use_relay_hop,
-            relayDiscovery=use_relay_discovery,
             autoRelay=use_auto_relay,
-            relayHopLimit=relay_hop_limit,
+            autonat=auto_nat,
             b=need_bootstrap,
-            q=quiet,
+            connManager=conn_manager,
+            idleTimeout=f"{idle_timeout}s",
+            listen=self._daemon_listen_maddr,
+            natPortMap=nat_port_map,
+            quic=quic,
+            relay=use_relay,
+            relayDiscovery=use_relay_discovery,
+            relayHop=use_relay_hop,
+            relayHopLimit=relay_hop_limit,
+            tls=tls,
+            persistentConnMaxMsgSize=persistent_conn_max_msg_size,
             **process_kwargs,
         )
 
-        self._child = Popen(args=proc_args, encoding="utf8")
+        env = os.environ.copy()
+        env.setdefault("GOLOG_LOG_LEVEL", python_level_to_golog(loglevel))
+        env["GOLOG_LOG_FMT"] = "json"
+
+        logger.debug(f"Launching {proc_args}")
+        self._child = await asyncio.subprocess.create_subprocess_exec(
+            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env
+        )
         self._alive = True
-        self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
 
-        await self._ping_daemon_with_retries(ping_n_attempts, ping_delay)
+        ready = asyncio.Future()
+        self._reader_task = asyncio.create_task(self._read_outputs(ready))
+        try:
+            await asyncio.wait_for(ready, startup_timeout)
+        except asyncio.TimeoutError:
+            await self.shutdown()
+            raise P2PDaemonError(f"Daemon failed to start in {startup_timeout:.1f} seconds")
 
+        self._client = await p2pclient.Client.create(
+            control_maddr=self._daemon_listen_maddr,
+            listen_maddr=self._client_listen_maddr,
+            persistent_conn_max_msg_size=persistent_conn_max_msg_size,
+        )
+
+        await self._ping_daemon()
         return self
-
-    async def _ping_daemon_with_retries(self, ping_n_attempts: int, ping_delay: float) -> None:
-        for try_number in range(ping_n_attempts):
-            await asyncio.sleep(ping_delay * (2 ** try_number))
-
-            if self._child.poll() is not None:  # Process died
-                break
-
-            try:
-                await self._ping_daemon()
-                break
-            except Exception as e:
-                if try_number == ping_n_attempts - 1:
-                    logger.exception("Failed to ping p2pd that has just started")
-                    await self.shutdown()
-                    raise
-
-        if self._child.returncode is not None:
-            raise RuntimeError(f"The p2p daemon has died with return code {self._child.returncode}")
 
     @classmethod
     async def replicate(cls, daemon_listen_maddr: Multiaddr) -> "P2P":
@@ -206,7 +223,7 @@ class P2P:
         self._daemon_listen_maddr = daemon_listen_maddr
         self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pclient-{socket_uid}.sock")
 
-        self._client = p2pclient.Client(self._daemon_listen_maddr, self._client_listen_maddr)
+        self._client = await p2pclient.Client.create(self._daemon_listen_maddr, self._client_listen_maddr)
 
         await self._ping_daemon()
         return self
@@ -275,7 +292,7 @@ class P2P:
 
     @staticmethod
     async def receive_protobuf(
-        input_protobuf_type: type, reader: asyncio.StreamReader
+        input_protobuf_type: Type[Message], reader: asyncio.StreamReader
     ) -> Tuple[Optional[TInputProtobuf], Optional[RPCError]]:
         msg_type = await reader.readexactly(1)
         if msg_type == P2P.MESSAGE_MARKER:
@@ -296,7 +313,7 @@ class P2P:
         self,
         name: str,
         handler: Callable[[TInputStream, P2PContext], TOutputStream],
-        input_protobuf_type: type,
+        input_protobuf_type: Type[Message],
         max_prefetch: int = 5,
     ) -> None:
         """
@@ -314,7 +331,6 @@ class P2P:
                 handle_name=name,
                 local_id=self.peer_id,
                 remote_id=stream_info.peer_id,
-                remote_maddr=stream_info.addr,
             )
             requests = asyncio.Queue(max_prefetch)
 
@@ -328,10 +344,18 @@ class P2P:
             async def _process_stream() -> None:
                 try:
                     async for response in handler(_read_stream(), context):
-                        await P2P.send_protobuf(response, writer)
+                        try:
+                            await P2P.send_protobuf(response, writer)
+                        except Exception:
+                            # The connection is unexpectedly closed by the caller or broken.
+                            # The loglevel is DEBUG since the actual error will be reported on the caller
+                            logger.debug("Exception while sending response:", exc_info=True)
+                            break
                 except Exception as e:
-                    logger.warning("Exception while processing stream and sending responses:", exc_info=True)
-                    await P2P.send_protobuf(RPCError(message=str(e)), writer)
+                    logger.warning("Handler failed with the exception:", exc_info=True)
+                    with suppress(Exception):
+                        # Sometimes `e` is a connection error, so it is okay if we fail to report `e` to the caller
+                        await P2P.send_protobuf(RPCError(message=str(e)), writer)
 
             with closing(writer):
                 processing_task = asyncio.create_task(_process_stream())
@@ -358,7 +382,7 @@ class P2P:
         await self.add_binary_stream_handler(name, _handle_stream)
 
     async def _iterate_protobuf_stream_handler(
-        self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: type
+        self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: Type[Message]
     ) -> TOutputStream:
         _, reader, writer = await self.call_binary_stream_handler(peer_id, name)
 
@@ -367,22 +391,25 @@ class P2P:
                 await P2P.send_protobuf(request, writer)
             await P2P.send_protobuf(P2P.END_OF_STREAM, writer)
 
-        with closing(writer):
-            writing_task = asyncio.create_task(_write_to_stream())
-            try:
-                while True:
-                    try:
-                        response, err = await P2P.receive_protobuf(output_protobuf_type, reader)
-                    except asyncio.IncompleteReadError:  # Connection is closed
-                        break
+        async def _read_from_stream() -> AsyncIterator[Message]:
+            with closing(writer):
+                try:
+                    while True:
+                        try:
+                            response, err = await P2P.receive_protobuf(output_protobuf_type, reader)
+                        except asyncio.IncompleteReadError:  # Connection is closed
+                            break
 
-                    if err is not None:
-                        raise P2PHandlerError(f"Failed to call handler `{name}` at {peer_id}: {err.message}")
-                    yield response
+                        if err is not None:
+                            raise P2PHandlerError(f"Failed to call handler `{name}` at {peer_id}: {err.message}")
+                        yield response
 
-                await writing_task
-            finally:
-                writing_task.cancel()
+                    await writing_task
+                finally:
+                    writing_task.cancel()
+
+        writing_task = asyncio.create_task(_write_to_stream())
+        return _read_from_stream()
 
     async def add_protobuf_handler(
         self,
@@ -390,14 +417,21 @@ class P2P:
         handler: Callable[
             [Union[TInputProtobuf, TInputStream], P2PContext], Union[Awaitable[TOutputProtobuf], TOutputStream]
         ],
-        input_protobuf_type: type,
+        input_protobuf_type: Type[Message],
         *,
         stream_input: bool = False,
+        stream_output: bool = False,
     ) -> None:
         """
         :param stream_input: If True, assume ``handler`` to take ``TInputStream``
                              (not just ``TInputProtobuf``) as input.
+        :param stream_output: If True, assume ``handler`` to return ``TOutputStream``
+                              (not ``Awaitable[TOutputProtobuf]``).
         """
+
+        if not stream_input and not stream_output:
+            await self._add_protobuf_unary_handler(name, handler, input_protobuf_type)
+            return
 
         async def _stream_handler(requests: P2P.TInputStream, context: P2PContext) -> P2P.TOutputStream:
             input = requests if stream_input else await asingle(requests)
@@ -411,43 +445,75 @@ class P2P:
 
         await self._add_protobuf_stream_handler(name, _stream_handler, input_protobuf_type)
 
+    async def _add_protobuf_unary_handler(
+        self,
+        handle_name: str,
+        handler: Callable[[TInputProtobuf, P2PContext], Awaitable[TOutputProtobuf]],
+        input_protobuf_type: Type[Message],
+    ) -> None:
+        """
+        Register a request-response (unary) handler. Unary requests and responses
+        are sent through persistent multiplexed connections to the daemon for the
+        sake of reducing the number of open files.
+        :param handle_name: name of the handler (protocol id)
+        :param handler: function handling the unary requests
+        :param input_protobuf_type: protobuf type of the request
+        """
+
+        async def _unary_handler(request: bytes, remote_id: PeerID) -> bytes:
+            input_serialized = input_protobuf_type.FromString(request)
+            context = P2PContext(
+                handle_name=handle_name,
+                local_id=self.peer_id,
+                remote_id=remote_id,
+            )
+
+            response = await handler(input_serialized, context)
+            return response.SerializeToString()
+
+        await self._client.add_unary_handler(handle_name, _unary_handler)
+
     async def call_protobuf_handler(
         self,
         peer_id: PeerID,
         name: str,
         input: Union[TInputProtobuf, TInputStream],
-        output_protobuf_type: type,
+        output_protobuf_type: Type[Message],
     ) -> Awaitable[TOutputProtobuf]:
-        requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
-        responses = self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
+
+        if not isinstance(input, AsyncIterableABC):
+            return await self._call_unary_protobuf_handler(peer_id, name, input, output_protobuf_type)
+
+        responses = await self._iterate_protobuf_stream_handler(peer_id, name, input, output_protobuf_type)
         return await asingle(responses)
 
-    def iterate_protobuf_handler(
+    async def _call_unary_protobuf_handler(
+        self,
+        peer_id: PeerID,
+        handle_name: str,
+        input: TInputProtobuf,
+        output_protobuf_type: Type[Message],
+    ) -> Awaitable[TOutputProtobuf]:
+        serialized_input = input.SerializeToString()
+        response = await self._client.call_unary_handler(peer_id, handle_name, serialized_input)
+        return output_protobuf_type.FromString(response)
+
+    async def iterate_protobuf_handler(
         self,
         peer_id: PeerID,
         name: str,
         input: Union[TInputProtobuf, TInputStream],
-        output_protobuf_type: type,
+        output_protobuf_type: Type[Message],
     ) -> TOutputStream:
-        requests = input if isinstance(input, AsyncIterableABC) else aiter(input)
-        return self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
+        requests = input if isinstance(input, AsyncIterableABC) else as_aiter(input)
+        return await self._iterate_protobuf_stream_handler(peer_id, name, requests, output_protobuf_type)
 
     def _start_listening(self) -> None:
         async def listen() -> None:
             async with self._client.listen():
-                await self._server_stopped.wait()
+                await asyncio.Future()  # Wait until this task will be cancelled in _terminate()
 
         self._listen_task = asyncio.create_task(listen())
-
-    async def _stop_listening(self) -> None:
-        if self._listen_task is not None:
-            self._server_stopped.set()
-            self._listen_task.cancel()
-            try:
-                await self._listen_task
-            except asyncio.CancelledError:
-                self._listen_task = None
-                self._server_stopped.clear()
 
     async def add_binary_stream_handler(self, name: str, handler: p2pclient.StreamHandler) -> None:
         if self._listen_task is None:
@@ -467,14 +533,21 @@ class P2P:
         return self._alive
 
     async def shutdown(self) -> None:
-        await self._stop_listening()
-        await asyncio.get_event_loop().run_in_executor(None, self._terminate)
+        self._terminate()
+        if self._child is not None:
+            await self._child.wait()
 
     def _terminate(self) -> None:
+        if self._client is not None:
+            self._client.close()
+        if self._listen_task is not None:
+            self._listen_task.cancel()
+        if self._reader_task is not None:
+            self._reader_task.cancel()
+
         self._alive = False
-        if self._child is not None and self._child.poll() is None:
+        if self._child is not None and self._child.returncode is None:
             self._child.terminate()
-            self._child.wait()
             logger.debug(f"Terminated p2pd with id = {self.peer_id}")
 
             with suppress(FileNotFoundError):
@@ -502,10 +575,52 @@ class P2P:
     def _maddrs_to_str(maddrs: List[Multiaddr]) -> str:
         return ",".join(str(addr) for addr in maddrs)
 
+    async def _read_outputs(self, ready: asyncio.Future) -> None:
+        last_line = None
+        while True:
+            line = await self._child.stdout.readline()
+            if not line:  # Stream closed
+                break
+            last_line = line.rstrip().decode(errors="ignore")
 
-class P2PInterruptedError(Exception):
-    pass
+            self._log_p2pd_message(last_line)
+            if last_line.startswith("Peer ID:"):
+                ready.set_result(None)
 
+        if not ready.done():
+            ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
 
-class P2PHandlerError(Exception):
-    pass
+    @staticmethod
+    def _log_p2pd_message(line: str) -> None:
+        if '"logger"' not in line:  # User-friendly info from p2pd stdout
+            logger.debug(line, extra={"caller": "p2pd"})
+            return
+
+        try:
+            record = json.loads(line)
+            caller = record["caller"]
+
+            level = golog_level_to_python(record["level"])
+            if level <= logging.WARNING:
+                # Many Go loggers are excessively verbose (e.g. show warnings for unreachable peers),
+                # so we downgrade INFO and WARNING messages to DEBUG.
+                # The Go verbosity can still be controlled via the GOLOG_LOG_LEVEL env variable.
+                # Details: https://github.com/ipfs/go-log#golog_log_level
+                level = logging.DEBUG
+
+            message = record["msg"]
+            if "error" in record:
+                message += f": {record['error']}"
+
+            logger.log(
+                level,
+                message,
+                extra={
+                    "origin_created": datetime.strptime(record["ts"], "%Y-%m-%dT%H:%M:%S.%f%z").timestamp(),
+                    "caller": caller,
+                },
+            )
+        except Exception:
+            # Parsing errors are unlikely, but we don't want to lose these messages anyway
+            logger.warning(line, extra={"caller": "p2pd"})
+            logger.exception("Failed to parse go-log message:")

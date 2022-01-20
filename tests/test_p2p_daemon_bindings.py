@@ -18,7 +18,7 @@ from hivemind.p2p.p2p_daemon_bindings.utils import (
 )
 from hivemind.proto import p2pd_pb2 as p2pd_pb
 
-from test_utils.p2p_daemon import connect_safe, make_p2pd_pair_ip4
+from test_utils.p2p_daemon import connect_safe, make_p2pd_pair_unix
 
 
 def test_raise_if_failed_raises():
@@ -61,7 +61,7 @@ ENABLE_CONTROL = True
 ENABLE_CONNMGR = False
 ENABLE_DHT = False
 ENABLE_PUBSUB = False
-FUNC_MAKE_P2PD_PAIR = make_p2pd_pair_ip4
+FUNC_MAKE_P2PD_PAIR = make_p2pd_pair_unix
 
 
 class MockReader(io.BytesIO):
@@ -144,6 +144,12 @@ def test_peer_id():
     peer_id_3 = PeerID.from_base58("QmbmfNDEth7Ucvjuxiw3SP3E4PoJzbk7g4Ge6ZDigbCsNp")
     assert PEER_ID != peer_id_3
 
+    a = PeerID.from_base58("bob")
+    b = PeerID.from_base58("eve")
+    assert a < b and b > a and not (b < a) and not (a > b)
+    with pytest.raises(TypeError):
+        assert a < object()
+
 
 def test_stream_info():
     proto = "123"
@@ -193,24 +199,31 @@ def test_parse_conn_protocol_invalid(maddr_str):
 
 
 @pytest.mark.parametrize("control_maddr_str", ("/unix/123", "/ip4/127.0.0.1/tcp/6666"))
-def test_client_ctor_control_maddr(control_maddr_str):
+@pytest.mark.asyncio
+async def test_client_create_control_maddr(control_maddr_str):
     c = DaemonConnector(Multiaddr(control_maddr_str))
     assert c.control_maddr == Multiaddr(control_maddr_str)
 
 
-def test_client_ctor_default_control_maddr():
+def test_client_create_default_control_maddr():
     c = DaemonConnector()
     assert c.control_maddr == Multiaddr(DaemonConnector.DEFAULT_CONTROL_MADDR)
 
 
 @pytest.mark.parametrize("listen_maddr_str", ("/unix/123", "/ip4/127.0.0.1/tcp/6666"))
-def test_control_client_ctor_listen_maddr(listen_maddr_str):
-    c = ControlClient(daemon_connector=DaemonConnector(), listen_maddr=Multiaddr(listen_maddr_str))
+@pytest.mark.asyncio
+async def test_control_client_create_listen_maddr(listen_maddr_str):
+    c = await ControlClient.create(
+        daemon_connector=DaemonConnector(),
+        listen_maddr=Multiaddr(listen_maddr_str),
+        use_persistent_conn=False,
+    )
     assert c.listen_maddr == Multiaddr(listen_maddr_str)
 
 
-def test_control_client_ctor_default_listen_maddr():
-    c = ControlClient(daemon_connector=DaemonConnector())
+@pytest.mark.asyncio
+async def test_control_client_create_default_listen_maddr():
+    c = await ControlClient.create(daemon_connector=DaemonConnector(), use_persistent_conn=False)
     assert c.listen_maddr == Multiaddr(ControlClient.DEFAULT_LISTEN_MADDR)
 
 
@@ -374,11 +387,6 @@ async def p2pcs():
             for _ in range(NUM_P2PDS)
         ]
         yield tuple(p2pd_tuple.client for p2pd_tuple in p2pd_tuples)
-
-
-@pytest.mark.asyncio
-async def test_client_identify_unix_socket(p2pcs):
-    await p2pcs[0].identify()
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,7 @@ from itertools import chain
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from hivemind.p2p import PeerID
-from hivemind.utils import MSGPackSerializer, get_dht_time
+from hivemind.utils import DHTExpiration, MSGPackSerializer, get_dht_time
 
 DHTKey = Subkey = DHTValue = Any
 BinaryDHTID = BinaryDHTValue = bytes
@@ -217,7 +217,7 @@ class KBucket:
 
     def __delitem__(self, node_id: DHTID):
         if not (node_id in self.nodes_to_peer_id or node_id in self.replacement_nodes):
-            raise KeyError(f"KBucket does not contain node id={node_id}.")
+            raise KeyError(f"KBucket does not contain node id={node_id}")
 
         if node_id in self.replacement_nodes:
             del self.replacement_nodes[node_id]

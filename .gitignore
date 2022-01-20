@@ -54,6 +54,7 @@ coverage.xml
 .project
 .pydevproject
 .idea
+.vscode
 .ipynb_checkpoints
 
 # Rope

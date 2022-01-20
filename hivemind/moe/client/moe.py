@@ -9,13 +9,13 @@ import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-import hivemind
+from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.dht import DHT
 from hivemind.moe.client.beam_search import MoEBeamSearcher
 from hivemind.moe.client.expert import DUMMY, RemoteExpert, _get_expert_stub
 from hivemind.moe.server.expert_uid import UID_DELIMITER
 from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
 from hivemind.utils import nested_flatten, nested_map, nested_pack
-from hivemind.utils.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -48,7 +48,7 @@ class RemoteMixtureOfExperts(nn.Module):
         *,
         in_features,
         grid_size: Tuple[int, ...],
-        dht: hivemind.DHT,
+        dht: DHT,
         uid_prefix: str,
         k_best: int,
         k_min: int = 1,
@@ -238,14 +238,14 @@ class _RemoteCallMany(torch.autograd.Function):
             pending_tasks, num_samples, k_min, forward_timeout, timeout_after_k_min, detect_anomalies
         )
         if len(responded_inds) < k_min:
-            raise TimeoutError(f"Forward pass: less than {k_min} responded within timeout.")
+            raise TimeoutError(f"Forward pass: less than {k_min} responded within timeout")
 
         if not isinstance(info["outputs_schema"], tuple):
             outputs_schema = (info["outputs_schema"],)
         else:
             outputs_schema = info["outputs_schema"]
         outputs = nested_map(
-            lambda descriptor: descriptor.make_empty(num_samples, max_experts, device=flat_inputs[0].device).zero_(),
+            lambda descriptor: descriptor.make_zeros(num_samples, max_experts, device=flat_inputs[0].device),
             outputs_schema,
         )
 
@@ -330,7 +330,7 @@ class _RemoteCallMany(torch.autograd.Function):
             pending_tasks, num_samples, backward_k_min, backward_timeout, timeout_after_k_min, detect_anomalies
         )
         if len(survivor_inds) < backward_k_min:
-            raise TimeoutError(f"Backward pass: less than {backward_k_min} experts responded within timeout.")
+            raise TimeoutError(f"Backward pass: less than {backward_k_min} experts responded within timeout")
 
         # assemble responses
         batch_inds, expert_inds = map(
@@ -341,7 +341,7 @@ class _RemoteCallMany(torch.autograd.Function):
         # torch tensors, i-th tensor is of shape [num_backward_survivors, *flat_inputs_cpu[i].shape]
 
         grad_inputs = nested_map(
-            lambda descr: descr.make_empty(num_samples, device=flat_grad_outputs[0].device).zero_(),
+            lambda descr: descr.make_zeros(num_samples, device=flat_grad_outputs[0].device),
             list(nested_flatten(info["forward_schema"])),
         )
 

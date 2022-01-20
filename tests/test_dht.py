@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import random
 import time
 
@@ -6,8 +7,23 @@ import pytest
 from multiaddr import Multiaddr
 
 import hivemind
+from hivemind.utils.networking import get_free_port
 
 from test_utils.dht_swarms import launch_dht_instances
+
+
+@pytest.mark.asyncio
+async def test_startup_error():
+    with pytest.raises(hivemind.p2p.P2PDaemonError, match=r"(?i)Failed to connect to bootstrap peers"):
+        hivemind.DHT(
+            initial_peers=[f"/ip4/127.0.0.1/tcp/{get_free_port()}/p2p/QmdaK4LUeQaKhqSFPRu9N7MvXUEWDxWwtCvPrS444tCgd1"],
+            start=True,
+        )
+
+    dht = hivemind.DHT(start=True, await_ready=False)
+    with pytest.raises(concurrent.futures.TimeoutError):
+        dht.wait_until_ready(timeout=0.01)
+    dht.shutdown()
 
 
 @pytest.mark.forked
@@ -102,7 +118,7 @@ async def test_dht_get_visible_maddrs():
 
     dummy_endpoint = Multiaddr("/ip4/123.45.67.89/tcp/31337")
     p2p = await hivemind.p2p.P2P.create(announce_maddrs=[dummy_endpoint])
-    dht = hivemind.DHT(start=True, p2p=await p2p.replicate(p2p.daemon_listen_maddr))
+    dht = hivemind.DHT(start=True, p2p=p2p)
 
     assert dht.get_visible_maddrs() == [dummy_endpoint.encapsulate(f"/p2p/{p2p.peer_id}")]
     dht.shutdown()

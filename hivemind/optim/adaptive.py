@@ -2,8 +2,8 @@ from typing import Sequence
 
 import torch.optim
 
-from hivemind import TrainingAverager
 from hivemind.optim.collaborative import CollaborativeOptimizer
+from hivemind.optim.training_averager import TrainingAverager
 
 
 class CollaborativeAdaptiveOptimizer(CollaborativeOptimizer):

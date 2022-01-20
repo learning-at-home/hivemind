@@ -80,7 +80,7 @@ def optimize_parts_lp(vector_size: int, bandwidths: np.ndarray, min_size: int = 
             peer_scores[peer_scores < min_size / float(vector_size)] = 0.0
         peer_scores = np.round(peer_scores, LOAD_BALANCING_LP_DECIMALS)
     else:
-        logger.error(f"Failed to solve load-balancing for bandwidths {bandwidths}.")
+        logger.error(f"Failed to solve load-balancing for bandwidths {bandwidths}")
         peer_scores = np.ones(group_size, c.dtype)
 
     return peer_scores[np.argsort(permutation)]
