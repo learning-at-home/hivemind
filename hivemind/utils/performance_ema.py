@@ -37,7 +37,7 @@ class PerformanceEMA:
         self.samples_per_second = 1 / max(adjusted_seconds_per_sample, self.eps)
         return self.samples_per_second
 
-    def reset_timer(self):
+    def reset_timer(self) -> None:
         """Reset the time since the last update so that the next task performance is counted from current time"""
         self.timestamp = time.perf_counter()
 
@@ -51,7 +51,7 @@ class PerformanceEMA:
             self.paused = was_paused
             self.reset_timer()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}(ema={self.samples_per_second:.5f}, num_updates={self.num_updates})"
 
     @contextmanager

@@ -57,7 +57,7 @@ class DaemonConnector:
         else:
             raise ValueError(f"Protocol not supported: {protocols.protocol_with_code(self.proto_code)}")
 
-    async def open_persistent_connection(self) -> (asyncio.StreamReader, asyncio.StreamWriter):
+    async def open_persistent_connection(self) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """
         Open connection to daemon and upgrade it to a persistent one
         """

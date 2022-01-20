@@ -111,7 +111,7 @@ async def amap_in_executor(
 ) -> AsyncIterator[T]:
     """iterate from an async iterable in a background thread, yield results to async iterable"""
     loop = asyncio.get_event_loop()
-    queue: asyncio.Queue[Optional[Awaitable[T]]] = asyncio.Queue(max_prefetch)
+    queue = asyncio.Queue(max_prefetch)
 
     async def _put_items():
         try:

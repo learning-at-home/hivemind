@@ -1,6 +1,6 @@
 """ A unified interface for several common serialization methods """
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 import msgpack
 
@@ -27,10 +27,10 @@ class MSGPackSerializer(SerializerBase):
     _TUPLE_EXT_TYPE_CODE = 0x40
 
     @classmethod
-    def ext_serializable(cls, type_code: int):
+    def ext_serializable(cls, type_code: int) -> Callable[[type], type]:
         assert isinstance(type_code, int), "Please specify a (unique) int type code"
 
-        def wrap(wrapped_type: type):
+        def wrap(wrapped_type: type) -> type:
             assert callable(getattr(wrapped_type, "packb", None)) and callable(
                 getattr(wrapped_type, "unpackb", None)
             ), f"Every ext_type must have 2 methods: packb(self) -> bytes and classmethod unpackb(cls, bytes)"
@@ -42,7 +42,7 @@ class MSGPackSerializer(SerializerBase):
         return wrap
 
     @classmethod
-    def _encode_ext_types(cls, obj):
+    def _encode_ext_types(cls, obj: object):
         type_code = cls._ext_types.get(type(obj))
         if type_code is not None:
             return msgpack.ExtType(type_code, obj.packb())

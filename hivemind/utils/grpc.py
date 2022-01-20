@@ -54,7 +54,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     _lock: threading.RLock = threading.RLock()
     _update_eviction_evt: threading.Event = threading.Event()
 
-    def __init__(self, _created_as_singleton=False):
+    def __init__(self, _created_as_singleton=False) -> None:
         assert _created_as_singleton, f"Please use {self.__class__.__name__}.get_singleton()"
         super().__init__(maxsize=self.MAXIMUM_CHANNELS)
         self._is_active = True
@@ -76,7 +76,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     def get_stub(
         cls,
         target: Endpoint,
-        stub_type: Type[Stub],
+        stub_type: type,
         *,
         aio: bool,
         options: Tuple[Tuple[str, Any]] = (),
@@ -146,7 +146,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
                 target, credentials=channel_credentials, options=options, compression=compression
             )
 
-    def _evict_stale_channels_in_background(self):
+    def _evict_stale_channels_in_background(self) -> None:
         while self._is_active:
             now = get_dht_time()
             time_to_wait = max(0.0, self._nearest_expiration_time - now)

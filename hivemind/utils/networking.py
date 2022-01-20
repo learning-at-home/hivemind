@@ -5,7 +5,8 @@ from typing import Optional, Sequence
 
 from multiaddr import Multiaddr
 
-Hostname, Port = str, int  # flavour types
+Hostname = str
+Port = int  # flavour types
 Endpoint = str  # e.g. 1.2.3.4:1337 or [2a21:6с8:b192:2105]:8888, https://networkengineering.stackexchange.com/a/9435
 LOCALHOST = "127.0.0.1"
 
@@ -30,7 +31,9 @@ def strip_port(endpoint: Endpoint) -> Hostname:
     return endpoint[: endpoint.rindex(":")] if maybe_port.isdigit() or maybe_port == "*" else endpoint
 
 
-def get_free_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):
+def get_free_port(
+    params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+) -> Port:
     """
     Finds a tcp port that can be occupied with a socket with *params and use *opt options.
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import threading
 from abc import ABC, abstractmethod
+from typing import Any, Dict
 
 from cryptography import exceptions
 from cryptography.hazmat.primitives import hashes, serialization
@@ -39,7 +40,7 @@ _RSA_HASH_ALGORITHM = hashes.SHA256()
 
 
 class RSAPrivateKey(PrivateKey):
-    def __init__(self):
+    def __init__(self) -> None:
         self._private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     _process_wide_key = None
@@ -60,7 +61,7 @@ class RSAPrivateKey(PrivateKey):
     def get_public_key(self) -> RSAPublicKey:
         return RSAPublicKey(self._private_key.public_key())
 
-    def __getstate__(self):
+    def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
         # Serializes the private key to make the class instances picklable
         state["_private_key"] = self._private_key.private_bytes(
@@ -70,13 +71,13 @@ class RSAPrivateKey(PrivateKey):
         )
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         self.__dict__.update(state)
         self._private_key = serialization.load_ssh_private_key(self._private_key, password=None)
 
 
 class RSAPublicKey(PublicKey):
-    def __init__(self, public_key: rsa.RSAPublicKey):
+    def __init__(self, public_key: rsa.RSAPublicKey) -> None:
         self._public_key = public_key
 
     def verify(self, data: bytes, signature: bytes) -> bool:
@@ -97,7 +98,7 @@ class RSAPublicKey(PublicKey):
 
     @classmethod
     def from_bytes(cls, key: bytes) -> RSAPublicKey:
-        loaded_key = serialization.load_ssh_public_key(key)
-        if not isinstance(loaded_key, rsa.RSAPublicKey):
+        deserialized_key = serialization.load_ssh_public_key(key)
+        if not isinstance(deserialized_key, rsa.RSAPublicKey):
             raise ValueError(f"Expected an RSA public key, got {str(key)}")
-        return cls(loaded_key)
+        return cls(deserialized_key)

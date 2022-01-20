@@ -83,7 +83,7 @@ class CustomFormatter(logging.Formatter):
         return super().format(record)
 
 
-def _initialize_if_necessary():
+def _initialize_if_necessary() -> None:
     global _current_mode, _default_handler
 
     with _init_lock:

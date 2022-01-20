@@ -1,7 +1,8 @@
 """ utility functions that help you process nested dicts, tuples, lists and namedtuples """
+from typing import Any
 
 
-def nested_compare(t, u):
+def nested_compare(t: Any, u: Any) -> bool:
     """
     Return whether nested structure of t1 and t2 matches.
     """
@@ -29,7 +30,7 @@ def nested_compare(t, u):
         return True
 
 
-def nested_flatten(t):
+def nested_flatten(t: Any) -> Any:
     """
     Turn nested list/tuple/dict into a flat iterator.
     """
@@ -43,7 +44,7 @@ def nested_flatten(t):
         yield t
 
 
-def nested_pack(flat, structure):
+def nested_pack(flat: Any, structure: Any) -> Any:
     """
     Restore nested structure from flattened state
     :param flat: result of nested_flatten
@@ -53,7 +54,7 @@ def nested_pack(flat, structure):
     return _nested_pack(iter(flat), structure)
 
 
-def _nested_pack(flat_iter, structure):
+def _nested_pack(flat_iter: Any, structure: Any) -> Any:
     if is_namedtuple(structure):
         return type(structure)(*[_nested_pack(flat_iter, x) for x in structure])
     elif isinstance(structure, (list, tuple)):
@@ -64,7 +65,7 @@ def _nested_pack(flat_iter, structure):
         return next(flat_iter)
 
 
-def is_namedtuple(x):
+def is_namedtuple(x) -> bool:
     """Checks if x is a namedtuple instance. Taken from https://stackoverflow.com/a/2166841 ."""
     t = type(x)
     b = t.__bases__

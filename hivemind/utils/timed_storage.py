@@ -5,7 +5,7 @@ import heapq
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, Generic, Iterator, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, Generic, Iterator, List, Optional, Tuple, TypeVar, Union
 
 KeyType = TypeVar("KeyType")
 ValueType = TypeVar("ValueType")
@@ -20,10 +20,10 @@ class ValueWithExpiration(Generic[ValueType]):
     value: ValueType
     expiration_time: DHTExpiration
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Union[ValueType, DHTExpiration]]:
         return iter((self.value, self.expiration_time))
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Union[int, str]) -> Union[ValueType, DHTExpiration]:
         if item == 0:
             return self.value
         elif item == 1:
@@ -31,7 +31,7 @@ class ValueWithExpiration(Generic[ValueType]):
         else:
             return getattr(self, item)
 
-    def __eq__(self, item):
+    def __eq__(self, item: Any) -> bool:
         if isinstance(item, ValueWithExpiration):
             return self.value == item.value and self.expiration_time == item.expiration_time
         elif isinstance(item, tuple):
@@ -51,13 +51,13 @@ class TimedStorage(Generic[KeyType, ValueType]):
 
     frozen = False  # can be set to True. If true, do not remove outdated elements
 
-    def __init__(self, maxsize: Optional[int] = None):
+    def __init__(self, maxsize: Optional[int] = None) -> None:
         self.maxsize = maxsize or float("inf")
         self.data: Dict[KeyType, ValueWithExpiration[ValueType]] = dict()
         self.expiration_heap: List[HeapEntry[KeyType]] = []
         self.key_to_heap: Dict[KeyType, HeapEntry[KeyType]] = dict()
 
-    def _remove_outdated(self):
+    def _remove_outdated(self) -> None:
         while (
             not self.frozen
             and self.expiration_heap
@@ -108,28 +108,28 @@ class TimedStorage(Generic[KeyType, ValueType]):
             return top_key, self.data[top_key]
         return None, None
 
-    def clear(self):
+    def clear(self) -> None:
         self.data.clear()
         self.key_to_heap.clear()
         self.expiration_heap.clear()
 
-    def __contains__(self, key: KeyType):
+    def __contains__(self, key: KeyType) -> bool:
         self._remove_outdated()
         return key in self.data
 
-    def __len__(self):
+    def __len__(self) -> int:
         self._remove_outdated()
         return len(self.data)
 
-    def __delitem__(self, key: KeyType):
+    def __delitem__(self, key: KeyType) -> None:
         if key in self.key_to_heap:
             del self.data[key], self.key_to_heap[key]
         # note: key may still be in self.expiration_heap, but it will not be used and eventually ._remove_outdated()
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.data)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.data})"
 
     @contextmanager

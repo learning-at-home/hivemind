@@ -55,13 +55,13 @@ class PeerID:
     def __repr__(self) -> str:
         return f"<libp2p.peer.id.ID ({self.to_base58()})>"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.to_base58()
 
-    def pretty(self):
+    def pretty(self) -> str:
         return self.to_base58()
 
-    def to_string(self):
+    def to_string(self) -> str:
         return self.to_base58()
 
     def __eq__(self, other: object) -> bool:
@@ -128,10 +128,10 @@ class PeerInfo:
         addrs = [Multiaddr(addr) for addr in peer_info_pb.addrs]
         return PeerInfo(peer_id, addrs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.peer_id.pretty()} {','.join(str(a) for a in self.addrs)}"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"PeerInfo(peer_id={repr(self.peer_id)}, addrs={repr(self.addrs)})"
 
 

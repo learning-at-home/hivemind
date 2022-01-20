@@ -140,7 +140,7 @@ class TensorPartContainer:
         self._outputs_consumed = True
         peer_index = num_parts_processed = 0
         for tensor_index in range(len(self.local_tensors)):
-            tensor_parts: List[torch.Tensor] = []
+            tensor_parts = []
             while len(tensor_parts) < self.num_parts_by_tensor[tensor_index]:
                 if num_parts_processed >= self.num_parts_by_peer[peer_index]:
                     num_parts_processed = 0
@@ -187,7 +187,7 @@ class TensorPartReducer:
         self.part_shapes, self.num_senders, self.num_parts = part_shapes, num_senders, len(part_shapes)
         self.current_part_index = -1  # index in local_parts of the part that should be loaded next
         self.current_part_accumulated_from = 0  # number of peers from which the current part was accumulated
-        self.accumulator: Optional[torch.Tensor] = None  # contains the sum of current tensor part from group peers
+        self.accumulator = None  # this will contain the sum of current tensor part from group peers
         self.denominator = 0.0  # total weight accumulated from all peers for current part
         self.current_part_future = asyncio.Future()
         self.finished = asyncio.Event()
