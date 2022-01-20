@@ -46,7 +46,6 @@ class StepControl(MPFuture):
         self._trigger: Optional[MPFuture] = None
         self._cancel: Optional[MPFuture] = None
 
-        torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARING_STRATEGY", "file_system"))
         # Buffer contents:
         # scheduled_time (double) | weight (double) | stage (AveragingStage, 1 byte) | began_allreduce: (bool, 1 byte)
         self._shared_buffer = torch.zeros([18], dtype=torch.uint8).share_memory_()
