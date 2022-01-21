@@ -9,8 +9,6 @@ combine_as_imports = true
 combine_star = true
 known_local_folder = ["arguments", "test_utils", "tests", "utils"]
 
-
-
 [tool.mypy]
 plugins = [
   "numpy.typing.mypy_plugin",
