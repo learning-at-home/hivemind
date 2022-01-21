@@ -16,14 +16,17 @@ plugins = [
   "numpy.typing.mypy_plugin",
   "pydantic.mypy"
 ]
-
+ignore_missing_imports = true
 follow_imports = "silent"
 warn_redundant_casts = true
 warn_unused_ignores = true
 disallow_any_generics = true
 check_untyped_defs = true
 no_implicit_reexport = true
-
+strict_optional = false
+no_implicit_optional = true
+implicit_reexport = true
+allow_untyped_globals = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
