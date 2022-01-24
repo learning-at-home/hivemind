@@ -215,7 +215,7 @@ def main():
     # This data collator will take care of randomly masking the tokens.
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer)
 
-    validators, local_public_key = utils.make_validators(collaboration_args.experiment_prefix)
+    validators, local_public_key = utils.make_validators(collaboration_args.run_id)
 
     dht = DHT(
         start=True,
@@ -265,7 +265,7 @@ def main():
 
     optimizer = Optimizer(
         dht=dht,
-        run_id=collaboration_args.experiment_prefix,
+        run_id=collaboration_args.run_id,
         target_batch_size=adjusted_target_batch_size,
         batch_size_per_step=total_batch_size_per_step,
         optimizer=opt,
