@@ -40,6 +40,7 @@ class TrainingMonitorArguments(BaseTrainingArguments):
     wandb_project: Optional[str] = field(
         default=None, metadata={"help": "Name of Weights & Biases project to report the training progress to"}
     )
+    store_checkpoints: bool = field(default=True, metadata={"help": "If False, disables CheckpointHandler altogether"})
     save_checkpoint_step_interval: int = field(
         default=5, metadata={"help": "Frequency (in steps) of fetching and saving state from peers"}
     )
@@ -56,7 +57,6 @@ class TrainingMonitorArguments(BaseTrainingArguments):
     upload_interval: Optional[float] = field(
         default=None, metadata={"help": "Frequency (in seconds) of uploading the model to Hub"}
     )
-    store_checkpoints: bool = field(default=False, metadata={"help": "If True, enables CheckpointHandler"})
 
 
 class CheckpointHandler:
