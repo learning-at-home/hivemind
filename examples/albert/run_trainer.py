@@ -260,7 +260,7 @@ def main():
     ]
 
     scheduler = lambda opt: get_linear_schedule_with_warmup(
-        opt, num_warmup_steps=training_args.warmup_steps, num_training_steps=training_args.max_steps
+        opt, num_warmup_steps=training_args.warmup_steps, num_training_steps=training_args.total_steps
     )
 
     optimizer = Optimizer(

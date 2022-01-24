@@ -127,7 +127,7 @@ class AlbertTrainingArguments(TrainingArguments):
     gradient_accumulation_steps: int = 2
     seq_length: int = 512
 
-    max_steps: int = 125_000  # please note: this affects both number of steps and learning rate schedule
+    total_steps: int = 125_000  # please note: this only affects the learning rate schedule
     learning_rate: float = 0.00176
     warmup_steps: int = 5000
     adam_epsilon: float = 1e-6
@@ -142,5 +142,6 @@ class AlbertTrainingArguments(TrainingArguments):
     logging_steps: int = 100
     save_total_limit: int = 2
     save_steps: int = 500
+    max_steps: int = 10 ** 30
 
     output_dir: str = "outputs"
