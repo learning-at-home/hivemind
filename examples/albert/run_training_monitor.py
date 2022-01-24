@@ -40,7 +40,7 @@ class TrainingMonitorArguments(BaseTrainingArguments):
     wandb_project: Optional[str] = field(
         default=None, metadata={"help": "Name of Weights & Biases project to report the training progress to"}
     )
-    store_checkpoints: bool = field(default=True, metadata={"help": "If False, disables CheckpointHandler altogether"})
+    store_checkpoints: bool = field(default=True, metadata={"help": "If False, disables periodic checkpoint saving"})
     save_checkpoint_step_interval: int = field(
         default=5, metadata={"help": "Frequency (in steps) of fetching and saving state from peers"}
     )
