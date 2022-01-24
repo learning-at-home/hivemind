@@ -138,10 +138,14 @@ class AlbertTrainingArguments(TrainingArguments):
     fp16: bool = True
     fp16_opt_level: str = "O2"
     do_train: bool = True
+    do_eval: bool = False
 
+    logging_dir: str = "logs"
+    output_dir: str = "outputs"
     logging_steps: int = 100
+    logging_first_step: bool = True
+    overwrite_output_dir: bool = True
+
     save_total_limit: int = 2
     save_steps: int = 500
     max_steps: int = 10 ** 30
-
-    output_dir: str = "outputs"
