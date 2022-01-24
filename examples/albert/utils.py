@@ -24,9 +24,9 @@ class MetricSchema(BaseModel):
     metrics: Dict[BytesWithPublicKey, LocalMetrics]
 
 
-def make_validators(experiment_prefix: str) -> Tuple[List[RecordValidatorBase], bytes]:
+def make_validators(run_id: str) -> Tuple[List[RecordValidatorBase], bytes]:
     signature_validator = RSASignatureValidator()
-    validators = [SchemaValidator(MetricSchema, prefix=experiment_prefix), signature_validator]
+    validators = [SchemaValidator(MetricSchema, prefix=run_id), signature_validator]
     return validators, signature_validator.local_public_key
 
 
