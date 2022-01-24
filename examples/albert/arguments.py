@@ -148,4 +148,4 @@ class AlbertTrainingArguments(TrainingArguments):
 
     save_total_limit: int = 2
     save_steps: int = 500
-    max_steps: int = 10 ** 30
+    max_steps: int = 10 ** 30  # meant as "peer should compute gradients forever"
