@@ -85,7 +85,7 @@ class P2P:
         conn_manager: bool = True,
         dht_mode: str = "server",
         force_reachability: Optional[str] = None,
-        host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ("/ip4/127.0.0.1/tcp/0", "/ip4/127.0.0.1/udp/0/quic",),
+        host_maddrs: Optional[Sequence[Union[Multiaddr, str]]] = ("/ip4/127.0.0.1/tcp/0", "/ip4/127.0.0.1/udp/0/quic"),
         identity_path: Optional[str] = None,
         idle_timeout: float = 30,
         nat_port_map: bool = True,
@@ -96,8 +96,8 @@ class P2P:
         use_auto_relay: bool = False,
         use_ipfs: bool = False,
         use_relay: bool = True,
-        use_relay_hop: bool = False,
-        use_relay_discovery: bool = False,
+        use_relay_hop: bool = True,
+        use_relay_discovery: bool = True,
         persistent_conn_max_msg_size: int = DEFAULT_MAX_MSG_SIZE,
     ) -> "P2P":
         """
