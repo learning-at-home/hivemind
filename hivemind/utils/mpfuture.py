@@ -18,7 +18,7 @@ from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARING_STRATEGY", "file_system"))
+torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARING_STRATEGY", "file_descriptor"))
 
 # flavour types
 ResultType = TypeVar("ResultType")
