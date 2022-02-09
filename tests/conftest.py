@@ -4,6 +4,7 @@ from contextlib import suppress
 
 import psutil
 import pytest
+import torch.multiprocessing
 
 from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
@@ -31,6 +32,9 @@ def event_loop():
 
 @pytest.fixture(autouse=True, scope="session")
 def cleanup_children():
+    # test with file_descriptor strategy because file_system does not play well with abrupt kills
+    torch.multiprocessing.set_sharing_strategy("file_descriptor")
+
     yield
 
     with RSAPrivateKey._process_wide_key_lock:
