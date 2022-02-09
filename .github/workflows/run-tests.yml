@@ -61,6 +61,7 @@ jobs:
       - name: Test
         run: |
           cd tests
+          export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
           pytest -k "p2p" -v
   codecov_in_develop_mode:
 
@@ -87,6 +88,7 @@ jobs:
           pip install -e . --no-use-pep517
       - name: Test
         run: |
+          export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
           pytest --cov=hivemind -v tests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
