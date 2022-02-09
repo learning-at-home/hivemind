@@ -90,6 +90,6 @@ jobs:
       - name: Test
         run: |
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
-          pytest  -v tests/test_moe.py
+          pytest --cov=hivemind -v tests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
