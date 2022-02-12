@@ -3,7 +3,6 @@ import asyncio
 import random
 import time
 import uuid
-from logging import shutdown
 from typing import Tuple
 
 import numpy as np

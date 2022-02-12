@@ -1,5 +1,4 @@
 import multiprocessing as mp
-import multiprocessing.pool
 import threading
 from collections import defaultdict
 from itertools import chain

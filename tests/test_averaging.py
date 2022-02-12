@@ -6,7 +6,6 @@ import pytest
 import torch
 
 import hivemind
-import hivemind.averaging.averager
 from hivemind.averaging.allreduce import AveragingMode
 from hivemind.averaging.control import AveragingStage
 from hivemind.averaging.key_manager import GroupKeyManager

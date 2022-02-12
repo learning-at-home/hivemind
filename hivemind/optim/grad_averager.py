@@ -6,7 +6,7 @@ import torch
 import hivemind
 from hivemind.averaging import DecentralizedAverager
 from hivemind.averaging.control import StepControl
-from hivemind.utils import DHTExpiration, get_dht_time, get_logger
+from hivemind.utils import DHTExpiration, get_logger
 
 logger = get_logger(__name__)
 

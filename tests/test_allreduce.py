@@ -10,8 +10,7 @@ from hivemind import Quantile8BitQuantization, aenumerate
 from hivemind.averaging.allreduce import AllReduceRunner, AveragingMode
 from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer
 from hivemind.compression import deserialize_torch_tensor
-from hivemind.p2p import P2P, StubBase
-from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.p2p import P2P
 
 
 @pytest.mark.forked

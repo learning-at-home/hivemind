@@ -15,5 +15,6 @@ The code is organized as follows:
 
 from hivemind.dht.dht import DHT
 from hivemind.dht.node import DEFAULT_NUM_WORKERS, DHTNode
-from hivemind.dht.routing import DHTID, DHTExpiration, DHTKey, DHTValue, Subkey
+from hivemind.dht.routing import DHTID, DHTKey, DHTValue, Subkey
+from hivemind.utils import DHTExpiration
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase

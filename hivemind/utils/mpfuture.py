@@ -8,7 +8,7 @@ import threading
 import uuid
 from contextlib import nullcontext
 from enum import Enum, auto
-from typing import Any, Callable, Dict, Generic, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 from weakref import ref
 
 import torch  # used for py3.7-compatible shared memory
