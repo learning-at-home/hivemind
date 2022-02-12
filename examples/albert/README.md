@@ -55,9 +55,7 @@ To join the collaboration with a GPU trainer,
   (see [default paths](./arguments.py#L117-L134) for reference)
 - Run:
   ```bash
-  ./run_trainer.py \
-      --initial_peers ONE_OR_MORE_PEERS \
-      --logging_first_step --output_dir ./outputs --overwrite_output_dir --logging_dir ./logs
+  ./run_trainer.py  --initial_peers ONE_OR_MORE_PEERS --per_device_train_batch_size BATCH_SIZE_FOR_YOUR_GPU
   ```
 
   Here, `ONE_OR_MORE_PEERS` stands for multiaddresses of one or multiple existing peers (training monitors or existing
@@ -81,6 +79,9 @@ To join the collaboration with a GPU trainer,
 
   You may need to change the IP address to a publicly visible one if some of the initial peers are located behind NAT.
   If you have any trouble doing this, consider the ["Using IPFS"](#using-ipfs) section.
+
+  The `BATCH_SIZE_FOR_YOUR_GPU` should be tweaked so that the model fits into your GPU memory.
+  For 1080Ti or 2080Ti gpus, a good initial value is 4. For 8GB GPUs, try batch size 1-2.
 
 See the ["Tips and tricks"](#tips-and-tricks) section for more information on setting up collaborative training.
 
