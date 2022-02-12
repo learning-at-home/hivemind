@@ -150,7 +150,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
         # for each grid dimension, sum across all indices for a dimension. Optimizing this leads to uniform allocation
         balancing_loss = torch.stack(
             [
-                torch.mean(dim_softmax.mean(0) * dim_utilization) * (dim_size ** 2)
+                torch.mean(dim_softmax.mean(0) * dim_utilization) * (dim_size**2)
                 for dim_softmax, dim_utilization, dim_size in zip(
                     grid_softmax, self.grid_utilization, self.beam_search.grid_size
                 )

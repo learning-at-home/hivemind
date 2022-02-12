@@ -53,7 +53,7 @@ def test_serialize_tensor():
         assert torch.allclose(deserialize_torch_tensor(restored), tensor, rtol=rtol, atol=atol)
 
     tensor = torch.randn(512, 12288)
-    for chunk_size in [1024, 64 * 1024, 64 * 1024 + 1, 10 ** 9]:
+    for chunk_size in [1024, 64 * 1024, 64 * 1024 + 1, 10**9]:
         _check(tensor, CompressionType.NONE, chunk_size=chunk_size)
 
     _check(tensor, CompressionType.FLOAT16, rtol=0.0, atol=1e-2)

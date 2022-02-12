@@ -283,7 +283,7 @@ def test_load_balancing():
         load_balance_peers(100, (0, 0, 0))
 
     for i in range(10):
-        vector_size = np.random.randint(1, 1024 ** 3)
+        vector_size = np.random.randint(1, 1024**3)
         num_peers = np.random.randint(1, 256)
         scale = 1e-9 + np.random.rand() * 1e5
         bandwidths = np.random.rand(num_peers) * scale + 1e-6

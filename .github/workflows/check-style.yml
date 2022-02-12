@@ -13,7 +13,7 @@ jobs:
       - uses: psf/black@stable
         with:
           options: "--check --diff"
-          version: "21.6b0"
+          version: "22.1.0"
   isort:
     runs-on: ubuntu-latest
     steps:
@@ -22,3 +22,6 @@ jobs:
         with:
           python-version: 3.8
       - uses: isort/isort-action@master
+        with:
+          isortVersion: "5.10.1"
+

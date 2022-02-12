@@ -48,7 +48,7 @@ class Quantization(CompressionBase, ABC):
 
     @property
     def n_bins(self):
-        return 2 ** self.n_bits
+        return 2**self.n_bits
 
 
 class Uniform8BitQuantization(Quantization):
@@ -94,7 +94,7 @@ def get_chunk_size(num_elements: int, min_chunk_size: int) -> int:
     return min_chunk_size + (leftover_elements - 1) // num_chunks + 1
 
 
-def quantile_qq_approximation(array: np.ndarray, n_quantiles: int, min_chunk_size: int = 10 ** 5) -> np.ndarray:
+def quantile_qq_approximation(array: np.ndarray, n_quantiles: int, min_chunk_size: int = 10**5) -> np.ndarray:
     """Estimate uniform quantiles of data using quantile-of-quantiles. Runs in parallel."""
     if not array.data.c_contiguous and array.data.f_contiguous:
         array = array.T
