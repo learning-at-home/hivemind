@@ -13,7 +13,7 @@ from hivemind.proto import runtime_pb2
 from hivemind.utils import amap_in_executor, as_aiter, get_logger
 
 T = TypeVar("T")
-DEFAULT_PART_SIZE_BYTES = 2 ** 19
+DEFAULT_PART_SIZE_BYTES = 2**19
 logger = get_logger(__name__)
 
 

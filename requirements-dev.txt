@@ -6,6 +6,6 @@ coverage==6.0.2  # see https://github.com/pytest-dev/pytest-cov/issues/520
 tqdm
 scikit-learn
 torchvision
-black==21.6b0
-isort
+black==22.1.0
+isort==5.10.1
 psutil

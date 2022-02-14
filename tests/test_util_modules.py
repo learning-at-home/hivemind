@@ -397,7 +397,7 @@ def test_split_parts():
     chunks2 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10_000))
     assert len(chunks2) == int(np.ceil(tensor.numel() * tensor.element_size() / 10_000))
 
-    chunks3 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10 ** 9))
+    chunks3 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10**9))
     assert len(chunks3) == 1
 
     compressed_tensor_part = serialize_torch_tensor(tensor, CompressionType.FLOAT16, allow_inplace=False)
@@ -440,8 +440,8 @@ async def test_asyncio_utils():
     assert res == list(range(len(res)))
 
     num_steps = 0
-    async for elem in amap_in_executor(lambda x: x ** 2, as_aiter(*range(100)), max_prefetch=5):
-        assert elem == num_steps ** 2
+    async for elem in amap_in_executor(lambda x: x**2, as_aiter(*range(100)), max_prefetch=5):
+        assert elem == num_steps**2
         num_steps += 1
     assert num_steps == 100
 

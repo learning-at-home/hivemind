@@ -89,7 +89,7 @@ async def test_unary_handler_edge_cases():
     p2p_replica = await P2P.replicate(p2p.daemon_listen_maddr)
 
     async def square_handler(data: test_pb2.TestRequest, context):
-        return test_pb2.TestResponse(number=data.number ** 2)
+        return test_pb2.TestResponse(number=data.number**2)
 
     await p2p.add_protobuf_handler("square", square_handler, test_pb2.TestRequest)
 
@@ -202,7 +202,7 @@ async def handle_square_stream(_, reader: asyncio.StreamReader, writer: asyncio.
             except asyncio.IncompleteReadError:
                 break
 
-            result = x ** 2
+            result = x**2
 
             await P2P.send_raw_data(MSGPackSerializer.dumps(result), writer)
 
@@ -215,7 +215,7 @@ async def validate_square_stream(reader: asyncio.StreamReader, writer: asyncio.S
             await P2P.send_raw_data(MSGPackSerializer.dumps(x), writer)
             result = MSGPackSerializer.loads(await P2P.receive_raw_data(reader))
 
-            assert result == x ** 2
+            assert result == x**2
 
 
 @pytest.mark.asyncio
