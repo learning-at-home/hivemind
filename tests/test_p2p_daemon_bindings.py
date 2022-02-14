@@ -125,7 +125,7 @@ async def test_read_write_unsigned_varint_max_bits_edge(max_bits):
     Test edge cases with different `max_bits`
     """
     for i in range(-3, 0):
-        integer = i + (2**max_bits)
+        integer = i + 2**max_bits
         s = MockReaderWriter()
         await write_unsigned_varint(s, integer, max_bits=max_bits)
         s.seek(0, 0)
