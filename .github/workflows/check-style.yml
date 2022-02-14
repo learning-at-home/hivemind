@@ -24,4 +24,3 @@ jobs:
       - uses: isort/isort-action@master
         with:
           isortVersion: "5.10.1"
-
