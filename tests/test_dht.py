@@ -72,7 +72,7 @@ async def dummy_dht_coro_stateful(self, node):
 
 async def dummy_dht_coro_long(self, node):
     await asyncio.sleep(0.25)
-    return self._x_dummy ** 2
+    return self._x_dummy**2
 
 
 async def dummy_dht_coro_for_cancel(self, node):
@@ -94,7 +94,7 @@ def test_run_coroutine():
     assert dht.run_coroutine(dummy_dht_coro_stateful) == 125
     assert dht.run_coroutine(dummy_dht_coro_stateful) == 126
     assert not hasattr(dht, "_x_dummy")
-    assert bg_task.result() == 126 ** 2
+    assert bg_task.result() == 126**2
 
     future = dht.run_coroutine(dummy_dht_coro_for_cancel, return_future=True)
     time.sleep(0.25)

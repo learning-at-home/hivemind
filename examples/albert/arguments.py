@@ -6,7 +6,7 @@ from transformers import TrainingArguments
 
 @dataclass
 class BaseTrainingArguments:
-    experiment_prefix: str = field(
+    run_id: str = field(
         default="albert", metadata={"help": "A unique 'name' of this experiment, used to store metadata on the DHT"}
     )
     initial_peers: List[str] = field(
@@ -127,7 +127,7 @@ class AlbertTrainingArguments(TrainingArguments):
     gradient_accumulation_steps: int = 2
     seq_length: int = 512
 
-    max_steps: int = 125_000  # please note: this affects both number of steps and learning rate schedule
+    total_steps: int = 125_000  # please note: this only affects the learning rate schedule
     learning_rate: float = 0.00176
     warmup_steps: int = 5000
     adam_epsilon: float = 1e-6
@@ -138,9 +138,14 @@ class AlbertTrainingArguments(TrainingArguments):
     fp16: bool = True
     fp16_opt_level: str = "O2"
     do_train: bool = True
+    do_eval: bool = False
 
+    logging_dir: str = "logs"
+    output_dir: str = "outputs"
     logging_steps: int = 100
+    logging_first_step: bool = True
+    overwrite_output_dir: bool = True
+
     save_total_limit: int = 2
     save_steps: int = 500
-
-    output_dir: str = "outputs"
+    max_steps: int = 10**30  # meant as "peer should compute gradients forever"

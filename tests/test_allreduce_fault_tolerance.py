@@ -158,7 +158,7 @@ def test_fault_tolerance(fault0: Fault, fault1: Fault):
             min_matchmaking_time=1.0,
             next_chunk_timeout=0.5,
             allreduce_timeout=5,
-            part_size_bytes=2 ** 16,
+            part_size_bytes=2**16,
             client_mode=(i == 1),
             start=True,
             fault=fault0 if i == 0 else fault1 if i == 1 else Fault.NONE,
