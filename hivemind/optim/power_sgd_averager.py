@@ -40,12 +40,13 @@ from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration, get_dht_time
 
 from .grad_averager import GradientAverager
+from .power_ef_averager import PowerEFGradientAverager
 
 GatheredData = Any
 logger = get_logger(__name__)
 
 
-class PowerEFGradientAverager(GradientAverager):
+class PowerSGDGradientAverager(GradientAverager):
     def __init__(
         self,
         parameters: Iterable[torch.nn.Parameter],
@@ -71,13 +72,13 @@ class PowerEFGradientAverager(GradientAverager):
                 self.rank * (grad.size(0) + np.prod(grad.size()[1:])) / np.prod(grad.size()) > 1 - min_comprasion_ratio
             )
         )
-        self._gradient_residual = list(torch.zeros_like(grad, device="cpu") for grad in self._grads_from_parameters())
+        self._ms = list(torch.zeros_like(grad, device="cpu") for grad in self._grads_from_parameters())
         self._qs = list(
             grad
-            for idx, grad in enumerate(averaged_grads[:len(averaged_grads) // 2])
+            for idx, grad in enumerate(averaged_grads)
             if idx not in self._uncompressed_gradients
         )
-        for tensor in self._qs + self._gradient_residual:
+        for tensor in self._ms:
             if tensor is not None:
                 assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
                 tensor.share_memory_()
@@ -92,7 +93,7 @@ class PowerEFGradientAverager(GradientAverager):
             accumulate_grads_on=accumulate_grads_on,
             client_mode=client_mode,
             warn=warn,
-            averaged_grads=averaged_grads[len(averaged_grads) // 2:],
+            averaged_grads=None,
             **kwargs,
         )
 
@@ -126,18 +127,24 @@ class PowerEFGradientAverager(GradientAverager):
             )
 
             async with enter_asynchronously(self.get_tensors()) as averaged_grads:
-                cs = [
-                    rest for idx, rest in enumerate(self._gradient_residual) if idx not in self._uncompressed_gradients
+                for grad, m in zip(averaged_grads, self._ms):
+                    m.add_(grad.to(m.device))
+
+                averaged_sgd_ms = [
+                    m for idx, m in enumerate(self._ms) if idx not in self._uncompressed_gradients
+                ]
+                averaged_sgd_grad = [
+                    grad for idx, grad in enumerate(averaged_grads) if idx not in self._uncompressed_gradients
                 ]
                 ps = [
                     torch.zeros((grad.size(0), self.rank), device="cpu")
                     for idx, grad in enumerate(averaged_grads)
                     if idx not in self._uncompressed_gradients
                 ]
-                for p, q, rest in zip(ps, self._qs, cs):
-                    torch.matmul(rest.reshape(-1, q.size(0)), q, out=p)
+                for p, q, m in zip(ps, self._qs, averaged_sgd_ms):
+                    torch.matmul(m.reshape(-1, q.size(0)), q, out=p)
                 first_all_reduced = ps + [
-                    rest for idx, rest in enumerate(self._gradient_residual) if idx in self._uncompressed_gradients
+                    m for idx, m in enumerate(self._ms) if idx in self._uncompressed_gradients
                 ]
                 allreduce1 = AllReduceRunner(
                     p2p=self._p2p,
@@ -166,8 +173,8 @@ class PowerEFGradientAverager(GradientAverager):
                     orthogonalize(p)
 
                 # compute qs
-                for p, q, c in zip(ps, self._qs, cs):
-                    torch.matmul(c.reshape(-1, q.size(0)).t(), p, out=q)
+                for p, q, m in zip(ps, self._qs, averaged_sgd_ms):
+                    torch.matmul(m.reshape(-1, q.size(0)).t(), p, out=q)
 
                 allreduce2 = AllReduceRunner(
                     p2p=self._p2p,
@@ -194,12 +201,15 @@ class PowerEFGradientAverager(GradientAverager):
                         raise ValueError("aux peers should not receive averaged tensors")
 
                 # recompute grads
-                for p, q, c in zip(ps, self._qs, cs):
-                    new_c = torch.matmul(p, q.t())
-                    c.copy_(new_c.reshape(c.size()))
+                for p, q, m, grad in zip(ps, self._qs, averaged_sgd_ms, averaged_sgd_grad):
+                    new_m = torch.matmul(p, q.t())
+                    m.sub_(new_m.reshape(m.size()))
+                    grad.copy_(new_m.reshape(grad.size()))
 
-                for rest, grad in zip(self._gradient_residual, averaged_grads):
-                    torch.add(grad, rest, out=grad)
+                for idx, (m, grad) in enumerate(zip(self._ms, averaged_grads)):
+                    if idx in self._uncompressed_gradients:
+                        grad.copy_(m)
+                        m.data[...] = 0
 
                 return allreduce1.gathered
         except BaseException as e:
@@ -207,17 +217,6 @@ class PowerEFGradientAverager(GradientAverager):
             raise MatchmakingException(f"Unable to run All-Reduce: {e}")
         finally:
             pass
-
-    @torch.no_grad()
-    def load_accumulators_into_averager_(self):
-        """load locally accumulated gradients into the averager for aggregation"""
-        # divide locally accumulated gradients by the number of times they were accumulated
-        grad_scale = (1.0 / self.local_times_accumulated) if self.local_times_accumulated != 0 else 0.0
-        with self.get_tensors() as averaged_grads:
-            for grad_acc, averaged_grad, rest in zip(
-                self._grad_accumulators(), averaged_grads, self._gradient_residual
-            ):
-                rest.copy_(grad_acc, non_blocking=False).mul_(grad_scale).sub_(averaged_grad)
 
 
 @torch.jit.script
