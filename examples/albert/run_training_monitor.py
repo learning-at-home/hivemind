@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import time
 from dataclasses import asdict, dataclass, field
@@ -9,13 +9,14 @@ import requests
 import torch
 import wandb
 from torch_optimizer import Lamb
-from transformers import AlbertConfig, AlbertForPreTraining, HfArgumentParser
+from transformers import AlbertConfig, AlbertForPreTraining, HfArgumentParser, get_linear_schedule_with_warmup
 
 import hivemind
+from hivemind.optim.state_averager import TrainingStateAverager
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
 
 import utils
-from arguments import AveragerArguments, BaseTrainingArguments, CollaborativeOptimizerArguments
+from arguments import AveragerArguments, BaseTrainingArguments, OptimizerArguments
 
 use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
@@ -39,6 +40,7 @@ class TrainingMonitorArguments(BaseTrainingArguments):
     wandb_project: Optional[str] = field(
         default=None, metadata={"help": "Name of Weights & Biases project to report the training progress to"}
     )
+    store_checkpoints: bool = field(default=True, metadata={"help": "If False, disables periodic checkpoint saving"})
     save_checkpoint_step_interval: int = field(
         default=5, metadata={"help": "Frequency (in steps) of fetching and saving state from peers"}
     )
@@ -55,14 +57,13 @@ class TrainingMonitorArguments(BaseTrainingArguments):
     upload_interval: Optional[float] = field(
         default=None, metadata={"help": "Frequency (in seconds) of uploading the model to Hub"}
     )
-    store_checkpoins: bool = field(default=False, metadata={"help": "If True, enables CheckpointHandler"})
 
 
 class CheckpointHandler:
     def __init__(
         self,
         monitor_args: TrainingMonitorArguments,
-        collab_optimizer_args: CollaborativeOptimizerArguments,
+        optimizer_args: OptimizerArguments,
         averager_args: AveragerArguments,
         dht: hivemind.DHT,
     ):
@@ -95,17 +96,14 @@ class CheckpointHandler:
             debias=True,
         )
 
-        adjusted_target_batch_size = collab_optimizer_args.target_batch_size - collab_optimizer_args.batch_size_lead
-
-        self.collaborative_optimizer = hivemind.CollaborativeOptimizer(
-            opt=opt,
+        self.state_averager = TrainingStateAverager(
             dht=dht,
-            prefix=experiment_prefix,
-            compression_type=hivemind.Float16Compression(),
-            bandwidth=collab_optimizer_args.bandwidth,
-            target_batch_size=adjusted_target_batch_size,
-            client_mode=collab_optimizer_args.client_mode,
-            verbose=True,
+            optimizer=opt,
+            scheduler=get_linear_schedule_with_warmup(opt, num_warmup_steps=5000, num_training_steps=125_000),
+            prefix=f"{run_id}_state_averager",
+            state_compression=hivemind.Float16Compression(),
+            bandwidth=optimizer_args.bandwidth,
+            client_mode=optimizer_args.client_mode,
             start=True,
             **asdict(averager_args),
         )
@@ -121,7 +119,7 @@ class CheckpointHandler:
 
     def save_state(self, cur_step):
         logger.info("Saving state from peers")
-        self.collaborative_optimizer.load_state_from_peers()
+        self.state_averager.load_state_from_peers()
         self.previous_step = cur_step
 
     def is_time_to_upload(self):
@@ -134,7 +132,7 @@ class CheckpointHandler:
 
     def upload_checkpoint(self, current_loss):
         logger.info("Saving optimizer")
-        torch.save(self.collaborative_optimizer.opt.state_dict(), f"{self.repo_path}/optimizer_state.pt")
+        torch.save(self.state_averager.optimizer.state_dict(), f"{self.repo_path}/optimizer_state.pt")
         self.previous_timestamp = time.time()
         logger.info("Started uploading to Model Hub")
         self.model.push_to_hub(
@@ -146,8 +144,8 @@ class CheckpointHandler:
 
 
 if __name__ == "__main__":
-    parser = HfArgumentParser((TrainingMonitorArguments, CollaborativeOptimizerArguments, AveragerArguments))
-    monitor_args, collab_optimizer_args, averager_args = parser.parse_args_into_dataclasses()
+    parser = HfArgumentParser((TrainingMonitorArguments, OptimizerArguments, AveragerArguments))
+    monitor_args, optimizer_args, averager_args = parser.parse_args_into_dataclasses()
 
     if monitor_args.use_google_dns:
         request = requests.get("https://api.ipify.org")
@@ -158,8 +156,8 @@ if __name__ == "__main__":
         version = ip_address(address).version
         monitor_args.announce_maddrs += [f"/ip{version}/{address}/tcp/0"]
 
-    experiment_prefix = monitor_args.experiment_prefix
-    validators, local_public_key = utils.make_validators(experiment_prefix)
+    run_id = monitor_args.run_id
+    validators, local_public_key = utils.make_validators(run_id)
 
     dht = hivemind.DHT(
         start=True,
@@ -176,11 +174,11 @@ if __name__ == "__main__":
         wandb.init(project=monitor_args.wandb_project)
 
     current_step = 0
-    if monitor_args.store_checkpoins:
-        checkpoint_handler = CheckpointHandler(monitor_args, collab_optimizer_args, averager_args, dht)
+    if monitor_args.store_checkpoints:
+        checkpoint_handler = CheckpointHandler(monitor_args, optimizer_args, averager_args, dht)
 
     while True:
-        metrics_dict = dht.get(experiment_prefix + "_metrics", latest=True)
+        metrics_dict = dht.get(run_id + "_metrics", latest=True)
         if metrics_dict is not None:
             metrics_dict = metrics_dict.value
             metrics = [utils.LocalMetrics.parse_obj(metrics_dict[peer].value) for peer in metrics_dict]
@@ -219,7 +217,7 @@ if __name__ == "__main__":
                         }
                     )
 
-                if monitor_args.store_checkpoins:
+                if monitor_args.store_checkpoints:
                     if checkpoint_handler.is_time_to_save_state(current_step):
                         checkpoint_handler.save_state(current_step)
                         if checkpoint_handler.is_time_to_upload():

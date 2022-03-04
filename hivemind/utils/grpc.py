@@ -175,7 +175,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
         raise ValueError(f"Please use {self.__class__.__name__}.get_stub to get or create stubs")
 
 
-STREAMING_CHUNK_SIZE_BYTES = 2 ** 16
+STREAMING_CHUNK_SIZE_BYTES = 2**16
 
 
 def split_for_streaming(

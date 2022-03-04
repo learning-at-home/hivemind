@@ -1,4 +1,5 @@
 import dataclasses
+import warnings
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Any, Optional
@@ -8,6 +9,10 @@ import torch
 
 from hivemind.proto import runtime_pb2
 from hivemind.utils.tensor_descr import TensorDescriptor
+
+# While converting read-only NumPy arrays into PyTorch tensors, we don't make extra copies for efficiency
+warnings.filterwarnings("ignore", message="The given NumPy array is not writeable", category=UserWarning)
+
 
 Key = Any
 
@@ -64,6 +69,9 @@ class CompressionBase(ABC):
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
         """Estimate the compression ratio without doing the actual compression; lower ratio = better compression"""
         ...
+
+    def __repr__(self):
+        return f"hivemind.{self.__class__.__name__}()"
 
 
 class NoCompression(CompressionBase):

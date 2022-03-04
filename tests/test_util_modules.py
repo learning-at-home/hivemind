@@ -3,6 +3,7 @@ import concurrent.futures
 import multiprocessing as mp
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -13,7 +14,7 @@ from hivemind.compression import deserialize_torch_tensor, serialize_torch_tenso
 from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
-from hivemind.utils import DHTExpiration, HeapEntry, MSGPackSerializer, ValueWithExpiration
+from hivemind.utils import BatchTensorDescriptor, DHTExpiration, HeapEntry, MSGPackSerializer, ValueWithExpiration
 from hivemind.utils.asyncio import (
     achain,
     aenumerate,
@@ -23,10 +24,13 @@ from hivemind.utils.asyncio import (
     anext,
     as_aiter,
     asingle,
+    attach_event_on_finished,
     azip,
     cancel_and_wait,
+    enter_asynchronously,
 )
 from hivemind.utils.mpfuture import InvalidStateError
+from hivemind.utils.performance_ema import PerformanceEMA
 
 
 @pytest.mark.forked
@@ -309,6 +313,8 @@ def test_many_futures():
     p.start()
 
     some_fork_futures = receiver.recv()
+
+    time.sleep(0.1)  # giving enough time for the futures to be destroyed
     assert len(hivemind.MPFuture._active_futures) == 700
 
     for future in some_fork_futures:
@@ -319,6 +325,7 @@ def test_many_futures():
     evt.set()
     for future in main_futures:
         future.cancel()
+    time.sleep(0.1)  # giving enough time for the futures to be destroyed
     assert len(hivemind.MPFuture._active_futures) == 0
     p.join()
 
@@ -390,7 +397,7 @@ def test_split_parts():
     chunks2 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10_000))
     assert len(chunks2) == int(np.ceil(tensor.numel() * tensor.element_size() / 10_000))
 
-    chunks3 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10 ** 9))
+    chunks3 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10**9))
     assert len(chunks3) == 1
 
     compressed_tensor_part = serialize_torch_tensor(tensor, CompressionType.FLOAT16, allow_inplace=False)
@@ -433,8 +440,8 @@ async def test_asyncio_utils():
     assert res == list(range(len(res)))
 
     num_steps = 0
-    async for elem in amap_in_executor(lambda x: x ** 2, as_aiter(*range(100)), max_prefetch=5):
-        assert elem == num_steps ** 2
+    async for elem in amap_in_executor(lambda x: x**2, as_aiter(*range(100)), max_prefetch=5):
+        assert elem == num_steps**2
         num_steps += 1
     assert num_steps == 100
 
@@ -490,6 +497,18 @@ async def test_asyncio_utils():
 
     assert num_steps == 2
 
+    event = asyncio.Event()
+    async for i in attach_event_on_finished(iterate_with_delays([0, 0, 0, 0, 0]), event):
+        assert not event.is_set()
+    assert event.is_set()
+
+    event = asyncio.Event()
+    sleepy_aiter = iterate_with_delays([0.1, 0.1, 0.3, 0.1, 0.1])
+    with pytest.raises(asyncio.TimeoutError):
+        async for _ in attach_event_on_finished(aiter_with_timeout(sleepy_aiter, timeout=0.2), event):
+            assert not event.is_set()
+    assert event.is_set()
+
 
 @pytest.mark.asyncio
 async def test_cancel_and_wait():
@@ -521,3 +540,61 @@ async def test_cancel_and_wait():
     await asyncio.sleep(0.05)
     assert not await cancel_and_wait(task_with_result)
     assert not await cancel_and_wait(task_with_error)
+
+
+@pytest.mark.asyncio
+async def test_async_context():
+    lock = mp.Lock()
+
+    async def coro1():
+        async with enter_asynchronously(lock):
+            await asyncio.sleep(0.2)
+
+    async def coro2():
+        await asyncio.sleep(0.1)
+        async with enter_asynchronously(lock):
+            await asyncio.sleep(0.1)
+
+    await asyncio.wait_for(asyncio.gather(coro1(), coro2()), timeout=0.5)
+    # running this without enter_asynchronously would deadlock the event loop
+
+
+def test_batch_tensor_descriptor_msgpack():
+    tensor_descr = BatchTensorDescriptor.from_tensor(torch.ones(1, 3, 3, 7))
+    tensor_descr_roundtrip = MSGPackSerializer.loads(MSGPackSerializer.dumps(tensor_descr))
+
+    assert (
+        tensor_descr.size == tensor_descr_roundtrip.size
+        and tensor_descr.dtype == tensor_descr_roundtrip.dtype
+        and tensor_descr.layout == tensor_descr_roundtrip.layout
+        and tensor_descr.device == tensor_descr_roundtrip.device
+        and tensor_descr.requires_grad == tensor_descr_roundtrip.requires_grad
+        and tensor_descr.pin_memory == tensor_descr.pin_memory
+        and tensor_descr.compression == tensor_descr.compression
+    )
+
+
+@pytest.mark.parametrize("max_workers", [1, 2, 10])
+def test_performance_ema_threadsafe(
+    max_workers: int,
+    interval: float = 0.01,
+    num_updates: int = 100,
+    alpha: float = 0.05,
+    bias_power: float = 0.7,
+    tolerance: float = 0.05,
+):
+    def run_task(ema):
+        task_size = random.randint(1, 4)
+        with ema.update_threadsafe(task_size):
+            time.sleep(task_size * interval * (0.9 + 0.2 * random.random()))
+            return task_size
+
+    with ThreadPoolExecutor(max_workers) as pool:
+        ema = PerformanceEMA(alpha=alpha)
+        start_time = time.perf_counter()
+        futures = [pool.submit(run_task, ema) for i in range(num_updates)]
+        total_size = sum(future.result() for future in futures)
+        end_time = time.perf_counter()
+        target = total_size / (end_time - start_time)
+        assert ema.samples_per_second >= (1 - tolerance) * target * max_workers ** (bias_power - 1)
+        assert ema.samples_per_second <= (1 + tolerance) * target

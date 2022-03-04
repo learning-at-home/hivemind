@@ -38,15 +38,15 @@ PAIRS_INT_SERIALIZED_VALID = (
     (0, b"\x00"),
     (1, b"\x01"),
     (128, b"\x80\x01"),
-    (2 ** 32, b"\x80\x80\x80\x80\x10"),
-    (2 ** 64 - 1, b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\x01"),
+    (2**32, b"\x80\x80\x80\x80\x10"),
+    (2**64 - 1, b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\x01"),
 )
 
 PAIRS_INT_SERIALIZED_OVERFLOW = (
-    (2 ** 64, b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x02"),
-    (2 ** 64 + 1, b"\x81\x80\x80\x80\x80\x80\x80\x80\x80\x02"),
+    (2**64, b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x02"),
+    (2**64 + 1, b"\x81\x80\x80\x80\x80\x80\x80\x80\x80\x02"),
     (
-        2 ** 128,
+        2**128,
         b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x04",
     ),
 )
@@ -94,7 +94,7 @@ async def test_write_unsigned_varint_overflow(integer):
         await write_unsigned_varint(s, integer)
 
 
-@pytest.mark.parametrize("integer", (-1, -(2 ** 32), -(2 ** 64), -(2 ** 128)))
+@pytest.mark.parametrize("integer", (-1, -(2**32), -(2**64), -(2**128)))
 @pytest.mark.asyncio
 async def test_write_unsigned_varint_negative(integer):
     s = MockWriter()
@@ -125,7 +125,7 @@ async def test_read_write_unsigned_varint_max_bits_edge(max_bits):
     Test edge cases with different `max_bits`
     """
     for i in range(-3, 0):
-        integer = i + (2 ** max_bits)
+        integer = i + 2**max_bits
         s = MockReaderWriter()
         await write_unsigned_varint(s, integer, max_bits=max_bits)
         s.seek(0, 0)

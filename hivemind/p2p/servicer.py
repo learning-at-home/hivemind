@@ -86,37 +86,20 @@ class ServicerBase:
     @classmethod
     def _make_rpc_caller(cls, handler: RPCHandler):
         input_type = AsyncIterator[handler.request_type] if handler.stream_input else handler.request_type
+        output_type = AsyncIterator[handler.response_type] if handler.stream_output else handler.response_type
 
         # This method will be added to a new Stub type (a subclass of StubBase)
-        if handler.stream_output:
-
-            def caller(
-                self: StubBase, input: input_type, timeout: None = None
-            ) -> AsyncIterator[handler.response_type]:
-                if timeout is not None:
-                    raise ValueError("Timeouts for handlers returning streams are not supported")
-
-                return self._p2p.iterate_protobuf_handler(
-                    self._peer,
-                    cls._get_handle_name(self._namespace, handler.method_name),
-                    input,
-                    handler.response_type,
-                )
-
-        else:
-
-            async def caller(
-                self: StubBase, input: input_type, timeout: Optional[float] = None
-            ) -> handler.response_type:
+        async def caller(self: StubBase, input: input_type, timeout: Optional[float] = None) -> output_type:
+            handle_name = cls._get_handle_name(self._namespace, handler.method_name)
+            if not handler.stream_output:
                 return await asyncio.wait_for(
-                    self._p2p.call_protobuf_handler(
-                        self._peer,
-                        cls._get_handle_name(self._namespace, handler.method_name),
-                        input,
-                        handler.response_type,
-                    ),
+                    self._p2p.call_protobuf_handler(self._peer, handle_name, input, handler.response_type),
                     timeout=timeout,
                 )
+
+            if timeout is not None:
+                raise ValueError("Timeouts for handlers returning streams are not supported")
+            return await self._p2p.iterate_protobuf_handler(self._peer, handle_name, input, handler.response_type)
 
         caller.__name__ = handler.method_name
         return caller

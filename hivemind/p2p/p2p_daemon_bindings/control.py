@@ -26,7 +26,7 @@ SUPPORT_CONN_PROTOCOLS = (
 SUPPORTED_PROTOS = (protocols.protocol_with_code(proto) for proto in SUPPORT_CONN_PROTOCOLS)
 logger = get_logger(__name__)
 
-DEFAULT_MAX_MSG_SIZE = 4 * 1024 ** 2
+DEFAULT_MAX_MSG_SIZE = 4 * 1024**2
 
 
 def parse_conn_protocol(maddr: Multiaddr) -> int:

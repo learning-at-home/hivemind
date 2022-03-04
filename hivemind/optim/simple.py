@@ -4,9 +4,9 @@ from typing import Optional, Sequence, Tuple
 
 import torch
 
-from hivemind.averaging import TrainingAverager
 from hivemind.dht import DHT
 from hivemind.optim.base import DecentralizedOptimizerBase
+from hivemind.optim.training_averager import TrainingAverager
 from hivemind.utils import get_dht_time, get_logger
 
 logger = get_logger(__name__)
@@ -86,6 +86,10 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
             if self.local_step % self.averaging_step_period == 0:
                 self.update_event.set()
             self.averager.pending_updates_done.wait()
+
+            if not self.averager.client_mode:
+                self.averager.state_sharing_priority = get_dht_time()
+
             return loss
         finally:
             self.lock_parameters.acquire()
@@ -127,16 +131,16 @@ class DecentralizedOptimizer(DecentralizedOptimizerBase):
                 time.sleep(time_to_nearest_interval)
 
             if verbose:
-                logger.info(f"Starting a new averaging round with current parameters.")
+                logger.info(f"Starting a new averaging round with current parameters")
             try:
                 group_info = averager.step(lock_parameters, **kwargs)
                 if verbose:
                     if group_info is not None:
-                        logger.info(f"Finished averaging round in with {len(group_info)} peers.")
+                        logger.info(f"Finished averaging round in with {len(group_info)} peers")
                     else:
-                        logger.warning(f"Averaging round failed: could not find group.")
+                        logger.warning(f"Averaging round failed: could not find group")
             except Exception as e:
-                logger.error(f"Averaging round failed: caught {e}.")
+                logger.error(f"Averaging round failed: caught {e}")
 
 
 class DecentralizedSGD(DecentralizedOptimizer):

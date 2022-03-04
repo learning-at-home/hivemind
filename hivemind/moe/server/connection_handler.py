@@ -1,6 +1,5 @@
 import asyncio
 import multiprocessing as mp
-import pickle
 from typing import AsyncIterator, Dict
 
 import torch
@@ -10,7 +9,7 @@ from hivemind.dht import DHT
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.p2p import P2PContext, ServicerBase
 from hivemind.proto import runtime_pb2
-from hivemind.utils import MPFuture, as_aiter, get_logger, nested_flatten
+from hivemind.utils import MSGPackSerializer, MPFuture, as_aiter, get_logger, nested_flatten
 from hivemind.utils.asyncio import switch_to_uvloop
 
 logger = get_logger(__name__)
@@ -54,11 +53,11 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             logger.debug("Caught KeyboardInterrupt, shutting down")
 
     async def rpc_info(self, request: runtime_pb2.ExpertUID, context: P2PContext) -> runtime_pb2.ExpertInfo:
-        return runtime_pb2.ExpertInfo(serialized_info=pickle.dumps(self.experts[request.uid].get_info()))
+        return runtime_pb2.ExpertInfo(serialized_info=MSGPackSerializer.dumps(self.experts[request.uid].get_info()))
 
     async def rpc_forward(
         self, request: runtime_pb2.ExpertRequest, context: P2PContext
-    ) -> AsyncIterator[runtime_pb2.ExpertResponse]:
+    ) -> runtime_pb2.ExpertResponse:
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
 
         future = self.experts[request.uid].forward_pool.submit_task(*inputs)
@@ -67,15 +66,15 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             for tensor, proto in zip(await future, nested_flatten(self.experts[request.uid].outputs_schema))
         ]
 
-        yield runtime_pb2.ExpertResponse(tensors=serialized_response)
+        return runtime_pb2.ExpertResponse(tensors=serialized_response)
 
     async def rpc_backward(
         self, request: runtime_pb2.ExpertRequest, context: P2PContext
-    ) -> AsyncIterator[runtime_pb2.ExpertResponse]:
+    ) -> runtime_pb2.ExpertResponse:
         inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
         serialized_response = [
             serialize_torch_tensor(tensor, proto.compression, allow_inplace=True)
             for tensor, proto in zip(await future, nested_flatten(self.experts[request.uid].grad_inputs_schema))
         ]
-        yield runtime_pb2.ExpertResponse(tensors=serialized_response)
+        return runtime_pb2.ExpertResponse(tensors=serialized_response)
