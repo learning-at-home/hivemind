@@ -13,7 +13,6 @@ from hivemind.compression import CompressionBase, NoCompression
 from hivemind.dht import DHT
 from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFactory
 from hivemind.optim.grad_scaler import GradScaler
-from hivemind.optim.power_ef_averager import PowerEFGradientAverager
 from hivemind.optim.power_sgd_averager import PowerSGDGradientAverager
 from hivemind.optim.progress_tracker import LocalTrainingProgress, ProgressTracker
 from hivemind.optim.state_averager import (
@@ -184,8 +183,7 @@ class Optimizer(torch.optim.Optimizer):
         client_mode: bool = None,
         auxiliary: bool = False,
         grad_compression: CompressionBase = NoCompression(),
-        grad_averager: Optional[GradientAveragerFactory] = PowerEFGradientAverager.get_factory(averager_rank=32),
-        use_ext_grad_buffer: bool = True,
+        grad_averager: Optional[GradientAveragerFactory] = PowerSGDGradientAverager.get_factory(averager_rank=32),
         state_averaging_compression: CompressionBase = NoCompression(),
         load_state_compression: CompressionBase = NoCompression(),
         average_opt_statistics: Sequence[str] = (),
@@ -247,18 +245,6 @@ class Optimizer(torch.optim.Optimizer):
             target_batch_size, performance_ema_alpha=performance_ema_alpha, **tracker_opts or {}
         )
         averaged_grads = None
-        if use_ext_grad_buffer:
-            assert grad_averager is not None, "Use external gradient buffers only with working gradient averager."
-            averaged_grads = [
-                torch.rand((param.reshape((param.size(0), -1)).size(1), 32), device="cpu").share_memory_()
-                for param_group in params
-                for param in param_group["params"]
-            ] + [
-                torch.zeros_like(param).share_memory_()
-                for param_group in params
-                for param in param_group["params"]
-            ]
-            extra_tensors = [e for e in extra_tensors] + averaged_grads
         self.state_averager = self._make_state_averager(
             optimizer=optimizer,
             params=params,
@@ -700,6 +686,7 @@ class Optimizer(torch.optim.Optimizer):
             while True:
                 try:
                     self.state_averager.load_state_from_peers(timeout=self.load_state_timeout, **kwargs)
+                    self.grad_averager.load_state_from_peers(timeout=self.load_state_timeout, **kwargs)
                     break
                 except KeyboardInterrupt:
                     raise

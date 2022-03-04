@@ -14,7 +14,7 @@ import hivemind
 from hivemind.averaging.control import AveragingStage
 from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFactory
 from hivemind.optim.optimizer import Optimizer
-from hivemind.optim.power_ef_averager import PowerEFGradientAverager
+from hivemind.optim.power_sgd_averager import PowerSGDGradientAverager
 from hivemind.optim.progress_tracker import ProgressTracker
 from hivemind.optim.state_averager import TrainingStateAverager
 from hivemind.utils.crypto import RSAPrivateKey
@@ -149,8 +149,7 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
 
 
 @pytest.mark.forked
-@pytest.mark.parametrize("dpu", [True, False])
-def test_load_state_from_peers(dpu: bool):
+def test_load_state_from_peers(dpu: bool = False):
     dht1 = hivemind.DHT(start=True)
     dht2 = hivemind.DHT(initial_peers=dht1.get_visible_maddrs(), start=True)
 
@@ -306,7 +305,7 @@ def test_progress_tracker():
 @pytest.mark.forked
 @pytest.mark.parametrize(
     "grad_averager",
-    [GradientAverager.get_factory(), PowerEFGradientAverager.get_factory(averager_rank=1)],
+    [GradientAverager.get_factory(), PowerSGDGradientAverager.get_factory(averager_rank=1)],
 )
 def test_optimizer(
     grad_averager: GradientAveragerFactory,

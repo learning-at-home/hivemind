@@ -40,7 +40,6 @@ from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration, get_dht_time
 
 from .grad_averager import GradientAverager
-from .power_ef_averager import PowerEFGradientAverager
 
 GatheredData = Any
 logger = get_logger(__name__)
@@ -72,16 +71,12 @@ class PowerSGDGradientAverager(GradientAverager):
                 self.rank * (grad.size(0) + np.prod(grad.size()[1:])) / np.prod(grad.size()) > 1 - min_comprasion_ratio
             )
         )
-        self._ms = list(torch.zeros_like(grad, device="cpu") for grad in self._grads_from_parameters())
+        self._ms = list(torch.zeros_like(grad, device="cpu").share_memory_() for grad in self._grads_from_parameters())
         self._qs = list(
-            grad
-            for idx, grad in enumerate(averaged_grads)
+            torch.rand((grad.reshape((grad.size(0), -1)).size(1), self.rank), device="cpu").share_memory_()
+            for idx, grad in enumerate(self._grads_from_parameters())
             if idx not in self._uncompressed_gradients
         )
-        for tensor in self._ms:
-            if tensor is not None:
-                assert tensor.grad_fn is None, "averaged_tensors must be either parameters or leaf tensors"
-                tensor.share_memory_()
 
         self.all_reduce_phases = (b".phase1", b".phase2")
 
@@ -217,6 +212,33 @@ class PowerSGDGradientAverager(GradientAverager):
             raise MatchmakingException(f"Unable to run All-Reduce: {e}")
         finally:
             pass
+
+    def get_current_state(self):
+        with torch.no_grad(), self.lock_averaged_tensors:
+            grad_averager_buffers = list(q for q in self._qs)
+            grad_averager_buffers_infos = [
+                CompressionInfo.from_tensor(buffer, key=f"buffer_q_{key}", role=TensorRole.PARAMETER)
+                for buffer, key in zip(grad_averager_buffers, range(len(grad_averager_buffers)))
+            ]
+
+        metadata = dict(group_bits=self.get_group_bits())
+        return metadata, grad_averager_buffers, grad_averager_buffers_infos
+
+    def load_state_from_peers(self, **kwargs):
+        loaded_state = super().load_state_from_peers(**kwargs)
+        if loaded_state is None:
+            return
+
+        metadata, flat_tensors = loaded_state
+        logger.info("Starting loading gradient averager buffers from peers")
+
+        if num_parameters_and_extras != len(self._qs):
+            logger.error("Failed to load state from peer, received parameters, extras or metadata")
+            return
+
+        with torch.no_grad(), self.lock_averaged_tensors:
+            for local_q, loaded_q in zip(self._qs, flat_tensors):
+                local_q.copy_(loaded_q, non_blocking=True)
 
 
 @torch.jit.script
