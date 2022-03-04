@@ -233,7 +233,7 @@ class PowerSGDGradientAverager(GradientAverager):
         metadata, flat_tensors = loaded_state
         logger.info("Starting loading gradient averager buffers from peers")
 
-        if num_parameters_and_extras != len(self._qs):
+        if len(flat_tensors) != len(self._qs):
             logger.error("Failed to load state from peer, received parameters, extras or metadata")
             return
 
