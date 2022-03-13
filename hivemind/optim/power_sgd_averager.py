@@ -19,9 +19,9 @@ from hivemind.compression import (
     CompressionBase,
     CompressionInfo,
     NoCompression,
+    TensorRole,
     deserialize_torch_tensor,
     serialize_torch_tensor,
-    TensorRole,
 )
 from hivemind.dht import DHT, DHTID
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, ServicerBase
