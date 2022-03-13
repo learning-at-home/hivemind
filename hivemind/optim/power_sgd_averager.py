@@ -126,9 +126,7 @@ class PowerSGDGradientAverager(GradientAverager):
                 for grad, m in zip(averaged_grads, self._ms):
                     m.add_(grad.to(m.device))
 
-                averaged_sgd_ms = [
-                    m for idx, m in enumerate(self._ms) if idx not in self._uncompressed_gradients
-                ]
+                averaged_sgd_ms = [m for idx, m in enumerate(self._ms) if idx not in self._uncompressed_gradients]
                 averaged_sgd_grad = [
                     grad for idx, grad in enumerate(averaged_grads) if idx not in self._uncompressed_gradients
                 ]
@@ -139,9 +137,7 @@ class PowerSGDGradientAverager(GradientAverager):
                 ]
                 for p, q, m in zip(ps, self._qs, averaged_sgd_ms):
                     torch.matmul(m.reshape(-1, q.size(0)), q, out=p)
-                first_all_reduced = ps + [
-                    m for idx, m in enumerate(self._ms) if idx in self._uncompressed_gradients
-                ]
+                first_all_reduced = ps + [m for idx, m in enumerate(self._ms) if idx in self._uncompressed_gradients]
                 allreduce1 = AllReduceRunner(
                     p2p=self._p2p,
                     servicer_type=type(self),
@@ -247,7 +243,7 @@ def orthogonalize(matrix, eps=torch.tensor(1e-8)):
     n, m = matrix.shape
     for i in range(m):
         col = matrix[:, i : i + 1]
-        col /= torch.sqrt(torch.sum(col ** 2)) + eps
+        col /= torch.sqrt(torch.sum(col**2)) + eps
         if i + 1 < m:
             rest = matrix[:, i + 1 :]
             rest -= torch.sum(col * rest, dim=0) * col
