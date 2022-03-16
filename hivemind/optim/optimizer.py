@@ -251,7 +251,7 @@ class Optimizer(torch.optim.Optimizer):
             optimizer=optimizer,
             params=params,
             scheduler=scheduler,
-            delta_rule_averaging=grad_averager is None and self.delay_state_averaging,
+            delta_rule_averaging=use_local_updates and self.delay_state_averaging,
             compression=state_averaging_compression,
             state_compression=load_state_compression,
             average_opt_statistics=average_opt_statistics,

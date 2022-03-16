@@ -509,7 +509,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     @contextlib.contextmanager
     def _register_allreduce_group(self, group_info: GroupInfo):
-        """Register a given group all-reduce for one or more all-reduce rounds"""
+        """Register a given group for one or more all-reduce rounds"""
         try:
             self._running_groups[group_info.group_id] = asyncio.Future()
             self._pending_groups_registered.set()
