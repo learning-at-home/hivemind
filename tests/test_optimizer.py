@@ -2,7 +2,7 @@ import ctypes
 import multiprocessing as mp
 import time
 from functools import partial
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 import pytest
@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 import hivemind
 from hivemind.averaging.control import AveragingStage
-from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFactory
+from hivemind.optim.grad_averager import GradientAverager
 from hivemind.optim.optimizer import Optimizer
 from hivemind.optim.power_sgd_averager import PowerSGDGradientAverager
 from hivemind.optim.progress_tracker import ProgressTracker
@@ -294,10 +294,10 @@ def test_progress_tracker():
 @pytest.mark.forked
 @pytest.mark.parametrize(
     "grad_averager",
-    [GradientAverager.get_factory(), PowerSGDGradientAverager.get_factory(averager_rank=1)],
+    [GradientAverager, partial(PowerSGDGradientAverager, averager_rank=1)],
 )
 def test_optimizer(
-    grad_averager: GradientAveragerFactory,
+    grad_averager: Optional[Callable[..., GradientAverager]],
     num_peers: int = 1,
     num_clients: int = 0,
     target_batch_size: int = 32,

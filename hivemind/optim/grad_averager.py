@@ -11,10 +11,6 @@ from hivemind.utils import DHTExpiration, get_dht_time, get_logger
 logger = get_logger(__name__)
 
 
-TGradientAverager = TypeVar("TGradientAverager", bound="GradientAverager")
-GradientAveragerFactory = Callable[[Type[TGradientAverager], Any], TGradientAverager]
-
-
 class GradientAverager(DecentralizedAverager):
     """
     An auxiliary averaging class that is responsible for accumulating gradients and aggregating them with peers.
@@ -40,6 +36,7 @@ class GradientAverager(DecentralizedAverager):
       if True, the averager will only join existing groups where at least one peer has client_mode=False.
       By default, this flag is copied from DHTNode inside the ``dht`` instance.
     :param warn: if True, warn when the averager did not reset accumulators after use or did not use averaging results
+    :param average_grads: if provided, it will be used as a set of averagable gradients
     :param kwargs: see DecentralizedAverager keyword arguments for additional parameters
 
 
@@ -230,10 +227,3 @@ class GradientAverager(DecentralizedAverager):
     def notify_used_averaged_gradients(self):
         """Notify averager that the results of a previous averaging round are accounted for"""
         self._new_averaged_grads = False
-
-    @classmethod
-    def get_factory(cls, **kwargs1) -> GradientAveragerFactory:
-        def _factory(**kwargs2):
-            return cls(**kwargs1, **kwargs2)
-
-        return _factory

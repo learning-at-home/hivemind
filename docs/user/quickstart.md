@@ -58,6 +58,7 @@ opt = hivemind.Optimizer(
     batch_size_per_step=32,   # each call to opt.step adds this many samples towards the next epoch
     target_batch_size=10000,  # after peers collectively process this many samples, average weights and begin the next epoch 
     optimizer=opt,            # wrap the SGD optimizer defined above
+    use_local_updates=True,   # perform optimizer steps with local gradients, average parameters in background
     matchmaking_time=3.0,     # when averaging parameters, gather peers in background for up to this many seconds
     averaging_timeout=10.0,   # give up on averaging if not successful in this many seconds
     verbose=True              # print logs incessently

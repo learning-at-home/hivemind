@@ -11,7 +11,7 @@ import torch
 from hivemind.averaging.control import AveragingStage, StepControl
 from hivemind.compression import CompressionBase, NoCompression
 from hivemind.dht import DHT
-from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFactory
+from hivemind.optim.grad_averager import GradientAverager
 from hivemind.optim.grad_scaler import GradScaler
 from hivemind.optim.power_sgd_averager import PowerSGDGradientAverager
 from hivemind.optim.progress_tracker import LocalTrainingProgress, ProgressTracker
@@ -35,7 +35,7 @@ class Optimizer(torch.optim.Optimizer):
 
     By default, Optimizer is configured to be exactly **equivalent to synchronous training** with target_batch_size.
     There are advanced options make training semi-asynchronous (delay_optimizer_step and delay_gradient_averaging)
-    or even fully asynchronous (grad_averager=None).
+    or even fully asynchronous (use_local_updates=True).
 
     :example: The Optimizer can be used as a drop-in replacement for a regular PyTorch Optimizer:
 
@@ -140,10 +140,15 @@ class Optimizer(torch.optim.Optimizer):
       hardly ever skip averaging rounds, they can average state less frequently. In turn, network failures, lossy
       gradient compression and local_updates cause parameters to diverge faster and requires more frequent averaging.
 
+    :param use_local_updates: if enabled, peers will update parameters on each .step using local gradients;
+      if not enabled (default), accumulate gradients to target_batch_size, and then call .step with averaged gradients.
+      Even if use_local_updates=True, learning rate scheduler will still be called once per target_batch_size.
+
     :param client_mode: if True, this peer will not accept incoming connections (firewall-compatible mode)
     :param auxiliary: if True, optimizer.step will only assist other peers in averaging (for cpu-only workers)
 
     :param grad_compression: compression strategy used for averaging gradients, default = no compression
+    :param grad_averager: if provided, creates gradient averager with required averaging strategy
     :param state_averaging_compression: compression for averaging params and state tensors, default = no compression
     :param load_state_compression: compression strategy for loading state from peers, default = no compression
     :param average_opt_statistics: names of optimizer statistics from state dict that should be averaged with peers
@@ -180,10 +185,11 @@ class Optimizer(torch.optim.Optimizer):
         delay_grad_averaging: bool = False,
         delay_state_averaging: bool = True,
         average_state_every: int = 1,
+        use_local_updates: bool = False,
         client_mode: bool = None,
         auxiliary: bool = False,
         grad_compression: CompressionBase = NoCompression(),
-        grad_averager: Optional[GradientAveragerFactory] = PowerSGDGradientAverager.get_factory(averager_rank=32),
+        grad_averager: Optional[Callable[..., GradientAverager]] = GradientAverager,
         state_averaging_compression: CompressionBase = NoCompression(),
         load_state_compression: CompressionBase = NoCompression(),
         average_opt_statistics: Sequence[str] = (),
@@ -219,13 +225,10 @@ class Optimizer(torch.optim.Optimizer):
                 "(A) hivemind.Optimizer(..., params=params, optimizer=lambda params: create_opt(params)\n"
                 "(B) hivemind.Optimizer(..., optimizer=pre_initialize_optimizer)"
             )
-        if grad_averager is None:
+        if use_local_updates:
             assert not reuse_grad_buffers, "if local_updates is True, gradients will not be accumulated"
             assert not delay_grad_averaging, "if local_updates is True, gradients will not be averaged"
-
-        params = list(params) if params is not None else optimizer.param_groups
-        if all(isinstance(p, torch.Tensor) for p in params):
-            params = (dict(params=params),)
+            assert grad_averager is None, "if local_updates is True, provided gradient_averager will not be used"
 
         self.dht, self.run_id, self.client_mode, self.auxiliary = dht, run_id, client_mode, auxiliary
         self.batch_size_per_step, self.target_batch_size = batch_size_per_step, target_batch_size
@@ -244,7 +247,6 @@ class Optimizer(torch.optim.Optimizer):
         self.tracker = self._make_progress_tracker(
             target_batch_size, performance_ema_alpha=performance_ema_alpha, **tracker_opts or {}
         )
-        averaged_grads = None
         self.state_averager = self._make_state_averager(
             optimizer=optimizer,
             params=params,
@@ -257,9 +259,9 @@ class Optimizer(torch.optim.Optimizer):
             extra_tensors=extra_tensors,
             **averager_opts or {},
         )
-        if grad_averager:
+        if grad_averager is not None and not use_local_updates:
             self.grad_averager = self._make_gradient_averager(
-                reuse_grad_buffers=reuse_grad_buffers, grad_averager=grad_averager, averaged_grads=averaged_grads
+                reuse_grad_buffers=reuse_grad_buffers, grad_averager=grad_averager
             )
         else:
             self.grad_averager = None
