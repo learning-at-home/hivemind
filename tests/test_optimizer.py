@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 import hivemind
 from hivemind.averaging.control import AveragingStage
-from hivemind.optim.grad_averager import GradientAverager
+from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFactory
 from hivemind.optim.optimizer import Optimizer
 from hivemind.optim.power_sgd_averager import PowerSGDGradientAverager
 from hivemind.optim.progress_tracker import ProgressTracker
@@ -293,11 +293,11 @@ def test_progress_tracker():
 
 @pytest.mark.forked
 @pytest.mark.parametrize(
-    "grad_averager",
+    "grad_averager_factory",
     [GradientAverager, partial(PowerSGDGradientAverager, averager_rank=1)],
 )
 def test_optimizer(
-    grad_averager: Optional[Callable[..., GradientAverager]],
+    grad_averager_factory: GradientAveragerFactory,
     num_peers: int = 1,
     num_clients: int = 0,
     target_batch_size: int = 32,
@@ -341,7 +341,7 @@ def test_optimizer(
             delay_optimizer_step=delay_optimizer_step,
             average_state_every=average_state_every,
             client_mode=client_mode,
-            grad_averager=grad_averager,
+            grad_averager_factory=grad_averager_factory,
             verbose=False,
         )
         optimizer.load_state_from_peers()

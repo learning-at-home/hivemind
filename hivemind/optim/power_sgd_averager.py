@@ -80,14 +80,9 @@ class PowerSGDGradientAverager(GradientAverager):
         self._uncompressed_gradients_indexes = set(
             i
             for i, grad in enumerate(self._grads_from_parameters())
-            if len(tuple(grad.size())) <= 1
-            or (
-                1
-                - self.rank
-                * sum(get_flatten_greedy_dims(grad))
-                / (get_flatten_greedy_dims(grad)[0] * get_flatten_greedy_dims(grad)[1])
-                < min_compression_ratio
-            )  # compute how much parameters can we left via factorization
+            if grad.ndim <= 1
+            or (1 - self.rank * sum(get_flatten_greedy_dims(grad)) / grad.numel()) < min_compression_ratio
+            # compute how much parameters can we left via factorization
         )
         self._ms = [
             torch.zeros_like(grad, device="cpu").share_memory_()
@@ -144,7 +139,6 @@ class PowerSGDGradientAverager(GradientAverager):
             )
 
             async with enter_asynchronously(self.get_tensors()) as averaged_grads:
-                # make this two pairs list for better mapping between m buffers and gradients
                 averaged_grads_via_sgd = [
                     grad for idx, grad in enumerate(averaged_grads) if idx not in self._uncompressed_gradients_indexes
                 ]
@@ -156,7 +150,7 @@ class PowerSGDGradientAverager(GradientAverager):
                     for idx, grad in enumerate(averaged_grad_via_sgd)
                 ]
                 for p, q, m in zip(ps, self._qs, self._ms):
-                    # we use reshape for all matrixes because sgd works only with 2d tensors
+                    # we use reshape for all matrixes because PowerSGD works only with 2d tensors
                     torch.matmul(m.reshape(-1, q.size(0)), q, out=p)
 
                 allreduce_p_phase = AllReduceRunner(
@@ -206,13 +200,12 @@ class PowerSGDGradientAverager(GradientAverager):
                 self._running_groups[group_info.group_id + self.all_reduce_phases[1]].set_result(allreduce_q_phase)
 
                 if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
-                    async for tensor, update in azip(as_aiter(*self._qs), allreduce_q_phase):
-                        # all-reduce is performed asynchronously while iterating
+                    async for tensor, update in azip(as_aiter(*(self._qs + averaged_grad_wo_sgd)), allreduce_q_phase):
                         tensor.add_(update, alpha=self._averaging_alpha)
                         self.last_updated = get_dht_time()
                         self._state_updated.set()
                 else:
-                    async for _ in allreduce_q_phase:  # trigger all-reduce by iterating
+                    async for _ in allreduce_q_phase:
                         raise ValueError("aux peers should not receive averaged tensors")
 
                 for p, q, m, grad in zip(ps, self._qs, self._ms, averaged_grad_via_sgd):
@@ -245,7 +238,7 @@ class PowerSGDGradientAverager(GradientAverager):
         logger.info("Starting loading gradient averager buffers from peers")
 
         if len(flat_tensors) != len(self._qs):
-            logger.error("Failed to load state from peer, received parameters, extras or metadata")
+            logger.error("Failed to load state from peer, received invalid parameters, extras or metadata")
             return
 
         with torch.no_grad(), self.lock_averaged_tensors:
