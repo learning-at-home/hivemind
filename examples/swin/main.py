@@ -3,6 +3,7 @@ import torch.nn as nn
 from transformers import ViTConfig, ViTForImageClassification
 from transformers import SwinConfig, SwinForImageClassification
 from timm.scheduler.cosine_lr import CosineLRScheduler
+import hivemind
 
 from main_worker import main_worker
 from dataloader import build_dataloader
@@ -18,7 +19,7 @@ def main(model_name):
         configuration.num_labels = 1000
         model = ViTForImageClassification(configuration)
 
-    batch_size = 230
+    batch_size = 128
     req_batch_size = 1024
     req_num_iterations = int(req_batch_size / batch_size)
     num_epochs = 300
@@ -42,9 +43,18 @@ def main(model_name):
         t_in_epochs=False,
     )
     scaler = torch.cuda.amp.GradScaler()
+    start_epoch = 0
+    saved_model_path = f"/external1/meshchaninov/MLEngineeringPractice/saved_models/swin_20220313/Epoch: 91, acc: 0.71957"
+    if saved_model_path:
+        state = torch.load(saved_model_path)
+        model.load_state_dict(state["state_dict"])
+        optimizer.load_state_dict(state["optimizer"])
+        scheduler.load_state_dict(state["scheduler"])
+        scaler.load_state_dict(state["scaler"])
+        start_epoch = state["epoch"]
 
     main_worker(num_epochs, model, optimizer, criterion, scheduler, scaler, model_name, train_loader, val_loader,
-                req_num_iterations, device)
+                req_num_iterations, device, start_epoch)
 
 
 if __name__ == '__main__':
