@@ -1,6 +1,7 @@
 import ctypes
 import multiprocessing as mp
 import time
+import sys
 from functools import partial
 from typing import Callable, Optional
 
@@ -21,16 +22,22 @@ from hivemind.utils.crypto import RSAPrivateKey
 
 
 @pytest.mark.forked
-def test_grad_averager():
+@pytest.mark.parametrize(
+    "grad_averager_factory",
+    [GradientAverager, partial(PowerSGDGradientAverager, averager_rank=1)],
+)
+def test_grad_averager(grad_averager_factory: GradientAveragerFactory):
+    parameter_shape = (5, 5)
+
     dht1 = hivemind.DHT(start=True)
-    model1 = nn.ParameterDict({"w": nn.Parameter(torch.zeros(3))})
-    averager1 = GradientAverager(
+    model1 = nn.ParameterDict({"w": nn.Parameter(torch.zeros(parameter_shape))})
+    averager1 = grad_averager_factory(
         model1.parameters(), dht=dht1, prefix="test", target_group_size=2, reuse_grad_buffers=False, start=True
     )
 
     dht2 = hivemind.DHT(start=True, initial_peers=dht1.get_visible_maddrs())
-    model2 = nn.ParameterDict({"w": nn.Parameter(torch.zeros(3))})
-    averager2 = GradientAverager(
+    model2 = nn.ParameterDict({"w": nn.Parameter(torch.zeros(parameter_shape))})
+    averager2 = grad_averager_factory(
         model2.parameters(), dht=dht2, prefix="test", target_group_size=2, reuse_grad_buffers=True, start=True
     )
 
@@ -40,12 +47,12 @@ def test_grad_averager():
     for i in range(10):
         time.sleep(0.1)
         if i % 3 == 0:
-            loss1 = F.mse_loss(model1.w, torch.ones(3))
+            loss1 = F.mse_loss(model1.w, torch.ones(parameter_shape))
             loss1.backward()
             averager1.accumulate_grads_(batch_size=2)  # total: 4 times * 2 samples = 8
             model1.zero_grad()
         else:
-            loss2 = F.mse_loss(model2.w, -torch.ones(3))
+            loss2 = F.mse_loss(model2.w, -torch.ones(parameter_shape))
             loss2.backward()
             averager2.accumulate_grads_(batch_size=3)  # total: 6 times * 3 samples = 18
             # note: we do not call zero grad here because reuse_grad_buffers=True
@@ -53,11 +60,11 @@ def test_grad_averager():
     assert control1.stage == control2.stage == AveragingStage.AWAITING_TRIGGER
     peer1_samples, peer1_times, peer2_samples, peer2_times = 8, 4, 18, 6
     assert averager1.local_samples_accumulated == peer1_samples and averager1.local_times_accumulated == peer1_times
-    ref_grads1 = torch.full((3,), -2 * 1 / 3 * averager1.local_times_accumulated)
+    ref_grads1 = torch.full(parameter_shape, -2 / np.prod(parameter_shape) * averager1.local_times_accumulated)
     assert torch.allclose(next(averager1._grad_accumulators()), ref_grads1)
 
     assert averager2.local_samples_accumulated == peer2_samples and averager2.local_times_accumulated == peer2_times
-    ref_grads2 = torch.full((3,), 2 * 1 / 3 * averager2.local_times_accumulated)
+    ref_grads2 = torch.full(parameter_shape, 2 / np.prod(parameter_shape) * averager2.local_times_accumulated)
     assert torch.allclose(next(averager2._grad_accumulators()), ref_grads2)
 
     averager1.step(control=control1, wait=False)
@@ -292,12 +299,7 @@ def test_progress_tracker():
 
 
 @pytest.mark.forked
-@pytest.mark.parametrize(
-    "grad_averager_factory",
-    [GradientAverager, partial(PowerSGDGradientAverager, averager_rank=1)],
-)
 def test_optimizer(
-    grad_averager_factory: GradientAveragerFactory,
     num_peers: int = 1,
     num_clients: int = 0,
     target_batch_size: int = 32,
@@ -316,11 +318,7 @@ def test_optimizer(
 
     def run_trainer(batch_size: int, batch_time: float, client_mode: bool):
         nonlocal optimizer
-        model = nn.Sequential(
-            nn.Linear(5, 5),
-            nn.ReLU(),
-            nn.Linear(5, 1),
-        )
+        model = nn.Sequential(nn.Linear(5, 1))
 
         assert isinstance(model, torch.nn.Module), "model_arch must evaluate to a pytorch module"
 
@@ -341,7 +339,7 @@ def test_optimizer(
             delay_optimizer_step=delay_optimizer_step,
             average_state_every=average_state_every,
             client_mode=client_mode,
-            grad_averager_factory=grad_averager_factory,
+            grad_averager_factory=GradientAverager,
             verbose=False,
         )
         optimizer.load_state_from_peers()
