@@ -47,7 +47,6 @@ class PowerSGDGradientAverager(GradientAverager):
 
     :param parameters: pytorch parameters for which to aggregate gradients
     :param averager_rank: compress gradient tensors
-    :param min_compression_ratio: apply PowerSGD to a tensor only if it reduces communication by at least this factor, otherwise aggregate tensors as is
     :param dht: a DHT isntance connected to the rest of the swarm. See hivemind.DHT docs
     :param prefix: a unique DHT key used for matchmaking. E.g. this can be your experiment name with optional suffixes
     :param reuse_grad_buffers: if True, use model's .grad buffers for accumulating gradients over multiple steps.
@@ -58,6 +57,9 @@ class PowerSGDGradientAverager(GradientAverager):
     :param client_mode: if False, this averager will accept incoming requests from other peers.
       if True, the averager will only join existing groups where at least one peer has client_mode=False.
       By default, this flag is copied from DHTNode inside the ``dht`` instance.
+    :param warn: if True, warn when the averager did not reset accumulators after use or did not use averaging results
+    :param min_compression_ratio: apply PowerSGD to a tensor only if it reduces communication by at least this factor, otherwise aggregate tensors as is
+    :param averaged_grads: if provided, it will be used as a set of averagable gradients
     """
 
     def __init__(
