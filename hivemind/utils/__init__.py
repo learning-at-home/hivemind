@@ -9,3 +9,4 @@ from hivemind.utils.performance_ema import PerformanceEMA
 from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils.tensor_descr import BatchTensorDescriptor, TensorDescriptor
 from hivemind.utils.timed_storage import *
+from hivemind.utils.lazy_value import LazyValue, LazyFutureCaller
