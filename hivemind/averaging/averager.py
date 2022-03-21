@@ -27,7 +27,6 @@ from hivemind.compression import (
     CompressionInfo,
     NoCompression,
     deserialize_torch_tensor,
-    serialize_torch_tensor,
 )
 from hivemind.dht import DHT, DHTID
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, ServicerBase
@@ -36,7 +35,6 @@ from hivemind.proto import averaging_pb2
 from hivemind.utils import MPFuture, TensorDescriptor, get_logger
 from hivemind.utils.asyncio import (
     achain,
-    afirst,
     aiter_with_timeout,
     anext,
     as_aiter,
