@@ -90,7 +90,7 @@ class PowerSGDGradientAverager(GradientAverager):
             for i, grad in enumerate(self._grads_from_parameters())
             if grad.ndim <= 1
             or (1 - self.rank * sum(get_flatten_greedy_dims(grad)) / grad.numel()) < min_compression_ratio
-            # compute how much parameters can we left via factorization
+            # compute how much parameters are left after factorization
         )
         self._ms = [
             torch.zeros_like(grad, device="cpu").share_memory_()
