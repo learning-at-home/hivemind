@@ -318,7 +318,7 @@ def test_optimizer(
 
     def run_trainer(batch_size: int, batch_time: float, client_mode: bool):
         nonlocal optimizer
-        model = nn.Sequential(nn.Linear(5, 1))
+        model = nn.Linear(5, 1)
 
         assert isinstance(model, torch.nn.Module), "model_arch must evaluate to a pytorch module"
 
