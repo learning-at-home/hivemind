@@ -1,5 +1,5 @@
 import contextlib
-from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, TypeVar
+from typing import Callable, Iterable, Iterator, Optional, Sequence, TypeVar
 
 import torch
 

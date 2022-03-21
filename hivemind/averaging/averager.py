@@ -546,7 +546,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
     async def _run_allreduce_inplace_(
         self, tensors: Sequence[torch.Tensor], group_info: GroupInfo, group_id: Optional[bytes] = None, **kwargs
     ):
-        """Run one allreduce process to average tensors inplace. Can be called more a few times in one aggergate process"""
+        """Run one allreduce process to average tensors inplace. Can be called more than a few times in one aggregation process"""
         group_id = group_info.group_id if group_id is None else group_id
 
         runner = AllReduceRunner(
