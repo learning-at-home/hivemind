@@ -339,7 +339,6 @@ def test_optimizer(
             delay_optimizer_step=delay_optimizer_step,
             average_state_every=average_state_every,
             client_mode=client_mode,
-            grad_averager_factory=GradientAverager,
             verbose=False,
         )
         optimizer.load_state_from_peers()
