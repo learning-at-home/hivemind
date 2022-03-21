@@ -41,7 +41,7 @@ class PowerSGDGradientAverager(GradientAverager):
     if some part of the gradient is "lost in compression", it will be added to the next iteration.
     This has two implications: (a) it needs more RAM in order to store the "feedback buffers"
     and (b) if devices stay alive only for one step, training with small rank may converge slower.
-    This is because error feedback takes multiple step to kick in.
+    This is because error feedback takes multiple steps to kick in.
 
     Since not all gradients are matrices, PowerSGD views 3d+ tensors via tensor.flatten(1, -1).
     If a tensor has less than 2 dimensions or does not compress efficiently, it will be aggregated
@@ -51,7 +51,7 @@ class PowerSGDGradientAverager(GradientAverager):
      matrix of shape (256, 256) be compressed differently if you .reshape it to (32, 32, 32).
 
     :param parameters: pytorch parameters for which to aggregate gradients
-    :param averager_rank: compress gradient tensors
+    :param averager_rank: rank of compressed gradients
     :param dht: a DHT isntance connected to the rest of the swarm. See hivemind.DHT docs
     :param prefix: a unique DHT key used for matchmaking. E.g. this can be your experiment name with optional suffixes
     :param reuse_grad_buffers: if True, use model's .grad buffers for accumulating gradients over multiple steps.

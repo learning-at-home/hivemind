@@ -1,9 +1,7 @@
 import ctypes
 import multiprocessing as mp
-import sys
 import time
 from functools import partial
-from typing import Callable, Optional
 
 import numpy as np
 import pytest

@@ -66,7 +66,7 @@ class FaultyAverager(hivemind.DecentralizedAverager):
                 )
 
                 self._running_groups[group_info.group_id].set_result(allreduce)
-                # ^--- maybe this can be extracted into a method that checks if register_... context is active.
+                # TODO maybe this can be extracted into a method that checks if register_... context is active.
 
                 if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
                     iter_results = allreduce.run()
