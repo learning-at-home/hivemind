@@ -35,7 +35,7 @@ class FaultyAverager(hivemind.DecentralizedAverager):
         self.fault = fault
         super().__init__(*args, **kwargs)
 
-    async def _run_allreduce(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
+    async def _aggregate_with_group(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
         """Run All-Reduce in a given group and update tensors in place, return gathered metadata"""
         try:
             bandwidths, mode_ids, user_gathered_bytes = zip(*map(self.serializer.loads, group_info.gathered))
@@ -60,7 +60,6 @@ class FaultyAverager(hivemind.DecentralizedAverager):
                     tensors=local_tensors,
                     ordered_peer_ids=group_info.peer_ids,
                     peer_fractions=peer_fractions,
-                    gathered=user_gathered,
                     modes=modes,
                     fault=self.fault,
                     **kwargs,
@@ -80,7 +79,7 @@ class FaultyAverager(hivemind.DecentralizedAverager):
                     async for _ in allreduce:  # trigger all-reduce by iterating
                         raise ValueError("aux peers should not receive averaged tensors")
 
-                return allreduce.gathered
+                return user_gathered
         except BaseException as e:
             logger.exception(e)
             raise MatchmakingException(f"Unable to run All-Reduce: {e}")

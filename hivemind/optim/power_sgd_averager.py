@@ -130,8 +130,8 @@ class PowerSGDGradientAverager(GradientAverager):
                     logger.warning(f"All-reduce group {group_info.group_id + phase.name.encode()} did not finish.")
             self._pending_groups_registered.set()
 
-    async def _run_allreduce(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
-        """Run All-Reduce in a given group and update tensors in place, return gathered metadata"""
+    async def _aggregate_with_group(self, group_info: GroupInfo, min_vector_size: int, **kwargs) -> GatheredData:
+        """Run aggregation in a given group and update tensors in place, return gathered metadata"""
         try:
             bandwidths, mode_ids, user_gathered_bytes = zip(*map(self.serializer.loads, group_info.gathered))
             user_gathered = dict(zip(group_info.peer_ids, map(self.serializer.loads, user_gathered_bytes)))
@@ -159,27 +159,10 @@ class PowerSGDGradientAverager(GradientAverager):
                     # we use reshape for all matrixes because PowerSGD works only with 2d tensors
                     torch.matmul(m.reshape(-1, q.size(0)), q, out=p)
 
-                allreduce_phase_p = AllReduceRunner(
-                    p2p=self._p2p,
-                    servicer_type=type(self),
-                    prefix=self.prefix,
-                    group_id=group_info.group_id + AllReducePhases.PHASE_P.name.encode(),
-                    tensors=ps,
-                    ordered_peer_ids=group_info.peer_ids,
-                    peer_fractions=peer_fractions,
-                    gathered=user_gathered,
-                    modes=modes,
-                    **kwargs,
-                )
-                self._running_groups[group_info.group_id + AllReducePhases.PHASE_P.name.encode()].set_result(allreduce_phase_p)
+                p_group_id = group_info.group_id + AllReducePhases.PHASE_P.name.encode()
+                q_groud_id = group_info.group_id + AllReducePhases.PHASE_Q.name.encode()
 
-                if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
-                    async for tensor, update in azip(as_aiter(*ps), allreduce_phase_p):
-                        # all-reduce is performed asynchronously while iterating
-                        tensor.add_(update, alpha=self._averaging_alpha)
-                else:
-                    async for _ in allreduce_phase_p:  # trigger all-reduce by iterating
-                        raise ValueError("aux peers should not receive averaged tensors")
+                await self._run_allreduce_inplace_(ps, group_info, p_group_id, peer_fractions=peer_fractions, **kwargs)
 
                 for p in ps:
                     orthogonalize_(p)
@@ -187,39 +170,20 @@ class PowerSGDGradientAverager(GradientAverager):
                 for p, q, m in zip(ps, self._qs, self._ms):
                     torch.matmul(m.reshape(-1, q.size(0)).t(), p, out=q)
 
-                averaged_grad_wo_sgd = [
+                phase_q_tensors = self._qs + [
                     grad for idx, grad in enumerate(averaged_grads) if idx in self._uncompressed_gradients_indexes
                 ]
 
-                allreduce_phase_q = AllReduceRunner(
-                    p2p=self._p2p,
-                    servicer_type=type(self),
-                    prefix=self.prefix,
-                    group_id=group_info.group_id + AllReducePhases.PHASE_Q.name.encode(),
-                    tensors=self._qs + averaged_grad_wo_sgd,
-                    ordered_peer_ids=group_info.peer_ids,
-                    peer_fractions=peer_fractions,
-                    gathered=user_gathered,
-                    modes=modes,
-                    **kwargs,
+                await self._run_allreduce_inplace_(
+                    phase_q_tensors, group_info, q_groud_id, peer_fractions=peer_fractions, **kwargs
                 )
-                self._running_groups[group_info.group_id + AllReducePhases.PHASE_Q.name.encode()].set_result(allreduce_phase_q)
-
-                if modes[group_info.peer_ids.index(self.peer_id)] != AveragingMode.AUX:
-                    async for tensor, update in azip(as_aiter(*(self._qs + averaged_grad_wo_sgd)), allreduce_phase_q):
-                        tensor.add_(update, alpha=self._averaging_alpha)
-                        self.last_updated = get_dht_time()
-                        self._state_updated.set()
-                else:
-                    async for _ in allreduce_phase_q:
-                        raise ValueError("aux peers should not receive averaged tensors")
 
                 for p, q, m, grad in zip(ps, self._qs, self._ms, averaged_grads_via_sgd):
                     new_m = torch.matmul(p, q.t()).reshape(m.size())
                     m.sub_(new_m)
                     grad.copy_(new_m)
 
-                return allreduce_phase_p.gathered
+                return user_gathered
         except BaseException as e:
             logger.exception(e)
             raise MatchmakingException(f"Unable to run All-Reduce: {e}")

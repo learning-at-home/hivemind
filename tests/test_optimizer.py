@@ -1,7 +1,7 @@
 import ctypes
 import multiprocessing as mp
-import time
 import sys
+import time
 from functools import partial
 from typing import Callable, Optional
 
