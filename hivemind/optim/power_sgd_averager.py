@@ -6,7 +6,7 @@ from typing import Any, Iterable, Optional, Sequence
 
 import torch
 
-from hivemind.averaging.allreduce import AllReduceRunner, AveragingMode
+from hivemind.averaging.allreduce import AveragingMode
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.matchmaking import Matchmaking, MatchmakingException
@@ -14,9 +14,8 @@ from hivemind.compression import CompressionInfo, TensorRole
 from hivemind.dht import DHT
 from hivemind.optim.grad_averager import GradientAverager
 from hivemind.utils import get_logger
-from hivemind.utils.asyncio import as_aiter, azip, enter_asynchronously
+from hivemind.utils.asyncio import enter_asynchronously
 from hivemind.utils.math import get_flatten_greedy_dims, orthogonalize_
-from hivemind.utils.timed_storage import get_dht_time
 
 GatheredData = Any
 logger = get_logger(__name__)
@@ -64,7 +63,8 @@ class PowerSGDGradientAverager(GradientAverager):
       if True, the averager will only join existing groups where at least one peer has client_mode=False.
       By default, this flag is copied from DHTNode inside the ``dht`` instance.
     :param warn: if True, warn when the averager did not reset accumulators after use or did not use averaging results
-    :param min_compression_ratio: apply PowerSGD to a tensor only if it reduces communication by at least this factor, otherwise aggregate tensors as is
+    :param min_compression_ratio: apply PowerSGD to a tensor only if it reduces communication by at least this factor,
+      otherwise aggregate tensors as is
     :param averaged_grads: if provided, it will be used as a set of averagable gradients
     """
 
