@@ -32,12 +32,11 @@ def train(train_loader, model, criterion, optimizer, scheduler, scaler, epoch, d
             acc = accuracy(output, target)
             scaler.scale(loss).backward()
 
-        # compute gradient and do SGD step
-        if (i + 1) % req_num_iterations == 0:
-            scaler.step(optimizer)
-            optimizer.zero_grad()
-            scaler.update()
-            scheduler.step_update(epoch * len(train_loader) + i)
+        # compute gradient
+        scaler.step(optimizer)
+        optimizer.zero_grad()
+        scaler.update()
+        scheduler.step_update(epoch * len(train_loader) + i)
 
         # measure elapsed time
         batch_time = time.time() - end
@@ -53,5 +52,5 @@ def train(train_loader, model, criterion, optimizer, scheduler, scaler, epoch, d
 
         if i % print_freq == 0:
             training_iter = epoch * len(train_loader) + i
-            writer_train.add_scalar('train_loss', loss / images.shape[0], global_step=training_iter)
-            writer_train.add_scalar('train_accuracy', acc / images.shape[0], global_step=training_iter)
+            writer_train.add_scalar('train_loss', loss_epoch / (i + 1), global_step=training_iter)
+            writer_train.add_scalar('train_accuracy', acc_epoch / (i + 1), global_step=training_iter)
