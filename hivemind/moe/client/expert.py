@@ -11,8 +11,10 @@ from torch.autograd.function import once_differentiable
 import hivemind
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.p2p import P2P, PeerInfo, StubBase
+from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
-from hivemind.utils import MSGPackSerializer, asingle, nested_compare, nested_flatten, nested_pack, switch_to_uvloop
+from hivemind.utils import MSGPackSerializer, amap_in_executor, as_aiter, nested_compare, nested_flatten, nested_pack, switch_to_uvloop
+from hivemind.utils.grpc import gather_from_grpc, split_for_streaming
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 
@@ -133,11 +135,20 @@ class _RemoteModuleCall(torch.autograd.Function):
             for inp, proto in zip(inputs, nested_flatten(info["forward_schema"]))
         ]
 
+        split = [p for t in serialized_tensors for p in split_for_streaming(t, DEFAULT_MAX_MSG_SIZE // 2)]
+
         outputs = cls.run_coroutine(
-            stub.rpc_forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors)),
+            stub.rpc_forward(
+                amap_in_executor(
+                    lambda t: runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[t, ]),
+                    as_aiter(*split)
+                ),
+            )
         )
 
-        deserialized_outputs = [deserialize_torch_tensor(tensor) for tensor in outputs.tensors]
+        deserialized_outputs = cls.run_coroutine(
+            gather_from_grpc(outputs, lambda r: r.tensors, deserialize_torch_tensor)
+        )
 
         return tuple(deserialized_outputs)
 
@@ -152,9 +163,18 @@ class _RemoteModuleCall(torch.autograd.Function):
             for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)
         ]
 
+        split = [p for t in serialized_tensors for p in split_for_streaming(t, DEFAULT_MAX_MSG_SIZE // 2)]
+
         grad_inputs = cls.run_coroutine(
-            ctx.stub.rpc_forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors)),
+            ctx.stub.rpc_backward(
+                amap_in_executor(
+                    lambda t: runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=[t, ]),
+                    as_aiter(*split)
+                ),
+            )
         )
 
-        deserialized_grad_inputs = [deserialize_torch_tensor(tensor) for tensor in grad_inputs.tensors]
+        deserialized_grad_inputs = cls.run_coroutine(
+            gather_from_grpc(grad_inputs, lambda r: r.tensors, deserialize_torch_tensor)
+        )
         return (DUMMY, None, None, None, *deserialized_grad_inputs)

@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import os
 import threading
-from typing import Any, Dict, Iterable, Iterator, NamedTuple, Optional, Tuple, Type, TypeVar, Union
+import torch
+from typing import Callable, AsyncIterator, Any, Dict, Iterable, Iterator, NamedTuple, Optional, Tuple, Type, TypeVar, Union
 
 import grpc
 
@@ -208,3 +209,27 @@ def combine_from_streaming(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.
         buffer_chunks.append(tensor_part.buffer)
     serialized_tensor.buffer = b"".join(buffer_chunks)
     return serialized_tensor
+
+
+RpcMessage = TypeVar("RpcMessage")
+
+async def gather_from_grpc(
+    stream: AsyncIterator[RpcMessage],
+    key: Callable[[RpcMessage], Iterable[runtime_pb2.Tensor]],
+    deserializer: Callable[[runtime_pb2.Tensor], torch.Tensor],
+) -> list[torch.Tensor]:
+    tensors = []
+    parts = []
+
+    async for msg in stream:
+        parts_stream = key(msg)
+        for part in parts_stream:
+            if part.dtype and parts:
+                tensors.append(deserializer(combine_from_streaming(parts)))
+                parts = []
+
+            parts.append(part)
+    if parts:
+        tensors.append(deserializer(combine_from_streaming(parts)))
+
+    return tensors

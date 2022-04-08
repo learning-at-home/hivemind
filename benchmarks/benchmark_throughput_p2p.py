@@ -250,7 +250,7 @@ if __name__ == "__main__":
             num_clients=1,
             num_handlers=1,
             num_batches_per_client=args.num_batches_per_client,
-            batch_size=256,
+            batch_size=1024,
         )
     elif args.preset == "nop":
         benchmark_throughput(expert_cls="nop", backprop=False, num_batches_per_client=args.num_batches_per_client)
