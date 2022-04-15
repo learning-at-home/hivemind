@@ -90,6 +90,17 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         ]
 
     async def rpc_forward(
+        self, request: runtime_pb2.ExpertRequest, context: P2PContext
+    ) -> runtime_pb2.ExpertResponse:
+        inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
+        expert = self.experts[request.uid]
+        return runtime_pb2.ExpertResponse(
+            tensors=await self._process_inputs(
+                inputs, expert.forward_pool, expert.outputs_schema
+            )
+        )
+
+    async def rpc_forward_partial(
         self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
     ) -> AsyncIterator[runtime_pb2.ExpertRequest]:
         uid, inputs = await self._gather_inputs(requests, context)
@@ -103,6 +114,17 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             yield runtime_pb2.ExpertResponse(tensors=[part, ])
 
     async def rpc_backward(
+        self, request: runtime_pb2.ExpertRequest, context: P2PContext
+    ) -> runtime_pb2.ExpertResponse:
+        inputs_and_grads = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
+        expert = self.experts[request.uid]
+        return runtime_pb2.ExpertResponse(
+            tensors=await self._process_inputs(
+                inputs_and_grads, expert.backward_pool, expert.grad_inputs_schema
+            )
+        )
+
+    async def rpc_backward_partial(
         self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
     ) -> AsyncIterator[runtime_pb2.ExpertResponse]:
         uid, inputs_and_grads = await self._gather_inputs(requests, context)
