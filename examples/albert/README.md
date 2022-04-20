@@ -27,7 +27,7 @@ Run the first DHT peer to welcome trainers and record training statistics (e.g.,
 
 ```
 $ ./run_training_monitor.py --wandb_project Demo-run
-Oct 14 16:26:36.083 [INFO] Running a DHT peer. To connect other peers to this one over the Internet,
+Oct 14 16:26:36.083 [INFO] Running a DHT instance. To connect other peers to this one, use
 use --initial_peers /ip4/1.2.3.4/tcp/1337/p2p/XXXX /ip4/1.2.3.4/udp/31337/quic/p2p/XXXX
 Oct 14 16:26:36.083 [INFO] Full list of visible multiaddresses: ...
 wandb: Currently logged in as: XXX (use `wandb login --relogin` to force relogin)
