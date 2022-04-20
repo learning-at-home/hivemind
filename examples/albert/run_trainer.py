@@ -19,6 +19,7 @@ from transformers.trainer_utils import is_main_process
 
 from hivemind import DHT, Float16Compression, Optimizer, get_dht_time
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
+from hivemind.utils.networking import log_visible_maddrs
 
 import utils
 from arguments import (
@@ -227,7 +228,7 @@ def main():
         announce_maddrs=collaboration_args.announce_maddrs,
         identity_path=collaboration_args.identity_path,
     )
-    utils.log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=collaboration_args.use_ipfs)
+    log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=collaboration_args.use_ipfs)
 
     total_batch_size_per_step = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     if torch.cuda.device_count() != 0:

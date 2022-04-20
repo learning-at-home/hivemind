@@ -244,7 +244,7 @@ class DHT(mp.Process):
           DHT fields made by this coroutine will not be accessible from the host process.
         :note: all time-consuming operations in coro should be asynchronous (e.g. asyncio.sleep instead of time.sleep)
           or use asyncio.get_event_loop().run_in_executor(...) to prevent coroutine from blocking background DHT tasks
-        :note: when run_coroutine is called with wait=False, MPFuture can be cancelled to interrupt the task.
+        :note: when run_coroutine is called with return_future=False, MPFuture can be cancelled to interrupt the task.
         """
         future = MPFuture()
         self._outer_pipe.send(("_run_coroutine", [], dict(coro=coro, future=future)))

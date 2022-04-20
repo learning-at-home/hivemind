@@ -178,6 +178,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
+            "hivemind-dht = hivemind.hivemind_cli.run_dht:main",
             "hivemind-server = hivemind.hivemind_cli.run_server:main",
         ]
     },
