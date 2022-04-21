@@ -17,14 +17,14 @@ class _Empty(Generic[T]):
 
 class LazyValue(Generic[T]):
 
-    def __init__(self, value: T = _Empty(), init: Optional[Callable[[], T]] = None):
+    def __init__(self, value: T = _Empty(), init: Optional[Callable[..., T]] = None):
         assert value != _Empty() or init is not None, "One should provide either value or intializer"
         self.value = value
         self.init = init
 
-    def get(self) -> T:
+    def get(self, *args, **kwargs) -> T:
         if self.value == _Empty():
-            self.value = self.init()
+            self.value = self.init(*args, **kwargs)
 
         return self.value
 

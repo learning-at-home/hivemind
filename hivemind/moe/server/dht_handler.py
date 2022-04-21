@@ -17,7 +17,6 @@ from hivemind.moe.server.expert_uid import (
 )
 from hivemind.p2p import PeerID, PeerInfo
 from hivemind.utils import get_dht_time, LazyFutureCaller, LazyValue
-from hivemind.utils.mpfuture import MPFuture
 
 
 class DHTHandlerThread(threading.Thread):
@@ -57,7 +56,7 @@ def declare_experts(
 
 
 async def _declare_experts(
-    dht: DHT, node: DHTNode, uids: List[ExpertUID], peer_id: PeerID, addrs: tuple[str], expiration: DHTExpiration
+    dht: DHT, node: DHTNode, uids: List[ExpertUID], peer_id: PeerID, addrs: Tuple[str], expiration: DHTExpiration
 ) -> Dict[ExpertUID, bool]:
     num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
     expiration_time = get_dht_time() + expiration

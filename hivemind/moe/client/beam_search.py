@@ -17,7 +17,8 @@ from hivemind.moe.server.expert_uid import (
     UidEndpoint,
     is_valid_prefix,
 )
-from hivemind.utils import MPFuture, get_dht_time, get_logger
+from hivemind.p2p import PeerInfo
+from hivemind.utils import get_dht_time, get_logger, LazyFutureCaller, LazyValue
 
 logger = get_logger(__name__)
 
@@ -230,7 +231,7 @@ class MoEBeamSearcher:
 
     def find_best_experts(
         self, grid_scores: Sequence[Sequence[float]], beam_size: int, return_future: bool = False
-    ) -> Union[List[RemoteExpert], MPFuture[RemoteExpert]]:
+    ) -> Union[List[RemoteExpert], LazyFutureCaller]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
 
@@ -245,7 +246,7 @@ class MoEBeamSearcher:
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
         assert len(grid_scores) == len(self.grid_size) and beam_size > 0
-        return self.dht.run_coroutine(
+        result = self.dht.run_coroutine(
             partial(
                 self._find_best_experts,
                 prefix=self.uid_prefix,
@@ -257,6 +258,12 @@ class MoEBeamSearcher:
             ),
             return_future,
         )
+        if return_future:
+            return LazyFutureCaller(
+                result,
+                lambda lst: [l.get() for l in lst]
+            )
+        return [r.get() for r in result]
 
     @classmethod
     async def _find_best_experts(
@@ -269,7 +276,7 @@ class MoEBeamSearcher:
         negative_caching: bool,
         cache_expiration: DHTExpiration,
         num_workers: Optional[int] = None,
-    ) -> List[RemoteExpert]:
+    ) -> List[LazyValue[RemoteExpert]]:
         num_workers = num_workers or min(beam_size, dht.num_workers or beam_size)
 
         # form initial beam from top-k active L1 prefixes, each row is (score, uid prefix, possible suffixes)
@@ -322,7 +329,14 @@ class MoEBeamSearcher:
                 push_and_maybe_pop(best_experts_heap, (score, uid_endpoint))
                 unique_experts.add(uid_endpoint.uid)
 
-        best_experts = [RemoteExpert(*uid_endpoint) for score, uid_endpoint in sorted(best_experts_heap, reverse=True)]
+        best_experts = [
+            LazyValue(init=partial(
+                RemoteExpert,
+                uid=uid_endpoint.uid,
+                server_peer_info=PeerInfo.from_endpoint(uid_endpoint.endpoint),
+            ))
+            for _, uid_endpoint in sorted(best_experts_heap, reverse=True)
+        ]
         return best_experts
 
     @staticmethod
@@ -351,7 +365,7 @@ class MoEBeamSearcher:
 
     def batch_find_best_experts(
         self, batch_grid_scores: Sequence[Sequence[Sequence[float]]], beam_size: int, return_future: bool = False
-    ) -> Union[List[List[RemoteExpert]], MPFuture]:
+    ) -> Union[List[List[RemoteExpert]], LazyFutureCaller]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
 
@@ -364,7 +378,7 @@ class MoEBeamSearcher:
         :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
-        return self.dht.run_coroutine(
+        result = self.dht.run_coroutine(
             partial(
                 self._batch_find_best_experts,
                 prefix=self.uid_prefix,
@@ -376,6 +390,10 @@ class MoEBeamSearcher:
             return_future,
         )
 
+        if return_future:
+            return LazyFutureCaller(result, lambda res: [[e.get() for e in exps] for exps in res])
+        return [[e.get() for e in exps] for exps in result]
+
     @classmethod
     async def _batch_find_best_experts(
         cls,
@@ -386,7 +404,7 @@ class MoEBeamSearcher:
         beam_size: int,
         negative_caching: bool,
         num_workers: Optional[int],
-    ) -> Sequence[Sequence[RemoteExpert]]:
+    ) -> Sequence[Sequence[LazyValue[RemoteExpert]]]:
         batch_grid_scores = [
             [tuple(grid_score[i]) for grid_score in batch_grid_scores] for i in range(len(batch_grid_scores[0]))
         ]

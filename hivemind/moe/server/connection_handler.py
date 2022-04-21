@@ -1,6 +1,6 @@
 import asyncio
 import multiprocessing as mp
-from typing import AsyncIterator, Dict, Iterable, Union
+from typing import AsyncIterator, Dict, Iterable, Union, Tuple, List
 
 import torch
 
@@ -76,13 +76,13 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
 
     async def _gather_inputs(
         self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
-    ) -> tuple[str, list[torch.Tensor]]:
+    ) -> Tuple[str, List[torch.Tensor]]:
         unpacker = self._RequestUnpacker()
         inputs = await gather_from_grpc(requests, unpacker, deserialize_torch_tensor)
         return unpacker.uid, inputs
 
     async def _process_inputs(
-        self, inputs: list[torch.Tensor], pool: TaskPool, schema: Union[BatchTensorDescriptor, tuple[BatchTensorDescriptor, ...]]
+        self, inputs: List[torch.Tensor], pool: TaskPool, schema: Union[BatchTensorDescriptor, Tuple[BatchTensorDescriptor, ...]]
     ):
         return [
             serialize_torch_tensor(t, p.compression, allow_inplace=True)

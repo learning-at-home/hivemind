@@ -1,8 +1,7 @@
 from concurrent.futures import Future
 from queue import Queue
 from threading import Thread
-from typing import Any, Awaitable, Dict, Optional, Tuple
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Awaitable, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -148,8 +147,8 @@ class _RemoteModuleCall(torch.autograd.Function):
 
     @classmethod
     def forward_partial(
-        cls, serialized_tensors: list[runtime_pb2.Tensor], ctx, stub
-    ) -> list[torch.Tensor]:
+        cls, serialized_tensors: List[runtime_pb2.Tensor], ctx, stub
+    ) -> List[torch.Tensor]:
         split = [p for t in serialized_tensors for p in split_for_streaming(t, DEFAULT_MAX_MSG_SIZE // 2)]
 
         outputs = cls.run_coroutine(
@@ -167,8 +166,8 @@ class _RemoteModuleCall(torch.autograd.Function):
 
     @classmethod
     def forward_oneshot(
-        cls, serialized_tensors: list[runtime_pb2.Tensor], ctx, stub
-    ) -> list[torch.Tensor]:
+        cls, serialized_tensors: List[runtime_pb2.Tensor], ctx, stub
+    ) -> List[torch.Tensor]:
 
         outputs = cls.run_coroutine(
             stub.rpc_forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
@@ -201,8 +200,8 @@ class _RemoteModuleCall(torch.autograd.Function):
     @classmethod
     @once_differentiable
     def backward_partial(
-        cls, serialized_tensors: list[runtime_pb2.Tensor], ctx
-    ) -> list[torch.Tensor]:
+        cls, serialized_tensors: List[runtime_pb2.Tensor], ctx
+    ) -> List[torch.Tensor]:
         split = tuple(p for t in serialized_tensors for p in split_for_streaming(t, DEFAULT_MAX_MSG_SIZE // 2))
 
         grad_inputs = cls.run_coroutine(
@@ -221,8 +220,8 @@ class _RemoteModuleCall(torch.autograd.Function):
     @classmethod
     @once_differentiable
     def backward_oneshot(
-        cls, serialized_tensors: list[runtime_pb2.Tensor], ctx
-    ) -> list[torch.Tensor]:
+        cls, serialized_tensors: List[runtime_pb2.Tensor], ctx
+    ) -> List[torch.Tensor]:
         grad_inputs = cls.run_coroutine(
             ctx.stub.rpc_backward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
         )

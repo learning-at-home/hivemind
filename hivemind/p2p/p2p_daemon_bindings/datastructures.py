@@ -12,6 +12,7 @@ import multihash
 from multiaddr import Multiaddr, protocols
 
 from hivemind.proto import p2pd_pb2
+from hivemind.utils import Endpoint
 
 # NOTE: On inlining...
 # See: https://github.com/libp2p/specs/issues/138
@@ -126,6 +127,12 @@ class PeerInfo:
     def from_protobuf(cls, peer_info_pb: p2pd_pb2.PeerInfo) -> "PeerInfo":
         peer_id = PeerID(peer_info_pb.id)
         addrs = [Multiaddr(addr) for addr in peer_info_pb.addrs]
+        return PeerInfo(peer_id, addrs)
+
+    @classmethod
+    def from_endpoint(cls, endpoint: Endpoint) -> "PeerInfo":
+        peer_id = PeerID.from_base58(endpoint[0])
+        addrs = [Multiaddr(a) for a in endpoint[1]]
         return PeerInfo(peer_id, addrs)
 
     def __str__(self):

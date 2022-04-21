@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 import threading
 import torch
-from typing import Callable, AsyncIterator, Any, Dict, Iterable, Iterator, NamedTuple, Optional, Tuple, Type, TypeVar, Union
+from typing import Callable, AsyncIterator, Any, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple, Type, TypeVar, Union
 
 import grpc
 
@@ -217,7 +217,7 @@ async def gather_from_grpc(
     stream: AsyncIterator[RpcMessage],
     key: Callable[[RpcMessage], Iterable[runtime_pb2.Tensor]],
     deserializer: Callable[[runtime_pb2.Tensor], torch.Tensor],
-) -> list[torch.Tensor]:
+) -> List[torch.Tensor]:
     tensors = []
     parts = []
 
