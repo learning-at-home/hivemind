@@ -173,7 +173,7 @@ class _RemoteModuleCall(torch.autograd.Function):
             stub.rpc_forward(runtime_pb2.ExpertRequest(uid=ctx.uid, tensors=serialized_tensors))
         )
 
-        return [deserialize_torch_tensor(t) for t in outputs]
+        return [deserialize_torch_tensor(t) for t in outputs.tensors]
 
     @classmethod
     @once_differentiable
