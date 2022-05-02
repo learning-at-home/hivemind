@@ -23,4 +23,4 @@ from hivemind.optim import (
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, PeerInfo
 from hivemind.utils import *
 
-__version__ = "1.1.0dev0"
+__version__ = "1.1.1dev0"
