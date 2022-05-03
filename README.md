@@ -63,7 +63,7 @@ By default, hivemind uses the precompiled binary of
 the [go-libp2p-daemon](https://github.com/learning-at-home/go-libp2p-daemon) library. If you face compatibility issues
 or want to build the binary yourself, you can recompile it by running `pip install . --global-option="--buildgo"`.
 Before running the compilation, please ensure that your machine has a recent version
-of [Go toolchain](https://golang.org/doc/install) (1.15 or higher).
+of [Go toolchain](https://golang.org/doc/install) (1.15 or 1.16).
 
 ### System requirements
 
