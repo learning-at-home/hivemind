@@ -134,7 +134,7 @@ def benchmark_throughput(
         server = hivemind.moe.Server(
             dht=server_dht,
             expert_backends=experts,
-            num_connection_handlers=1,  # TODO: support greater number
+            num_connection_handlers=num_handlers,
             device=device,
         )
         server.start()

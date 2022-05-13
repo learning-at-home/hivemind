@@ -41,7 +41,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         async def _run():
             try:
                 self._p2p = await self.dht.replicate_p2p()
-                await self.add_p2p_handlers(self._p2p)
+                await self.add_p2p_handlers(self._p2p, balanced=True)
 
                 await asyncio.Future()
 

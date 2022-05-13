@@ -315,6 +315,7 @@ class P2P:
         handler: Callable[[TInputStream, P2PContext], TOutputStream],
         input_protobuf_type: Type[Message],
         max_prefetch: int = 5,
+        balanced: bool = False,
     ) -> None:
         """
         :param max_prefetch: Maximum number of items to prefetch from the request stream.
@@ -379,7 +380,7 @@ class P2P:
                 finally:
                     processing_task.cancel()
 
-        await self.add_binary_stream_handler(name, _handle_stream)
+        await self.add_binary_stream_handler(name, _handle_stream, balanced=balanced)
 
     async def _iterate_protobuf_stream_handler(
         self, peer_id: PeerID, name: str, requests: TInputStream, output_protobuf_type: Type[Message]
@@ -421,6 +422,7 @@ class P2P:
         *,
         stream_input: bool = False,
         stream_output: bool = False,
+        balanced: bool = False,
     ) -> None:
         """
         :param stream_input: If True, assume ``handler`` to take ``TInputStream``
@@ -430,7 +432,7 @@ class P2P:
         """
 
         if not stream_input and not stream_output:
-            await self._add_protobuf_unary_handler(name, handler, input_protobuf_type)
+            await self._add_protobuf_unary_handler(name, handler, input_protobuf_type, balanced=balanced)
             return
 
         async def _stream_handler(requests: P2P.TInputStream, context: P2PContext) -> P2P.TOutputStream:
@@ -443,13 +445,14 @@ class P2P:
             else:
                 yield await output
 
-        await self._add_protobuf_stream_handler(name, _stream_handler, input_protobuf_type)
+        await self._add_protobuf_stream_handler(name, _stream_handler, input_protobuf_type, balanced=balanced)
 
     async def _add_protobuf_unary_handler(
         self,
         handle_name: str,
         handler: Callable[[TInputProtobuf, P2PContext], Awaitable[TOutputProtobuf]],
         input_protobuf_type: Type[Message],
+        balanced: bool = False,
     ) -> None:
         """
         Register a request-response (unary) handler. Unary requests and responses
@@ -471,7 +474,7 @@ class P2P:
             response = await handler(input_serialized, context)
             return response.SerializeToString()
 
-        await self._client.add_unary_handler(handle_name, _unary_handler)
+        await self._client.add_unary_handler(handle_name, _unary_handler, balanced=balanced)
 
     async def call_protobuf_handler(
         self,
@@ -515,10 +518,10 @@ class P2P:
 
         self._listen_task = asyncio.create_task(listen())
 
-    async def add_binary_stream_handler(self, name: str, handler: p2pclient.StreamHandler) -> None:
+    async def add_binary_stream_handler(self, name: str, handler: p2pclient.StreamHandler, balanced: bool = False) -> None:
         if self._listen_task is None:
             self._start_listening()
-        await self._client.stream_handler(name, handler)
+        await self._client.stream_handler(name, handler, balanced)
 
     async def call_binary_stream_handler(
         self, peer_id: PeerID, handler_name: str

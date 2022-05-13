@@ -104,7 +104,7 @@ class ServicerBase:
         caller.__name__ = handler.method_name
         return caller
 
-    async def add_p2p_handlers(self, p2p: P2P, wrapper: Any = None, *, namespace: Optional[str] = None) -> None:
+    async def add_p2p_handlers(self, p2p: P2P, wrapper: Any = None, *, namespace: Optional[str] = None, balanced: bool = False) -> None:
         self._collect_rpc_handlers()
 
         servicer = self if wrapper is None else wrapper
@@ -116,6 +116,7 @@ class ServicerBase:
                     handler.request_type,
                     stream_input=handler.stream_input,
                     stream_output=handler.stream_output,
+                    balanced=balanced
                 )
                 for handler in self._rpc_handlers
             ]
