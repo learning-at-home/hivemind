@@ -435,4 +435,5 @@ def _test_optimizer(
         assert not optimizer.grad_averager.is_alive()
     else:
         assert optimizer.grad_averager is None
+
     assert optimizer.scheduled_grads is None or optimizer.scheduled_grads.done()
