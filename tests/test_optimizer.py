@@ -299,6 +299,7 @@ def test_progress_tracker():
 @pytest.mark.forked
 @pytest.mark.parametrize(
     "use_local_updates, delay_state_averaging, delay_optimizer_step, delay_grad_averaging, reuse_grad_buffers",
+    # fmt: off
     [
         (False, False, False, False, False),
         (False, True, False, False, False),
@@ -307,14 +308,9 @@ def test_progress_tracker():
         (False, True, True, True, True),
         (False, True, True, False, True),
         (True, False, False, False, False),
-        (
-            True,
-            True,
-            False,
-            False,
-            False,
-        ),
+        (True, True, False, False, False,),
     ],
+    # fmt: on
 )
 def test_optimizer(
     use_local_updates: bool,
