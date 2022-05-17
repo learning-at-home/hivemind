@@ -189,7 +189,7 @@ class Optimizer(torch.optim.Optimizer):
         client_mode: bool = None,
         auxiliary: bool = False,
         grad_compression: CompressionBase = NoCompression(),
-        grad_averager_factory: Optional[GradientAveragerFactory] = GradientAverager,
+        grad_averager_factory: Optional[GradientAveragerFactory] = None,
         state_averaging_compression: CompressionBase = NoCompression(),
         load_state_compression: CompressionBase = NoCompression(),
         average_opt_statistics: Sequence[str] = (),
@@ -262,9 +262,9 @@ class Optimizer(torch.optim.Optimizer):
             extra_tensors=extra_tensors,
             **averager_opts or {},
         )
-        if grad_averager_factory is not None and not use_local_updates:
+        if not use_local_updates:
             self.grad_averager = self._make_gradient_averager(
-                reuse_grad_buffers=reuse_grad_buffers, grad_averager_factory=grad_averager_factory
+                grad_averager_factory, reuse_grad_buffers=reuse_grad_buffers, compression=grad_compression
             )
         else:
             self.grad_averager = None
@@ -297,9 +297,10 @@ class Optimizer(torch.optim.Optimizer):
             **kwargs,
         )
 
-    def _make_gradient_averager(self, grad_averager_factory, **kwargs) -> GradientAverager:
+    def _make_gradient_averager(self, factory: Optional[GradientAveragerFactory], **kwargs) -> GradientAverager:
         assert hasattr(self, "state_averager"), "must initialize state averager first"
-        grad_averager = grad_averager_factory(
+        factory = factory if factory is not None else GradientAverager
+        grad_averager = factory(
             dht=self.dht,
             prefix=f"{self.run_id}_grad_averager",
             parameters=self.state_averager.main_parameters,
@@ -691,7 +692,8 @@ class Optimizer(torch.optim.Optimizer):
             while True:
                 try:
                     self.state_averager.load_state_from_peers(timeout=self.load_state_timeout, **kwargs)
-                    self.grad_averager.load_state_from_peers(timeout=self.load_state_timeout, **kwargs)
+                    if self.grad_averager is not None:
+                        self.grad_averager.load_state_from_peers(timeout=self.load_state_timeout, **kwargs)
                     break
                 except KeyboardInterrupt:
                     raise
