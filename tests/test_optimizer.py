@@ -431,5 +431,8 @@ def _test_optimizer(
 
     assert not optimizer.state_averager.is_alive()
     assert not optimizer.tracker.is_alive()
-    assert optimizer.grad_averager is None if use_local_updates else (not optimizer.grad_averager.is_alive())
+    if not use_local_updates:
+        assert not optimizer.grad_averager.is_alive()
+    else:
+        assert optimizer.grad_averager is None
     assert optimizer.scheduled_grads is None or optimizer.scheduled_grads.done()
