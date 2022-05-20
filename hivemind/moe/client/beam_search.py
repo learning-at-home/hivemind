@@ -5,7 +5,7 @@ from functools import partial
 from typing import Deque, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
 from hivemind.dht import DHT, DHTExpiration, DHTNode
-from hivemind.moe.client.expert import RemoteExpert
+from hivemind.moe.client.expert import RemoteExpert, _RemoteModuleCall
 from hivemind.moe.server.expert_uid import (
     FLAT_EXPERT,
     PREFIX_PATTERN,
@@ -258,12 +258,14 @@ class MoEBeamSearcher:
             ),
             return_future,
         )
+
+        p2p = _RemoteModuleCall.run_coroutine(self.dht.replicate_p2p())
         if return_future:
             return LazyFutureCaller(
                 result,
-                lambda lst: [l.get() for l in lst]
+                lambda lst: [l.get(p2p=p2p) for l in lst]
             )
-        return [r.get() for r in result]
+        return [r.get(p2p=p2p) for r in result]
 
     @classmethod
     async def _find_best_experts(
@@ -390,9 +392,11 @@ class MoEBeamSearcher:
             return_future,
         )
 
+        p2p = _RemoteModuleCall.run_coroutine(self.dht.replicate_p2p())
+
         if return_future:
-            return LazyFutureCaller(result, lambda res: [[e.get() for e in exps] for exps in res])
-        return [[e.get() for e in exps] for exps in result]
+            return LazyFutureCaller(result, lambda res: [[e.get(p2p=p2p) for e in exps] for exps in res])
+        return [[e.get(p2p=p2p) for e in exps] for exps in result]
 
     @classmethod
     async def _batch_find_best_experts(

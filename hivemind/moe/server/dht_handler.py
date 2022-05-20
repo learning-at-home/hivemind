@@ -4,7 +4,7 @@ from multiaddr import Multiaddr
 from typing import Union, Dict, List, Optional, Sequence, Tuple
 
 from hivemind.dht import DHT, DHTExpiration, DHTNode, DHTValue
-from hivemind.moe.client.expert import RemoteExpert
+from hivemind.moe.client.expert import RemoteExpert, _RemoteModuleCall
 from hivemind.moe.server.expert_uid import (
     FLAT_EXPERT,
     UID_DELIMITER,
@@ -83,10 +83,11 @@ def get_experts(
     :returns: a list of [RemoteExpert if found else None]
     """
     assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
+    p2p = _RemoteModuleCall.run_coroutine(dht.replicate_p2p())
     result = dht.run_coroutine(partial(_get_experts, uids=list(uids), expiration_time=expiration_time), return_future)
 
     def _unwrap_experts(vals: List[Optional[LazyValue[RemoteExpert]]]) -> List[Optional[RemoteExpert]]:
-        return [val.get() if val is not None else None for val in vals]
+        return [val.get(p2p=p2p) if val is not None else None for val in vals]
 
     if return_future:
         return LazyFutureCaller(result, _unwrap_experts)

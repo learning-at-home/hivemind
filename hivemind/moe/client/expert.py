@@ -38,11 +38,9 @@ class RemoteExpert(nn.Module):
 
         if p2p is None:
             self.p2p = _RemoteModuleCall.run_coroutine(P2P.create())
+            _RemoteModuleCall.run_coroutine(self.p2p._client.connect(server_peer_info.peer_id, server_peer_info.addrs))
         else:
             self.p2p = p2p
-
-        if connect:
-            _RemoteModuleCall.run_coroutine(self.p2p._client.connect(server_peer_info.peer_id, server_peer_info.addrs))
 
     @property
     def stub(self) -> StubBase:
