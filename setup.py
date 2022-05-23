@@ -3,6 +3,7 @@ import glob
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -12,6 +13,7 @@ from pkg_resources import parse_requirements, parse_version
 from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
+from setuptools.command.install import install
 
 P2PD_VERSION = "v0.3.0-hivemind.8"
 
@@ -101,6 +103,17 @@ def download_p2p_daemon():
                 )
 
 
+def install_p2p_keygen(script_dir):
+    # We copy the executable manually due to https://github.com/pypa/setuptools/issues/210
+
+    if script_dir is None:
+        return  # script_dir is not known when we use `pip install -e ...`
+
+    binary_path = os.path.join(here, "hivemind", "hivemind_cli", "p2p-keygen")
+    os.makedirs(script_dir, exist_ok=True)
+    shutil.copyfile(binary_path, os.path.join(script_dir, "p2p-keygen"))
+
+
 class BuildPy(build_py):
     user_options = build_py.user_options + [("buildgo", None, "Builds p2pd from source")]
 
@@ -123,7 +136,15 @@ class Develop(develop):
     def run(self):
         self.reinitialize_command("build_py", build_lib=here)
         self.run_command("build_py")
+
         super().run()
+        install_p2p_keygen(self.install_scripts)
+
+
+class Install(install):
+    def run(self):
+        super().run()
+        install_p2p_keygen(self.install_scripts)
 
 
 with open("requirements.txt") as requirements_file:
@@ -147,7 +168,7 @@ extras["all"] = extras["dev"] + extras["docs"]
 setup(
     name="hivemind",
     version=version_string,
-    cmdclass={"build_py": BuildPy, "develop": Develop},
+    cmdclass={"build_py": BuildPy, "develop": Develop, "install": Install},
     description="Decentralized deep learning in PyTorch",
     long_description="Decentralized deep learning in PyTorch. Built to train models on thousands of volunteers "
     "across the world.",
