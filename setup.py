@@ -17,18 +17,22 @@ P2PD_VERSION = "v0.3.0-hivemind.8"
 
 P2PD_SOURCE_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz"
 P2PD_BINARY_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/"
-EXECUTABLES = ["p2pd", "p2p-keygen"]
+
+# The value is sha256 of the binary from the release page
+EXECUTABLES = {
+    "p2pd": "785058526d993f699c674dc2f9b66d565a52315a18b79b629998fab3ebd8e20f",
+    "p2p-keygen": "5ad09d46a1a328d00f226fec43ef41a22bc4a9ee5851199f76dce5f4b55dd0c7",
+}
 
 
 here = os.path.abspath(os.path.dirname(__file__))
 
 
-def md5(fname, chunk_size=4096):
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(chunk_size), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
+def sha256(path):
+    if not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
 def proto_compile(output_path):
@@ -80,13 +84,21 @@ def build_p2p_daemon():
 
 
 def download_p2p_daemon():
-    for executable in EXECUTABLES:
-        binary_url = os.path.join(P2PD_BINARY_URL, executable)
+    for executable, expected_hash in EXECUTABLES.items():
         binary_path = os.path.join(here, "hivemind", "hivemind_cli", executable)
 
-        print(f"Downloading {binary_url}")
-        urllib.request.urlretrieve(binary_url, binary_path)
-        os.chmod(binary_path, 0o777)
+        if sha256(binary_path) != expected_hash:
+            binary_url = os.path.join(P2PD_BINARY_URL, executable)
+            print(f"Downloading {binary_url}")
+
+            urllib.request.urlretrieve(binary_url, binary_path)
+            os.chmod(binary_path, 0o777)
+
+            actual_hash = sha256(binary_path)
+            if actual_hash != expected_hash:
+                raise RuntimeError(
+                    f"The sha256 checksum for {executable} does not match (expected: {expected_hash}, actual: {actual_hash})"
+                )
 
 
 class BuildPy(build_py):
