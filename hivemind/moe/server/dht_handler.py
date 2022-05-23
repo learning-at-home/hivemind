@@ -51,7 +51,8 @@ def declare_experts(
         assert is_valid_uid(uid), f"{uid} is not a valid expert uid. All uids must follow {UID_PATTERN.pattern}"
     addrs = tuple(str(a.decapsulate("/p2p/" + a.get("p2p"))) for a in dht.get_visible_maddrs())
     return dht.run_coroutine(
-        partial(_declare_experts, uids=list(uids), peer_id=peer_id, addrs=addrs, expiration=expiration), return_future=not wait
+        partial(_declare_experts, uids=list(uids), peer_id=peer_id, addrs=addrs, expiration=expiration),
+        return_future=not wait,
     )
 
 
@@ -104,8 +105,8 @@ async def _get_experts(
 
     experts: List[Optional[RemoteExpert]] = [None] * len(uids)
     for i, uid in enumerate(uids):
-        if (elem := found[uid]) is not None and \
-            isinstance(elem.value, tuple):
+        elem = found[uid]
+        if elem is not None and isinstance(elem.value, tuple):
             peer_id, addrs = elem.value
             peer_info = PeerInfo(peer_id=PeerID.from_base58(peer_id), addrs=tuple(Multiaddr(a) for a in addrs))
             experts[i] = LazyValue(init=partial(RemoteExpert, uid=uid, server_peer_info=peer_info))

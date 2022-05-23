@@ -61,7 +61,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
 
     class _RequestUnpacker:
 
-        __slots__ = "uid",
+        __slots__ = ("uid",)
 
         def __init__(self):
             self.uid = None
@@ -82,22 +82,21 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         return unpacker.uid, inputs
 
     async def _process_inputs(
-        self, inputs: List[torch.Tensor], pool: TaskPool, schema: Union[BatchTensorDescriptor, Tuple[BatchTensorDescriptor, ...]]
-    ):
+        self,
+        inputs: List[torch.Tensor],
+        pool: TaskPool,
+        schema: Union[BatchTensorDescriptor, Tuple[BatchTensorDescriptor, ...]],
+    ) -> List[runtime_pb2.Tensor]:
         return [
             serialize_torch_tensor(t, p.compression, allow_inplace=True)
             for t, p in zip(await pool.submit_task(*inputs), nested_flatten(schema))
         ]
 
-    async def rpc_forward(
-        self, request: runtime_pb2.ExpertRequest, context: P2PContext
-    ) -> runtime_pb2.ExpertResponse:
+    async def rpc_forward(self, request: runtime_pb2.ExpertRequest, context: P2PContext) -> runtime_pb2.ExpertResponse:
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         expert = self.experts[request.uid]
         return runtime_pb2.ExpertResponse(
-            tensors=await self._process_inputs(
-                inputs, expert.forward_pool, expert.outputs_schema
-            )
+            tensors=await self._process_inputs(inputs, expert.forward_pool, expert.outputs_schema)
         )
 
     async def rpc_forward_partial(
@@ -106,12 +105,17 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         uid, inputs = await self._gather_inputs(requests, context)
         expert = self.experts[uid]
         output_split = [
-            p for t in await self._process_inputs(inputs, expert.forward_pool, expert.outputs_schema)
+            p
+            for t in await self._process_inputs(inputs, expert.forward_pool, expert.outputs_schema)
             for p in split_for_streaming(t, DEFAULT_MAX_MSG_SIZE // 2)
         ]
 
         async for part in as_aiter(*output_split):
-            yield runtime_pb2.ExpertResponse(tensors=[part, ])
+            yield runtime_pb2.ExpertResponse(
+                tensors=[
+                    part,
+                ],
+            )
 
     async def rpc_backward(
         self, request: runtime_pb2.ExpertRequest, context: P2PContext

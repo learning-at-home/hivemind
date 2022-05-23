@@ -261,10 +261,8 @@ class MoEBeamSearcher:
 
         p2p = _RemoteModuleCall.run_coroutine(self.dht.replicate_p2p())
         if return_future:
-            return LazyFutureCaller(
-                result,
-                lambda lst: [l.get(p2p=p2p) for l in lst]
-            )
+            return LazyFutureCaller(result, lambda lst: [l.get(p2p=p2p) for l in lst])
+
         return [r.get(p2p=p2p) for r in result]
 
     @classmethod
@@ -332,11 +330,13 @@ class MoEBeamSearcher:
                 unique_experts.add(uid_endpoint.uid)
 
         best_experts = [
-            LazyValue(init=partial(
-                RemoteExpert,
-                uid=uid_endpoint.uid,
-                server_peer_info=PeerInfo.from_endpoint(uid_endpoint.endpoint),
-            ))
+            LazyValue(
+                init=partial(
+                    RemoteExpert,
+                    uid=uid_endpoint.uid,
+                    server_peer_info=PeerInfo.from_endpoint(uid_endpoint.endpoint),
+                )
+            )
             for _, uid_endpoint in sorted(best_experts_heap, reverse=True)
         ]
         return best_experts

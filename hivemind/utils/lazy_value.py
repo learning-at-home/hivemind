@@ -4,6 +4,7 @@ from hivemind.utils.mpfuture import MPFuture
 
 T = TypeVar("T")
 
+
 class _Empty(Generic[T]):
 
     _instance = None
@@ -14,9 +15,7 @@ class _Empty(Generic[T]):
         return cls._instance
 
 
-
 class LazyValue(Generic[T]):
-
     def __init__(self, value: T = _Empty(), init: Optional[Callable[..., T]] = None):
         assert value != _Empty() or init is not None, "One should provide either value or intializer"
         self.value = value
@@ -28,10 +27,11 @@ class LazyValue(Generic[T]):
 
         return self.value
 
+
 RT = TypeVar("RT")
 
-class LazyFutureCaller(Generic[T, RT]):
 
+class LazyFutureCaller(Generic[T, RT]):
     def __init__(self, future: MPFuture[T], callback: Optional[Callable[[T], RT]] = None):
         self._fut = future
         self._cb = callback

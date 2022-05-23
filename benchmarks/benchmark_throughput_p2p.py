@@ -113,7 +113,6 @@ def benchmark_throughput(
         for client in clients:
             client.start()
 
-
         timestamps["launched_clients"] = timestamps["began_launching_server"] = time.perf_counter()
 
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -129,7 +128,6 @@ def benchmark_throughput(
                 max_batch_size=max_batch_size,
             )
         timestamps["created_experts"] = time.perf_counter()
-
 
         server = hivemind.moe.Server(
             dht=server_dht,
@@ -197,6 +195,7 @@ def benchmark_throughput(
     sys.stderr.flush()
 
     assert not benchmarking_failed.is_set()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

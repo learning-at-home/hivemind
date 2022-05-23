@@ -7,7 +7,21 @@ from __future__ import annotations
 import os
 import threading
 import torch
-from typing import Callable, AsyncIterator, Any, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple, Type, TypeVar, Union
+from typing import (
+    Callable,
+    AsyncIterator,
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import grpc
 
@@ -212,6 +226,7 @@ def combine_from_streaming(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.
 
 
 RpcMessage = TypeVar("RpcMessage")
+
 
 async def gather_from_grpc(
     stream: AsyncIterator[RpcMessage],
