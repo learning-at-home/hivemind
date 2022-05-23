@@ -18,7 +18,7 @@ P2PD_VERSION = "v0.3.0-hivemind.8"
 
 P2PD_SOURCE_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz"
 P2PD_BINARY_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/"
-EXECUTABLES = ['p2pd', 'p2p-keygen']
+EXECUTABLES = ["p2pd", "p2p-keygen"]
 
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -73,13 +73,11 @@ def build_p2p_daemon():
 
         for executable in EXECUTABLES:
             result = subprocess.run(
-                ['go', 'build', '-o', os.path.join(here, "hivemind", "hivemind_cli", executable)],
+                ["go", "build", "-o", os.path.join(here, "hivemind", "hivemind_cli", executable)],
                 cwd=os.path.join(tempdir, f"go-libp2p-daemon-{P2PD_VERSION.lstrip('v')}", executable),
             )
             if result.returncode != 0:
-                raise RuntimeError(
-                    f"Failed to build {executable}: exited with status code: {result.returncode}"
-                )
+                raise RuntimeError(f"Failed to build {executable}: exited with status code: {result.returncode}")
 
 
 def download_p2p_daemon():
@@ -87,7 +85,7 @@ def download_p2p_daemon():
         binary_url = os.path.join(P2PD_BINARY_URL, executable)
         binary_path = os.path.join(here, "hivemind", "hivemind_cli", "p2pd", executable)
 
-        print(f'Downloading {binary_url}')
+        print(f"Downloading {binary_url}")
         urllib.request.urlretrieve(binary_url, binary_path)
         os.chmod(binary_path, 0o777)
 
@@ -168,11 +166,7 @@ setup(
         "Topic :: Software Development :: Libraries",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    entry_points={
-        "console_scripts": [
-            "hivemind-server = hivemind.hivemind_cli.run_server:main",
-        ]
-    },
+    entry_points={"console_scripts": ["hivemind-server = hivemind.hivemind_cli.run_server:main",]},
     # What does your project relate to?
     keywords="pytorch, deep learning, machine learning, gpu, distributed computing, volunteer computing, dht",
 )
