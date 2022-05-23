@@ -13,7 +13,6 @@ from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
-
 P2PD_VERSION = "v0.3.0-hivemind.8"
 
 P2PD_SOURCE_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz"
@@ -166,7 +165,11 @@ setup(
         "Topic :: Software Development :: Libraries",
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
-    entry_points={"console_scripts": ["hivemind-server = hivemind.hivemind_cli.run_server:main",]},
+    entry_points={
+        "console_scripts": [
+            "hivemind-server = hivemind.hivemind_cli.run_server:main",
+        ]
+    },
     # What does your project relate to?
     keywords="pytorch, deep learning, machine learning, gpu, distributed computing, volunteer computing, dht",
 )
