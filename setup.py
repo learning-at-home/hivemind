@@ -83,7 +83,7 @@ def build_p2p_daemon():
 def download_p2p_daemon():
     for executable in EXECUTABLES:
         binary_url = os.path.join(P2PD_BINARY_URL, executable)
-        binary_path = os.path.join(here, "hivemind", "hivemind_cli", "p2pd", executable)
+        binary_path = os.path.join(here, "hivemind", "hivemind_cli", executable)
 
         print(f"Downloading {binary_url}")
         urllib.request.urlretrieve(binary_url, binary_path)
