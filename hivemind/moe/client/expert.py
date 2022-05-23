@@ -19,7 +19,7 @@ from hivemind.utils import (
     nested_compare,
     nested_flatten,
     nested_pack,
-    switch_to_uvloop
+    switch_to_uvloop,
 )
 from hivemind.utils.grpc import gather_from_grpc, split_for_streaming
 
