@@ -1,7 +1,8 @@
 import threading
 from functools import partial
+from typing import Dict, List, Optional, Sequence, Tuple, Union
+
 from multiaddr import Multiaddr
-from typing import Union, Dict, List, Optional, Sequence, Tuple
 
 from hivemind.dht import DHT, DHTExpiration, DHTNode, DHTValue
 from hivemind.moe.client.expert import RemoteExpert, _RemoteModuleCall

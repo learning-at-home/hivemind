@@ -1,6 +1,6 @@
 import asyncio
 import multiprocessing as mp
-from typing import AsyncIterator, Dict, Iterable, Union, Tuple, List
+from typing import AsyncIterator, Dict, Iterable, List, Tuple, Union
 
 import torch
 
@@ -11,7 +11,7 @@ from hivemind.moe.server.task_pool import TaskPool
 from hivemind.p2p import P2PContext, ServicerBase
 from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
-from hivemind.utils import MSGPackSerializer, MPFuture, as_aiter, get_logger, nested_flatten
+from hivemind.utils import MPFuture, MSGPackSerializer, as_aiter, get_logger, nested_flatten
 from hivemind.utils.asyncio import switch_to_uvloop
 from hivemind.utils.grpc import gather_from_grpc, split_for_streaming
 from hivemind.utils.tensor_descr import BatchTensorDescriptor

@@ -6,11 +6,10 @@ from __future__ import annotations
 
 import os
 import threading
-import torch
 from typing import (
-    Callable,
-    AsyncIterator,
     Any,
+    AsyncIterator,
+    Callable,
     Dict,
     Iterable,
     Iterator,
@@ -24,6 +23,7 @@ from typing import (
 )
 
 import grpc
+import torch
 
 from hivemind.proto import runtime_pb2
 from hivemind.utils.logging import get_logger

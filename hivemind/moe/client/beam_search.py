@@ -18,7 +18,7 @@ from hivemind.moe.server.expert_uid import (
     is_valid_prefix,
 )
 from hivemind.p2p import PeerInfo
-from hivemind.utils import get_dht_time, get_logger, LazyFutureCaller, LazyValue
+from hivemind.utils import LazyFutureCaller, LazyValue, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 

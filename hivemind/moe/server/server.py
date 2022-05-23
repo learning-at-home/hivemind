@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+import random
 import threading
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-import random
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -25,9 +25,9 @@ from hivemind.moe.server.layers import (
 )
 from hivemind.moe.server.runtime import Runtime
 from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.utils import Endpoint
 from hivemind.utils.logging import get_logger
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
-from hivemind.utils import Endpoint
 
 logger = get_logger(__name__)
 
