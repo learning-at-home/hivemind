@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         python-version: [ 3.7, 3.8, 3.9 ]
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python
@@ -71,7 +71,7 @@ jobs:
   codecov_in_develop_mode:
 
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python

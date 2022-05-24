@@ -3,7 +3,6 @@ import glob
 import hashlib
 import os
 import re
-import shlex
 import subprocess
 import tarfile
 import tempfile
@@ -14,20 +13,25 @@ from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
-P2PD_VERSION = "v0.3.6"
-P2PD_CHECKSUM = "627d0c3b475a29331fdfd1667e828f6d"
-LIBP2P_TAR_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz"
-P2PD_BINARY_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/p2pd"
+P2PD_VERSION = "v0.3.8"
+
+P2PD_SOURCE_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz"
+P2PD_BINARY_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/"
+
+# The value is sha256 of the binary from the release page
+EXECUTABLES = {
+    "p2pd": "785058526d993f699c674dc2f9b66d565a52315a18b79b629998fab3ebd8e20f",
+}
+
 
 here = os.path.abspath(os.path.dirname(__file__))
 
 
-def md5(fname, chunk_size=4096):
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(chunk_size), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
+def sha256(path):
+    if not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
 def proto_compile(output_path):
@@ -64,32 +68,36 @@ def build_p2p_daemon():
 
     with tempfile.TemporaryDirectory() as tempdir:
         dest = os.path.join(tempdir, "libp2p-daemon.tar.gz")
-        urllib.request.urlretrieve(LIBP2P_TAR_URL, dest)
+        urllib.request.urlretrieve(P2PD_SOURCE_URL, dest)
 
         with tarfile.open(dest, "r:gz") as tar:
             tar.extractall(tempdir)
 
-        result = subprocess.run(
-            f'go build -o {shlex.quote(os.path.join(here, "hivemind", "hivemind_cli", "p2pd"))}',
-            cwd=os.path.join(tempdir, f"go-libp2p-daemon-{P2PD_VERSION[1:]}", "p2pd"),
-            shell=True,
-        )
-
-        if result.returncode:
-            raise RuntimeError(
-                "Failed to build or install libp2p-daemon:" f" exited with status code: {result.returncode}"
+        for executable in EXECUTABLES:
+            result = subprocess.run(
+                ["go", "build", "-o", os.path.join(here, "hivemind", "hivemind_cli", executable)],
+                cwd=os.path.join(tempdir, f"go-libp2p-daemon-{P2PD_VERSION.lstrip('v')}", executable),
             )
+            if result.returncode != 0:
+                raise RuntimeError(f"Failed to build {executable}: exited with status code: {result.returncode}")
 
 
 def download_p2p_daemon():
-    install_path = os.path.join(here, "hivemind", "hivemind_cli")
-    binary_path = os.path.join(install_path, "p2pd")
-    if not os.path.exists(binary_path) or md5(binary_path) != P2PD_CHECKSUM:
-        print("Downloading Peer to Peer Daemon")
-        urllib.request.urlretrieve(P2PD_BINARY_URL, binary_path)
-        os.chmod(binary_path, 0o777)
-        if md5(binary_path) != P2PD_CHECKSUM:
-            raise RuntimeError(f"Downloaded p2pd binary from {P2PD_BINARY_URL} does not match with md5 checksum")
+    for executable, expected_hash in EXECUTABLES.items():
+        binary_path = os.path.join(here, "hivemind", "hivemind_cli", executable)
+
+        if sha256(binary_path) != expected_hash:
+            binary_url = os.path.join(P2PD_BINARY_URL, executable)
+            print(f"Downloading {binary_url}")
+
+            urllib.request.urlretrieve(binary_url, binary_path)
+            os.chmod(binary_path, 0o777)
+
+            actual_hash = sha256(binary_path)
+            if actual_hash != expected_hash:
+                raise RuntimeError(
+                    f"The sha256 checksum for {executable} does not match (expected: {expected_hash}, actual: {actual_hash})"
+                )
 
 
 class BuildPy(build_py):
