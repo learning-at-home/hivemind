@@ -2,8 +2,6 @@ import threading
 from functools import partial
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
-from multiaddr import Multiaddr
-
 from hivemind.dht import DHT, DHTExpiration, DHTNode, DHTValue
 from hivemind.moe.client.expert import RemoteExpert, RemoteExpertInfo, RemoteExpertWorker
 from hivemind.moe.server.expert_uid import (
@@ -16,8 +14,8 @@ from hivemind.moe.server.expert_uid import (
     is_valid_uid,
     split_uid,
 )
-from hivemind.p2p import PeerID, PeerInfo
-from hivemind.utils import get_dht_time, LazyFutureCaller, LazyValue
+from hivemind.p2p import PeerID
+from hivemind.utils import get_dht_time, MPFuture
 
 
 class DHTHandlerThread(threading.Thread):
@@ -37,7 +35,7 @@ class DHTHandlerThread(threading.Thread):
 
 def declare_experts(
     dht: DHT, uids: Sequence[ExpertUID], peer_id: PeerID, expiration: DHTExpiration = 300, wait: bool = True
-) -> Dict[ExpertUID, bool]:
+) -> Union[Dict[ExpertUID, bool], MPFuture[Dict[ExpertUID, bool]]]:
     """
     Make experts visible to all DHT peers; update timestamps if declared previously.
 
@@ -77,7 +75,7 @@ async def _declare_experts(
 
 def get_experts(
     dht: DHT, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration] = None, return_future: bool = False
-) -> Union[List[Optional[RemoteExpert]], LazyFutureCaller[Optional[LazyValue[RemoteExpert]], Optional[RemoteExpert]]]:
+) -> Union[List[Optional[RemoteExpert]], MPFuture[List[Optional[RemoteExpert]]]]:
     """
     :param uids: find experts with these ids from across the DHT
     :param expiration_time: if specified, return experts that expire no sooner than this (based on get_dht_time)
