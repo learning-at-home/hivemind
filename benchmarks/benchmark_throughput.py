@@ -3,16 +3,17 @@ import multiprocessing as mp
 import random
 import sys
 import time
+from grpc import server
 
 import torch
 
-from hivemind.moe.client import RemoteExpert
-from hivemind.moe.server import ExpertBackend, Server
-from hivemind.moe.server.layers import name_to_block
+import hivemind
+from hivemind import P2P
+from hivemind.dht import DHT
+from hivemind.moe.client.expert import RemoteExpertWorker
+from hivemind.moe.server import layers
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
-from hivemind.utils.networking import LOCALHOST, get_free_port
-from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
@@ -31,10 +32,24 @@ def print_device_info(device=None):
         logger.info(f"Cached:   {round(torch.cuda.memory_cached(0) / 1024 ** 3, 1)} GB")
 
 
-def client_process(can_start, benchmarking_failed, port, num_experts, batch_size, hid_dim, num_batches, backprop=True):
+def client_process(
+    can_start,
+    benchmarking_failed,
+    server_peer_info,
+    num_experts,
+    batch_size,
+    hid_dim,
+    num_batches,
+    backprop=True,
+) -> None:
     torch.set_num_threads(1)
     can_start.wait()
-    experts = [RemoteExpert(f"expert{i}", endpoint=f"{LOCALHOST}:{port}") for i in range(num_experts)]
+
+    p2p = RemoteExpertWorker.run_coroutine(P2P.create())
+    RemoteExpertWorker.run_coroutine(p2p._client.connect(server_peer_info.peer_id, server_peer_info.addrs))
+    experts = [
+        hivemind.RemoteExpert(f"expert.{i}", server_peer_info=server_peer_info, p2p=p2p) for i in range(num_experts)
+    ]
 
     try:
         dummy_batch = torch.randn(batch_size, hid_dim)
@@ -59,15 +74,13 @@ def benchmark_throughput(
     max_batch_size=None,
     backprop=True,
     device=None,
-    port=None,
 ):
     assert (
         not hasattr(torch.cuda, "is_initialized")
         or not torch.cuda.is_initialized()
         or torch.device(device) == torch.device("cpu")
     )
-    assert expert_cls in name_to_block
-    port = port or get_free_port()
+    assert expert_cls in layers.name_to_block
     max_batch_size = max_batch_size or batch_size * 4
     num_handlers = max(1, num_handlers or num_clients // 2)
     benchmarking_failed = mp.Event()
@@ -75,8 +88,12 @@ def benchmark_throughput(
     timestamps = dict(started=time.perf_counter())
 
     try:
-        # start clients and await server
-        # Note: client processes must be launched BEFORE touching gpu, even torch.cuda.is_available can cause trouble
+        server_dht = DHT(start=True)
+        server_dht_peer_info = hivemind.PeerInfo(
+            peer_id=server_dht.peer_id,
+            addrs=[addr.decapsulate("/p2p/" + addr.get("p2p")) for addr in server_dht.get_visible_maddrs()],
+        )
+
         clients = [
             mp.Process(
                 target=client_process,
@@ -84,52 +101,54 @@ def benchmark_throughput(
                 args=(
                     can_start,
                     benchmarking_failed,
-                    port,
+                    server_dht_peer_info,
                     num_experts,
                     batch_size,
                     hid_dim,
                     num_batches_per_client,
                     backprop,
                 ),
+                daemon=True,
             )
             for i in range(num_clients)
         ]
 
         for client in clients:
-            client.daemon = True
             client.start()
 
         timestamps["launched_clients"] = timestamps["began_launching_server"] = time.perf_counter()
 
-        # start server
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         experts = {}
         for i in range(num_experts):
-            expert = torch.jit.script(name_to_block[expert_cls](hid_dim))
-            experts[f"expert{i}"] = ExpertBackend(
-                name=f"expert{i}",
+            expert = torch.jit.script(layers.name_to_block[expert_cls](hid_dim))
+            experts[f"expert.{i}"] = hivemind.ExpertBackend(
+                name=f"expert.{i}",
                 expert=expert,
                 optimizer=torch.optim.Adam(expert.parameters()),
-                args_schema=(BatchTensorDescriptor(hid_dim),),
-                outputs_schema=BatchTensorDescriptor(hid_dim),
+                args_schema=(hivemind.BatchTensorDescriptor(hid_dim),),
+                outputs_schema=hivemind.BatchTensorDescriptor(hid_dim),
                 max_batch_size=max_batch_size,
             )
         timestamps["created_experts"] = time.perf_counter()
-        server = Server(
-            None,
-            experts,
-            listen_on=f"{LOCALHOST}:{port}",
+
+        server = hivemind.moe.Server(
+            dht=server_dht,
+            expert_backends=experts,
             num_connection_handlers=num_handlers,
             device=device,
         )
         server.start()
         server.ready.wait()
+
         timestamps["server_ready"] = time.perf_counter()
         can_start.set()
 
         for client in clients:
             client.join()
+
         timestamps["clients_finished"] = time.perf_counter()
+
     except BaseException as e:
         benchmarking_failed.set()
         raise e
@@ -229,7 +248,11 @@ if __name__ == "__main__":
         )
     elif args.preset == "minimalistic":
         benchmark_throughput(
-            num_experts=1, num_clients=1, num_handlers=1, num_batches_per_client=args.num_batches_per_client
+            num_experts=1,
+            num_clients=1,
+            num_handlers=1,
+            num_batches_per_client=args.num_batches_per_client,
+            batch_size=1024,
         )
     elif args.preset == "nop":
         benchmark_throughput(expert_cls="nop", backprop=False, num_batches_per_client=args.num_batches_per_client)

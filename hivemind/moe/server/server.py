@@ -42,8 +42,7 @@ class Server(threading.Thread):
      - publishes updates to expert status every :update_period: seconds
      - follows orders from HivemindController - if it exists
 
-    :type dht: DHT or None. Server with dht=None will NOT be visible from DHT,
-     but it will still support accessing experts directly with RemoteExpert(uid=UID, endpoint="IPADDR:PORT").
+    :type dht: DHT.
     :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
     :param listen_on: server's dht address that determines how it can be accessed. Address and (optional) port
     :param num_connection_handlers: maximum number of simultaneous requests. Please note that the default value of 1
@@ -56,7 +55,7 @@ class Server(threading.Thread):
 
     def __init__(
         self,
-        dht: Optional[DHT],
+        dht: DHT,
         expert_backends: Dict[str, ExpertBackend],
         num_connection_handlers: int = 1,
         update_period: int = 30,
@@ -74,7 +73,7 @@ class Server(threading.Thread):
             self.checkpoint_saver = None
         self.runtime = Runtime(self.experts, **kwargs)
 
-        if self.dht and self.experts:
+        if self.experts:
             self.dht_handler_thread = DHTHandlerThread(
                 experts=self.experts,
                 dht=self.dht,
@@ -103,7 +102,6 @@ class Server(threading.Thread):
         min_batch_size=1,
         max_batch_size=4096,
         device=None,
-        no_dht=False,
         initial_peers=(),
         checkpoint_dir: Optional[Path] = None,
         compression=CompressionType.NONE,
@@ -132,7 +130,6 @@ class Server(threading.Thread):
         :param num_total_steps: the total number of steps for LR schedule
         :param clip_grad_norm: maximum gradient norm used for clipping
 
-        :param no_dht: if specified, the server will not be attached to a dht
         :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
 
         :param checkpoint_dir: directory to save and load expert checkpoints
@@ -148,12 +145,9 @@ class Server(threading.Thread):
             add_custom_models_from_file(custom_module_path)
         assert expert_cls in name_to_block
 
-        if no_dht:
-            dht = None
-        else:
-            dht = DHT(initial_peers=initial_peers, start=True)
-            visible_maddrs_str = [str(a) for a in dht.get_visible_maddrs()]
-            logger.info(f"Running DHT node on {visible_maddrs_str}, initial peers = {initial_peers}")
+        dht = DHT(initial_peers=initial_peers, start=True)
+        visible_maddrs_str = [str(a) for a in dht.get_visible_maddrs()]
+        logger.info(f"Running DHT node on {visible_maddrs_str}, initial peers = {initial_peers}")
 
         assert (expert_pattern is None and num_experts is None and expert_uids is not None) or (
             num_experts is not None and expert_uids is None
@@ -234,12 +228,12 @@ class Server(threading.Thread):
             num_parameters = sum(p.numel() for p in backend.expert.parameters() if p.requires_grad)
             logger.info(f"{expert_name}: {backend.expert.__class__.__name__}, {num_parameters} parameters")
 
-        if self.dht:
-            if not self.dht.is_alive():
-                self.dht.run_in_background(await_ready=True)
+        if not self.dht.is_alive():
+            self.dht.run_in_background(await_ready=True)
 
-            if self.experts:
-                self.dht_handler_thread.start()
+        if self.experts:
+            self.dht_handler_thread.start()
+
         if self.checkpoint_saver is not None:
             self.checkpoint_saver.start()
 
@@ -288,7 +282,7 @@ class Server(threading.Thread):
             process.join()
         logger.debug("Connection handlers terminated")
 
-        if self.dht and self.experts:
+        if self.experts:
             self.dht_handler_thread.stop.set()
             self.dht_handler_thread.join()
 
@@ -296,9 +290,8 @@ class Server(threading.Thread):
             self.checkpoint_saver.stop.set()
             self.checkpoint_saver.join()
 
-        if self.dht is not None:
-            self.dht.shutdown()
-            self.dht.join()
+        self.dht.shutdown()
+        self.dht.join()
 
         logger.debug(f"Shutting down runtime")
 
@@ -314,7 +307,7 @@ def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[Endpoint, Li
     try:
         runner.start()
         # once the server is ready, runner will send us
-        # either (False, exception) or (True, (server.listen_on, dht_maddrs))
+        # either (False, exception) or (True, (dht_peer_id, dht_maddrs))
         start_ok, data = pipe.recv()
         if start_ok:
             yield data
@@ -338,8 +331,8 @@ def _server_runner(pipe, *args, **kwargs):
         return
 
     try:
-        dht_maddrs = server.dht.get_visible_maddrs() if server.dht is not None else None
-        pipe.send((True, (server.listen_on, dht_maddrs)))
+        dht_maddrs = server.dht.get_visible_maddrs()
+        pipe.send((True, (server.dht.peer_id, dht_maddrs)))
         pipe.recv()  # wait for shutdown signal
 
     finally:

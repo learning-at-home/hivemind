@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 from multiaddr import Multiaddr
 
 from hivemind.dht import DHT, DHTExpiration, DHTNode, DHTValue
-from hivemind.moe.client.expert import RemoteExpert, _RemoteModuleCall
+from hivemind.moe.client.expert import RemoteExpert, RemoteExpertInfo, RemoteExpertWorker
 from hivemind.moe.server.expert_uid import (
     FLAT_EXPERT,
     UID_DELIMITER,
@@ -85,20 +85,15 @@ def get_experts(
     :returns: a list of [RemoteExpert if found else None]
     """
     assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
-    p2p = _RemoteModuleCall.run_coroutine(dht.replicate_p2p())
     result = dht.run_coroutine(partial(_get_experts, uids=list(uids), expiration_time=expiration_time), return_future)
-
-    def _unwrap_experts(vals: List[Optional[LazyValue[RemoteExpert]]]) -> List[Optional[RemoteExpert]]:
-        return [val.get(p2p=p2p) if val is not None else None for val in vals]
-
     if return_future:
-        return LazyFutureCaller(result, _unwrap_experts)
-    return _unwrap_experts(result)
+        return RemoteExpertWorker.spawn_experts_future(result, dht)
+    return RemoteExpertWorker.spawn_experts(result, dht)
 
 
 async def _get_experts(
     dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration]
-) -> List[Optional[LazyValue[RemoteExpert]]]:
+) -> List[Optional[RemoteExpertInfo]]:
     if expiration_time is None:
         expiration_time = get_dht_time()
     num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
@@ -109,6 +104,5 @@ async def _get_experts(
         elem = found[uid]
         if elem is not None and isinstance(elem.value, tuple):
             peer_id, addrs = elem.value
-            peer_info = PeerInfo(peer_id=PeerID.from_base58(peer_id), addrs=tuple(Multiaddr(a) for a in addrs))
-            experts[i] = LazyValue(init=partial(RemoteExpert, uid=uid, server_peer_info=peer_info))
+            experts[i] = RemoteExpertInfo(uid, peer_id, addrs)
     return experts

@@ -55,6 +55,7 @@ class DHT(mp.Process):
         **kwargs,
     ):
         self._parent_pid = os.getpid()
+        self._my_pid = os.getpid()
         super().__init__()
 
         if not (
@@ -310,7 +311,8 @@ class DHT(mp.Process):
         The replica uses the same P2P daemon as the DHT and only works while DHT is alive.
         """
 
-        if self._p2p_replica is None:
+        if self._p2p_replica is None or self._my_pid != os.getpid():
+            self._my_pid = os.getpid()
             daemon_listen_maddr = self.run_coroutine(DHT._get_p2p_daemon_listen_maddr)
             self._p2p_replica = await P2P.replicate(daemon_listen_maddr)
         return self._p2p_replica
