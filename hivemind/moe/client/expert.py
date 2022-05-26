@@ -1,7 +1,6 @@
 import os
 from concurrent.futures import Future
 from dataclasses import dataclass
-from lib2to3.pgen2.token import OP
 from queue import Queue
 from threading import Thread
 from typing import Any, Awaitable, Dict, List, Optional, Sequence, Tuple
@@ -136,17 +135,7 @@ class RemoteExpertWorker:
         return result
 
     @classmethod
-    def spawn_experts_future(
-        cls, infos: MPFuture[Sequence[Optional[RemoteExpertInfo]]], dht: DHT
-    ) -> MPFuture[List[Optional[RemoteExpert]]]:
-        async def _unpack():
-            return cls.spawn_experts(await infos, dht)
-
-        return cls.run_coroutine(_unpack, True)
-
-    @classmethod
-    def spawn_experts(cls, infos: Sequence[Optional[RemoteExpertInfo]], dht: DHT) -> List[Optional[RemoteExpert]]:
-        p2p = cls.run_coroutine(dht.replicate_p2p())
+    def _spawn_experts(cls, infos: Sequence[Optional[RemoteExpertInfo]], p2p: P2P) -> List[Optional[RemoteExpert]]:
         experts: List[Optional[RemoteExpert]] = []
         for i in infos:
             if i is not None:
@@ -155,6 +144,37 @@ class RemoteExpertWorker:
             else:
                 experts.append(None)
         return experts
+
+    @classmethod
+    def spawn_experts(cls, infos: Sequence[Optional[RemoteExpertInfo]], dht: DHT) -> List[Optional[RemoteExpert]]:
+        p2p = cls.run_coroutine(dht.replicate_p2p())
+        return cls._spawn_experts(infos, p2p)
+
+    @classmethod
+    def spawn_experts_future(
+        cls, infos: MPFuture[Sequence[Optional[RemoteExpertInfo]]], dht: DHT
+    ) -> MPFuture[List[Optional[RemoteExpert]]]:
+        async def _unpack():
+            p2p = cls.run_coroutine(dht.replicate_p2p(), True)
+            return cls.spawn_experts(await infos, await p2p)
+
+        return cls.run_coroutine(_unpack, True)
+
+    @classmethod
+    def spawn_experts_bulk(
+        cls, infos: Sequence[Sequence[Optional[RemoteExpertInfo]]], dht: DHT
+    ) -> List[List[Optional[RemoteExpert]]]:
+        return [cls.spawn_experts(exps, dht) for exps in infos]
+
+    @classmethod
+    def spawn_experts_bulk_future(
+        cls, infos: MPFuture[Sequence[Sequence[Optional[RemoteExpertInfo]]]], dht: DHT
+    ) -> MPFuture[List[List[Optional[RemoteExpert]]]]:
+        async def _unpack():
+            return cls.spawn_experts_bulk(await infos, dht)
+
+        return cls.run_coroutine(_unpack, True)
+
 
 
 class _RemoteModuleCall(torch.autograd.Function):
