@@ -130,6 +130,15 @@ monitors on different servers and list all of them as `--initial_peers`. The sys
 as at least one externally accessible participant is available. For short- to mid-term experiments you can host the
 monitor on a [free-tier VM](https://www.quora.com/Are-there-any-free-online-virtual-machines).
 
+By default, the training monitor changes its address on restart, so you may launch two monitors on the same machine.
+If you'd like to fix the monitor's address (e.g., before sending it to your collaborators),
+you need to **(a)** make it listen a specific TCP/UDP port and **(b)** provide a path for storing the identity file
+(which allows [libp2p](https://libp2p.io/) to reuse the same peer ID after restart). You may do that like this:
+
+```bash
+./run_training_monitor.py --wandb_project YOUR_WANDB_PROJECT --host_maddrs /ip4/0.0.0.0/tcp/31337 --identity_path ./identity.key
+```
+
 ### Tuning for hardware/network
 
 The optimal training parameters for each peer depend on its GPU and internet connection. If a peer cannot accept
