@@ -1,6 +1,6 @@
-//Originally taken from: https://github.com/mhchia/py-libp2p-daemon-bindings
-//Licence: MIT
-//Author: Kevin Mai-Husan Chia
+// Originally taken from: https://github.com/mhchia/py-libp2p-daemon-bindings
+// Licence: MIT
+// Author: Kevin Mai-Husan Chia
 
 syntax = "proto2";
 
@@ -15,7 +15,7 @@ message Request {
     DHT                      = 4;
     LIST_PEERS               = 5;
     CONNMANAGER              = 6;
-    DISCONNECT               = 7;      
+    DISCONNECT               = 7;
     PUBSUB                   = 8;
 
     PERSISTENT_CONN_UPGRADE  = 9;
