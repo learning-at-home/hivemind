@@ -1,6 +1,8 @@
 import asyncio
 import multiprocessing as mp
+import os
 import subprocess
+import tempfile
 from contextlib import closing
 from functools import partial
 from typing import List
@@ -43,6 +45,29 @@ async def test_startup_error_message():
 
     with pytest.raises(P2PDaemonError, match=r"Daemon failed to start in .+ seconds"):
         await P2P.create(startup_timeout=0.01)  # Test that startup_timeout works
+
+
+@pytest.mark.asyncio
+async def test_identity():
+    with tempfile.TemporaryDirectory() as tempdir:
+        id1_path = os.path.join(tempdir, "id1")
+        id2_path = os.path.join(tempdir, "id2")
+        p2ps = await asyncio.gather(*[P2P.create(identity_path=path)
+                                      for path in [None, None, id1_path, id2_path]])
+
+        # We create the second daemon with id2 separately
+        # to avoid a race condition while saving a newly generated identity
+        p2ps.append(await P2P.create(identity_path=id2_path))
+
+        # Using the same identity (if any) should lead to the same peer ID
+        assert p2ps[-2].peer_id == p2ps[-1].peer_id
+
+        # The rest of peer IDs should be different
+        peer_ids = {instance.peer_id for instance in p2ps}
+        assert len(peer_ids) == 4
+
+        for instance in p2ps:
+            await instance.shutdown()
 
 
 @pytest.mark.parametrize(
