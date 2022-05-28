@@ -68,6 +68,9 @@ async def test_identity():
         for instance in p2ps:
             await instance.shutdown()
 
+    with pytest.raises(FileNotFoundError, match=r"The directory.+does not exist"):
+        P2P.generate_identity(id1_path)
+
 
 @pytest.mark.parametrize(
     "host_maddrs",

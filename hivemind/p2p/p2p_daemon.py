@@ -116,7 +116,7 @@ class P2P:
         :param force_reachability: Force reachability mode (public/private)
         :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
         :param identity_path: Path to a private key file. If defined, makes the peer ID deterministic.
-                              If the file does not exist, generates a new private key.
+                              If the file does not exist yet, writes a new private key to this file.
         :param idle_timeout: kill daemon if client has been idle for a given number of
                              seconds before opening persistent streams
         :param nat_port_map: Enables NAT port mapping
@@ -222,8 +222,13 @@ class P2P:
         private_key = RSAPrivateKey()
         protobuf = crypto_pb2.PrivateKey(key_type=crypto_pb2.KeyType.RSA, data=private_key.to_bytes())
 
-        with open(identity_path, "wb") as f:
-            f.write(protobuf.SerializeToString())
+        try:
+            with open(identity_path, "wb") as f:
+                f.write(protobuf.SerializeToString())
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"The directory `{os.path.dirname(identity_path)}` for saving the identity does not exist"
+            )
         os.chmod(identity_path, 0o400)
 
     @classmethod
