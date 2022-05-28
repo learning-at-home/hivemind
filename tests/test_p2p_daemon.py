@@ -52,8 +52,7 @@ async def test_identity():
     with tempfile.TemporaryDirectory() as tempdir:
         id1_path = os.path.join(tempdir, "id1")
         id2_path = os.path.join(tempdir, "id2")
-        p2ps = await asyncio.gather(*[P2P.create(identity_path=path)
-                                      for path in [None, None, id1_path, id2_path]])
+        p2ps = await asyncio.gather(*[P2P.create(identity_path=path) for path in [None, None, id1_path, id2_path]])
 
         # We create the second daemon with id2 separately
         # to avoid a race condition while saving a newly generated identity
