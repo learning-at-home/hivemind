@@ -385,7 +385,6 @@ class MoEBeamSearcher:
             return_future,
         )
 
-
         if return_future:
             return RemoteExpertWorker.spawn_experts_bulk_future(result, self.dht)
         return RemoteExpertWorker.spawn_experts_bulk(result, self.dht)

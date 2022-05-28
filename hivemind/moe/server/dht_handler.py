@@ -15,7 +15,7 @@ from hivemind.moe.server.expert_uid import (
     split_uid,
 )
 from hivemind.p2p import PeerID
-from hivemind.utils import get_dht_time, MPFuture
+from hivemind.utils import MPFuture, get_dht_time
 
 
 class DHTHandlerThread(threading.Thread):
