@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import secrets
+import warnings
 from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
@@ -17,8 +18,10 @@ import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.control import DEFAULT_MAX_MSG_SIZE, P2PDaemonError, P2PHandlerError
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
+from hivemind.proto import crypto_pb2
 from hivemind.proto.p2pd_pb2 import RPCError
 from hivemind.utils.asyncio import as_aiter, asingle
+from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.logging import get_logger, golog_level_to_python, loglevel, python_level_to_golog
 
 logger = get_logger(__name__)
@@ -89,16 +92,16 @@ class P2P:
         identity_path: Optional[str] = None,
         idle_timeout: float = 30,
         nat_port_map: bool = True,
-        quic: bool = False,
         relay_hop_limit: int = 0,
         startup_timeout: float = 15,
         tls: bool = True,
         use_auto_relay: bool = False,
         use_ipfs: bool = False,
         use_relay: bool = True,
-        use_relay_hop: bool = False,
-        use_relay_discovery: bool = False,
         persistent_conn_max_msg_size: int = DEFAULT_MAX_MSG_SIZE,
+        quic: Optional[bool] = None,
+        use_relay_hop: Optional[bool] = None,
+        use_relay_discovery: Optional[bool] = None,
     ) -> "P2P":
         """
         Start a new p2pd process and connect to it.
@@ -112,26 +115,34 @@ class P2P:
                          Details: https://pkg.go.dev/github.com/libp2p/go-libp2p-kad-dht#ModeOpt
         :param force_reachability: Force reachability mode (public/private)
         :param host_maddrs: Multiaddrs to listen for external connections from other p2p instances
-        :param identity_path: Path to a pre-generated private key file. If defined, makes the peer ID deterministic.
-                              May be generated using ``./p2p-keygen`` from ``go-libp2p-daemon``.
+        :param identity_path: Path to a private key file. If defined, makes the peer ID deterministic.
+                              If the file does not exist yet, writes a new private key to this file.
         :param idle_timeout: kill daemon if client has been idle for a given number of
                              seconds before opening persistent streams
         :param nat_port_map: Enables NAT port mapping
-        :param quic: Enables the QUIC transport
         :param relay_hop_limit: sets the hop limit for hop relays
         :param startup_timeout: raise a P2PDaemonError if the daemon does not start in ``startup_timeout`` seconds
         :param tls: Enables TLS1.3 channel security protocol
         :param use_auto_relay: enables autorelay
         :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
         :param use_relay: enables circuit relay
-        :param use_relay_hop: enables hop for relay
-        :param use_relay_discovery: enables passive discovery for relay
+        :param quic: Deprecated, has no effect since libp2p 0.17.0
+        :param use_relay_hop: Deprecated, has no effect since libp2p 0.17.0
+        :param use_relay_discovery: Deprecated, has no effect since libp2p 0.17.0
         :return: a wrapper for the p2p daemon
         """
 
         assert not (
             initial_peers and use_ipfs
         ), "User-defined initial_peers and use_ipfs=True are incompatible, please choose one option"
+
+        if not all(arg is None for arg in [quic, use_relay_hop, use_relay_discovery]):
+            warnings.warn(
+                "Parameters `quic`, `use_relay_hop`, and `use_relay_discovery` of hivemind.P2P "
+                "have no effect since libp2p 0.17.0 and will be removed in hivemind 1.2.0+",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         self = cls()
         with path(cli, P2PD_FILENAME) as p:
@@ -147,7 +158,7 @@ class P2P:
                     raise ValueError("Please specify an explicit port in announce_maddrs: port 0 is not supported")
 
         need_bootstrap = bool(initial_peers) or use_ipfs
-        process_kwargs = cls.DHT_MODE_MAPPING.get(dht_mode, {"dht": 0})
+        process_kwargs = cls.DHT_MODE_MAPPING[dht_mode].copy()
         process_kwargs.update(cls.FORCE_REACHABILITY_MAPPING.get(force_reachability, {}))
         for param, value in [
             ("bootstrapPeers", initial_peers),
@@ -156,7 +167,11 @@ class P2P:
         ]:
             if value:
                 process_kwargs[param] = self._maddrs_to_str(value)
+
         if identity_path is not None:
+            if not os.path.isfile(identity_path):
+                logger.info(f"Generating new identity (libp2p private key) in `{identity_path}`")
+                self.generate_identity(identity_path)
             process_kwargs["id"] = identity_path
 
         proc_args = self._make_process_args(
@@ -168,10 +183,7 @@ class P2P:
             idleTimeout=f"{idle_timeout}s",
             listen=self._daemon_listen_maddr,
             natPortMap=nat_port_map,
-            quic=quic,
             relay=use_relay,
-            relayDiscovery=use_relay_discovery,
-            relayHop=use_relay_hop,
             relayHopLimit=relay_hop_limit,
             tls=tls,
             persistentConnMaxMsgSize=persistent_conn_max_msg_size,
@@ -204,6 +216,20 @@ class P2P:
 
         await self._ping_daemon()
         return self
+
+    @staticmethod
+    def generate_identity(identity_path: str) -> None:
+        private_key = RSAPrivateKey()
+        protobuf = crypto_pb2.PrivateKey(key_type=crypto_pb2.KeyType.RSA, data=private_key.to_bytes())
+
+        try:
+            with open(identity_path, "wb") as f:
+                f.write(protobuf.SerializeToString())
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"The directory `{os.path.dirname(identity_path)}` for saving the identity does not exist"
+            )
+        os.chmod(identity_path, 0o400)
 
     @classmethod
     async def replicate(cls, daemon_listen_maddr: Multiaddr) -> "P2P":

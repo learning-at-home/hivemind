@@ -60,19 +60,22 @@ class RSAPrivateKey(PrivateKey):
     def get_public_key(self) -> RSAPublicKey:
         return RSAPublicKey(self._private_key.public_key())
 
+    def to_bytes(self) -> bytes:
+        return self._private_key.private_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+
     def __getstate__(self):
         state = self.__dict__.copy()
         # Serializes the private key to make the class instances picklable
-        state["_private_key"] = self._private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.OpenSSH,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
+        state["_private_key"] = self.to_bytes()
         return state
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self._private_key = serialization.load_ssh_private_key(self._private_key, password=None)
+        self._private_key = serialization.load_der_private_key(self._private_key, password=None)
 
 
 class RSAPublicKey(PublicKey):

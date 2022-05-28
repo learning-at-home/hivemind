@@ -38,7 +38,7 @@ class BaseTrainingArguments:
         default=None,
         metadata={
             "help": "Path to a pre-generated private key file. If defined, makes the peer ID deterministic. "
-            "May be generated using ``./p2p-keygen`` from ``go-libp2p-daemon``."
+            "If the file does not exist yet, writes a new private key to this file."
         },
     )
 
