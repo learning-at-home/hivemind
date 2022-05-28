@@ -109,6 +109,7 @@ class Server(threading.Thread):
         custom_module_path=None,
         *,
         start: bool,
+        **kwargs,
     ) -> Server:
         """
         Instantiate a server with several identical experts. See argparse comments below for details
@@ -140,12 +141,13 @@ class Server(threading.Thread):
 
         :param start: if True, starts server right away and returns when server is ready for requests
         :param stats_report_interval: interval between two reports of batch processing performance statistics
+        :param kwargs: any other params will be forwarded to DHT upon creation
         """
         if custom_module_path is not None:
             add_custom_models_from_file(custom_module_path)
         assert expert_cls in name_to_block
 
-        dht = DHT(initial_peers=initial_peers, start=True)
+        dht = DHT(initial_peers=initial_peers, start=True, **kwargs)
         visible_maddrs_str = [str(a) for a in dht.get_visible_maddrs()]
         logger.info(f"Running DHT node on {visible_maddrs_str}, initial peers = {initial_peers}")
 

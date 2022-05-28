@@ -6,13 +6,13 @@ import time
 
 import torch
 
-import hivemind
-from hivemind import P2P
 from hivemind.dht import DHT
-from hivemind.moe.client.expert import RemoteExpertWorker
-from hivemind.moe.server import layers
+from hivemind.moe.client.expert import RemoteExpert, RemoteExpertWorker
+from hivemind.moe.server import ExpertBackend, Server, layers
+from hivemind.p2p import P2P, PeerInfo
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
+from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
@@ -46,13 +46,11 @@ def client_process(
 
     p2p = RemoteExpertWorker.run_coroutine(P2P.create())
     RemoteExpertWorker.run_coroutine(p2p._client.connect(server_peer_info.peer_id, server_peer_info.addrs))
-    experts = [
-        hivemind.RemoteExpert(f"expert.{i}", server_peer_info=server_peer_info, p2p=p2p) for i in range(num_experts)
-    ]
+    experts = [RemoteExpert(f"expert.{i}", server_peer_info=server_peer_info, p2p=p2p) for i in range(num_experts)]
 
     try:
         dummy_batch = torch.randn(batch_size, hid_dim)
-        for batch_i in range(num_batches):
+        for _ in range(num_batches):
             expert = random.choice(experts)
             out = expert(dummy_batch)
             if backprop:
@@ -88,7 +86,7 @@ def benchmark_throughput(
 
     try:
         server_dht = DHT(start=True)
-        server_dht_peer_info = hivemind.PeerInfo(
+        server_dht_peer_info = PeerInfo(
             peer_id=server_dht.peer_id,
             addrs=[addr.decapsulate("/p2p/" + addr.get("p2p")) for addr in server_dht.get_visible_maddrs()],
         )
@@ -121,17 +119,17 @@ def benchmark_throughput(
         experts = {}
         for i in range(num_experts):
             expert = torch.jit.script(layers.name_to_block[expert_cls](hid_dim))
-            experts[f"expert.{i}"] = hivemind.ExpertBackend(
+            experts[f"expert.{i}"] = ExpertBackend(
                 name=f"expert.{i}",
                 expert=expert,
                 optimizer=torch.optim.Adam(expert.parameters()),
-                args_schema=(hivemind.BatchTensorDescriptor(hid_dim),),
-                outputs_schema=hivemind.BatchTensorDescriptor(hid_dim),
+                args_schema=(BatchTensorDescriptor(hid_dim),),
+                outputs_schema=BatchTensorDescriptor(hid_dim),
                 max_batch_size=max_batch_size,
             )
         timestamps["created_experts"] = time.perf_counter()
 
-        server = hivemind.moe.Server(
+        server = Server(
             dht=server_dht,
             expert_backends=experts,
             num_connection_handlers=num_handlers,
@@ -251,7 +249,6 @@ if __name__ == "__main__":
             num_clients=1,
             num_handlers=1,
             num_batches_per_client=args.num_batches_per_client,
-            batch_size=1024,
         )
     elif args.preset == "nop":
         benchmark_throughput(expert_cls="nop", backprop=False, num_batches_per_client=args.num_batches_per_client)
