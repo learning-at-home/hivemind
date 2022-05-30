@@ -230,7 +230,7 @@ class _RemoteCallMany(torch.autograd.Function):
                     serialize_torch_tensor(tensor, proto.compression)
                     for tensor, proto in zip(flat_inputs_per_sample[i], nested_flatten(info["forward_schema"]))
                 ]
-                stub: runtime_grpc.ConnectionHandlerStub = _get_expert_stub(expert.endpoint)
+                stub: runtime_grpc.ConnectionHandlerStub = _get_expert_stub(expert.p2p, expert.server_peer_info)
                 new_task = stub.forward.future(runtime_pb2.ExpertRequest(uid=expert.uid, tensors=input_tensors))
                 pending_tasks[new_task] = (i, j)
 

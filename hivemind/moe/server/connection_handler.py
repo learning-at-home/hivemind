@@ -13,7 +13,7 @@ from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
 from hivemind.utils import MPFuture, MSGPackSerializer, as_aiter, get_logger, nested_flatten
 from hivemind.utils.asyncio import switch_to_uvloop
-from hivemind.utils.grpc import gather_from_grpc, split_for_streaming
+from hivemind.utils.grpc import gather_from_rpc, split_for_streaming
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 logger = get_logger(__name__)
@@ -78,7 +78,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
     ) -> Tuple[str, List[torch.Tensor]]:
         unpacker = self._RequestUnpacker()
-        inputs = await gather_from_grpc(requests, unpacker, deserialize_torch_tensor)
+        inputs = await gather_from_rpc(requests, unpacker, deserialize_torch_tensor)
         return unpacker.uid, inputs
 
     async def _process_inputs(
@@ -99,7 +99,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             tensors=await self._process_inputs(inputs, expert.forward_pool, expert.outputs_schema)
         )
 
-    async def rpc_forward_partial(
+    async def rpc_forward_stream(
         self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
     ) -> AsyncIterator[runtime_pb2.ExpertRequest]:
         uid, inputs = await self._gather_inputs(requests, context)
@@ -111,11 +111,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         ]
 
         async for part in as_aiter(*output_split):
-            yield runtime_pb2.ExpertResponse(
-                tensors=[
-                    part,
-                ],
-            )
+            yield runtime_pb2.ExpertResponse(tensors=[part])
 
     async def rpc_backward(
         self, request: runtime_pb2.ExpertRequest, context: P2PContext
@@ -126,7 +122,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             tensors=await self._process_inputs(inputs_and_grads, expert.backward_pool, expert.grad_inputs_schema)
         )
 
-    async def rpc_backward_partial(
+    async def rpc_backward_stream(
         self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
     ) -> AsyncIterator[runtime_pb2.ExpertResponse]:
         uid, inputs_and_grads = await self._gather_inputs(requests, context)
@@ -138,8 +134,4 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         ]
 
         async for part in as_aiter(*output_split):
-            yield runtime_pb2.ExpertResponse(
-                tensors=[
-                    part,
-                ]
-            )
+            yield runtime_pb2.ExpertResponse(tensors=[part])

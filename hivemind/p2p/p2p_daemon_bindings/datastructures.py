@@ -5,14 +5,13 @@ Author: Kevin Mai-Husan Chia
 """
 
 import hashlib
-from typing import Any, Sequence, Union
+from typing import Any, Sequence, Tuple, Union
 
 import base58
 import multihash
 from multiaddr import Multiaddr, protocols
 
 from hivemind.proto import p2pd_pb2
-from hivemind.utils import Endpoint
 
 # NOTE: On inlining...
 # See: https://github.com/libp2p/specs/issues/138
@@ -130,9 +129,9 @@ class PeerInfo:
         return PeerInfo(peer_id, addrs)
 
     @classmethod
-    def from_endpoint(cls, endpoint: Endpoint) -> "PeerInfo":
-        peer_id = PeerID.from_base58(endpoint[0])
-        addrs = [Multiaddr(a) for a in endpoint[1]]
+    def from_tuple(cls, value: Tuple[str, Sequence[str]]) -> "PeerInfo":
+        peer_id = PeerID.from_base58(value[0])
+        addrs = [Multiaddr(addr) for addr in value[1]]
         return PeerInfo(peer_id, addrs)
 
     def __str__(self):

@@ -7,7 +7,7 @@ import time
 import torch
 
 from hivemind.dht import DHT
-from hivemind.moe.client.expert import RemoteExpert, RemoteExpertWorker
+from hivemind.moe.client.expert import RemoteExpert, RemoteExpertInfo, RemoteExpertWorker
 from hivemind.moe.server import ExpertBackend, Server, layers
 from hivemind.p2p import P2P, PeerInfo
 from hivemind.utils.limits import increase_file_limit
@@ -34,7 +34,8 @@ def print_device_info(device=None):
 def client_process(
     can_start,
     benchmarking_failed,
-    server_peer_info,
+    server_maddrs,
+    server_peer_id,
     num_experts,
     batch_size,
     hid_dim,
@@ -44,9 +45,13 @@ def client_process(
     torch.set_num_threads(1)
     can_start.wait()
 
-    p2p = RemoteExpertWorker.run_coroutine(P2P.create())
-    RemoteExpertWorker.run_coroutine(p2p._client.connect(server_peer_info.peer_id, server_peer_info.addrs))
-    experts = [RemoteExpert(f"expert.{i}", server_peer_info=server_peer_info, p2p=p2p) for i in range(num_experts)]
+    p2p = RemoteExpertWorker.run_coroutine(P2P.create(initial_peers=server_maddrs))
+    experts = [
+        RemoteExpert(
+            expert_info=RemoteExpertInfo(uid=f"expert.{i}", peer_info=PeerInfo(server_peer_id, server_maddrs)), p2p=p2p
+        )
+        for i in range(num_experts)
+    ]
 
     try:
         dummy_batch = torch.randn(batch_size, hid_dim)
@@ -86,11 +91,6 @@ def benchmark_throughput(
 
     try:
         server_dht = DHT(start=True)
-        server_dht_peer_info = PeerInfo(
-            peer_id=server_dht.peer_id,
-            addrs=[addr.decapsulate("/p2p/" + addr.get("p2p")) for addr in server_dht.get_visible_maddrs()],
-        )
-
         clients = [
             mp.Process(
                 target=client_process,
@@ -98,7 +98,8 @@ def benchmark_throughput(
                 args=(
                     can_start,
                     benchmarking_failed,
-                    server_dht_peer_info,
+                    server_dht.get_visible_maddrs(),
+                    server_dht.peer_id,
                     num_experts,
                     batch_size,
                     hid_dim,

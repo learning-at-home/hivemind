@@ -6,11 +6,11 @@ import numpy as np
 import pytest
 
 import hivemind
-from hivemind import LOCALHOST
 from hivemind.dht import DHTNode
 from hivemind.moe.client.beam_search import MoEBeamSearcher
 from hivemind.moe.server import declare_experts, get_experts
 from hivemind.moe.server.expert_uid import UidEndpoint, is_valid_prefix, is_valid_uid, split_uid
+from hivemind.p2p import PeerInfo
 
 
 @pytest.mark.forked
@@ -106,12 +106,11 @@ def test_dht_single_node():
     successors = beam_search.get_active_successors(["e.1.2.", "e.2.", "e.4.5."])
     assert len(successors["e.1.2."]) == 2
 
-    addrs = tuple(str(a.decapsulate("/p2p/" + a.get("p2p"))) for a in node.get_visible_maddrs())
-    endpoint = (node.peer_id.to_base58(), addrs)
+    peer_info = PeerInfo(node.peer_id, [a.decapsulate("/p2p/" + a.get("p2p")) for a in node.get_visible_maddrs()])
 
-    assert successors["e.1.2."][3] == UidEndpoint("e.1.2.3", endpoint)
-    assert successors["e.1.2."][5] == UidEndpoint("e.1.2.5", endpoint)
-    assert len(successors["e.2."]) == 1 and successors["e.2."][0] == UidEndpoint("e.2.0", endpoint)
+    assert successors["e.1.2."][3] == UidEndpoint("e.1.2.3", peer_info)
+    assert successors["e.1.2."][5] == UidEndpoint("e.1.2.5", peer_info)
+    assert len(successors["e.2."]) == 1 and successors["e.2."][0] == UidEndpoint("e.2.0", peer_info)
     assert successors["e.4.5."] == {}
 
     initial_beam = beam_search.get_initial_beam((3, 2, 1, 0, -1, -2, -3), beam_size=3)

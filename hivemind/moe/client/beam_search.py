@@ -17,6 +17,7 @@ from hivemind.moe.server.expert_uid import (
     UidEndpoint,
     is_valid_prefix,
 )
+from hivemind.p2p import PeerInfo
 from hivemind.utils import get_dht_time, get_logger
 from hivemind.utils.mpfuture import MPFuture
 
@@ -146,7 +147,7 @@ class MoEBeamSearcher:
                 maybe_prefix_data = await pending_task
                 if maybe_prefix_data is not None and isinstance(maybe_prefix_data.value, dict):
                     successors = {
-                        coord: UidEndpoint(*match.value)
+                        coord: UidEndpoint(match.value[0], PeerInfo.from_tuple(match.value[1]))
                         for coord, match in maybe_prefix_data.value.items()
                         if isinstance(coord, Coordinate)
                         and isinstance(getattr(match, "value", None), list)
@@ -213,7 +214,7 @@ class MoEBeamSearcher:
         for prefix, found in dht_responses.items():
             if found and isinstance(found.value, dict):
                 successors[prefix] = {
-                    coord: UidEndpoint(*match.value)
+                    coord: UidEndpoint(match.value[0], PeerInfo.from_tuple(match.value[1]))
                     for coord, match in found.value.items()
                     if isinstance(coord, Coordinate)
                     and 0 <= coord < grid_size
@@ -329,7 +330,7 @@ class MoEBeamSearcher:
                 unique_experts.add(uid_endpoint.uid)
 
         best_experts = [
-            RemoteExpertInfo(uid_endpoint.uid, *uid_endpoint.endpoint)
+            RemoteExpertInfo(uid_endpoint.uid, uid_endpoint.peer_info)
             for _, uid_endpoint in sorted(best_experts_heap, reverse=True)
         ]
         return best_experts

@@ -14,7 +14,7 @@ from hivemind.moe.server.expert_uid import (
     is_valid_uid,
     split_uid,
 )
-from hivemind.p2p import PeerID
+from hivemind.p2p import PeerID, PeerInfo
 from hivemind.utils import MPFuture, get_dht_time
 
 
@@ -101,6 +101,5 @@ async def _get_experts(
     for i, uid in enumerate(uids):
         elem = found[uid]
         if elem is not None and isinstance(elem.value, tuple):
-            peer_id, addrs = elem.value
-            experts[i] = RemoteExpertInfo(uid, peer_id, addrs)
+            experts[i] = RemoteExpertInfo(uid, PeerInfo.from_tuple(elem.value))
     return experts

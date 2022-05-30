@@ -24,8 +24,8 @@ from hivemind.moe.server.layers import (
     schedule_name_to_scheduler,
 )
 from hivemind.moe.server.runtime import Runtime
+from hivemind.proto.p2pd_pb2 import PeerInfo
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils import Endpoint
 from hivemind.utils.logging import get_logger
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
@@ -302,7 +302,7 @@ class Server(threading.Thread):
 
 
 @contextmanager
-def background_server(*args, shutdown_timeout=5, **kwargs) -> Tuple[Endpoint, List[Multiaddr]]:
+def background_server(*args, shutdown_timeout=5, **kwargs) -> PeerInfo:
     """A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit"""
     pipe, runners_pipe = mp.Pipe(duplex=True)
     runner = mp.Process(target=_server_runner, args=(runners_pipe, *args), kwargs=kwargs)
@@ -334,7 +334,7 @@ def _server_runner(pipe, *args, **kwargs):
 
     try:
         dht_maddrs = server.dht.get_visible_maddrs()
-        pipe.send((True, (server.dht.peer_id, dht_maddrs)))
+        pipe.send((True, PeerInfo(server.dht.peer_id, dht_maddrs)))
         pipe.recv()  # wait for shutdown signal
 
     finally:
