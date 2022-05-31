@@ -102,7 +102,7 @@ class TrainingStateAverager(DecentralizedAverager):
         if reuse_tensors and delta_rule_averaging:
             raise ValueError("reuse_tensors and delta_rule_averaging are mutually exclusive")
 
-        param_groups, main_parameters, parameter_names = self._check_params(optimizer, params, parameter_names)
+        param_groups, main_parameters, parameter_names = self.check_params(optimizer, params, parameter_names)
 
         self.status_loglevel = status_loglevel
         self.offload_optimizer, self.custom_gradients = offload_optimizer, custom_gradients
@@ -131,10 +131,10 @@ class TrainingStateAverager(DecentralizedAverager):
         )
 
     @staticmethod
-    def _check_params(
+    def check_params(
         optimizer: Union[TorchOptimizer, OptimizerFactory],
-        param_groups: Optional[Union[Parameters, ParamGroups]],
-        parameter_names: Optional[Sequence[str]],
+        param_groups: Optional[Union[Parameters, ParamGroups]] = None,
+        parameter_names: Optional[Sequence[str]] = None,
     ) -> Tuple[ParamGroups, Sequence[torch.Tensor], Sequence[str]]:
         """Get and verify parameters, groups and names"""
         if param_groups is None:
