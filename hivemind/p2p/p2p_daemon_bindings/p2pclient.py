@@ -110,6 +110,7 @@ class Client:
         Register a stream handler
         :param proto: protocols that handler serves
         :param handler_cb: handler callback
+        :param balanced: flag if stream handler should be balanced on p2pd side. Default: False.
         :return:
         """
         await self.control.stream_handler(proto=proto, handler_cb=handler_cb, balanced=balanced)

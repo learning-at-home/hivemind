@@ -224,12 +224,12 @@ def combine_from_streaming(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.
     return serialized_tensor
 
 
-RpcMessage = TypeVar("RpcMessage")
+StreamMessage = TypeVar("StreamMessage")
 
 
-async def gather_from_rpc(
-    stream: AsyncIterator[RpcMessage],
-    key: Callable[[RpcMessage], Iterable[runtime_pb2.Tensor]],
+async def gather_from_streaming(
+    stream: AsyncIterator[StreamMessage],
+    key: Callable[[StreamMessage], Iterable[runtime_pb2.Tensor]],
     deserializer: Callable[[runtime_pb2.Tensor], torch.Tensor],
 ) -> List[torch.Tensor]:
     tensors = []

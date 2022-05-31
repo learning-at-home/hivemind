@@ -24,7 +24,7 @@ from hivemind.utils import (
     nested_pack,
     switch_to_uvloop,
 )
-from hivemind.utils.grpc import gather_from_rpc, split_for_streaming
+from hivemind.utils.grpc import gather_from_streaming, split_for_streaming
 from hivemind.utils.mpfuture import MPFuture
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
@@ -180,12 +180,12 @@ async def _backward_stream(uid: str, serialized_tensors: Iterable[runtime_pb2.Te
 
     grad_inputs = await stub.rpc_backward_stream(
         amap_in_executor(
-            lambda t: runtime_pb2.ExpertRequest(uid=uid, tensors=[t]),
+            lambda tensor: runtime_pb2.ExpertRequest(uid=uid, tensors=[tensor]),
             as_aiter(*split),
         ),
     )
 
-    return await gather_from_rpc(grad_inputs, lambda r: r.tensors, deserialize_torch_tensor)
+    return await gather_from_streaming(grad_inputs, lambda r: r.tensors, deserialize_torch_tensor)
 
 
 async def _backward(uid: str, serialized_tensors: Iterable[runtime_pb2.Tensor], stub) -> List[torch.Tensor]:
@@ -216,12 +216,12 @@ async def _forward_stream(uid: str, serialized_tensors: Iterable[runtime_pb2.Ten
 
     outputs = await stub.rpc_forward_stream(
         amap_in_executor(
-            lambda t: runtime_pb2.ExpertRequest(uid=uid, tensors=[t]),
+            lambda tensor: runtime_pb2.ExpertRequest(uid=uid, tensors=[tensor]),
             as_aiter(*split),
         ),
     )
 
-    return await gather_from_rpc(outputs, lambda r: r.tensors, deserialize_torch_tensor)
+    return await gather_from_streaming(outputs, lambda r: r.tensors, deserialize_torch_tensor)
 
 
 async def _forward(uid: str, serialized_tensors: Iterable[runtime_pb2.Tensor], stub) -> List[torch.Tensor]:
