@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from concurrent.futures import Future
 from dataclasses import dataclass
@@ -168,7 +170,7 @@ class RemoteExpertWorker:
     @classmethod
     def spawn_experts_bulk_future(
         cls, infos: Future[Sequence[Sequence[Optional[RemoteExpertInfo]]]], dht: DHT
-    ) -> MPFuture[List[List[Optional[RemoteExpert]]]]:
+    ) -> Future[List[List[Optional[RemoteExpert]]]]:
         async def _unpack():
             return cls.spawn_experts_bulk(await infos, dht)
 
