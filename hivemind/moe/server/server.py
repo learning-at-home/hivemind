@@ -24,7 +24,7 @@ from hivemind.moe.server.layers import (
     schedule_name_to_scheduler,
 )
 from hivemind.moe.server.runtime import Runtime
-from hivemind.proto.p2pd_pb2 import PeerInfo
+from hivemind.p2p import PeerInfo
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils.logging import get_logger
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
@@ -309,7 +309,7 @@ def background_server(*args, shutdown_timeout=5, **kwargs) -> PeerInfo:
     try:
         runner.start()
         # once the server is ready, runner will send us
-        # either (False, exception) or (True, (dht_peer_id, dht_maddrs))
+        # either (False, exception) or (True, PeerInfo(dht_peer_id, dht_maddrs))
         start_ok, data = pipe.recv()
         if start_ok:
             yield data

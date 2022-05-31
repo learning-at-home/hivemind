@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
-import grpc
 import torch
 
 from hivemind.moe.client.expert import DUMMY, RemoteExpert
 from hivemind.moe.client.moe import RemoteMixtureOfExperts, _RemoteCallMany
 from hivemind.moe.server.expert_uid import UID_DELIMITER
+from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError
 from hivemind.utils import nested_flatten, nested_pack
 from hivemind.utils.logging import get_logger
 
@@ -80,7 +80,6 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         # Compute scores, find most appropriate experts with beam search
         grid_scores = self.proj(input_for_gating).split_with_sizes(self.beam_search.grid_size, dim=-1)
-
         grid_dropout_masks = (
             (
                 torch.rand(size=(dim_size,), dtype=input_for_gating.dtype, device=input_for_gating.device)
@@ -96,12 +95,10 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
             )
             for grid_score, dropout_mask in zip(grid_scores, grid_dropout_masks)
         ]
-
         grid_softmax = [torch.softmax(grid_score, dim=-1) for grid_score in grid_scores_dropout]
         chosen_experts: List[List[RemoteExpert]] = self.beam_search.batch_find_best_experts(
             [scores.detach().cpu() for scores in grid_scores_dropout], self.k_best
         )
-
         if self._expert_info is None:
             try:
                 self._expert_info = next((expert.info for experts_i in chosen_experts for expert in experts_i))
@@ -110,9 +107,8 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
                     "No responding experts found during beam search. Check that UID prefixes and "
                     "the grid size are consistent with running Server instances."
                 )
-            except grpc.RpcError as e:
+            except P2PDaemonError as e:
                 logger.warning(f"Failed to get RemoteSwitchMixtureOfExperts.output_shape: {e}")
-
         expert_mask, *expert_outputs = _RemoteCallMany.apply(
             DUMMY,
             chosen_experts,
