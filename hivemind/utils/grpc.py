@@ -27,6 +27,7 @@ import torch
 
 from hivemind.proto import runtime_pb2
 from hivemind.utils.logging import get_logger
+from hivemind.utils.networking import Endpoint
 from hivemind.utils.timed_storage import TimedStorage, ValueWithExpiration, get_dht_time
 
 logger = get_logger(__name__)
@@ -44,7 +45,7 @@ GRPC_KEEPALIVE_OPTIONS = (
 
 
 class ChannelInfo(NamedTuple):
-    target: str
+    target: Endpoint
     aio: bool
     options: Tuple[Tuple[str, str], ...]
     credentials: Optional[grpc.ChannelCredentials]
@@ -89,7 +90,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     @classmethod
     def get_stub(
         cls,
-        target: str,
+        target: Endpoint,
         stub_type: Type[Stub],
         *,
         aio: bool,
@@ -136,7 +137,7 @@ class ChannelCache(TimedStorage[ChannelInfo, Tuple[Union[grpc.Channel, grpc.aio.
     @classmethod
     def _create_channel(
         cls,
-        target: str,
+        target: Endpoint,
         aio: bool,
         extra_options: Tuple[Tuple[str, Any], ...],
         channel_credentials: Optional[grpc.ChannelCredentials],

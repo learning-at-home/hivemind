@@ -566,7 +566,13 @@ async def test_client_stream_handler_success(p2pcs):
     async def handler_third(stream_info, reader, writer):
         event_third.set()
 
-    await p2pcs[1].stream_handler(another_proto, handler_third)
+    # p2p raises now for doubled stream handlers
+    with pytest.raises(ControlFailure):
+        await p2pcs[1].stream_handler(another_proto, handler_third)
+
+    # add in balanced mode, know handler should be placed in round robin queue
+    # also it should be next to be called
+    await p2pcs[1].stream_handler(another_proto, handler_third, True)
     assert another_proto in p2pcs[1].control.handlers
     # ensure the handler is override
     assert handler_third == p2pcs[1].control.handlers[another_proto]
