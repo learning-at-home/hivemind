@@ -26,8 +26,8 @@ from hivemind.utils import (
     nested_pack,
     switch_to_uvloop,
 )
-from hivemind.utils.grpc import gather_from_streaming, split_for_streaming
 from hivemind.utils.mpfuture import MPFuture
+from hivemind.utils.streaming import gather_from_streaming, split_for_streaming
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 

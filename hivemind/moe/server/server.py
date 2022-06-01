@@ -303,7 +303,7 @@ class Server(threading.Thread):
 
 @contextmanager
 def background_server(*args, shutdown_timeout=5, **kwargs) -> PeerInfo:
-    """A context manager that creates server in a background thread, awaits .ready on entry and shutdowns on exit"""
+    """A context manager that creates server in a background thread, awaits .ready on entry and shuts down on exit"""
     pipe, runners_pipe = mp.Pipe(duplex=True)
     runner = mp.Process(target=_server_runner, args=(runners_pipe, *args), kwargs=kwargs)
     try:

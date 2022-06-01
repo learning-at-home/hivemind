@@ -80,6 +80,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         # Compute scores, find most appropriate experts with beam search
         grid_scores = self.proj(input_for_gating).split_with_sizes(self.beam_search.grid_size, dim=-1)
+
         grid_dropout_masks = (
             (
                 torch.rand(size=(dim_size,), dtype=input_for_gating.dtype, device=input_for_gating.device)
@@ -95,10 +96,12 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
             )
             for grid_score, dropout_mask in zip(grid_scores, grid_dropout_masks)
         ]
+
         grid_softmax = [torch.softmax(grid_score, dim=-1) for grid_score in grid_scores_dropout]
         chosen_experts: List[List[RemoteExpert]] = self.beam_search.batch_find_best_experts(
             [scores.detach().cpu() for scores in grid_scores_dropout], self.k_best
         )
+
         if self._expert_info is None:
             try:
                 self._expert_info = next((expert.info for experts_i in chosen_experts for expert in experts_i))
@@ -109,6 +112,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
                 )
             except P2PDaemonError as e:
                 logger.warning(f"Failed to get RemoteSwitchMixtureOfExperts.output_shape: {e}")
+
         expert_mask, *expert_outputs = _RemoteCallMany.apply(
             DUMMY,
             chosen_experts,
