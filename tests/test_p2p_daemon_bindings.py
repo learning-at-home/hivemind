@@ -560,7 +560,7 @@ async def test_client_stream_handler_success(p2pcs):
 
     writer.close()
 
-    # test case: registering twice can override the previous registration
+    # test case: registering twice can not override the previous registration without balanced flag
     event_third = asyncio.Event()
 
     async def handler_third(stream_info, reader, writer):
@@ -570,8 +570,8 @@ async def test_client_stream_handler_success(p2pcs):
     with pytest.raises(ControlFailure):
         await p2pcs[1].stream_handler(another_proto, handler_third)
 
-    # add in balanced mode, know handler should be placed in round robin queue
-    # also it should be next to be called
+    # add in balanced mode: handler should be placed in round robin queue
+    # and become the next to be called
     await p2pcs[1].stream_handler(another_proto, handler_third, True)
     assert another_proto in p2pcs[1].control.handlers
     # ensure the handler is override

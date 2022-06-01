@@ -41,7 +41,7 @@ class Server(threading.Thread):
      - processes incoming forward/backward requests via Runtime (created by the server)
      - publishes updates to expert status every :update_period: seconds
 
-    :type dht: DHT.
+    :type dht: an instance of hivemind.DHT.
     :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
     :param listen_on: server's dht address that determines how it can be accessed. Address and (optional) port
     :param num_connection_handlers: maximum number of simultaneous requests. Please note that the default value of 1

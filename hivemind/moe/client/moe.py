@@ -183,7 +183,7 @@ class RemoteMixtureOfExperts(nn.Module):
         if self._expert_info is None:
             # grab some expert to set ensemble output shape
             proj_device = self.proj.weight.device
-            dummy_scores_concat: torch.Tensor = self.proj(torch.randn(1, self.proj.in_features, device=proj_device))
+            dummy_scores_concat = self.proj(torch.randn(1, self.proj.in_features, device=proj_device))
             dummy_scores = dummy_scores_concat.cpu().detach().split_with_sizes(self.beam_search.grid_size, dim=-1)
             dummy_experts = self.beam_search.find_best_experts(dummy_scores, beam_size=1)
             self._expert_info = dummy_experts[0].info

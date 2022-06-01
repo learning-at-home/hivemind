@@ -19,22 +19,6 @@ from hivemind.utils.tensor_descr import BatchTensorDescriptor
 logger = get_logger(__name__)
 
 
-class _RequestUnpacker:
-
-    __slots__ = ("uid",)
-
-    def __init__(self):
-        self.uid: Optional[str] = None
-
-    def __call__(self, request: runtime_pb2.ExpertRequest) -> Iterable[runtime_pb2.Tensor]:
-        if self.uid is None:
-            self.uid = request.uid
-        else:
-            assert self.uid == request.uid, "Expert uids differ in one request"
-
-        return request.tensors
-
-
 class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     """
     A process that accepts incoming requests to experts and submits them into the corresponding TaskPool.
@@ -78,9 +62,20 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     async def _gather_inputs(
         self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
     ) -> Tuple[str, List[torch.Tensor]]:
-        unpacker = _RequestUnpacker()
-        inputs = await gather_from_streaming(requests, unpacker, deserialize_torch_tensor)
-        return unpacker.uid, inputs
+        expert_uid = None
+
+        def _unpack(req: runtime_pb2.ExpertRequest) -> Iterable[runtime_pb2.Tensor]:
+            nonlocal expert_uid
+
+            if expert_uid is None:
+                expert_uid = req.uid
+            elif expert_uid != req.uid:
+                raise ValueError("Expert uids differ in one reques")
+
+            return req.tensors
+
+        inputs = await gather_from_streaming(requests, _unpack, deserialize_torch_tensor)
+        return expert_uid, inputs
 
     async def _process_inputs(
         self,
