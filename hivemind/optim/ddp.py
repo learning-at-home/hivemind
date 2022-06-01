@@ -91,10 +91,6 @@ class DDPOptimizer(Optimizer):
 
         return super().__getattribute__(name)
 
-    def is_alive(self) -> bool:
-        # On followers, this always returns False since there's nothing to shut down in __del__()
-        return self.is_ddp_leader() and super().is_alive()
-
     def _compute_state_version(self) -> int:
         """Return a non-decreasing integer that goes up whenever model params and/or buffers were updated"""
 
@@ -162,18 +158,6 @@ class DDPOptimizer(Optimizer):
 
         return loss if self.is_ddp_leader() else None
 
-    def load_state_from_peers(self, **kwargs) -> None:
-        if self.is_ddp_leader():
-            super().load_state_from_peers(**kwargs)
-
-        self._sync_among_ddp_ranks()
-
-    def load_state_dict(self, state_dict: dict) -> None:
-        if self.is_ddp_leader():
-            super().load_state_dict(state_dict)
-
-        self._sync_among_ddp_ranks()
-
     @property
     def param_groups(self) -> ParamGroups:
         if self.is_ddp_leader():
@@ -188,3 +172,7 @@ class DDPOptimizer(Optimizer):
     def shutdown(self):
         if self.is_ddp_leader():
             super().shutdown()
+
+    def __del__(self):
+        if self.is_ddp_leader():
+            super().__del__()
