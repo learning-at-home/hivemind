@@ -27,7 +27,7 @@ from hivemind.moe.server.runtime import Runtime
 from hivemind.p2p import PeerInfo
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils.logging import get_logger
-from hivemind.utils.tensor_descr import BatchTensorDescriptor
+from hivemind.utils.tensor_descr import DUMMY_BATCH_SIZE, BatchTensorDescriptor
 
 logger = get_logger(__name__)
 
@@ -37,10 +37,9 @@ class Server(threading.Thread):
     Server allows you to host "experts" - pytorch sub-networks used by Decentralized Mixture of Experts.
     After creation, a server should be started: see Server.run or Server.run_in_background.
 
-    A working server does 3 things:
+    A working server does two things:
      - processes incoming forward/backward requests via Runtime (created by the server)
      - publishes updates to expert status every :update_period: seconds
-     - follows orders from HivemindController - if it exists
 
     :type dht: DHT.
     :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
@@ -182,7 +181,7 @@ class Server(threading.Thread):
         optim_cls = optim_cls if optim_cls is not None else partial(torch.optim.SGD, lr=0.0)
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-        sample_input = name_to_input[expert_cls](3, hidden_dim)
+        sample_input = name_to_input[expert_cls](DUMMY_BATCH_SIZE, hidden_dim)
         if isinstance(sample_input, tuple):
             args_schema = tuple(BatchTensorDescriptor.from_tensor(arg, compression) for arg in sample_input)
         else:

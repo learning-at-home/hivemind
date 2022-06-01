@@ -18,8 +18,7 @@ from hivemind.moe.server.expert_uid import (
     is_valid_prefix,
 )
 from hivemind.p2p import PeerInfo
-from hivemind.utils import get_dht_time, get_logger
-from hivemind.utils.mpfuture import MPFuture
+from hivemind.utils import MPFuture, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 
@@ -260,10 +259,7 @@ class MoEBeamSearcher:
             return_future,
         )
 
-        if return_future:
-            return RemoteExpertWorker.spawn_experts_future(result, self.dht)
-
-        return RemoteExpertWorker.spawn_experts(result, self.dht)
+        return RemoteExpertWorker.spawn_experts(result, self.dht, return_future)
 
     @classmethod
     async def _find_best_experts(
@@ -386,9 +382,7 @@ class MoEBeamSearcher:
             return_future,
         )
 
-        if return_future:
-            return RemoteExpertWorker.spawn_experts_bulk_future(result, self.dht)
-        return RemoteExpertWorker.spawn_experts_bulk(result, self.dht)
+        return RemoteExpertWorker.batch_spawn_experts(result, self.dht, return_future)
 
     @classmethod
     async def _batch_find_best_experts(

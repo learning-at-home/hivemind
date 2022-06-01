@@ -84,9 +84,7 @@ def get_experts(
     """
     assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
     result = dht.run_coroutine(partial(_get_experts, uids=list(uids), expiration_time=expiration_time), return_future)
-    if return_future:
-        return RemoteExpertWorker.spawn_experts_future(result, dht)
-    return RemoteExpertWorker.spawn_experts(result, dht)
+    return RemoteExpertWorker.spawn_experts(result, dht, return_future)
 
 
 async def _get_experts(
