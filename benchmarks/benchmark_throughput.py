@@ -7,7 +7,8 @@ import time
 import torch
 
 from hivemind.dht import DHT
-from hivemind.moe.client.expert import RemoteExpert, RemoteExpertInfo, RemoteExpertWorker
+from hivemind.moe.client.expert import RemoteExpert, RemoteExpertInfo
+from hivemind.moe.client.remote_expert_worker import _RemoteExpertWorker
 from hivemind.moe.server import ExpertBackend, Server
 from hivemind.moe.server.layers import name_to_block
 from hivemind.p2p import P2P, PeerInfo
@@ -46,11 +47,10 @@ def client_process(
     torch.set_num_threads(1)
     can_start.wait()
 
-    p2p = RemoteExpertWorker.run_coroutine(P2P.create(initial_peers=server_maddrs))
+    p2p = _RemoteExpertWorker.run_coroutine(P2P.create(initial_peers=server_maddrs))
+    peer_info = PeerInfo(server_peer_id, server_maddrs)
     experts = [
-        RemoteExpert(
-            expert_info=RemoteExpertInfo(uid=f"expert.{i}", peer_info=PeerInfo(server_peer_id, server_maddrs)), p2p=p2p
-        )
+        RemoteExpert(expert_info=RemoteExpertInfo(uid=f"expert.{i}", peer_info=peer_info), p2p=p2p)
         for i in range(num_experts)
     ]
 

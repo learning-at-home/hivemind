@@ -9,7 +9,7 @@ from sklearn.datasets import load_digits
 
 from hivemind import DHT
 from hivemind.moe.client import RemoteMixtureOfExperts, RemoteSwitchMixtureOfExperts
-from hivemind.moe.client.expert import RemoteExpertInfo, RemoteExpertWorker
+from hivemind.moe.client.expert import RemoteExpertInfo, create_remote_experts
 from hivemind.moe.server import background_server
 from hivemind.optim import DecentralizedAdam, DecentralizedSGD
 
@@ -24,7 +24,7 @@ def test_training(max_steps: int = 100, threshold: float = 0.9):
         num_experts=2, device="cpu", optim_cls=SGD, hidden_dim=64, num_handlers=1
     ) as server_peer_info:
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
-        expert1, expert2 = RemoteExpertWorker.spawn_experts(
+        expert1, expert2 = create_remote_experts(
             [
                 RemoteExpertInfo(uid="expert.0", peer_info=server_peer_info),
                 RemoteExpertInfo(uid="expert.1", peer_info=server_peer_info),

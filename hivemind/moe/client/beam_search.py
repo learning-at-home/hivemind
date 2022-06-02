@@ -5,7 +5,12 @@ from functools import partial
 from typing import Deque, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
 from hivemind.dht import DHT, DHTExpiration, DHTNode
-from hivemind.moe.client.expert import RemoteExpert, RemoteExpertInfo, RemoteExpertWorker
+from hivemind.moe.client.expert import (
+    RemoteExpert,
+    RemoteExpertInfo,
+    batch_create_remote_experts,
+    create_remote_experts,
+)
 from hivemind.moe.server.expert_uid import (
     FLAT_EXPERT,
     PREFIX_PATTERN,
@@ -259,7 +264,7 @@ class MoEBeamSearcher:
             return_future,
         )
 
-        return RemoteExpertWorker.spawn_experts(result, self.dht, return_future)
+        return create_remote_experts(result, self.dht, return_future)
 
     @classmethod
     async def _find_best_experts(
@@ -382,7 +387,7 @@ class MoEBeamSearcher:
             return_future,
         )
 
-        return RemoteExpertWorker.batch_spawn_experts(result, self.dht, return_future)
+        return batch_create_remote_experts(result, self.dht, return_future)
 
     @classmethod
     async def _batch_find_best_experts(

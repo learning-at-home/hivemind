@@ -14,11 +14,12 @@ from hivemind.moe.client.beam_search import MoEBeamSearcher
 from hivemind.moe.client.expert import (
     DUMMY,
     RemoteExpert,
-    RemoteExpertWorker,
     _get_expert_stub,
     expert_backward,
     expert_forward,
 )
+
+from hivemind.moe.client.remote_expert_worker import _RemoteExpertWorker
 from hivemind.moe.server.expert_uid import UID_DELIMITER
 from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError
 from hivemind.utils import nested_flatten, nested_map, nested_pack
@@ -234,7 +235,7 @@ class _RemoteCallMany(torch.autograd.Function):
             for j, expert in enumerate(experts_per_sample[i]):
                 compressions = (p.compression for p in nested_flatten(info["forward_schema"]))
                 stub = _get_expert_stub(expert.p2p, expert.server_peer_info)
-                new_task = RemoteExpertWorker.run_coroutine(
+                new_task = _RemoteExpertWorker.run_coroutine(
                     expert_forward(expert.uid, flat_inputs_per_sample[i], compressions, stub),
                     return_future=True,
                 )
@@ -326,7 +327,7 @@ class _RemoteCallMany(torch.autograd.Function):
             stub = _get_expert_stub(expert.p2p, expert.server_peer_info)
             inputs_and_grad_outputs = tuple(nested_flatten((inputs_ij, grad_outputs_ij)))
             compressions = (p.compression for p in backward_schema)
-            new_task = RemoteExpertWorker.run_coroutine(
+            new_task = _RemoteExpertWorker.run_coroutine(
                 expert_backward(expert.uid, inputs_and_grad_outputs, compressions, stub), return_future=True
             )
             pending_tasks[new_task] = (i, j)
