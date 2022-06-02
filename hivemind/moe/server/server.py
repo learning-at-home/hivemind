@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 
 class Server(threading.Thread):
     """
-    Server allows you to host "experts" - pytorch sub-networks used by Decentralized Mixture of Experts.
+    Server allows you to host "experts" - pytorch subnetworks used by Decentralized Mixture of Experts.
     After creation, a server should be started: see Server.run or Server.run_in_background.
 
     A working server does two things:
@@ -75,7 +75,6 @@ class Server(threading.Thread):
             self.dht_handler_thread = DHTHandlerThread(
                 experts=self.experts,
                 dht=self.dht,
-                peer_id=self.dht.peer_id,
                 update_period=self.update_period,
                 daemon=True,
             )
@@ -301,7 +300,7 @@ class Server(threading.Thread):
 
 @contextmanager
 def background_server(*args, shutdown_timeout=5, **kwargs) -> PeerInfo:
-    """A context manager that creates server in a background thread, awaits .ready on entry and shuts down on exit"""
+    """A context manager that creates server in a background , awaits .ready on entry and shuts down on exit"""
     pipe, runners_pipe = mp.Pipe(duplex=True)
     runner = mp.Process(target=_server_runner, args=(runners_pipe, *args), kwargs=kwargs)
     try:

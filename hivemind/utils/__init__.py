@@ -6,6 +6,10 @@ from hivemind.utils.nested import *
 from hivemind.utils.networking import *
 from hivemind.utils.performance_ema import PerformanceEMA
 from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
-from hivemind.utils.streaming import *
+from hivemind.utils.streaming import (
+    combine_and_deserialize_from_streaming,
+    combine_from_streaming,
+    split_for_streaming,
+)
 from hivemind.utils.tensor_descr import BatchTensorDescriptor, TensorDescriptor
 from hivemind.utils.timed_storage import *

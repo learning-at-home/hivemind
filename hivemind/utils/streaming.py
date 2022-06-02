@@ -1,5 +1,5 @@
 """
-Utilities for running GRPC services: compile protobuf, patch legacy versions, etc
+Utilities for streaming tensors
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ def split_for_streaming(
     serialized_tensor: runtime_pb2.Tensor,
     chunk_size_bytes: int = STREAMING_CHUNK_SIZE_BYTES,
 ) -> Iterator[runtime_pb2.Tensor]:
-    """Split serialized_tensor into multiple chunks for gRPC streaming"""
+    """Split serialized_tensor into multiple chunks for streaming"""
     buffer = memoryview(serialized_tensor.buffer)
     num_chunks = len(range(0, len(buffer), chunk_size_bytes))
     yield runtime_pb2.Tensor(
@@ -52,25 +52,23 @@ def combine_from_streaming(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.
 StreamMessage = TypeVar("StreamMessage")
 
 
-async def gather_from_streaming(
-    stream: AsyncIterator[StreamMessage],
-    key: Callable[[StreamMessage], Iterable[runtime_pb2.Tensor]],
+async def combine_and_deserialize_from_streaming(
+    stream: AsyncIterator[Iterable[runtime_pb2.Tensor]],
     deserializer: Callable[[runtime_pb2.Tensor], torch.Tensor],
 ) -> List[torch.Tensor]:
-    """Async wrapper of combine_from_streaming allowing to work with arbitrary messages gathered from AsyncIterator"""
+    """Async wrapper of combine_from_streaming allowing to combine tensors from async stream of parts and deserialize"""
 
     tensors = []
-    parts = []
+    tensor_parts = []
 
-    async for msg in stream:
-        parts_stream = key(msg)
-        for part in parts_stream:
-            if part.dtype and parts:
-                tensors.append(deserializer(combine_from_streaming(parts)))
-                parts = []
+    async for parts in stream:
+        for part in parts:
+            if part.dtype and tensor_parts:
+                tensors.append(deserializer(combine_from_streaming(tensor_parts)))
+                tensor_parts = []
 
-            parts.append(part)
-    if parts:
-        tensors.append(deserializer(combine_from_streaming(parts)))
+            tensor_parts.append(part)
+    if tensor_parts:
+        tensors.append(deserializer(combine_from_streaming(tensor_parts)))
 
     return tensors

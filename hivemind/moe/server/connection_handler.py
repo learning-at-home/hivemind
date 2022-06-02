@@ -1,6 +1,6 @@
 import asyncio
 import multiprocessing as mp
-from typing import AsyncIterator, Dict, Iterable, List, Optional, Tuple, Union
+from typing import AsyncIterator, Dict, Iterable, List, Tuple, Union
 
 import torch
 
@@ -12,8 +12,8 @@ from hivemind.p2p import P2PContext, ServicerBase
 from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
 from hivemind.utils import MPFuture, MSGPackSerializer, as_aiter, get_logger, nested_flatten
-from hivemind.utils.asyncio import switch_to_uvloop
-from hivemind.utils.streaming import gather_from_streaming, split_for_streaming
+from hivemind.utils.asyncio import amap_in_executor, switch_to_uvloop
+from hivemind.utils.streaming import combine_and_deserialize_from_streaming, split_for_streaming
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 logger = get_logger(__name__)
@@ -43,6 +43,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
                 self._p2p = await self.dht.replicate_p2p()
                 await self.add_p2p_handlers(self._p2p, balanced=True)
 
+                # wait forever
                 await asyncio.Future()
 
             except Exception as e:
@@ -70,11 +71,12 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             if expert_uid is None:
                 expert_uid = req.uid
             elif expert_uid != req.uid:
-                raise ValueError("Expert uids differ in one reques")
+                raise ValueError("Expert uids differ in one request")
 
             return req.tensors
 
-        inputs = await gather_from_streaming(requests, _unpack, deserialize_torch_tensor)
+        tensors_stream = amap_in_executor(_unpack, requests)
+        inputs = await combine_and_deserialize_from_streaming(tensors_stream, deserialize_torch_tensor)
         return expert_uid, inputs
 
     async def _process_inputs(

@@ -151,7 +151,7 @@ class MoEBeamSearcher:
                 maybe_prefix_data = await pending_task
                 if maybe_prefix_data is not None and isinstance(maybe_prefix_data.value, dict):
                     successors = {
-                        coord: UidEndpoint(match.value[0], PeerInfo.from_tuple(match.value[1]))
+                        coord: UidEndpoint(uid=match.value[0], peer_info=PeerInfo.from_tuple(match.value[1]))
                         for coord, match in maybe_prefix_data.value.items()
                         if isinstance(coord, Coordinate)
                         and isinstance(getattr(match, "value", None), list)
@@ -218,7 +218,7 @@ class MoEBeamSearcher:
         for prefix, found in dht_responses.items():
             if found and isinstance(found.value, dict):
                 successors[prefix] = {
-                    coord: UidEndpoint(match.value[0], PeerInfo.from_tuple(match.value[1]))
+                    coord: UidEndpoint(uid=match.value[0], peer_info=PeerInfo.from_tuple(match.value[1]))
                     for coord, match in found.value.items()
                     if isinstance(coord, Coordinate)
                     and 0 <= coord < grid_size

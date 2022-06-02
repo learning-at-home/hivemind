@@ -19,18 +19,17 @@ from hivemind.utils import MPFuture, get_dht_time
 
 
 class DHTHandlerThread(threading.Thread):
-    def __init__(self, experts, dht: DHT, peer_id: PeerID, update_period: int = 5, **kwargs):
+    def __init__(self, experts, dht: DHT, update_period: int = 5, **kwargs):
         super().__init__(**kwargs)
-        self.peer_id = peer_id
         self.experts = experts
         self.dht = dht
         self.update_period = update_period
         self.stop = threading.Event()
 
     def run(self) -> None:
-        declare_experts(self.dht, self.experts.keys(), self.peer_id)
+        declare_experts(self.dht, self.experts.keys(), self.dht.peer_id)
         while not self.stop.wait(self.update_period):
-            declare_experts(self.dht, self.experts.keys(), self.peer_id)
+            declare_experts(self.dht, self.experts.keys(), self.dht.peer_id)
 
 
 def declare_experts(
@@ -97,7 +96,7 @@ async def _get_experts(
 
     experts: List[Optional[RemoteExpert]] = [None] * len(uids)
     for i, uid in enumerate(uids):
-        elem = found[uid]
-        if elem is not None and isinstance(elem.value, tuple):
-            experts[i] = RemoteExpertInfo(uid, PeerInfo.from_tuple(elem.value))
+        expert_info_for_uid = found[uid]
+        if expert_info_for_uid is not None and isinstance(expert_info_for_uid.value, tuple):
+            experts[i] = RemoteExpertInfo(uid, PeerInfo.from_tuple(expert_info_for_uid.value))
     return experts
