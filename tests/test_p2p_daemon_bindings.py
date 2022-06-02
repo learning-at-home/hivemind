@@ -560,7 +560,7 @@ async def test_client_stream_handler_success(p2pcs):
 
     writer.close()
 
-    # test case: registering twice can not override the previous registration without balanced flag
+    # test case: registering twice can't override the previous registration without balanced flag
     event_third = asyncio.Event()
 
     async def handler_third(stream_info, reader, writer):
