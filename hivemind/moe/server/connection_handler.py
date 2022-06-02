@@ -23,8 +23,8 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     """
     A process that accepts incoming requests to experts and submits them into the corresponding TaskPool.
 
-    :note: ConnectionHandler is designed so as to allow using multiple handler processes for the same port.
-    :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
+    :note: ConnectionHandler is designed so as to allow using multiple handler processes for the same port
+    :param dht: a running hivemind.dht.DHT, used to let other peers connect to this one
     :param experts: a dict [UID -> ExpertBackend] with all active experts
     """
 
