@@ -99,9 +99,9 @@ class RemoteExpert(nn.Module):
 
 def _create_remote_experts(infos: Sequence[Optional[RemoteExpertInfo]], p2p: P2P) -> List[Optional[RemoteExpert]]:
     experts: List[Optional[RemoteExpert]] = []
-    for i in infos:
-        if i is not None:
-            experts.append(RemoteExpert(i, p2p))
+    for info in infos:
+        if info is not None:
+            experts.append(RemoteExpert(info, p2p))
         else:
             experts.append(None)
     return experts
