@@ -1,6 +1,6 @@
 import asyncio
 import multiprocessing as mp
-from typing import AsyncIterator, Dict, Iterable, List, Tuple, Union
+from typing import AsyncIterator, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 
@@ -9,7 +9,7 @@ from hivemind.dht import DHT
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.moe.server.task_pool import TaskPool
 from hivemind.p2p import P2PContext, ServicerBase
-from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
+from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE, P2P
 from hivemind.proto import runtime_pb2
 from hivemind.utils import MPFuture, MSGPackSerializer, as_aiter, get_logger, nested_flatten
 from hivemind.utils.asyncio import amap_in_executor, switch_to_uvloop
@@ -31,6 +31,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     def __init__(self, dht: DHT, experts: Dict[str, ExpertBackend]):
         super().__init__()
         self.dht, self.experts = dht, experts
+        self._p2p: Optional[P2P] = None
 
         self.ready = MPFuture()
 
