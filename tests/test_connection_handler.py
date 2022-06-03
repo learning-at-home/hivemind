@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from typing import Any, Dict
 
 import pytest
@@ -11,7 +12,7 @@ from hivemind.compression import deserialize_torch_tensor, serialize_torch_tenso
 from hivemind.moe.server.connection_handler import ConnectionHandler
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.moe.server.task_pool import TaskPool
-from hivemind.p2p.p2p_daemon_bindings.control import P2PHandlerError
+from hivemind.p2p.p2p_daemon_bindings.control import P2PHandlerError, DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
 from hivemind.utils.asyncio import amap_in_executor, iter_as_aiter
 from hivemind.utils.serializer import MSGPackSerializer
@@ -84,7 +85,7 @@ async def test_connection_handler_forward():
     )
     outputs_list = [part async for part in output_generator]
     del output_generator
-    assert len(outputs_list) == 8  # message size divided by DEFAULT_MAX_MSG_SIZE
+    assert len(outputs_list) == math.ceil(inputs_long.numel() * 4 / DEFAULT_MAX_MSG_SIZE)
 
     results = await combine_and_deserialize_from_streaming(
         amap_in_executor(lambda r: r.tensors, iter_as_aiter(outputs_list)), deserialize_torch_tensor
