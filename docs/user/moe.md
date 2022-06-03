@@ -1,7 +1,7 @@
 # Mixture-of-Experts
 
 This tutorial covers the basics of Decentralized Mixture-of-Experts (DMoE).
-From the infrastructure standpoint, DMoE consists of two parts: experts hosted on peer devices, and client-side utilities to access those experts.
+From the infrastructure standpoint, DMoE consists of two parts: experts hosted on peer devices, and client-side modiles to access those experts.
 
 ## Host experts with a server
 
@@ -101,9 +101,9 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_patt
 
 </details>
 
-By default, the server will only accept connections fr om your local network. 
-To enable training over the internet (or some other network), you should set `--host_maddrs` and `--announce_maddrs`.
-These option also allow you to select ipv4 / ipv6 network protocols and tcp / quic transport protocols.
+By default, the server will only accept connections from your local network.
+To enable training over the Internet (or some other network), you should set `--host_maddrs` and `--announce_maddrs`.
+These options also allow you to select IPv4/IPv6 network protocols and TCP and QUIC transport protocols.
 You can find more details in the [DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html).
 
 ## Train the experts

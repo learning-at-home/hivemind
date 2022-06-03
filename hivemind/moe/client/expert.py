@@ -11,7 +11,7 @@ from torch.autograd.function import once_differentiable
 from hivemind import moe
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.dht import DHT
-from hivemind.moe.client.remote_expert_worker import _RemoteExpertWorker
+from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.p2p import P2P, PeerInfo, StubBase
 from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
@@ -89,7 +89,7 @@ class RemoteExpert(nn.Module):
     @property
     def info(self):
         if self._rpc_info is None:
-            outputs = _RemoteExpertWorker.run_coroutine(self.stub.rpc_info(runtime_pb2.ExpertUID(uid=self.uid)))
+            outputs = RemoteExpertWorker.run_coroutine(self.stub.rpc_info(runtime_pb2.ExpertUID(uid=self.uid)))
             self._rpc_info = MSGPackSerializer.loads(outputs.serialized_info)
         return self._rpc_info
 
@@ -116,9 +116,9 @@ def create_remote_experts(
             p2p = await dht.replicate_p2p()
             return _create_remote_experts(await infos_future, p2p)
 
-        return _RemoteExpertWorker.run_coroutine(_unpack(infos, dht), return_future)
+        return RemoteExpertWorker.run_coroutine(_unpack(infos, dht), return_future)
 
-    p2p = _RemoteExpertWorker.run_coroutine(dht.replicate_p2p())
+    p2p = RemoteExpertWorker.run_coroutine(dht.replicate_p2p())
     return _create_remote_experts(infos, p2p)
 
 
@@ -133,7 +133,7 @@ def batch_create_remote_experts(
             p2p = await dht.replicate_p2p()
             return [_create_remote_experts(i, p2p) for i in await infos_future]
 
-        return _RemoteExpertWorker.run_coroutine(_unpack(infos, dht), return_future)
+        return RemoteExpertWorker.run_coroutine(_unpack(infos, dht), return_future)
 
     return [create_remote_experts(exps, dht) for exps in infos]
 
@@ -224,7 +224,7 @@ class _RemoteModuleCall(torch.autograd.Function):
             serialize_torch_tensor(tensor, proto.compression)
             for tensor, proto in zip(inputs, nested_flatten(info["forward_schema"]))
         )
-        deserialized_outputs = _RemoteExpertWorker.run_coroutine(expert_forward(uid, inputs, serialized_tensors, stub))
+        deserialized_outputs = RemoteExpertWorker.run_coroutine(expert_forward(uid, inputs, serialized_tensors, stub))
 
         return tuple(deserialized_outputs)
 
@@ -238,7 +238,7 @@ class _RemoteModuleCall(torch.autograd.Function):
             serialize_torch_tensor(tensor, proto.compression)
             for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)
         )
-        deserialized_grad_inputs = _RemoteExpertWorker.run_coroutine(
+        deserialized_grad_inputs = RemoteExpertWorker.run_coroutine(
             expert_backward(ctx.uid, inputs_and_grad_outputs, serialized_tensors, ctx.stub)
         )
 

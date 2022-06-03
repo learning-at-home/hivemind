@@ -77,6 +77,10 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
 
         tensors_stream = amap_in_executor(_unpack, requests)
         inputs = await combine_and_deserialize_from_streaming(tensors_stream, deserialize_torch_tensor)
+
+        if expert_uid is None:
+            raise ValueError("empty stream")
+
         return expert_uid, inputs
 
     async def _process_inputs(
@@ -105,7 +109,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         output_split = [
             part
             for tensor in await self._process_inputs(inputs, expert.forward_pool, expert.outputs_schema)
-            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE // 2)
+            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE)
         ]
 
         async for part in as_aiter(*output_split):
@@ -128,7 +132,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         output_split = [
             part
             for tensor in await self._process_inputs(inputs_and_grads, expert.backward_pool, expert.grad_inputs_schema)
-            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE // 2)
+            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE)
         ]
 
         async for part in as_aiter(*output_split):

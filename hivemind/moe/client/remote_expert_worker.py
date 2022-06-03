@@ -7,7 +7,7 @@ from typing import Awaitable, Optional
 from hivemind.utils import switch_to_uvloop
 
 
-class _RemoteExpertWorker:
+class RemoteExpertWorker:
     """Local thread for managing async tasks related to RemoteExpert"""
 
     _task_queue: Queue = Queue()
