@@ -82,7 +82,6 @@ async def test_connection_handler_forward():
         ),
     )
     outputs_list = [part async for part in output_generator]
-    del output_generator
     assert len(outputs_list) == math.ceil(inputs_long.numel() * 4 / DEFAULT_MAX_MSG_SIZE)
 
     results = await combine_and_deserialize_from_streaming(
