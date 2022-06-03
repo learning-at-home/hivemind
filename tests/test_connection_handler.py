@@ -7,7 +7,7 @@ from typing import Any, Dict
 import pytest
 import torch
 
-import hivemind
+from hivemind import DHT
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.moe.server.connection_handler import ConnectionHandler
 from hivemind.moe.server.expert_backend import ExpertBackend
@@ -24,12 +24,11 @@ from hivemind.utils.tensor_descr import BatchTensorDescriptor
 @pytest.mark.asyncio
 async def test_connection_handler_info():
     handler = ConnectionHandler(
-        hivemind.DHT(start=True),
-        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        DHT(start=True), dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
     )
     handler.start()
 
-    client_dht = hivemind.DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
+    client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
     client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
 
     # info
@@ -47,12 +46,11 @@ async def test_connection_handler_info():
 @pytest.mark.asyncio
 async def test_connection_handler_forward():
     handler = ConnectionHandler(
-        hivemind.DHT(start=True),
-        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        DHT(start=True), dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
     )
     handler.start()
 
-    client_dht = hivemind.DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
+    client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
     client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
 
     inputs = torch.randn(1, 2)
@@ -109,14 +107,13 @@ async def test_connection_handler_forward():
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_connection_handler_forward():
+async def test_connection_handler_backward():
     handler = ConnectionHandler(
-        hivemind.DHT(start=True),
-        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        DHT(start=True), dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
     )
     handler.start()
 
-    client_dht = hivemind.DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
+    client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
     client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
 
     inputs = torch.randn(1, 2)

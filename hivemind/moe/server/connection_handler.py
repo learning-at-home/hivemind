@@ -105,7 +105,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         output_split = [
             part
             for tensor in await self._process_inputs(inputs, expert.forward_pool, expert.outputs_schema)
-            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE // 2)
+            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE)
         ]
 
         async for part in as_aiter(*output_split):
@@ -128,7 +128,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         output_split = [
             part
             for tensor in await self._process_inputs(inputs_and_grads, expert.backward_pool, expert.grad_inputs_schema)
-            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE // 2)
+            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE)
         ]
 
         async for part in as_aiter(*output_split):
