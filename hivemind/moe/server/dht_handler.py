@@ -27,9 +27,9 @@ class DHTHandlerThread(threading.Thread):
         self.stop = threading.Event()
 
     def run(self) -> None:
-        declare_experts(self.dht, self.experts.keys(), self.dht.peer_id)
+        declare_experts(self.dht, self.experts.keys())
         while not self.stop.wait(self.update_period):
-            declare_experts(self.dht, self.experts.keys(), self.dht.peer_id)
+            declare_experts(self.dht, self.experts.keys())
 
 
 def declare_experts(
