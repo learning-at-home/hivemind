@@ -272,10 +272,10 @@ def test_client_anomaly_detection():
     server.start()
     try:
         server.ready.wait()
-        dht_experts = DHT(initial_peers=dht.get_visible_maddrs(), start=True)
+        client_dht = DHT(initial_peers=dht.get_visible_maddrs(), start=True)
 
         dmoe = RemoteMixtureOfExperts(
-            in_features=16, grid_size=(3,), dht=dht_experts, k_best=3, uid_prefix="expert.", detect_anomalies=True
+            in_features=16, grid_size=(3,), dht=client_dht, k_best=3, uid_prefix="expert.", detect_anomalies=True
         )
 
         input = torch.randn(1, 16)
@@ -292,7 +292,7 @@ def test_client_anomaly_detection():
             inf_loss.backward()
 
         dmoe = RemoteMixtureOfExperts(
-            in_features=16, grid_size=(4,), dht=dht_experts, k_best=4, uid_prefix="expert.", detect_anomalies=True
+            in_features=16, grid_size=(4,), dht=client_dht, k_best=4, uid_prefix="expert.", detect_anomalies=True
         )
         output = dmoe(input)
         assert output.isfinite().all()
