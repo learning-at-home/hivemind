@@ -7,8 +7,8 @@ from typing import Any, Dict
 import pytest
 import torch
 
-from hivemind import DHT
-from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.dht import DHT
 from hivemind.moe.server.connection_handler import ConnectionHandler
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.moe.server.task_pool import TaskPool
@@ -16,7 +16,7 @@ from hivemind.p2p.p2p_daemon_bindings.control import DEFAULT_MAX_MSG_SIZE, P2PHa
 from hivemind.proto import runtime_pb2
 from hivemind.utils.asyncio import amap_in_executor, iter_as_aiter
 from hivemind.utils.serializer import MSGPackSerializer
-from hivemind.utils.streaming import combine_and_deserialize_from_streaming, split_for_streaming
+from hivemind.utils.streaming import split_for_streaming
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 
@@ -86,9 +86,7 @@ async def test_connection_handler_forward():
     outputs_list = [part async for part in output_generator]
     assert len(outputs_list) == math.ceil(inputs_long.numel() * 4 / DEFAULT_MAX_MSG_SIZE)
 
-    results = await combine_and_deserialize_from_streaming(
-        amap_in_executor(lambda r: r.tensors, iter_as_aiter(outputs_list)), deserialize_torch_tensor
-    )
+    results = await deserialize_tensor_stream(amap_in_executor(lambda r: r.tensors, iter_as_aiter(outputs_list)))
     assert len(results) == 1
     assert torch.allclose(results[0], inputs_long * 2)
 
@@ -143,9 +141,7 @@ async def test_connection_handler_backward():
             iter_as_aiter(split),
         ),
     )
-    results = await combine_and_deserialize_from_streaming(
-        amap_in_executor(lambda r: r.tensors, output_generator), deserialize_torch_tensor
-    )
+    results = await deserialize_tensor_stream(amap_in_executor(lambda r: r.tensors, output_generator))
     assert len(results) == 1
     assert torch.allclose(results[0], inputs_long * 3)
 
@@ -162,9 +158,7 @@ async def test_connection_handler_backward():
                 iter_as_aiter([]),
             ),
         )
-        results = await combine_and_deserialize_from_streaming(
-            amap_in_executor(lambda r: r.tensors, output_generator), deserialize_torch_tensor
-        )
+        results = await deserialize_tensor_stream(amap_in_executor(lambda r: r.tensors, output_generator))
         assert len(results) == 1
         assert torch.allclose(results[0], inputs_long * 3)
 
