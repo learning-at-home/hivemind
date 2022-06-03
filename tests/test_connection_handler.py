@@ -24,7 +24,8 @@ from hivemind.utils.tensor_descr import BatchTensorDescriptor
 @pytest.mark.asyncio
 async def test_connection_handler_info():
     handler = ConnectionHandler(
-        DHT(start=True), dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        DHT(start=True),
+        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
     )
     handler.start()
 
@@ -46,7 +47,8 @@ async def test_connection_handler_info():
 @pytest.mark.asyncio
 async def test_connection_handler_forward():
     handler = ConnectionHandler(
-        DHT(start=True), dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        DHT(start=True),
+        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
     )
     handler.start()
 
@@ -108,7 +110,8 @@ async def test_connection_handler_forward():
 @pytest.mark.asyncio
 async def test_connection_handler_backward():
     handler = ConnectionHandler(
-        DHT(start=True), dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        DHT(start=True),
+        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
     )
     handler.start()
 

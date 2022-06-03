@@ -1,6 +1,6 @@
 import asyncio
 import multiprocessing as mp
-from typing import AsyncIterator, Dict, Iterable, List, Tuple, Union, Optional
+from typing import AsyncIterator, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 
