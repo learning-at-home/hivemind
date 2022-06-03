@@ -1,7 +1,7 @@
 # Mixture-of-Experts
 
 This tutorial covers the basics of Decentralized Mixture-of-Experts (DMoE).
-From the infrastructure standpoint, DMoE consists of two parts: experts hosted on peer devices, and client-side utilities to access those experts.
+From the infrastructure standpoint, DMoE consists of two parts: experts hosted on peer devices, and client-side modules to access those experts.
 
 ## Host experts with a server
 
