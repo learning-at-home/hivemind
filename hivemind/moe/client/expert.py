@@ -9,27 +9,22 @@ import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
 from hivemind import moe
-from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.dht import DHT
-from hivemind.moe.client.remote_expert_worker import _RemoteExpertWorker
+from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.p2p import P2P, PeerInfo, StubBase
 from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
-from hivemind.utils import (
-    MSGPackSerializer,
-    amap_in_executor,
-    iter_as_aiter,
-    nested_compare,
-    nested_flatten,
-    nested_pack,
-)
+from hivemind.utils.asyncio import amap_in_executor, iter_as_aiter
 from hivemind.utils.mpfuture import MPFuture
-from hivemind.utils.streaming import split_for_streaming
+from hivemind.utils.nested import nested_compare, nested_flatten, nested_pack
+from hivemind.utils.serializer import MSGPackSerializer
+from hivemind.utils.streaming import combine_and_deserialize_from_streaming, split_for_streaming
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 
 
-def _get_expert_stub(p2p: P2P, server_peer_info: PeerInfo) -> "ConnectionHandlerStub":
+def get_expert_stub(p2p: P2P, server_peer_info: PeerInfo) -> "ConnectionHandlerStub":
     return moe.server.connection_handler.ConnectionHandler.get_stub(p2p, server_peer_info.peer_id)
 
 
@@ -67,7 +62,7 @@ class RemoteExpert(nn.Module):
 
     @property
     def stub(self) -> StubBase:
-        return _get_expert_stub(self.p2p, self.server_peer_info)
+        return get_expert_stub(self.p2p, self.server_peer_info)
 
     def forward(self, *args, **kwargs):
         """Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd."""
@@ -89,7 +84,7 @@ class RemoteExpert(nn.Module):
     @property
     def info(self):
         if self._rpc_info is None:
-            outputs = _RemoteExpertWorker.run_coroutine(self.stub.rpc_info(runtime_pb2.ExpertUID(uid=self.uid)))
+            outputs = RemoteExpertWorker.run_coroutine(self.stub.rpc_info(runtime_pb2.ExpertUID(uid=self.uid)))
             self._rpc_info = MSGPackSerializer.loads(outputs.serialized_info)
         return self._rpc_info
 
@@ -99,9 +94,9 @@ class RemoteExpert(nn.Module):
 
 def _create_remote_experts(infos: Sequence[Optional[RemoteExpertInfo]], p2p: P2P) -> List[Optional[RemoteExpert]]:
     experts: List[Optional[RemoteExpert]] = []
-    for i in infos:
-        if i is not None:
-            experts.append(RemoteExpert(i, p2p))
+    for info in infos:
+        if info is not None:
+            experts.append(RemoteExpert(info, p2p))
         else:
             experts.append(None)
     return experts
@@ -116,9 +111,9 @@ def create_remote_experts(
             p2p = await dht.replicate_p2p()
             return _create_remote_experts(await infos_future, p2p)
 
-        return _RemoteExpertWorker.run_coroutine(_unpack(infos, dht), return_future)
+        return RemoteExpertWorker.run_coroutine(_unpack(infos, dht), return_future)
 
-    p2p = _RemoteExpertWorker.run_coroutine(dht.replicate_p2p())
+    p2p = RemoteExpertWorker.run_coroutine(dht.replicate_p2p())
     return _create_remote_experts(infos, p2p)
 
 
@@ -133,13 +128,13 @@ def batch_create_remote_experts(
             p2p = await dht.replicate_p2p()
             return [_create_remote_experts(i, p2p) for i in await infos_future]
 
-        return _RemoteExpertWorker.run_coroutine(_unpack(infos, dht), return_future)
+        return RemoteExpertWorker.run_coroutine(_unpack(infos, dht), return_future)
 
     return [create_remote_experts(exps, dht) for exps in infos]
 
 
 async def _backward_stream(uid: str, serialized_tensors: Iterable[runtime_pb2.Tensor], stub) -> List[torch.Tensor]:
-    split = (p for t in serialized_tensors for p in split_for_streaming(t, DEFAULT_MAX_MSG_SIZE))
+    split = (part for tensor in serialized_tensors for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE))
 
     grad_inputs = await stub.rpc_backward_stream(
         amap_in_executor(
@@ -148,7 +143,7 @@ async def _backward_stream(uid: str, serialized_tensors: Iterable[runtime_pb2.Te
         ),
     )
     tensors_stream = amap_in_executor(lambda msg: msg.tensors, grad_inputs)
-    return await deserialize_tensor_stream(tensors_stream)
+    return await combine_and_deserialize_from_streaming(tensors_stream, deserialize_torch_tensor)
 
 
 async def _backward_unary(uid: str, serialized_tensors: Iterable[runtime_pb2.Tensor], stub) -> List[torch.Tensor]:
@@ -181,7 +176,7 @@ async def _forward_stream(uid: str, serialized_tensors: Iterable[runtime_pb2.Ten
     )
 
     tensors_stream = amap_in_executor(lambda msg: msg.tensors, outputs)
-    return await deserialize_tensor_stream(tensors_stream)
+    return await combine_and_deserialize_from_streaming(tensors_stream, deserialize_torch_tensor)
 
 
 async def _forward_unary(uid: str, serialized_tensors: Iterable[runtime_pb2.Tensor], stub) -> List[torch.Tensor]:
@@ -224,7 +219,7 @@ class _RemoteModuleCall(torch.autograd.Function):
             serialize_torch_tensor(tensor, proto.compression)
             for tensor, proto in zip(inputs, nested_flatten(info["forward_schema"]))
         )
-        deserialized_outputs = _RemoteExpertWorker.run_coroutine(expert_forward(uid, inputs, serialized_tensors, stub))
+        deserialized_outputs = RemoteExpertWorker.run_coroutine(expert_forward(uid, inputs, serialized_tensors, stub))
 
         return tuple(deserialized_outputs)
 
@@ -238,7 +233,7 @@ class _RemoteModuleCall(torch.autograd.Function):
             serialize_torch_tensor(tensor, proto.compression)
             for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)
         )
-        deserialized_grad_inputs = _RemoteExpertWorker.run_coroutine(
+        deserialized_grad_inputs = RemoteExpertWorker.run_coroutine(
             expert_backward(ctx.uid, inputs_and_grad_outputs, serialized_tensors, ctx.stub)
         )
 

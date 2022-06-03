@@ -572,7 +572,7 @@ async def test_client_stream_handler_success(p2pcs):
 
     # add in balanced mode: handler should be placed in round robin queue
     # and become the next to be called
-    await p2pcs[1].stream_handler(another_proto, handler_third, True)
+    await p2pcs[1].stream_handler(another_proto, handler_third, balanced=True)
     assert another_proto in p2pcs[1].control.handlers
     # ensure the handler is override
     assert handler_third == p2pcs[1].control.handlers[another_proto]

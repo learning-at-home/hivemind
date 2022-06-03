@@ -12,8 +12,8 @@ from torch.autograd.function import once_differentiable
 from hivemind.compression import serialize_torch_tensor
 from hivemind.dht import DHT
 from hivemind.moe.client.beam_search import MoEBeamSearcher
-from hivemind.moe.client.expert import DUMMY, RemoteExpert, _get_expert_stub, expert_backward, expert_forward
-from hivemind.moe.client.remote_expert_worker import _RemoteExpertWorker
+from hivemind.moe.client.expert import DUMMY, RemoteExpert, expert_backward, expert_forward, get_expert_stub
+from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.moe.server.expert_uid import UID_DELIMITER
 from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError
 from hivemind.utils import nested_flatten, nested_map, nested_pack
@@ -227,12 +227,12 @@ class _RemoteCallMany(torch.autograd.Function):
         pending_tasks: Dict[Future, Tuple[int, int]] = {}
         for i in range(num_samples):
             for j, expert in enumerate(experts_per_sample[i]):
-                stub = _get_expert_stub(expert.p2p, expert.server_peer_info)
+                stub = get_expert_stub(expert.p2p, expert.server_peer_info)
                 serialized_tensors = (
                     serialize_torch_tensor(tensor, proto.compression)
                     for tensor, proto in zip(flat_inputs_per_sample[i], nested_flatten(info["forward_schema"]))
                 )
-                new_task = _RemoteExpertWorker.run_coroutine(
+                new_task = RemoteExpertWorker.run_coroutine(
                     expert_forward(expert.uid, flat_inputs_per_sample[i], serialized_tensors, stub),
                     return_future=True,
                 )
@@ -321,13 +321,13 @@ class _RemoteCallMany(torch.autograd.Function):
             alive_ii.cpu().numpy(), alive_jj.cpu().numpy(), inputs_per_expert, grad_outputs_per_expert
         ):
             expert: RemoteExpert = expert_per_sample[i.item()][j.item()]
-            stub = _get_expert_stub(expert.p2p, expert.server_peer_info)
+            stub = get_expert_stub(expert.p2p, expert.server_peer_info)
             inputs_and_grad_outputs = tuple(nested_flatten((inputs_ij, grad_outputs_ij)))
             serialized_tensors = (
                 serialize_torch_tensor(tensor, proto.compression)
                 for tensor, proto in zip(inputs_and_grad_outputs, backward_schema)
             )
-            new_task = _RemoteExpertWorker.run_coroutine(
+            new_task = RemoteExpertWorker.run_coroutine(
                 expert_backward(expert.uid, inputs_and_grad_outputs, serialized_tensors, stub), return_future=True
             )
             pending_tasks[new_task] = (i, j)

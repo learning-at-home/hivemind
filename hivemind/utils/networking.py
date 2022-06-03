@@ -1,12 +1,10 @@
 import socket
 from contextlib import closing
 from ipaddress import ip_address
-from typing import Optional, Sequence
+from typing import Sequence
 
 from multiaddr import Multiaddr
 
-Hostname, Port = str, int  # flavour types
-Endpoint = str  # e.g. 1.2.3.4:1337 or [2a21:6с8:b192:2105]:8888, https://networkengineering.stackexchange.com/a/9435
 LOCALHOST = "127.0.0.1"
 
 
@@ -28,7 +26,7 @@ def get_free_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_S
 
 def choose_ip_address(
     maddrs: Sequence[Multiaddr], prefer_global: bool = True, protocol_priority: Sequence[str] = ("ip4", "ip6")
-) -> Hostname:
+) -> str:
     """
     Currently, some components of hivemind are not converted to work over libp2p and use classical networking.
     To allow other peers reach a server when needed, these components announce a machine's IP address.
