@@ -148,7 +148,7 @@ async def _backward_stream(uid: str, serialized_tensors: Iterable[runtime_pb2.Te
         ),
     )
     tensors_stream = amap_in_executor(lambda msg: msg.tensors, grad_inputs)
-    return await deserialize_tensor_stream(tensors_stream, deserialize_torch_tensor)
+    return await deserialize_tensor_stream(tensors_stream)
 
 
 async def _backward_unary(uid: str, serialized_tensors: Iterable[runtime_pb2.Tensor], stub) -> List[torch.Tensor]:
@@ -181,7 +181,7 @@ async def _forward_stream(uid: str, serialized_tensors: Iterable[runtime_pb2.Ten
     )
 
     tensors_stream = amap_in_executor(lambda msg: msg.tensors, outputs)
-    return await deserialize_tensor_stream(tensors_stream, deserialize_torch_tensor)
+    return await deserialize_tensor_stream(tensors_stream)
 
 
 async def _forward_unary(uid: str, serialized_tensors: Iterable[runtime_pb2.Tensor], stub) -> List[torch.Tensor]:
