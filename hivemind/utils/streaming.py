@@ -4,15 +4,12 @@ Utilities for streaming tensors
 
 from __future__ import annotations
 
-from typing import AsyncIterator, Callable, Iterable, Iterator, List, TypeVar
-
-import torch
+from typing import Iterable, Iterator, TypeVar
 
 from hivemind.proto import runtime_pb2
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
-
 
 STREAMING_CHUNK_SIZE_BYTES = 2**16
 
@@ -50,25 +47,3 @@ def combine_from_streaming(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.
 
 
 StreamMessage = TypeVar("StreamMessage")
-
-
-async def combine_and_deserialize_from_streaming(
-    stream: AsyncIterator[Iterable[runtime_pb2.Tensor]],
-    deserializer: Callable[[runtime_pb2.Tensor], torch.Tensor],
-) -> List[torch.Tensor]:
-    """Async wrapper of combine_from_streaming allowing to combine tensors from async stream of parts and deserialize"""
-
-    tensors = []
-    tensor_parts = []
-
-    async for parts in stream:
-        for part in parts:
-            if part.dtype and tensor_parts:
-                tensors.append(deserializer(combine_from_streaming(tensor_parts)))
-                tensor_parts = []
-
-            tensor_parts.append(part)
-    if tensor_parts:
-        tensors.append(deserializer(combine_from_streaming(tensor_parts)))
-
-    return tensors

@@ -3,8 +3,8 @@ from typing import Mapping, Sequence, Union
 
 import torch
 
-import hivemind
 from hivemind.compression.base import CompressionBase, CompressionInfo, Key, NoCompression, TensorRole
+from hivemind.compression.serialization import deserialize_torch_tensor
 from hivemind.proto import runtime_pb2
 
 
@@ -20,7 +20,7 @@ class AdaptiveCompressionBase(CompressionBase, ABC):
         return self.choose_compression(info).compress(tensor, info=info, allow_inplace=allow_inplace)
 
     def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
-        return hivemind.compression.deserialize_torch_tensor(serialized_tensor)
+        return deserialize_torch_tensor(serialized_tensor)
 
 
 class SizeAdaptiveCompression(AdaptiveCompressionBase):
