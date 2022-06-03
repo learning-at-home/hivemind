@@ -33,13 +33,12 @@ class DHTHandlerThread(threading.Thread):
 
 
 def declare_experts(
-    dht: DHT, uids: Sequence[ExpertUID], peer_id: PeerID = None, expiration: DHTExpiration = 300, wait: bool = True
+    dht: DHT, uids: Sequence[ExpertUID], expiration: DHTExpiration = 300, wait: bool = True
 ) -> Union[Dict[ExpertUID, bool], MPFuture[Dict[ExpertUID, bool]]]:
     """
     Make experts visible to all DHT peers; update timestamps if declared previously.
 
     :param uids: a list of expert ids to update
-    :param peer_id: peer that serves these experts, defaults to your DHT endpoint
     :param wait: if True, awaits for declaration to finish, otherwise runs in background
     :param expiration: experts will be visible for this many seconds
     :returns: if wait, returns store status for every key (True = store succeeded, False = store rejected)
@@ -47,11 +46,9 @@ def declare_experts(
     assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
     for uid in uids:
         assert is_valid_uid(uid), f"{uid} is not a valid expert uid. All uids must follow {UID_PATTERN.pattern}"
-    if peer_id is None:
-        peer_id = dht.peer_id
     addrs = tuple(str(a.decapsulate("/p2p/" + a.get("p2p"))) for a in dht.get_visible_maddrs())
     return dht.run_coroutine(
-        partial(_declare_experts, uids=list(uids), peer_id=peer_id, addrs=addrs, expiration=expiration),
+        partial(_declare_experts, uids=list(uids), peer_id=dht.peer_id, addrs=addrs, expiration=expiration),
         return_future=not wait,
     )
 
