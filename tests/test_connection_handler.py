@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from typing import Any, Dict
 
 import pytest
 import torch
 
-import hivemind
+
+from hivemind import DHT
 from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.moe.server.connection_handler import ConnectionHandler
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.moe.server.task_pool import TaskPool
-from hivemind.p2p.p2p_daemon_bindings.control import P2PHandlerError
+from hivemind.p2p.p2p_daemon_bindings.control import DEFAULT_MAX_MSG_SIZE, P2PHandlerError
 from hivemind.proto import runtime_pb2
 from hivemind.utils.asyncio import amap_in_executor, iter_as_aiter
 from hivemind.utils.serializer import MSGPackSerializer
@@ -21,14 +23,35 @@ from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_connection_handler():
+async def test_connection_handler_info():
     handler = ConnectionHandler(
-        hivemind.DHT(start=True),
-        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        DHT(start=True), dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
     )
     handler.start()
 
-    client_dht = hivemind.DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
+    client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
+    client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
+
+    # info
+    response = await client_stub.rpc_info(runtime_pb2.ExpertUID(uid="expert1"))
+    assert MSGPackSerializer.loads(response.serialized_info) == dict(name="expert1")
+
+    response = await client_stub.rpc_info(runtime_pb2.ExpertUID(uid="expert2"))
+    assert MSGPackSerializer.loads(response.serialized_info) == dict(name="expert2")
+
+    with pytest.raises(P2PHandlerError):
+        await client_stub.rpc_info(runtime_pb2.ExpertUID(uid="expert999"))
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_connection_handler_forward():
+    handler = ConnectionHandler(
+        DHT(start=True), dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+    )
+    handler.start()
+
+    client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
     client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
 
     inputs = torch.randn(1, 2)
@@ -60,8 +83,7 @@ async def test_connection_handler():
         ),
     )
     outputs_list = [part async for part in output_generator]
-    del output_generator
-    assert len(outputs_list) == 8  # message size divided by DEFAULT_MAX_MSG_SIZE
+    assert len(outputs_list) == math.ceil(inputs_long.numel() * 4 / DEFAULT_MAX_MSG_SIZE)
 
     results = await deserialize_tensor_stream(amap_in_executor(lambda r: r.tensors, iter_as_aiter(outputs_list)))
     assert len(results) == 1
@@ -79,6 +101,21 @@ async def test_connection_handler():
         await client_stub.rpc_forward(
             runtime_pb2.ExpertRequest(uid="expert1", tensors=[serialize_torch_tensor(torch.arange(5))])
         )
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_connection_handler_backward():
+    handler = ConnectionHandler(
+        DHT(start=True), dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+    )
+    handler.start()
+
+    client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
+    client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
+
+    inputs = torch.randn(1, 2)
+    inputs_long = torch.randn(2**21, 2)
 
     # backward unary
     response = await client_stub.rpc_backward(
@@ -126,16 +163,6 @@ async def test_connection_handler():
     # check that handler did not crash after failed request
     await client_stub.rpc_forward(runtime_pb2.ExpertRequest(uid="expert1", tensors=[serialize_torch_tensor(inputs)]))
 
-    # info
-    response = await client_stub.rpc_info(runtime_pb2.ExpertUID(uid="expert1"))
-    assert MSGPackSerializer.loads(response.serialized_info) == dict(name="expert1")
-
-    response = await client_stub.rpc_info(runtime_pb2.ExpertUID(uid="expert2"))
-    assert MSGPackSerializer.loads(response.serialized_info) == dict(name="expert2")
-
-    with pytest.raises(P2PHandlerError):
-        await client_stub.rpc_info(runtime_pb2.ExpertUID(uid="expert999"))
-
     handler.terminate()
     handler.join()
 
@@ -146,7 +173,6 @@ class DummyPool(TaskPool):
 
     async def submit_task(self, *inputs: torch.Tensor):
         await asyncio.sleep(0.01)
-        print(type(inputs), inputs[0].shape)
         assert inputs[0].shape[-1] == 2
         return [inputs[0] * self.k]
 

@@ -25,14 +25,14 @@ def test_store_get_experts(n_peers=10):
     expert_uids = [f"my_expert.{i}" for i in range(50)]
     batch_size = 10
     for batch_start in range(0, len(expert_uids), batch_size):
-        declare_experts(first_peer, expert_uids[batch_start : batch_start + batch_size], first_peer.peer_id)
+        declare_experts(first_peer, expert_uids[batch_start : batch_start + batch_size])
 
     found = get_experts(other_peer, random.sample(expert_uids, 5) + ["foo", "bar"])
     assert all(res is not None for res in found[:-2]), "Could not find some existing experts"
     assert all(res is None for res in found[-2:]), "Found non-existing experts"
 
     other_expert = "my_other_expert.1337"
-    declare_experts(other_peer, [other_expert], other_peer.peer_id)
+    declare_experts(other_peer, [other_expert])
     first_notfound, first_found = get_experts(first_peer, ["foobar", other_expert])
     assert isinstance(first_found, hivemind.RemoteExpert)
     assert first_found.server_peer_info.peer_id == other_peer.peer_id
@@ -44,7 +44,7 @@ def test_store_get_experts(n_peers=10):
     time.sleep(1.0)
     remaining_peer1 = random.choice([peer for peer in peers if peer.is_alive()])
     remaining_peer2 = random.choice([peer for peer in peers if peer.is_alive()])
-    assert all(declare_experts(remaining_peer1, ["new_expert.1"], remaining_peer1.peer_id))
+    assert all(declare_experts(remaining_peer1, ["new_expert.1"]))
     assert get_experts(remaining_peer2, ["new_expert.1"])[0].server_peer_info.peer_id == remaining_peer1.peer_id
 
 
@@ -64,7 +64,6 @@ def test_beam_search(
         declare_experts(
             dht,
             real_experts[batch_start : batch_start + batch_size],
-            peer_id=dht.peer_id,
         )
 
     neighbors = sum(
@@ -92,14 +91,14 @@ def test_dht_single_node():
     node = hivemind.DHT(start=True)
     beam_search = MoEBeamSearcher(node, "expert.", grid_size=(10,))
 
-    assert all(declare_experts(node, ["expert.1", "expert.2", "expert.3"], node.peer_id).values())
-    assert len(declare_experts(node, ["ffn.1", "ffn.2"], node.peer_id)) == 4
-    assert len(declare_experts(node, ["e.1.2.3", "e.1.2.5", "e.2.0"], node.peer_id)) == 7
+    assert all(declare_experts(node, ["expert.1", "expert.2", "expert.3"]).values())
+    assert len(declare_experts(node, ["ffn.1", "ffn.2"])) == 4
+    assert len(declare_experts(node, ["e.1.2.3", "e.1.2.5", "e.2.0"])) == 7
 
     for expert in get_experts(node, ["expert.3", "expert.2"]):
         assert expert.server_peer_info.peer_id == node.peer_id
 
-    assert all(declare_experts(node, ["expert.5", "expert.2"], node.peer_id).values())
+    assert all(declare_experts(node, ["expert.5", "expert.2"]).values())
     found_experts = beam_search.find_best_experts([(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)], beam_size=2)
     assert len(found_experts) == 2 and [expert.uid for expert in found_experts] == ["expert.5", "expert.3"]
 
@@ -200,7 +199,7 @@ async def test_negative_caching(n_peers=10):
     peers += [hivemind.DHT(initial_peers=initial_peers, start=True, **dht_kwargs) for _ in range(n_peers - 1)]
 
     writer_peer = random.choice(peers)
-    assert all(declare_experts(writer_peer, ["ffn.1.2.3", "ffn.3.4.5"], writer_peer.peer_id).values())
+    assert all(declare_experts(writer_peer, ["ffn.1.2.3", "ffn.3.4.5"]).values())
 
     neighbors = sum([peer.get_visible_maddrs() for peer in random.sample(peers, min(3, len(peers)))], [])
     neg_caching_peer = hivemind.DHT(initial_peers=neighbors, start=True, **dht_kwargs)
