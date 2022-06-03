@@ -103,7 +103,7 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_patt
 
 By default, the server will only accept connections fr om your local network. 
 To enable training over the internet (or some other network), you should set `--host_maddrs` and `--announce_maddrs`.
-These option also allow you to select ipv4 / ipv6 network protocols and tcp / quic transport protocols.
+These options also allow you to select IPv4/IPv6 network protocols and TCP and QUIC transport protocols.
 You can find more details in the [DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html).
 
 ## Train the experts
