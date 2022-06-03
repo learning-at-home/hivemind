@@ -178,7 +178,6 @@ class DummyPool(TaskPool):
 
     async def submit_task(self, *inputs: torch.Tensor):
         await asyncio.sleep(0.01)
-        print(type(inputs), inputs[0].shape)
         assert inputs[0].shape[-1] == 2
         return [inputs[0] * self.k]
 
