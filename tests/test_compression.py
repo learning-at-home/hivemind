@@ -20,6 +20,7 @@ from hivemind.compression import (
 )
 from hivemind.compression.adaptive import AdaptiveCompressionBase
 from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.utils.streaming import combine_from_streaming, split_for_streaming
 
 from test_utils.dht_swarms import launch_dht_instances
 
@@ -47,9 +48,9 @@ def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
 def test_serialize_tensor():
     def _check(tensor, compression, rtol=1e-5, atol=1e-8, chunk_size=30 * 1024):
         serialized_tensor = serialize_torch_tensor(tensor, compression)
-        chunks = list(hivemind.split_for_streaming(serialized_tensor, chunk_size))
+        chunks = list(split_for_streaming(serialized_tensor, chunk_size))
         assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
-        restored = hivemind.combine_from_streaming(chunks)
+        restored = combine_from_streaming(chunks)
         assert torch.allclose(deserialize_torch_tensor(restored), tensor, rtol=rtol, atol=atol)
 
     tensor = torch.randn(512, 12288)

@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
 from hivemind import moe
-from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.dht import DHT
 from hivemind.moe.client.remote_expert_worker import _RemoteExpertWorker
 from hivemind.p2p import P2P, PeerInfo, StubBase
@@ -24,7 +24,7 @@ from hivemind.utils import (
     nested_pack,
 )
 from hivemind.utils.mpfuture import MPFuture
-from hivemind.utils.streaming import combine_and_deserialize_from_streaming, split_for_streaming
+from hivemind.utils.streaming import split_for_streaming
 
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 
@@ -148,7 +148,7 @@ async def _backward_stream(uid: str, serialized_tensors: Iterable[runtime_pb2.Te
         ),
     )
     tensors_stream = amap_in_executor(lambda msg: msg.tensors, grad_inputs)
-    return await combine_and_deserialize_from_streaming(tensors_stream, deserialize_torch_tensor)
+    return await deserialize_tensor_stream(tensors_stream, deserialize_torch_tensor)
 
 
 async def _backward_unary(uid: str, serialized_tensors: Iterable[runtime_pb2.Tensor], stub) -> List[torch.Tensor]:
@@ -181,7 +181,7 @@ async def _forward_stream(uid: str, serialized_tensors: Iterable[runtime_pb2.Ten
     )
 
     tensors_stream = amap_in_executor(lambda msg: msg.tensors, outputs)
-    return await combine_and_deserialize_from_streaming(tensors_stream, deserialize_torch_tensor)
+    return await deserialize_tensor_stream(tensors_stream, deserialize_torch_tensor)
 
 
 async def _forward_unary(uid: str, serialized_tensors: Iterable[runtime_pb2.Tensor], stub) -> List[torch.Tensor]:

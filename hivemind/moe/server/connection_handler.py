@@ -4,7 +4,7 @@ from typing import AsyncIterator, Dict, Iterable, List, Tuple, Union
 
 import torch
 
-from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.dht import DHT
 from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.moe.server.task_pool import TaskPool
@@ -13,7 +13,7 @@ from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
 from hivemind.utils import MPFuture, MSGPackSerializer, as_aiter, get_logger, nested_flatten
 from hivemind.utils.asyncio import amap_in_executor, switch_to_uvloop
-from hivemind.utils.streaming import combine_and_deserialize_from_streaming, split_for_streaming
+from hivemind.utils.streaming import split_for_streaming
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 logger = get_logger(__name__)
@@ -76,7 +76,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             return req.tensors
 
         tensors_stream = amap_in_executor(_unpack, requests)
-        inputs = await combine_and_deserialize_from_streaming(tensors_stream, deserialize_torch_tensor)
+        inputs = await deserialize_tensor_stream(tensors_stream)
         return expert_uid, inputs
 
     async def _process_inputs(
