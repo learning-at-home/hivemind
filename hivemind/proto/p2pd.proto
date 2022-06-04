@@ -90,6 +90,7 @@ message StreamOpenRequest {
 message StreamHandlerRequest {
   required bytes addr = 1;
   repeated string proto = 2;
+  required bool balanced = 3;
 }
 
 message ErrorResponse {
@@ -201,6 +202,7 @@ message CallUnaryResponse {
 
 message AddUnaryHandlerRequest {
   required string proto = 1;
+  required bool balanced = 2;
 }
 
 message DaemonError {

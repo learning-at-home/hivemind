@@ -11,9 +11,7 @@ import torch
 
 import hivemind
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
-from hivemind.proto.dht_pb2_grpc import DHTStub
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.proto.runtime_pb2_grpc import ConnectionHandlerStub
 from hivemind.utils import BatchTensorDescriptor, DHTExpiration, HeapEntry, MSGPackSerializer, ValueWithExpiration
 from hivemind.utils.asyncio import (
     achain,
@@ -330,50 +328,6 @@ def test_many_futures():
     p.join()
 
 
-@pytest.mark.forked
-@pytest.mark.asyncio
-async def test_channel_cache():
-    hivemind.ChannelCache.MAXIMUM_CHANNELS = 3
-    hivemind.ChannelCache.EVICTION_PERIOD_SECONDS = 0.1
-
-    c1 = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=False)
-    c2 = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=True)
-    c3 = hivemind.ChannelCache.get_stub("localhost:1338", DHTStub, aio=False)
-    c3_again = hivemind.ChannelCache.get_stub("localhost:1338", DHTStub, aio=False)
-    c1_again = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=False)
-    c4 = hivemind.ChannelCache.get_stub("localhost:1339", DHTStub, aio=True)
-    c2_anew = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=True)
-    c1_yetagain = hivemind.ChannelCache.get_stub("localhost:1337", DHTStub, aio=False)
-
-    await asyncio.sleep(0.2)
-    c1_anew = hivemind.ChannelCache.get_stub(target="localhost:1337", aio=False, stub_type=DHTStub)
-    c1_anew_again = hivemind.ChannelCache.get_stub(target="localhost:1337", aio=False, stub_type=DHTStub)
-    c1_otherstub = hivemind.ChannelCache.get_stub(target="localhost:1337", aio=False, stub_type=ConnectionHandlerStub)
-    await asyncio.sleep(0.05)
-    c1_otherstub_again = hivemind.ChannelCache.get_stub(
-        target="localhost:1337", aio=False, stub_type=ConnectionHandlerStub
-    )
-    all_channels = [c1, c2, c3, c4, c3_again, c1_again, c2_anew, c1_yetagain, c1_anew, c1_anew_again, c1_otherstub]
-
-    assert all(isinstance(c, DHTStub) for c in all_channels[:-1])
-    assert isinstance(all_channels[-1], ConnectionHandlerStub)
-    assert "aio" in repr(c2.rpc_find)
-    assert "aio" not in repr(c1.rpc_find)
-
-    duplicates = {
-        (c1, c1_again),
-        (c1, c1_yetagain),
-        (c1_again, c1_yetagain),
-        (c3, c3_again),
-        (c1_anew, c1_anew_again),
-        (c1_otherstub, c1_otherstub_again),
-    }
-    for i in range(len(all_channels)):
-        for j in range(i + 1, len(all_channels)):
-            ci, cj = all_channels[i], all_channels[j]
-            assert (ci is cj) == ((ci, cj) in duplicates), (i, j)
-
-
 def test_serialize_tuple():
     test_pairs = (
         ((1, 2, 3), [1, 2, 3]),
@@ -419,7 +373,7 @@ def test_split_parts():
     for combined in combined_incomplete, combined_incomplete2, combined_incomplete3:
         with pytest.raises(RuntimeError):
             deserialize_torch_tensor(combined)
-            # note: we rely on this being RuntimeError in hivemind.averaging.allreduce.AllreduceRunner
+            # note: we rely on this being RuntimeError in hivemind.averaging.allreduce.AllReduceRunner
 
 
 def test_generic_data_classes():

@@ -5,7 +5,12 @@ from functools import partial
 from typing import Deque, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
 from hivemind.dht import DHT, DHTExpiration, DHTNode
-from hivemind.moe.client.expert import RemoteExpert
+from hivemind.moe.client.expert import (
+    RemoteExpert,
+    RemoteExpertInfo,
+    batch_create_remote_experts,
+    create_remote_experts,
+)
 from hivemind.moe.server.expert_uid import (
     FLAT_EXPERT,
     PREFIX_PATTERN,
@@ -17,6 +22,7 @@ from hivemind.moe.server.expert_uid import (
     UidEndpoint,
     is_valid_prefix,
 )
+from hivemind.p2p import PeerInfo
 from hivemind.utils import MPFuture, get_dht_time, get_logger
 
 logger = get_logger(__name__)
@@ -145,7 +151,7 @@ class MoEBeamSearcher:
                 maybe_prefix_data = await pending_task
                 if maybe_prefix_data is not None and isinstance(maybe_prefix_data.value, dict):
                     successors = {
-                        coord: UidEndpoint(*match.value)
+                        coord: UidEndpoint(uid=match.value[0], peer_info=PeerInfo.from_tuple(match.value[1]))
                         for coord, match in maybe_prefix_data.value.items()
                         if isinstance(coord, Coordinate)
                         and isinstance(getattr(match, "value", None), list)
@@ -212,7 +218,7 @@ class MoEBeamSearcher:
         for prefix, found in dht_responses.items():
             if found and isinstance(found.value, dict):
                 successors[prefix] = {
-                    coord: UidEndpoint(*match.value)
+                    coord: UidEndpoint(uid=match.value[0], peer_info=PeerInfo.from_tuple(match.value[1]))
                     for coord, match in found.value.items()
                     if isinstance(coord, Coordinate)
                     and 0 <= coord < grid_size
@@ -230,7 +236,7 @@ class MoEBeamSearcher:
 
     def find_best_experts(
         self, grid_scores: Sequence[Sequence[float]], beam_size: int, return_future: bool = False
-    ) -> Union[List[RemoteExpert], MPFuture[RemoteExpert]]:
+    ) -> Union[List[RemoteExpert], MPFuture[List[RemoteExpert]]]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
 
@@ -245,7 +251,7 @@ class MoEBeamSearcher:
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
         assert len(grid_scores) == len(self.grid_size) and beam_size > 0
-        return self.dht.run_coroutine(
+        result = self.dht.run_coroutine(
             partial(
                 self._find_best_experts,
                 prefix=self.uid_prefix,
@@ -258,6 +264,8 @@ class MoEBeamSearcher:
             return_future,
         )
 
+        return create_remote_experts(result, self.dht, return_future)
+
     @classmethod
     async def _find_best_experts(
         cls,
@@ -269,7 +277,7 @@ class MoEBeamSearcher:
         negative_caching: bool,
         cache_expiration: DHTExpiration,
         num_workers: Optional[int] = None,
-    ) -> List[RemoteExpert]:
+    ) -> List[RemoteExpertInfo]:
         num_workers = num_workers or min(beam_size, dht.num_workers or beam_size)
 
         # form initial beam from top-k active L1 prefixes, each row is (score, uid prefix, possible suffixes)
@@ -322,7 +330,10 @@ class MoEBeamSearcher:
                 push_and_maybe_pop(best_experts_heap, (score, uid_endpoint))
                 unique_experts.add(uid_endpoint.uid)
 
-        best_experts = [RemoteExpert(*uid_endpoint) for score, uid_endpoint in sorted(best_experts_heap, reverse=True)]
+        best_experts = [
+            RemoteExpertInfo(uid_endpoint.uid, uid_endpoint.peer_info)
+            for _, uid_endpoint in sorted(best_experts_heap, reverse=True)
+        ]
         return best_experts
 
     @staticmethod
@@ -351,7 +362,7 @@ class MoEBeamSearcher:
 
     def batch_find_best_experts(
         self, batch_grid_scores: Sequence[Sequence[Sequence[float]]], beam_size: int, return_future: bool = False
-    ) -> Union[List[List[RemoteExpert]], MPFuture]:
+    ) -> Union[List[List[RemoteExpert]], MPFuture[List[List[RemoteExpert]]]]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
 
@@ -364,7 +375,7 @@ class MoEBeamSearcher:
         :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
-        return self.dht.run_coroutine(
+        result = self.dht.run_coroutine(
             partial(
                 self._batch_find_best_experts,
                 prefix=self.uid_prefix,
@@ -376,6 +387,8 @@ class MoEBeamSearcher:
             return_future,
         )
 
+        return batch_create_remote_experts(result, self.dht, return_future)
+
     @classmethod
     async def _batch_find_best_experts(
         cls,
@@ -386,7 +399,7 @@ class MoEBeamSearcher:
         beam_size: int,
         negative_caching: bool,
         num_workers: Optional[int],
-    ) -> Sequence[Sequence[RemoteExpert]]:
+    ) -> Sequence[Sequence[RemoteExpertInfo]]:
         batch_grid_scores = [
             [tuple(grid_score[i]) for grid_score in batch_grid_scores] for i in range(len(batch_grid_scores[0]))
         ]

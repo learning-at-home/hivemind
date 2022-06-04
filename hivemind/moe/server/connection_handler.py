@@ -1,82 +1,136 @@
+import asyncio
 import multiprocessing as mp
-import os
-from typing import Dict
+from typing import AsyncIterator, Dict, Iterable, List, Optional, Tuple, Union
 
-import grpc
 import torch
 
-from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
+from hivemind.dht import DHT
 from hivemind.moe.server.expert_backend import ExpertBackend
-from hivemind.proto import runtime_pb2, runtime_pb2_grpc as runtime_grpc
-from hivemind.utils import Endpoint, MSGPackSerializer, get_logger, nested_flatten
-from hivemind.utils.asyncio import switch_to_uvloop
-from hivemind.utils.grpc import GRPC_KEEPALIVE_OPTIONS
+from hivemind.moe.server.task_pool import TaskPool
+from hivemind.p2p import P2PContext, ServicerBase
+from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE, P2P
+from hivemind.proto import runtime_pb2
+from hivemind.utils import MPFuture, MSGPackSerializer, as_aiter, get_logger, nested_flatten
+from hivemind.utils.asyncio import amap_in_executor, switch_to_uvloop
+from hivemind.utils.streaming import split_for_streaming
+from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 logger = get_logger(__name__)
 
 
-class ConnectionHandler(mp.context.ForkProcess):
+class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     """
     A process that accepts incoming requests to experts and submits them into the corresponding TaskPool.
 
-    :note: ConnectionHandler is designed so as to allow using multiple handler processes for the same port.
-    :param listen_on: network interface, e.g. "0.0.0.0:1337" or "localhost:*" (* means pick any port) or "[::]:7654"
+    :note: ConnectionHandler is designed so as to allow using multiple handler processes for the same port
+    :param dht: a running hivemind.dht.DHT, used to let other peers connect to this one
     :param experts: a dict [UID -> ExpertBackend] with all active experts
     """
 
-    def __init__(self, listen_on: Endpoint, experts: Dict[str, ExpertBackend]):
+    def __init__(self, dht: DHT, experts: Dict[str, ExpertBackend]):
         super().__init__()
-        self.listen_on, self.experts = listen_on, experts
-        self.ready = mp.Event()
+        self.dht, self.experts = dht, experts
+        self._p2p: Optional[P2P] = None
+
+        self.ready = MPFuture()
 
     def run(self):
         torch.set_num_threads(1)
         loop = switch_to_uvloop()
 
         async def _run():
-            grpc.aio.init_grpc_aio()
-            logger.debug(f"Starting, pid {os.getpid()}")
-            server = grpc.aio.server(
-                options=GRPC_KEEPALIVE_OPTIONS
-                + (
-                    ("grpc.so_reuseport", 1),
-                    ("grpc.max_send_message_length", -1),
-                    ("grpc.max_receive_message_length", -1),
-                )
-            )
-            runtime_grpc.add_ConnectionHandlerServicer_to_server(self, server)
+            try:
+                self._p2p = await self.dht.replicate_p2p()
+                await self.add_p2p_handlers(self._p2p, balanced=True)
 
-            found_port = server.add_insecure_port(self.listen_on)
-            assert found_port != 0, f"Failed to listen to {self.listen_on}"
+                # wait forever
+                await asyncio.Future()
 
-            await server.start()
-            self.ready.set()
-            await server.wait_for_termination()
-            logger.debug(f"ConnectionHandler terminated: (pid={os.getpid()})")
+            except Exception as e:
+                self.ready.set_exception(e)
+                return
+
+        self.ready.set_result(None)
 
         try:
             loop.run_until_complete(_run())
         except KeyboardInterrupt:
             logger.debug("Caught KeyboardInterrupt, shutting down")
 
-    async def info(self, request: runtime_pb2.ExpertUID, context: grpc.ServicerContext):
+    async def rpc_info(self, request: runtime_pb2.ExpertUID, context: P2PContext) -> runtime_pb2.ExpertInfo:
         return runtime_pb2.ExpertInfo(serialized_info=MSGPackSerializer.dumps(self.experts[request.uid].get_info()))
 
-    async def forward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
+    async def _gather_inputs(
+        self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
+    ) -> Tuple[str, List[torch.Tensor]]:
+        expert_uid = None
+
+        def _unpack(req: runtime_pb2.ExpertRequest) -> Iterable[runtime_pb2.Tensor]:
+            nonlocal expert_uid
+
+            if expert_uid is None:
+                expert_uid = req.uid
+            elif expert_uid != req.uid:
+                raise ValueError("Expert uids differ in one request")
+
+            return req.tensors
+
+        tensors_stream = amap_in_executor(_unpack, requests)
+        inputs = await deserialize_tensor_stream(tensors_stream)
+        return expert_uid, inputs
+
+    async def _process_inputs(
+        self,
+        inputs: List[torch.Tensor],
+        pool: TaskPool,
+        schema: Union[BatchTensorDescriptor, Tuple[BatchTensorDescriptor, ...]],
+    ) -> List[runtime_pb2.Tensor]:
+        return [
+            serialize_torch_tensor(result, proto.compression, allow_inplace=True)
+            for result, proto in zip(await pool.submit_task(*inputs), nested_flatten(schema))
+        ]
+
+    async def rpc_forward(self, request: runtime_pb2.ExpertRequest, context: P2PContext) -> runtime_pb2.ExpertResponse:
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
-        future = self.experts[request.uid].forward_pool.submit_task(*inputs)
-        serialized_response = [
-            serialize_torch_tensor(tensor, proto.compression, allow_inplace=True)
-            for tensor, proto in zip(await future, nested_flatten(self.experts[request.uid].outputs_schema))
+        expert = self.experts[request.uid]
+        return runtime_pb2.ExpertResponse(
+            tensors=await self._process_inputs(inputs, expert.forward_pool, expert.outputs_schema)
+        )
+
+    async def rpc_forward_stream(
+        self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
+    ) -> AsyncIterator[runtime_pb2.ExpertRequest]:
+        uid, inputs = await self._gather_inputs(requests, context)
+        expert = self.experts[uid]
+        output_split = [
+            part
+            for tensor in await self._process_inputs(inputs, expert.forward_pool, expert.outputs_schema)
+            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE)
         ]
 
-        return runtime_pb2.ExpertResponse(tensors=serialized_response)
+        async for part in as_aiter(*output_split):
+            yield runtime_pb2.ExpertResponse(tensors=[part])
 
-    async def backward(self, request: runtime_pb2.ExpertRequest, context: grpc.ServicerContext):
-        inputs_and_grad_outputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
-        future = self.experts[request.uid].backward_pool.submit_task(*inputs_and_grad_outputs)
-        serialized_response = [
-            serialize_torch_tensor(tensor, proto.compression, allow_inplace=True)
-            for tensor, proto in zip(await future, nested_flatten(self.experts[request.uid].grad_inputs_schema))
+    async def rpc_backward(
+        self, request: runtime_pb2.ExpertRequest, context: P2PContext
+    ) -> runtime_pb2.ExpertResponse:
+        inputs_and_grads = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
+        expert = self.experts[request.uid]
+        return runtime_pb2.ExpertResponse(
+            tensors=await self._process_inputs(inputs_and_grads, expert.backward_pool, expert.grad_inputs_schema)
+        )
+
+    async def rpc_backward_stream(
+        self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
+    ) -> AsyncIterator[runtime_pb2.ExpertResponse]:
+        uid, inputs_and_grads = await self._gather_inputs(requests, context)
+        expert = self.experts[uid]
+        output_split = [
+            part
+            for tensor in await self._process_inputs(inputs_and_grads, expert.backward_pool, expert.grad_inputs_schema)
+            for part in split_for_streaming(tensor, DEFAULT_MAX_MSG_SIZE)
         ]
-        return runtime_pb2.ExpertResponse(tensors=serialized_response)
+
+        async for part in as_aiter(*output_split):
+            yield runtime_pb2.ExpertResponse(tensors=[part])

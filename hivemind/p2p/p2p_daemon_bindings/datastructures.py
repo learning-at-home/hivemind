@@ -5,7 +5,7 @@ Author: Kevin Mai-Husan Chia
 """
 
 import hashlib
-from typing import Any, Sequence, Union
+from typing import Any, Sequence, Tuple, Union
 
 import base58
 import multihash
@@ -126,6 +126,12 @@ class PeerInfo:
     def from_protobuf(cls, peer_info_pb: p2pd_pb2.PeerInfo) -> "PeerInfo":
         peer_id = PeerID(peer_info_pb.id)
         addrs = [Multiaddr(addr) for addr in peer_info_pb.addrs]
+        return PeerInfo(peer_id, addrs)
+
+    @classmethod
+    def from_tuple(cls, value: Tuple[str, Sequence[str]]) -> "PeerInfo":
+        peer_id = PeerID.from_base58(value[0])
+        addrs = [Multiaddr(addr) for addr in value[1]]
         return PeerInfo(peer_id, addrs)
 
     def __str__(self):

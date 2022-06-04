@@ -1,7 +1,7 @@
 # Mixture-of-Experts
 
 This tutorial covers the basics of Decentralized Mixture-of-Experts (DMoE).
-From the infrastructure standpoint, DMoE consists of two parts: experts hosted on peer devices, and a gating/routing function that assigns input to one of these experts.
+From the infrastructure standpoint, DMoE consists of two parts: experts hosted on peer devices, and client-side modules to access those experts.
 
 ## Host experts with a server
 
@@ -11,9 +11,8 @@ most of the model parameters and computation. The server can be started using ei
 for now. To host a server with default experts, run this in your shell:
 
 ```sh
-hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_pattern "expert.[0:5]" \
-                --listen_on 0.0.0.0:1337
-# note: if you omit listen_on and/or dht_port, they will be chosen automatically and printed to stdout.
+hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_pattern "expert.[0:5]"
+# note: server will listen to a random port. To specify interface & port, add --host_maddrs and --announce_maddrs
 ```
 
 <details style="margin-top:-24px; margin-bottom: 16px;">
@@ -22,8 +21,7 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_patte
 ```sh
 [2021/07/15 18:52:01.424][INFO][moe.server.create:156] Running DHT node on ['/ip4/127.0.0.1/tcp/42513/p2p/QmacLgRkAHSqdWYdQ8TePioMxQCNV2JeD3AUDmbVd69gNL'], initial peers = []
 [2021/07/15 18:52:01.424][INFO][moe.server.create:181] Generating 5 expert uids from pattern expert.[0:5]
-[2021/07/15 18:52:01.658][INFO][moe.server.run:233] Server started at 0.0.0.0:1337
-[2021/07/15 18:52:01.658][INFO][moe.server.run:234] Got 5 experts:
+[2021/07/15 18:52:01.658][INFO][moe.server.run:233] Server started with 5 experts
 [2021/07/15 18:52:01.658][INFO][moe.server.run:237] expert.4: FeedforwardBlock, 2100736 parameters
 [2021/07/15 18:52:01.658][INFO][moe.server.run:237] expert.0: FeedforwardBlock, 2100736 parameters
 [2021/07/15 18:52:01.659][INFO][moe.server.run:237] expert.3: FeedforwardBlock, 2100736 parameters
@@ -67,8 +65,7 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_patt
 ```sh
 [2021/07/15 18:53:41.700][INFO][moe.server.create:156] Running DHT node on ['/ip4/127.0.0.1/tcp/34487/p2p/QmcJ3jgbdwphLAiwGjvwrjimJJrdMyhLHf6tFj9viCFFGn'], initial peers = ['/ip4/127.0.0.1/tcp/42513/p2p/QmacLgRkAHSqdWYdQ8TePioMxQCNV2JeD3AUDmbVd69gNL']
 [2021/07/15 18:53:41.700][INFO][moe.server.create:181] Generating 10 expert uids from pattern expert.[5:250]
-[2021/07/15 18:53:42.085][INFO][moe.server.run:233] Server started at 0.0.0.0:36389
-[2021/07/15 18:53:42.086][INFO][moe.server.run:234] Got 10 experts:
+[2021/07/15 18:53:42.085][INFO][moe.server.run:233] Server started with 10 experts:
 [2021/07/15 18:53:42.086][INFO][moe.server.run:237] expert.55: FeedforwardBlock, 2100736 parameters
 [2021/07/15 18:53:42.086][INFO][moe.server.run:237] expert.173: FeedforwardBlock, 2100736 parameters
 [2021/07/15 18:53:42.086][INFO][moe.server.run:237] expert.164: FeedforwardBlock, 2100736 parameters
@@ -104,10 +101,10 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 10 --expert_patt
 
 </details>
 
-By default, the server will only accept connections from your local machine. To access it globally, you should replace
-`127.0.0.1` part from initial peers with server's IP address. Hivemind supports both ipv4 and ipv6 protocols and uses the same notation
-as [libp2p](https://docs.libp2p.io/concepts/addressing/). You can find more details on multiaddresses in the 
-[DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html).
+By default, the server will only accept connections from your local network. 
+To enable training over the Internet (or some other network), you should set `--host_maddrs` and `--announce_maddrs`.
+These options also allow you to select IPv4/IPv6 network protocols and TCP and QUIC transport protocols.
+You can find more details in the [DHT tutorial](https://learning-at-home.readthedocs.io/en/latest/user/dht.html).
 
 ## Train the experts
 
