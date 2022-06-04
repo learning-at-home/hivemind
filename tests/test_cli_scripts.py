@@ -1,7 +1,6 @@
 import re
+from subprocess import PIPE, Popen
 from time import sleep
-
-from subprocess import Popen, PIPE
 
 DHT_START_PATTERN = re.compile(r"Running a DHT instance. To connect other peers to this one, use (.+)$")
 
@@ -11,7 +10,9 @@ def test_dht_connection_successful():
 
     dht_proc = Popen(
         ["hivemind-dht", "--host_maddrs", "/ip4/127.0.0.1/tcp/0", "--refresh_period", str(dht_refresh_period)],
-        stderr=PIPE, text=True, encoding="utf-8"
+        stderr=PIPE,
+        text=True,
+        encoding="utf-8",
     )
 
     first_line = dht_proc.stderr.readline()
@@ -24,7 +25,9 @@ def test_dht_connection_successful():
 
     dht_client_proc = Popen(
         ["hivemind-dht", *initial_peers, "--host_maddrs", "/ip4/127.0.0.1/tcp/0"],
-        stderr=PIPE, text=True, encoding="utf-8"
+        stderr=PIPE,
+        text=True,
+        encoding="utf-8",
     )
 
     # skip first two lines with connectivity info
@@ -42,12 +45,16 @@ def test_dht_connection_successful():
         first_report_msg = dht_proc.stderr.readline()
         second_report_msg = dht_proc.stderr.readline()
 
-        if "2 DHT nodes (including this one) are in the local routing table" in first_report_msg and \
-            "Local storage contains 0 keys" in second_report_msg:
+        if (
+            "2 DHT nodes (including this one) are in the local routing table" in first_report_msg
+            and "Local storage contains 0 keys" in second_report_msg
+        ):
             break
     else:
-        assert "2 DHT nodes (including this one) are in the local routing table" in first_report_msg and \
-               "Local storage contains 0 keys" in second_report_msg
+        assert (
+            "2 DHT nodes (including this one) are in the local routing table" in first_report_msg
+            and "Local storage contains 0 keys" in second_report_msg
+        )
 
     dht_proc.terminate()
     dht_client_proc.terminate()
