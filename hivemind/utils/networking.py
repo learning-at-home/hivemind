@@ -9,7 +9,7 @@ from hivemind.utils.logging import TextStyle, get_logger
 
 LOCALHOST = "127.0.0.1"
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def get_free_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):
@@ -71,8 +71,8 @@ def log_visible_maddrs(visible_maddrs: List[Multiaddr], only_p2p: bool) -> None:
             selected_maddrs = visible_maddrs
         initial_peers_str = " ".join(str(addr) for addr in selected_maddrs)
 
-    _logger.info(
+    logger.info(
         f"Running a DHT instance. To connect other peers to this one, use "
         f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers_str}{TextStyle.RESET}"
     )
-    _logger.info(f"Full list of visible multiaddresses: {' '.join(str(addr) for addr in visible_maddrs)}")
+    logger.info(f"Full list of visible multiaddresses: {' '.join(str(addr) for addr in visible_maddrs)}")
