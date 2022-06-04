@@ -1,15 +1,12 @@
 import socket
 from contextlib import closing
 from ipaddress import ip_address
-from typing import Sequence
-from typing import List, Optional, Sequence
+from typing import List, Sequence
 
 from multiaddr import Multiaddr
 
 from hivemind.utils.logging import TextStyle, get_logger
 
-Hostname, Port = str, int  # flavour types
-Endpoint = str  # e.g. 1.2.3.4:1337 or [2a21:6с8:b192:2105]:8888, https://networkengineering.stackexchange.com/a/9435
 LOCALHOST = "127.0.0.1"
 
 _logger = get_logger(__name__)
