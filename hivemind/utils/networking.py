@@ -1,11 +1,15 @@
 import socket
 from contextlib import closing
 from ipaddress import ip_address
-from typing import Sequence
+from typing import List, Sequence
 
 from multiaddr import Multiaddr
 
+from hivemind.utils.logging import TextStyle, get_logger
+
 LOCALHOST = "127.0.0.1"
+
+logger = get_logger(__name__)
 
 
 def get_free_port(params=(socket.AF_INET, socket.SOCK_STREAM), opt=(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)):
@@ -52,3 +56,23 @@ def choose_ip_address(
                         return value_for_protocol
 
     raise ValueError(f"No IP address found among given multiaddrs: {maddrs}")
+
+
+def log_visible_maddrs(visible_maddrs: List[Multiaddr], only_p2p: bool) -> None:
+    if only_p2p:
+        unique_addrs = {addr["p2p"] for addr in visible_maddrs}
+        initial_peers = " ".join(f"/p2p/{addr}" for addr in unique_addrs)
+    else:
+        available_ips = [Multiaddr(addr) for addr in visible_maddrs if "ip4" in addr or "ip6" in addr]
+        if available_ips:
+            preferred_ip = choose_ip_address(available_ips)
+            selected_maddrs = [addr for addr in visible_maddrs if preferred_ip in str(addr)]
+        else:
+            selected_maddrs = visible_maddrs
+        initial_peers = " ".join(str(addr) for addr in selected_maddrs)
+
+    logger.info(
+        f"Running a DHT instance. To connect other peers to this one, use "
+        f"{TextStyle.BOLD}{TextStyle.BLUE}--initial_peers {initial_peers}{TextStyle.RESET}"
+    )
+    logger.info(f"Full list of visible multiaddresses: {' '.join(str(addr) for addr in visible_maddrs)}")
