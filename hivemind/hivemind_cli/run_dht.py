@@ -49,7 +49,7 @@ def main():
     parser.add_argument(
         "--identity_path",
         help="Path to a private key file. If defined, makes the peer ID deterministic. "
-             "If the file does not exist yet, writes a new private key to this file.",
+        "If the file does not exist yet, writes a new private key to this file.",
     )
     parser.add_argument(
         "--refresh_period", type=int, default=30, help="Period (in seconds) for fetching the keys from DHT"
