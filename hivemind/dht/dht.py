@@ -275,7 +275,11 @@ class DHT(mp.Process):
     @property
     def peer_id(self) -> PeerID:
         if self._peer_id is None:
-            self._peer_id = self.run_coroutine(DHT._get_peer_id)
+            if os.getpid() == self.pid:
+                self._peer_id = self._node.peer_id
+            else:
+                # note: we cannot run_coroutine from the same pid because it would deadlock the event loop
+                self._peer_id = self.run_coroutine(DHT._get_peer_id)
         return self._peer_id
 
     @staticmethod

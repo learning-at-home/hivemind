@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-from hivemind import moe, PeerID
+from hivemind import moe
 from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.dht import DHT
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
-from hivemind.p2p import P2P, StubBase
+from hivemind.p2p import P2P, StubBase, PeerID
 from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
 from hivemind.utils.asyncio import amap_in_executor, iter_as_aiter
@@ -21,10 +21,12 @@ from hivemind.utils.nested import nested_compare, nested_flatten, nested_pack
 from hivemind.utils.serializer import MSGPackSerializer
 from hivemind.utils.streaming import split_for_streaming
 
+
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 
 
-def get_expert_stub(p2p: P2P, server_peer_id: PeerID) -> "ConnectionHandlerStub":
+def get_server_stub(p2p: P2P, server_peer_id: PeerID) -> "ConnectionHandlerStub":
+    """Create an RPC stub that can send requests to any expert on the specified remote server"""
     return moe.server.connection_handler.ConnectionHandler.get_stub(p2p, server_peer_id)
 
 
@@ -57,12 +59,12 @@ class RemoteExpert(nn.Module):
         return self._info.uid
 
     @property
-    def server_peer_info(self):
-        return self._info.peer_info
+    def server_peer_id(self):
+        return self._info.peer_id
 
     @property
     def stub(self) -> StubBase:
-        return get_expert_stub(self.p2p, self.server_peer_id)
+        return get_server_stub(self.p2p, self.server_peer_id)
 
     def forward(self, *args, **kwargs):
         """Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd."""
@@ -89,7 +91,7 @@ class RemoteExpert(nn.Module):
         return self._rpc_info
 
     def extra_repr(self):
-        return f"uid={self.uid}, server_peer_info={self.server_peer_info}"
+        return f"uid={self.uid}, server_peer_id={self.server_peer_id}"
 
 
 def _create_remote_experts(infos: Sequence[Optional[RemoteExpertInfo]], p2p: P2P) -> List[Optional[RemoteExpert]]:

@@ -48,9 +48,8 @@ def client_process(
     can_start.wait()
 
     p2p = RemoteExpertWorker.run_coroutine(P2P.create(initial_peers=server_maddrs))
-    peer_info = PeerInfo(server_peer_id, server_maddrs)
     experts = [
-        RemoteExpert(expert_info=RemoteExpertInfo(uid=f"expert.{i}", peer_info=peer_info), p2p=p2p)
+        RemoteExpert(expert_info=RemoteExpertInfo(uid=f"expert.{i}", peer_id=server_peer_id), p2p=p2p)
         for i in range(num_experts)
     ]
 

@@ -12,7 +12,7 @@ from torch.autograd.function import once_differentiable
 from hivemind.compression import serialize_torch_tensor
 from hivemind.dht import DHT
 from hivemind.moe.client.beam_search import MoEBeamSearcher
-from hivemind.moe.client.expert import DUMMY, RemoteExpert, expert_backward, expert_forward, get_expert_stub
+from hivemind.moe.client.expert import DUMMY, RemoteExpert, expert_backward, expert_forward, get_server_stub
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.moe.server.expert_uid import UID_DELIMITER
 from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError
@@ -227,7 +227,7 @@ class _RemoteCallMany(torch.autograd.Function):
         pending_tasks: Dict[Future, Tuple[int, int]] = {}
         for i in range(num_samples):
             for j, expert in enumerate(experts_per_sample[i]):
-                stub = get_expert_stub(expert.p2p, expert.server_peer_info)
+                stub = get_server_stub(expert.p2p, expert.server_peer_id)
                 serialized_tensors = (
                     serialize_torch_tensor(tensor, proto.compression)
                     for tensor, proto in zip(flat_inputs_per_sample[i], nested_flatten(info["forward_schema"]))
@@ -321,7 +321,7 @@ class _RemoteCallMany(torch.autograd.Function):
             alive_ii.cpu().numpy(), alive_jj.cpu().numpy(), inputs_per_expert, grad_outputs_per_expert
         ):
             expert: RemoteExpert = expert_per_sample[i.item()][j.item()]
-            stub = get_expert_stub(expert.p2p, expert.server_peer_info)
+            stub = get_server_stub(expert.p2p, expert.server_peer_id)
             inputs_and_grad_outputs = tuple(nested_flatten((inputs_ij, grad_outputs_ij)))
             serialized_tensors = (
                 serialize_torch_tensor(tensor, proto.compression)

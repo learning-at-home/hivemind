@@ -14,7 +14,7 @@ from hivemind.moe.server.expert_uid import (
     is_valid_uid,
     split_uid,
 )
-from hivemind.p2p import PeerID, PeerInfo
+from hivemind.p2p import PeerID
 from hivemind.utils import MPFuture, get_dht_time
 
 
@@ -56,13 +56,14 @@ async def _declare_experts(
     num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
     expiration_time = get_dht_time() + expiration
     data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
-    peer_id_bytes = dht.peer_id.to_base58()
+    peer_id_raw = dht.peer_id.to_base58()
+
     for uid in uids:
-        data_to_store[uid, None] = peer_id_bytes
+        data_to_store[uid, None] = peer_id_raw
         prefix = uid if uid.count(UID_DELIMITER) > 1 else f"{uid}{UID_DELIMITER}{FLAT_EXPERT}"
         for i in range(prefix.count(UID_DELIMITER) - 1):
             prefix, last_coord = split_uid(prefix)
-            data_to_store[prefix, last_coord] = (uid, peer_id_bytes)
+            data_to_store[prefix, last_coord] = (uid, peer_id_raw)
 
     keys, maybe_subkeys, values = zip(*((key, subkey, value) for (key, subkey), value in data_to_store.items()))
     store_ok = await node.store_many(keys, values, expiration_time, subkeys=maybe_subkeys, num_workers=num_workers)
@@ -94,6 +95,6 @@ async def _get_experts(
     experts: List[Optional[RemoteExpertInfo]] = [None] * len(uids)
     for i, uid in enumerate(uids):
         expert_server_peer_id = found[uid]
-        if expert_server_peer_id is not None and isinstance(expert_server_peer_id.value, bytes):
+        if expert_server_peer_id is not None and isinstance(expert_server_peer_id.value, str):
             experts[i] = RemoteExpertInfo(uid, PeerID.from_base58(expert_server_peer_id.value))
     return experts
