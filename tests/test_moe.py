@@ -78,7 +78,7 @@ def test_call_many(hidden_dim=16):
 
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         e0, e1, e2, e3, e4 = create_remote_experts(
-            [ExpertInfo(uid=f"expert.{i}", peer_info=server_peer_info) for i in range(5)],
+            [ExpertInfo(uid=f"expert.{i}", peer_id=server_peer_info.peer_id) for i in range(5)],
             dht,
         )
         e5 = RemoteExpert(ExpertInfo(f"thisshouldnotexist", server_peer_info), None)
@@ -138,8 +138,8 @@ def test_remote_module_call(hidden_dim=16):
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         real_expert, fake_expert = create_remote_experts(
             [
-                ExpertInfo(uid="expert.0", peer_info=server_peer_info),
-                ExpertInfo(uid="oiasfjiasjf", peer_info=server_peer_info),
+                ExpertInfo(uid="expert.0", peer_id=server_peer_info.peer_id),
+                ExpertInfo(uid="oiasfjiasjf", peer_id=server_peer_info.peer_id),
             ],
             dht=dht,
         )
@@ -206,7 +206,7 @@ def test_determinism(hidden_dim=16):
     ) as server_peer_info:
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         expert = create_remote_experts(
-            [ExpertInfo(uid="expert.0", peer_info=server_peer_info)],
+            [ExpertInfo(uid="expert.0", peer_id=server_peer_info.peer_id)],
             dht=dht,
         )[0]
 

@@ -27,8 +27,8 @@ def test_training(max_steps: int = 100, threshold: float = 0.9):
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         expert1, expert2 = create_remote_experts(
             [
-                ExpertInfo(uid="expert.0", peer_info=server_peer_info),
-                ExpertInfo(uid="expert.1", peer_info=server_peer_info),
+                ExpertInfo(uid="expert.0", peer_id=server_peer_info.peer_id),
+                ExpertInfo(uid="expert.1", peer_id=server_peer_info.peer_id),
             ],
             dht=dht,
         )

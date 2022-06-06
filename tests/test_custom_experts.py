@@ -24,8 +24,8 @@ def test_custom_expert(hid_dim=16):
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         expert0, expert1 = create_remote_experts(
             [
-                ExpertInfo(uid="expert.0", peer_info=server_peer_info),
-                ExpertInfo(uid="expert.1", peer_info=server_peer_info),
+                ExpertInfo(uid="expert.0", peer_id=server_peer_info.peer_id),
+                ExpertInfo(uid="expert.1", peer_id=server_peer_info.peer_id),
             ],
             dht=dht,
         )
@@ -55,8 +55,8 @@ def test_multihead_expert(hid_dim=16):
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         expert0, expert1 = create_remote_experts(
             [
-                ExpertInfo(uid="expert.0", peer_info=server_peer_info),
-                ExpertInfo(uid="expert.1", peer_info=server_peer_info),
+                ExpertInfo(uid="expert.0", peer_id=server_peer_info.peer_id),
+                ExpertInfo(uid="expert.1", peer_id=server_peer_info.peer_id),
             ],
             dht=dht,
         )
