@@ -44,27 +44,25 @@ def declare_experts(
     :returns: if wait, returns store status for every key (True = store succeeded, False = store rejected)
     """
     assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
+    if not isinstance(uids, list):
+        uids = list(uids)
     for uid in uids:
         assert is_valid_uid(uid), f"{uid} is not a valid expert uid. All uids must follow {UID_PATTERN.pattern}"
-    addrs = tuple(str(a.decapsulate("/p2p/" + a.get("p2p"))) for a in dht.get_visible_maddrs())
-    return dht.run_coroutine(
-        partial(_declare_experts, uids=list(uids), peer_id=dht.peer_id, addrs=addrs, expiration=expiration),
-        return_future=not wait,
-    )
+    return dht.run_coroutine(partial(_declare_experts, uids=uids, expiration=expiration), return_future=not wait)
 
 
 async def _declare_experts(
-    dht: DHT, node: DHTNode, uids: List[ExpertUID], peer_id: PeerID, addrs: Tuple[str], expiration: DHTExpiration
-) -> Dict[ExpertUID, bool]:
+        dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration: DHTExpiration) -> Dict[ExpertUID, bool]:
     num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
     expiration_time = get_dht_time() + expiration
     data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
+    peer_id_bytes = dht.peer_id.to_base58()
     for uid in uids:
-        data_to_store[uid, None] = (peer_id.to_base58(), addrs)
+        data_to_store[uid, None] = peer_id_bytes
         prefix = uid if uid.count(UID_DELIMITER) > 1 else f"{uid}{UID_DELIMITER}{FLAT_EXPERT}"
         for i in range(prefix.count(UID_DELIMITER) - 1):
             prefix, last_coord = split_uid(prefix)
-            data_to_store[prefix, last_coord] = [uid, (peer_id.to_base58(), addrs)]
+            data_to_store[prefix, last_coord] = (uid, peer_id_bytes)
 
     keys, maybe_subkeys, values = zip(*((key, subkey, value) for (key, subkey), value in data_to_store.items()))
     store_ok = await node.store_many(keys, values, expiration_time, subkeys=maybe_subkeys, num_workers=num_workers)
@@ -93,9 +91,9 @@ async def _get_experts(
     num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
     found: Dict[ExpertUID, DHTValue] = await node.get_many(uids, expiration_time, num_workers=num_workers)
 
-    experts: List[Optional[RemoteExpert]] = [None] * len(uids)
+    experts: List[Optional[RemoteExpertInfo]] = [None] * len(uids)
     for i, uid in enumerate(uids):
-        expert_info_for_uid = found[uid]
-        if expert_info_for_uid is not None and isinstance(expert_info_for_uid.value, tuple):
-            experts[i] = RemoteExpertInfo(uid, PeerInfo.from_tuple(expert_info_for_uid.value))
+        expert_server_peer_id = found[uid]
+        if expert_server_peer_id is not None and isinstance(expert_server_peer_id.value, bytes):
+            experts[i] = RemoteExpertInfo(uid, PeerID.from_base58(expert_server_peer_id.value))
     return experts
