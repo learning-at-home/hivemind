@@ -151,6 +151,7 @@ class MoEBeamSearcher:
                         for coord, match in maybe_prefix_data.value.items()
                         if isinstance(coord, Coordinate)
                         and isinstance(match, ValueWithExpiration)
+                        and isinstance(match.value, tuple)
                         and len(match.value) == 2
                         and is_valid_uid(match.value[0])
                         and isinstance(match.value[1], str)
@@ -221,6 +222,7 @@ class MoEBeamSearcher:
                     if isinstance(coord, Coordinate)
                     and 0 <= coord < grid_size
                     and isinstance(match, ValueWithExpiration)
+                    and isinstance(match.value, tuple)
                     and len(match.value) == 2
                     and is_valid_uid(match.value[0])
                     and isinstance(match.value[1], str)
@@ -293,11 +295,11 @@ class MoEBeamSearcher:
         unique_experts: Set[ExpertUID] = set()
 
         for dim_index in range(1, len(grid_scores) - 1):
-            for score, uid_endpoint in cls._iterate_matching_experts(beam, grid_scores):
-                if uid_endpoint.uid not in unique_experts:
+            for score, expert_info in cls._iterate_matching_experts(beam, grid_scores):
+                if expert_info.uid not in unique_experts:
                     push_and_maybe_pop = heapq.heappush if len(best_experts_heap) < beam_size else heapq.heappushpop
-                    push_and_maybe_pop(best_experts_heap, (score, uid_endpoint))
-                    unique_experts.add(uid_endpoint.uid)
+                    push_and_maybe_pop(best_experts_heap, (score, expert_info))
+                    unique_experts.add(expert_info.uid)
 
             # form new beam using successors from the current beam
             dim_scores = grid_scores[dim_index]
@@ -331,11 +333,11 @@ class MoEBeamSearcher:
                 break
 
         # add best experts from the final beam
-        for score, uid_endpoint in cls._iterate_matching_experts(beam, grid_scores):
-            if uid_endpoint.uid not in unique_experts:
+        for score, expert_info in cls._iterate_matching_experts(beam, grid_scores):
+            if expert_info.uid not in unique_experts:
                 push_and_maybe_pop = heapq.heappush if len(best_experts_heap) < beam_size else heapq.heappushpop
-                push_and_maybe_pop(best_experts_heap, (score, uid_endpoint))
-                unique_experts.add(uid_endpoint.uid)
+                push_and_maybe_pop(best_experts_heap, (score, expert_info))
+                unique_experts.add(expert_info.uid)
 
         return [expert_info for _, expert_info in sorted(best_experts_heap, reverse=True)]
 
