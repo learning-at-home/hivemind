@@ -52,7 +52,8 @@ def declare_experts(
 
 
 async def _declare_experts(
-        dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration: DHTExpiration) -> Dict[ExpertUID, bool]:
+    dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration: DHTExpiration
+) -> Dict[ExpertUID, bool]:
     num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
     expiration_time = get_dht_time() + expiration
     data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
