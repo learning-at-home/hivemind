@@ -169,6 +169,7 @@ class DHT(mp.Process):
         :param kwargs: parameters forwarded to DHTNode.get_many_by_id
         :returns: (value, expiration time); if value was not found, returns None
         """
+        assert os.getpid() != self.pid, "calling *external* DHT interface from inside DHT will result in a deadlock"
         future = MPFuture()
         self._outer_pipe.send(("_get", [], dict(key=key, latest=latest, future=future, **kwargs)))
         return future if return_future else future.result()
@@ -202,6 +203,7 @@ class DHT(mp.Process):
         :param return_future: if False (default), return when finished. Otherwise return MPFuture and run in background.
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
+        assert os.getpid() != self.pid, "calling *external* DHT interface from inside DHT will result in a deadlock"
         future = MPFuture()
         self._outer_pipe.send(
             (
@@ -246,6 +248,7 @@ class DHT(mp.Process):
           or use asyncio.get_event_loop().run_in_executor(...) to prevent coroutine from blocking background DHT tasks
         :note: when run_coroutine is called with return_future=False, MPFuture can be cancelled to interrupt the task.
         """
+        assert os.getpid() != self.pid, "calling *external* DHT interface from inside DHT will result in a deadlock"
         future = MPFuture()
         self._outer_pipe.send(("_run_coroutine", [], dict(coro=coro, future=future)))
         return future if return_future else future.result()
