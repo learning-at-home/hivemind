@@ -50,7 +50,7 @@ class RemoteExpert(nn.Module):
         return self._info.uid
 
     @property
-    def server_peer_id(self):
+    def server_peer_id(self) -> PeerID:
         return self._info.peer_id
 
     @property
