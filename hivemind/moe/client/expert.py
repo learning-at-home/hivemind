@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 from torch.autograd.function import once_differentiable
 
-from hivemind import moe
+from hivemind import moe, PeerID
 from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.dht import DHT
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
-from hivemind.p2p import P2P, PeerInfo, StubBase
+from hivemind.p2p import P2P, StubBase
 from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
 from hivemind.utils.asyncio import amap_in_executor, iter_as_aiter
@@ -24,8 +24,8 @@ from hivemind.utils.streaming import split_for_streaming
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 
 
-def get_expert_stub(p2p: P2P, server_peer_info: PeerInfo) -> "ConnectionHandlerStub":
-    return moe.server.connection_handler.ConnectionHandler.get_stub(p2p, server_peer_info.peer_id)
+def get_expert_stub(p2p: P2P, server_peer_id: PeerID) -> "ConnectionHandlerStub":
+    return moe.server.connection_handler.ConnectionHandler.get_stub(p2p, server_peer_id)
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class RemoteExpertInfo:
     """A simple data class containing uid of expert and server PeerInfo"""
 
     uid: str
-    peer_info: PeerInfo
+    peer_id: PeerID
 
 
 class RemoteExpert(nn.Module):
@@ -62,7 +62,7 @@ class RemoteExpert(nn.Module):
 
     @property
     def stub(self) -> StubBase:
-        return get_expert_stub(self.p2p, self.server_peer_info)
+        return get_expert_stub(self.p2p, self.server_peer_id)
 
     def forward(self, *args, **kwargs):
         """Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd."""
