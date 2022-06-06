@@ -4,7 +4,8 @@ import pytest
 import torch
 
 from hivemind.dht import DHT
-from hivemind.moe.client.expert import RemoteExpertInfo, create_remote_experts
+from hivemind.moe.client.expert import create_remote_experts
+from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.moe.server import background_server
 
 CUSTOM_EXPERTS_PATH = os.path.join(os.path.dirname(__file__), "test_utils", "custom_networks.py")
@@ -23,8 +24,8 @@ def test_custom_expert(hid_dim=16):
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         expert0, expert1 = create_remote_experts(
             [
-                RemoteExpertInfo(uid="expert.0", peer_info=server_peer_info),
-                RemoteExpertInfo(uid="expert.1", peer_info=server_peer_info),
+                ExpertInfo(uid="expert.0", peer_info=server_peer_info),
+                ExpertInfo(uid="expert.1", peer_info=server_peer_info),
             ],
             dht=dht,
         )
@@ -54,8 +55,8 @@ def test_multihead_expert(hid_dim=16):
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         expert0, expert1 = create_remote_experts(
             [
-                RemoteExpertInfo(uid="expert.0", peer_info=server_peer_info),
-                RemoteExpertInfo(uid="expert.1", peer_info=server_peer_info),
+                ExpertInfo(uid="expert.0", peer_info=server_peer_info),
+                ExpertInfo(uid="expert.1", peer_info=server_peer_info),
             ],
             dht=dht,
         )

@@ -5,25 +5,21 @@ from functools import partial
 from typing import Deque, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
 from hivemind.dht import DHT, DHTExpiration, DHTNode
-from hivemind.moe.client.expert import (
-    RemoteExpert,
-    RemoteExpertInfo,
-    batch_create_remote_experts,
-    create_remote_experts,
-)
-from hivemind.moe.server.expert_uid import (
+from hivemind.moe.client.expert import RemoteExpert, batch_create_remote_experts, create_remote_experts
+from hivemind.moe.expert_uid import (
     FLAT_EXPERT,
     PREFIX_PATTERN,
     UID_DELIMITER,
     Coordinate,
+    ExpertInfo,
     ExpertPrefix,
     ExpertUID,
     Score,
-    UidEndpoint,
     is_valid_prefix,
+    is_valid_uid,
 )
-from hivemind.p2p import PeerInfo
-from hivemind.utils import MPFuture, get_dht_time, get_logger
+from hivemind.p2p import PeerID
+from hivemind.utils import MPFuture, ValueWithExpiration, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 
@@ -100,7 +96,7 @@ class MoEBeamSearcher:
 
     def get_initial_beam(
         self, scores: Sequence[float], beam_size: int, return_future: bool = False
-    ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
+    ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, ExpertInfo]]]:
         """
         :param scores: prefer suffix coordinates that have highest scores
         :param beam_size: select this many active suffixes with highest scores
@@ -130,9 +126,9 @@ class MoEBeamSearcher:
         negative_caching: bool,
         cache_expiration: DHTExpiration,
         num_workers: Optional[int] = None,
-    ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]]:
+    ) -> List[Tuple[Score, ExpertPrefix, Dict[Coordinate, ExpertInfo]]]:
         num_workers = num_workers or dht.num_workers or beam_size
-        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = []
+        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, ExpertInfo]]] = []
         unattempted_indices: List[Coordinate] = sorted(
             range(len(scores)), key=scores.__getitem__
         )  # from worst to best
@@ -151,11 +147,13 @@ class MoEBeamSearcher:
                 maybe_prefix_data = await pending_task
                 if maybe_prefix_data is not None and isinstance(maybe_prefix_data.value, dict):
                     successors = {
-                        coord: UidEndpoint(uid=match.value[0], peer_info=PeerInfo.from_tuple(match.value[1]))
+                        coord: ExpertInfo(uid=match.value[0], peer_id=PeerID.from_base58(match.value[1]))
                         for coord, match in maybe_prefix_data.value.items()
                         if isinstance(coord, Coordinate)
-                        and isinstance(getattr(match, "value", None), list)
+                        and isinstance(match, ValueWithExpiration)
                         and len(match.value) == 2
+                        and is_valid_uid(match.value[0])
+                        and isinstance(match.value[1], str)
                     }
                     if successors:
                         beam.append((scores[pending_best_index], pending_best_prefix, successors))
@@ -178,7 +176,7 @@ class MoEBeamSearcher:
 
     def get_active_successors(
         self, prefixes: List[ExpertPrefix], grid_size: Optional[int] = None, return_future: bool = False
-    ) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
+    ) -> Dict[ExpertPrefix, Dict[Coordinate, ExpertInfo]]:
         """
         :param prefixes: a list of prefix for which to find active successor uids
         :param grid_size: if specified, only return successors if ther are in range [0, grid_size)
@@ -210,20 +208,22 @@ class MoEBeamSearcher:
         negative_caching: bool,
         cache_expiration: DHTExpiration,
         num_workers: Optional[int] = None,
-    ) -> Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]]:
+    ) -> Dict[ExpertPrefix, Dict[Coordinate, ExpertInfo]]:
         grid_size = grid_size or float("inf")
         num_workers = num_workers or min(len(prefixes), dht.num_workers or len(prefixes))
         dht_responses = await node.get_many(keys=prefixes, num_workers=num_workers)
-        successors: Dict[ExpertPrefix, Dict[Coordinate, UidEndpoint]] = {}
+        successors: Dict[ExpertPrefix, Dict[Coordinate, ExpertInfo]] = {}
         for prefix, found in dht_responses.items():
             if found and isinstance(found.value, dict):
                 successors[prefix] = {
-                    coord: UidEndpoint(uid=match.value[0], peer_info=PeerInfo.from_tuple(match.value[1]))
+                    coord: ExpertInfo(uid=match.value[0], peer_id=PeerID.from_base58(match.value[1]))
                     for coord, match in found.value.items()
                     if isinstance(coord, Coordinate)
                     and 0 <= coord < grid_size
-                    and isinstance(getattr(match, "value", None), list)
+                    and isinstance(match, ValueWithExpiration)
                     and len(match.value) == 2
+                    and is_valid_uid(match.value[0])
+                    and isinstance(match.value[1], str)
                 }
             else:
                 successors[prefix] = {}
@@ -235,7 +235,11 @@ class MoEBeamSearcher:
         return successors
 
     def find_best_experts(
-        self, grid_scores: Sequence[Sequence[float]], beam_size: int, return_future: bool = False
+        self,
+        grid_scores: Sequence[Sequence[float]],
+        beam_size: int,
+        num_workers: Optional[int] = None,
+        return_future: bool = False,
     ) -> Union[List[RemoteExpert], MPFuture[List[RemoteExpert]]]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
@@ -251,6 +255,7 @@ class MoEBeamSearcher:
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
         assert len(grid_scores) == len(self.grid_size) and beam_size > 0
+        num_workers = num_workers if num_workers is not None else self.num_workers
         result = self.dht.run_coroutine(
             partial(
                 self._find_best_experts,
@@ -259,11 +264,10 @@ class MoEBeamSearcher:
                 grid_scores=list(grid_scores),
                 negative_caching=self.negative_caching,
                 cache_expiration=self.cache_expiration,
-                num_workers=self.num_workers,
+                num_workers=num_workers,
             ),
             return_future,
         )
-
         return create_remote_experts(result, self.dht, return_future)
 
     @classmethod
@@ -277,15 +281,15 @@ class MoEBeamSearcher:
         negative_caching: bool,
         cache_expiration: DHTExpiration,
         num_workers: Optional[int] = None,
-    ) -> List[RemoteExpertInfo]:
+    ) -> List[ExpertInfo]:
         num_workers = num_workers or min(beam_size, dht.num_workers or beam_size)
 
         # form initial beam from top-k active L1 prefixes, each row is (score, uid prefix, possible suffixes)
-        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]] = await cls._get_initial_beam(
+        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, ExpertInfo]]] = await cls._get_initial_beam(
             dht, node, prefix, beam_size, grid_scores[0], negative_caching, min(beam_size, num_workers)
         )
 
-        best_experts_heap: List[Tuple[Score, UidEndpoint]] = []  # max-heap of expert uids/endpoints ordered by scores
+        best_experts_heap: List[Tuple[Score, ExpertInfo]] = []  # max-heap of expert infos ordered by scores
         unique_experts: Set[ExpertUID] = set()
 
         for dim_index in range(1, len(grid_scores) - 1):
@@ -306,6 +310,9 @@ class MoEBeamSearcher:
                     if isinstance(next_coord, int) and 0 <= next_coord < len(dim_scores)
                 ),
             )
+
+            if not best_active_pairs:
+                break
             _, best_uid_prefixes = zip(*best_active_pairs)
 
             # search DHT for next step suffixes
@@ -330,16 +337,12 @@ class MoEBeamSearcher:
                 push_and_maybe_pop(best_experts_heap, (score, uid_endpoint))
                 unique_experts.add(uid_endpoint.uid)
 
-        best_experts = [
-            RemoteExpertInfo(uid_endpoint.uid, uid_endpoint.peer_info)
-            for _, uid_endpoint in sorted(best_experts_heap, reverse=True)
-        ]
-        return best_experts
+        return [expert_info for _, expert_info in sorted(best_experts_heap, reverse=True)]
 
     @staticmethod
     def _iterate_matching_experts(
-        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, UidEndpoint]]], grid_scores: Sequence[Sequence[float]]
-    ) -> Iterator[Tuple[Score, UidEndpoint]]:
+        beam: List[Tuple[Score, ExpertPrefix, Dict[Coordinate, ExpertInfo]]], grid_scores: Sequence[Sequence[float]]
+    ) -> Iterator[Tuple[Score, ExpertInfo]]:
         """iterate over all exemplar experts attached to current beam"""
         for score, prefix, suffixes in beam:
             for next_coord, match in suffixes.items():
@@ -399,7 +402,7 @@ class MoEBeamSearcher:
         beam_size: int,
         negative_caching: bool,
         num_workers: Optional[int],
-    ) -> Sequence[Sequence[RemoteExpertInfo]]:
+    ) -> Sequence[Sequence[ExpertInfo]]:
         batch_grid_scores = [
             [tuple(grid_score[i]) for grid_score in batch_grid_scores] for i in range(len(batch_grid_scores[0]))
         ]

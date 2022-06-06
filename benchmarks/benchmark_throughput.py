@@ -7,11 +7,12 @@ import time
 import torch
 
 from hivemind.dht import DHT
-from hivemind.moe.client.expert import RemoteExpert, RemoteExpertInfo
+from hivemind.moe.client.expert import RemoteExpert
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
+from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.moe.server import ExpertBackend, Server
 from hivemind.moe.server.layers import name_to_block
-from hivemind.p2p import P2P, PeerInfo
+from hivemind.p2p import P2P
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
@@ -49,7 +50,7 @@ def client_process(
 
     p2p = RemoteExpertWorker.run_coroutine(P2P.create(initial_peers=server_maddrs))
     experts = [
-        RemoteExpert(expert_info=RemoteExpertInfo(uid=f"expert.{i}", peer_id=server_peer_id), p2p=p2p)
+        RemoteExpert(expert_info=ExpertInfo(uid=f"expert.{i}", peer_id=server_peer_id), p2p=p2p)
         for i in range(num_experts)
     ]
 

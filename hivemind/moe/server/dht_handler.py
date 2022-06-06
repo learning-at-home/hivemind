@@ -3,12 +3,13 @@ from functools import partial
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from hivemind.dht import DHT, DHTExpiration, DHTNode, DHTValue
-from hivemind.moe.client.expert import RemoteExpert, RemoteExpertInfo, create_remote_experts
-from hivemind.moe.server.expert_uid import (
+from hivemind.moe.client.expert import RemoteExpert, create_remote_experts
+from hivemind.moe.expert_uid import (
     FLAT_EXPERT,
     UID_DELIMITER,
     UID_PATTERN,
     Coordinate,
+    ExpertInfo,
     ExpertPrefix,
     ExpertUID,
     is_valid_uid,
@@ -87,15 +88,15 @@ def get_experts(
 
 async def _get_experts(
     dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration_time: Optional[DHTExpiration]
-) -> List[Optional[RemoteExpertInfo]]:
+) -> List[Optional[ExpertInfo]]:
     if expiration_time is None:
         expiration_time = get_dht_time()
     num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
     found: Dict[ExpertUID, DHTValue] = await node.get_many(uids, expiration_time, num_workers=num_workers)
 
-    experts: List[Optional[RemoteExpertInfo]] = [None] * len(uids)
+    experts: List[Optional[ExpertInfo]] = [None] * len(uids)
     for i, uid in enumerate(uids):
         expert_server_peer_id = found[uid]
         if expert_server_peer_id is not None and isinstance(expert_server_peer_id.value, str):
-            experts[i] = RemoteExpertInfo(uid, PeerID.from_base58(expert_server_peer_id.value))
+            experts[i] = ExpertInfo(uid, PeerID.from_base58(expert_server_peer_id.value))
     return experts

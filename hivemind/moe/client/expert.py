@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from concurrent.futures import Future
-from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import torch
@@ -12,6 +11,7 @@ from hivemind import moe
 from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.dht import DHT
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
+from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.p2p import P2P, PeerID, StubBase
 from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
 from hivemind.proto import runtime_pb2
@@ -29,14 +29,6 @@ def get_server_stub(p2p: P2P, server_peer_id: PeerID) -> "ConnectionHandlerStub"
     return moe.server.connection_handler.ConnectionHandler.get_stub(p2p, server_peer_id)
 
 
-@dataclass(frozen=True)
-class RemoteExpertInfo:
-    """A simple data class containing uid of expert and server PeerInfo"""
-
-    uid: str
-    peer_id: PeerID
-
-
 class RemoteExpert(nn.Module):
     """
     A simple module that runs forward/backward of an expert hosted on a remote machine.
@@ -48,7 +40,7 @@ class RemoteExpert(nn.Module):
     :param p2p: P2P instance connected to the running p2pd
     """
 
-    def __init__(self, expert_info: RemoteExpertInfo, p2p: P2P):
+    def __init__(self, expert_info: ExpertInfo, p2p: P2P):
         super().__init__()
         self._info, self.p2p = expert_info, p2p
         self._rpc_info = None
@@ -93,7 +85,7 @@ class RemoteExpert(nn.Module):
         return f"uid={self.uid}, server_peer_id={self.server_peer_id}"
 
 
-def _create_remote_experts(infos: Sequence[Optional[RemoteExpertInfo]], p2p: P2P) -> List[Optional[RemoteExpert]]:
+def _create_remote_experts(infos: Sequence[Optional[ExpertInfo]], p2p: P2P) -> List[Optional[RemoteExpert]]:
     experts: List[Optional[RemoteExpert]] = []
     for info in infos:
         if info is not None:
@@ -104,7 +96,7 @@ def _create_remote_experts(infos: Sequence[Optional[RemoteExpertInfo]], p2p: P2P
 
 
 def create_remote_experts(
-    infos: Union[Sequence[Optional[RemoteExpertInfo]], MPFuture], dht: DHT, return_future: bool = False
+    infos: Union[Sequence[Optional[ExpertInfo]], MPFuture], dht: DHT, return_future: bool = False
 ) -> Union[List[Optional[RemoteExpert]], Future]:
     if return_future:
 
@@ -119,7 +111,7 @@ def create_remote_experts(
 
 
 def batch_create_remote_experts(
-    infos: Union[Sequence[Sequence[Optional[RemoteExpertInfo]]], MPFuture],
+    infos: Union[Sequence[Sequence[Optional[ExpertInfo]]], MPFuture],
     dht: DHT,
     return_future: bool = False,
 ) -> Union[List[List[Optional[RemoteExpert]]], Future]:

@@ -3,9 +3,10 @@ import pytest
 import torch
 
 from hivemind.dht import DHT
-from hivemind.moe.client.expert import RemoteExpert, RemoteExpertInfo, create_remote_experts
+from hivemind.moe.client.expert import RemoteExpert, create_remote_experts
 from hivemind.moe.client.moe import DUMMY, RemoteMixtureOfExperts, _RemoteCallMany
 from hivemind.moe.client.switch_moe import RemoteSwitchMixtureOfExperts
+from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.moe.server import ExpertBackend, Server, background_server, declare_experts
 from hivemind.moe.server.layers import name_to_block
 from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError
@@ -77,10 +78,10 @@ def test_call_many(hidden_dim=16):
 
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         e0, e1, e2, e3, e4 = create_remote_experts(
-            [RemoteExpertInfo(uid=f"expert.{i}", peer_info=server_peer_info) for i in range(5)],
+            [ExpertInfo(uid=f"expert.{i}", peer_info=server_peer_info) for i in range(5)],
             dht,
         )
-        e5 = RemoteExpert(RemoteExpertInfo(f"thisshouldnotexist", server_peer_info), None)
+        e5 = RemoteExpert(ExpertInfo(f"thisshouldnotexist", server_peer_info), None)
 
         mask, expert_outputs = _RemoteCallMany.apply(
             DUMMY,
@@ -137,8 +138,8 @@ def test_remote_module_call(hidden_dim=16):
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         real_expert, fake_expert = create_remote_experts(
             [
-                RemoteExpertInfo(uid="expert.0", peer_info=server_peer_info),
-                RemoteExpertInfo(uid="oiasfjiasjf", peer_info=server_peer_info),
+                ExpertInfo(uid="expert.0", peer_info=server_peer_info),
+                ExpertInfo(uid="oiasfjiasjf", peer_info=server_peer_info),
             ],
             dht=dht,
         )
@@ -181,7 +182,7 @@ def test_beam_search_correctness():
         # reference: independently find :beam_size: best experts with exhaustive search
         all_scores = dmoe.compute_expert_scores(
             [dim_scores.unsqueeze(0) for dim_scores in grid_scores],
-            [[RemoteExpert(RemoteExpertInfo(uid, None), None) for uid in all_expert_uids]],
+            [[RemoteExpert(ExpertInfo(uid, None), None) for uid in all_expert_uids]],
         )[0]
         true_best_scores = sorted(all_scores.cpu().detach().numpy(), reverse=True)[: len(chosen_experts)]
 
@@ -205,7 +206,7 @@ def test_determinism(hidden_dim=16):
     ) as server_peer_info:
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         expert = create_remote_experts(
-            [RemoteExpertInfo(uid="expert.0", peer_info=server_peer_info)],
+            [ExpertInfo(uid="expert.0", peer_info=server_peer_info)],
             dht=dht,
         )[0]
 
@@ -231,7 +232,7 @@ def test_compute_expert_scores():
         jj = [[2, 2, 1], [0, 1, 2, 0, 1], [0], [1, 2]]
         batch_experts = [
             [
-                RemoteExpert(RemoteExpertInfo(f"expert.{ii[batch_i][expert_i]}.{jj[batch_i][expert_i]}", None), None)
+                RemoteExpert(ExpertInfo(f"expert.{ii[batch_i][expert_i]}.{jj[batch_i][expert_i]}", None), None)
                 for expert_i in range(len(ii[batch_i]))
             ]
             for batch_i in range(len(ii))
