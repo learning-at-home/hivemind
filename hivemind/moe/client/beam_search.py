@@ -146,16 +146,7 @@ class MoEBeamSearcher:
             try:
                 maybe_prefix_data = await pending_task
                 if maybe_prefix_data is not None and isinstance(maybe_prefix_data.value, dict):
-                    successors = {
-                        coord: ExpertInfo(uid=match.value[0], peer_id=PeerID.from_base58(match.value[1]))
-                        for coord, match in maybe_prefix_data.value.items()
-                        if isinstance(coord, Coordinate)
-                        and isinstance(match, ValueWithExpiration)
-                        and isinstance(match.value, tuple)
-                        and len(match.value) == 2
-                        and is_valid_uid(match.value[0])
-                        and isinstance(match.value[1], str)
-                    }
+                    successors = MoEBeamSearcher._select_valid_entries(maybe_prefix_data)
                     if successors:
                         beam.append((scores[pending_best_index], pending_best_prefix, successors))
                 elif maybe_prefix_data is None and negative_caching:
@@ -201,6 +192,22 @@ class MoEBeamSearcher:
         )
 
     @staticmethod
+    def _select_valid_entries(entry: ValueWithExpiration, grid_size: Optional[int] = None):
+        if not isinstance(entry, ValueWithExpiration) or not isinstance(entry.value, dict):
+            return {}
+        return {
+            coord: ExpertInfo(uid=match.value[0], peer_id=PeerID.from_base58(match.value[1]))
+            for coord, match in entry.value.items()
+            if isinstance(coord, Coordinate)
+            and (0 <= coord < grid_size or grid_size is None)
+            and isinstance(match, ValueWithExpiration)
+            and isinstance(match.value, tuple)
+            and len(match.value) == 2
+            and is_valid_uid(match.value[0])
+            and isinstance(match.value[1], str)
+        }
+
+    @staticmethod
     async def _get_active_successors(
         dht: DHT,
         node: DHTNode,
@@ -215,25 +222,12 @@ class MoEBeamSearcher:
         dht_responses = await node.get_many(keys=prefixes, num_workers=num_workers)
         successors: Dict[ExpertPrefix, Dict[Coordinate, ExpertInfo]] = {}
         for prefix, found in dht_responses.items():
-            if found and isinstance(found.value, dict):
-                successors[prefix] = {
-                    coord: ExpertInfo(uid=match.value[0], peer_id=PeerID.from_base58(match.value[1]))
-                    for coord, match in found.value.items()
-                    if isinstance(coord, Coordinate)
-                    and 0 <= coord < grid_size
-                    and isinstance(match, ValueWithExpiration)
-                    and isinstance(match.value, tuple)
-                    and len(match.value) == 2
-                    and is_valid_uid(match.value[0])
-                    and isinstance(match.value[1], str)
-                }
-            else:
-                successors[prefix] = {}
-                if found is None and negative_caching:
-                    logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {prefix}")
-                    asyncio.create_task(
-                        node.store(prefix, subkey=-1, value=None, expiration_time=get_dht_time() + cache_expiration)
-                    )
+            successors[prefix] = MoEBeamSearcher._select_valid_entries(found, grid_size)
+            if not successors[prefix] and negative_caching:
+                logger.debug(f"DHT negative caching: storing a 'no prefix' entry for {prefix}")
+                asyncio.create_task(
+                    node.store(prefix, subkey=-1, value=None, expiration_time=get_dht_time() + cache_expiration)
+                )
         return successors
 
     def find_best_experts(
