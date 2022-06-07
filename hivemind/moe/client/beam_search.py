@@ -199,7 +199,7 @@ class MoEBeamSearcher:
             coord: ExpertInfo(uid=match.value[0], peer_id=PeerID.from_base58(match.value[1]))
             for coord, match in entry.value.items()
             if isinstance(coord, Coordinate)
-            and (0 <= coord < grid_size or grid_size is None)
+            and (grid_size is None or 0 <= coord < grid_size)
             and isinstance(match, ValueWithExpiration)
             and isinstance(match.value, tuple)
             and len(match.value) == 2
