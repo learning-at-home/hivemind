@@ -128,12 +128,6 @@ class PeerInfo:
         addrs = [Multiaddr(addr) for addr in peer_info_pb.addrs]
         return PeerInfo(peer_id, addrs)
 
-    @classmethod
-    def from_tuple(cls, value: Tuple[str, Sequence[str]]) -> "PeerInfo":
-        peer_id = PeerID.from_base58(value[0])
-        addrs = [Multiaddr(addr) for addr in value[1]]
-        return PeerInfo(peer_id, addrs)
-
     def __str__(self):
         return f"{self.peer_id.pretty()} {','.join(str(a) for a in self.addrs)}"
 
