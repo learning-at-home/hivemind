@@ -237,11 +237,7 @@ class MoEBeamSearcher:
         return successors
 
     def find_best_experts(
-        self,
-        grid_scores: Sequence[Sequence[float]],
-        beam_size: int,
-        num_workers: Optional[int] = None,
-        return_future: bool = False,
+        self, grid_scores: Sequence[Sequence[float]], beam_size: int, return_future: bool = False
     ) -> Union[List[RemoteExpert], MPFuture[List[RemoteExpert]]]:
         """
         Find and return :beam_size: active experts with highest scores, use both local cache and DHT
@@ -252,12 +248,10 @@ class MoEBeamSearcher:
          After time_budget is reached, beam search won't search for more experts and instead fall back on local cache
          Please note that any queries that fall outside the budget will still be performed in background and cached
          for subsequent iterations as long as DHTNode.cache_locally is True
-        :param num_workers: use up to this many concurrent workers to search DHT
         :param return_future: if set to True, returns MPFuture that can be awaited to get the actual result
         :returns: a list that contains *up to* k_best RemoteExpert instances
         """
         assert len(grid_scores) == len(self.grid_size) and beam_size > 0
-        num_workers = num_workers if num_workers is not None else self.num_workers
         result = self.dht.run_coroutine(
             partial(
                 self._find_best_experts,
@@ -266,7 +260,7 @@ class MoEBeamSearcher:
                 grid_scores=list(grid_scores),
                 negative_caching=self.negative_caching,
                 cache_expiration=self.cache_expiration,
-                num_workers=num_workers,
+                num_workers=self.num_workers,
             ),
             return_future,
         )
