@@ -12,7 +12,7 @@ from hivemind.moe.client import RemoteMixtureOfExperts, RemoteSwitchMixtureOfExp
 from hivemind.moe.client.expert import create_remote_experts
 from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.moe.server import background_server
-from hivemind.optim import DecentralizedAdam, DecentralizedSGD
+from hivemind.optim import Optimizer
 
 
 @pytest.mark.forked
@@ -141,21 +141,21 @@ def test_decentralized_optimizer_step():
     initial_peers = dht_root.get_visible_maddrs()
 
     param1 = torch.nn.Parameter(torch.zeros(32, 32), requires_grad=True)
-    opt1 = DecentralizedSGD(
+    opt1 = Optimizer(
         [param1],
         lr=0.1,
         dht=DHT(initial_peers=initial_peers, start=True),
-        prefix="foo",
+        run_id="foo",
         target_group_size=2,
         verbose=True,
     )
 
     param2 = torch.nn.Parameter(torch.ones(32, 32), requires_grad=True)
-    opt2 = DecentralizedSGD(
+    opt2 = Optimizer(
         [param2],
         lr=0.05,
         dht=DHT(initial_peers=initial_peers, start=True),
-        prefix="foo",
+        run_id="foo",
         target_group_size=2,
         verbose=True,
     )
@@ -174,45 +174,3 @@ def test_decentralized_optimizer_step():
     assert torch.allclose(param1, param2)
     reference = 0.5 * (0.0 - 0.1 * 1.0) + 0.5 * (1.0 - 0.05 * 300)
     assert torch.allclose(param1, torch.full_like(param1, reference))
-
-
-@pytest.mark.skip(reason="Skipped until a more stable averager implementation is ready (TODO @justheuristic)")
-@pytest.mark.forked
-def test_decentralized_optimizer_averaging():
-    dht_root = DHT(start=True)
-    initial_peers = dht_root.get_visible_maddrs()
-
-    param1 = torch.nn.Parameter(torch.zeros(32, 32), requires_grad=True)
-    opt1 = DecentralizedAdam(
-        [param1],
-        lr=0.1,
-        averaging_steps_period=1,
-        dht=DHT(initial_peers=initial_peers, start=True),
-        prefix="foo",
-        target_group_size=2,
-        verbose=True,
-    )
-
-    param2 = torch.nn.Parameter(torch.ones(32, 32), requires_grad=True)
-    opt2 = DecentralizedAdam(
-        [param2],
-        lr=0.05,
-        averaging_steps_period=1,
-        dht=DHT(initial_peers=initial_peers, start=True),
-        prefix="foo",
-        target_group_size=2,
-        verbose=True,
-    )
-
-    assert not torch.allclose(param1, param2, atol=1e-3, rtol=0)
-    (param1.sum() + param2.sum()).backward()
-
-    for _ in range(100):
-        time.sleep(0.1)
-        opt1.step()
-        opt2.step()
-        opt1.zero_grad()
-        opt2.zero_grad()
-
-    assert torch.allclose(param1, param2, atol=1e-3, rtol=0)
-    assert torch.allclose(opt1.state[param1]["exp_avg_sq"], opt2.state[param2]["exp_avg_sq"], atol=1e-3, rtol=0)

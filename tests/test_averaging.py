@@ -6,7 +6,7 @@ import pytest
 import torch
 
 import hivemind
-import hivemind.averaging.averager
+from hivemind.averaging import DecentralizedAverager
 from hivemind.averaging.allreduce import AveragingMode
 from hivemind.averaging.control import AveragingStage
 from hivemind.averaging.key_manager import GroupKeyManager
@@ -78,11 +78,11 @@ def _test_allreduce_once(n_clients, n_aux):
 
     dht_instances = launch_dht_instances(len(peer_tensors))
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             tensors,
             dht=dht,
             target_group_size=4,
-            averaging_expiration=15,
+            min_matchmaking_time=15,
             prefix="mygroup",
             client_mode=mode == AveragingMode.CLIENT,
             auxiliary=mode == AveragingMode.AUX,
@@ -135,11 +135,11 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
 
     dht_instances = launch_dht_instances(4)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             tensors,
             dht=dht,
             target_group_size=4,
-            averaging_expiration=15,
+            min_matchmaking_time=15,
             prefix="mygroup",
             client_mode=client_mode,
             start=True,
@@ -185,7 +185,7 @@ def compute_mean_std(averagers, unbiased=True):
 def test_allreduce_grid():
     dht_instances = launch_dht_instances(8)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             target_group_size=2,
@@ -221,11 +221,11 @@ def test_allreduce_grid():
 def test_allgather(n_averagers=8, target_group_size=4):
     dht_instances = launch_dht_instances(n_averagers)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             [torch.ones(1)],
             dht=dht,
             target_group_size=target_group_size,
-            averaging_expiration=15,
+            min_matchmaking_time=15,
             prefix="mygroup",
             initial_group_bits="000",
             start=True,
@@ -297,11 +297,11 @@ def test_load_balancing():
 def test_too_few_peers():
     dht_instances = launch_dht_instances(4)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             target_group_size=2,
-            averaging_expiration=1,
+            min_matchmaking_time=1,
             request_timeout=0.5,
             prefix="mygroup",
             initial_group_bits=bin(i)[2:].rjust(3, "0"),
@@ -327,11 +327,11 @@ def test_too_few_peers():
 def test_overcrowded(num_peers=16):
     dht_instances = launch_dht_instances(num_peers)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             target_group_size=2,
-            averaging_expiration=1,
+            min_matchmaking_time=1,
             request_timeout=0.5,
             prefix="mygroup",
             initial_group_bits="",
@@ -353,7 +353,7 @@ def test_load_state_from_peers():
     super_metadata = dict(x=123)
     super_tensors = (torch.randn(3), torch.randint(0, 5, (3,)))
 
-    class TestAverager(hivemind.averaging.DecentralizedAverager):
+    class TestAverager(DecentralizedAverager):
         def get_current_state(self):
             """
             Get current state and send it to a peer. executed in the host process. Meant to be overriden.
@@ -455,7 +455,7 @@ def test_load_state_priority():
 @pytest.mark.forked
 def test_getset_bits():
     dht = hivemind.DHT(start=True)
-    averager = hivemind.averaging.DecentralizedAverager(
+    averager = DecentralizedAverager(
         [torch.randn(3)],
         dht=dht,
         start=True,
@@ -469,7 +469,7 @@ def test_getset_bits():
 @pytest.mark.forked
 def test_averaging_trigger():
     averagers = tuple(
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             min_matchmaking_time=0.5,
@@ -514,7 +514,7 @@ def test_averaging_trigger():
 @pytest.mark.forked
 def test_averaging_cancel():
     averagers = tuple(
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             min_matchmaking_time=0.5,

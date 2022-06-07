@@ -87,7 +87,6 @@ class CollaborativeOptimizer(DecentralizedOptimizerBase):
     :param bandwidth: peer's network bandwidth for the purpose of load balancing (recommended: internet speed in mbps)
     :param step_tolerance: a peer can temporarily be delayed by this many steps without being deemed out of sync
     :param performance_ema_alpha: smoothing value used to estimate this peer's performance (training samples per second)
-    :param averaging_expiration: peer's requests for averaging will be valid for this many seconds
     :param metadata_expiration: peer's metadata (e.g. samples processed) is stored onto DHT for this many seconds
     :param averaging_timeout: if an averaging step hangs for this long, it will be cancelled.
     :param load_state_timeout: wait for at most this many seconds before giving up on load_state_from_peers
