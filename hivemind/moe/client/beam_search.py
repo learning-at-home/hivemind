@@ -313,8 +313,6 @@ class MoEBeamSearcher:
                 ),
             )
 
-            if not best_active_pairs:
-                break
             _, best_uid_prefixes = zip(*best_active_pairs)
 
             # search DHT for next step suffixes

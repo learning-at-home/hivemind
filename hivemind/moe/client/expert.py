@@ -50,12 +50,12 @@ class RemoteExpert(nn.Module):
         return self._info.uid
 
     @property
-    def server_peer_id(self) -> PeerID:
+    def peer_id(self) -> PeerID:
         return self._info.peer_id
 
     @property
     def stub(self) -> StubBase:
-        return get_server_stub(self.p2p, self.server_peer_id)
+        return get_server_stub(self.p2p, self.peer_id)
 
     def forward(self, *args, **kwargs):
         """Call RemoteExpert for the specified inputs and return its output(s). Compatible with pytorch.autograd."""
@@ -82,7 +82,7 @@ class RemoteExpert(nn.Module):
         return self._rpc_info
 
     def extra_repr(self):
-        return f"uid={self.uid}, server_peer_id={self.server_peer_id}"
+        return f"uid={self.uid}, server_peer_id={self.peer_id}"
 
 
 def _create_remote_experts(infos: Sequence[Optional[ExpertInfo]], p2p: P2P) -> List[Optional[RemoteExpert]]:

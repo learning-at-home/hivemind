@@ -34,7 +34,7 @@ def test_store_get_experts(n_peers=10):
     declare_experts(other_peer, [other_expert])
     first_notfound, first_found = get_experts(first_peer, ["foobar", other_expert])
     assert isinstance(first_found, hivemind.RemoteExpert)
-    assert first_found.server_peer_id == other_peer.peer_id
+    assert first_found.peer_id == other_peer.peer_id
     assert first_notfound is None
 
     # test graceful shutdown
@@ -44,7 +44,7 @@ def test_store_get_experts(n_peers=10):
     remaining_peer1 = random.choice([peer for peer in peers if peer.is_alive()])
     remaining_peer2 = random.choice([peer for peer in peers if peer.is_alive()])
     assert all(declare_experts(remaining_peer1, ["new_expert.1"]))
-    assert get_experts(remaining_peer2, ["new_expert.1"])[0].server_peer_id == remaining_peer1.peer_id
+    assert get_experts(remaining_peer2, ["new_expert.1"])[0].peer_id == remaining_peer1.peer_id
 
 
 @pytest.mark.forked
@@ -95,7 +95,7 @@ def test_dht_single_node():
     assert len(declare_experts(node, ["e.1.2.3", "e.1.2.5", "e.2.0"])) == 7
 
     for expert in get_experts(node, ["expert.3", "expert.2"]):
-        assert expert.server_peer_id == node.peer_id
+        assert expert.peer_id == node.peer_id
 
     assert all(declare_experts(node, ["expert.5", "expert.2"]).values())
     found_experts = beam_search.find_best_experts([(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)], beam_size=2)
