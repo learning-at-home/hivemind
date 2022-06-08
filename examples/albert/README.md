@@ -3,7 +3,7 @@
 This tutorial will walk you through the steps to set up collaborative training with the ALBERT-large-v2 model and the
 WikiText103 dataset. It uses Hugging Face [datasets](https://github.com/huggingface/datasets)
 and [transformers](https://github.com/huggingface/transformers/) libraries to compute local updates,
-using `hivemind.CollaborativeOptimizer` to exchange information between peers.
+using `hivemind.Optimizer` to exchange information between peers.
 
 ## Preparation
 

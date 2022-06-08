@@ -22,19 +22,3 @@
 .. currentmodule:: hivemind.optim.grad_scaler
 .. autoclass:: GradScaler
    :member-order: bysource
-
-
-**CollaborativeOptimizer**
---------------------------
-
-
-.. automodule:: hivemind.optim.collaborative
-.. currentmodule:: hivemind.optim
-
-.. autoclass:: CollaborativeOptimizer
-   :members: step
-   :member-order: bysource
-
-.. autoclass:: CollaborativeAdaptiveOptimizer
-   :members:
-   :member-order: bysource
