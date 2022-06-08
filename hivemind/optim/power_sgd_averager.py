@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import multiprocessing as mp
 from enum import Enum
 from typing import Any, Iterable, Optional, Sequence
 
@@ -9,7 +8,7 @@ import torch
 from hivemind.averaging.allreduce import AveragingMode
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
-from hivemind.averaging.matchmaking import Matchmaking, MatchmakingException
+from hivemind.averaging.matchmaking import MatchmakingException
 from hivemind.compression import CompressionInfo, TensorRole
 from hivemind.dht import DHT
 from hivemind.optim.grad_averager import GradientAverager
