@@ -1,4 +1,3 @@
-import time
 from functools import partial
 
 import pytest
@@ -12,7 +11,6 @@ from hivemind.moe.client import RemoteMixtureOfExperts, RemoteSwitchMixtureOfExp
 from hivemind.moe.client.expert import create_remote_experts
 from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.moe.server import background_server
-from hivemind.optim import Optimizer
 
 
 @pytest.mark.forked
@@ -133,44 +131,3 @@ def test_switch_training(max_steps: int = 10, threshold: float = 0.9, num_expert
 
         assert model.moe.grid_utilization.min().item() > (1 / num_experts) / 2
         assert accuracy >= threshold, f"too small accuracy: {accuracy}"
-
-
-@pytest.mark.forked
-def test_decentralized_optimizer_step():
-    dht_root = DHT(start=True)
-    initial_peers = dht_root.get_visible_maddrs()
-
-    param1 = torch.nn.Parameter(torch.zeros(32, 32), requires_grad=True)
-    opt1 = Optimizer(
-        [param1],
-        lr=0.1,
-        dht=DHT(initial_peers=initial_peers, start=True),
-        run_id="foo",
-        target_group_size=2,
-        verbose=True,
-    )
-
-    param2 = torch.nn.Parameter(torch.ones(32, 32), requires_grad=True)
-    opt2 = Optimizer(
-        [param2],
-        lr=0.05,
-        dht=DHT(initial_peers=initial_peers, start=True),
-        run_id="foo",
-        target_group_size=2,
-        verbose=True,
-    )
-
-    assert not torch.allclose(param1, param2)
-
-    (param1.sum() + 300 * param2.sum()).backward()
-
-    for i in range(5):
-        time.sleep(0.1)
-        opt1.step()
-        opt2.step()
-        opt1.zero_grad()
-        opt2.zero_grad()
-
-    assert torch.allclose(param1, param2)
-    reference = 0.5 * (0.0 - 0.1 * 1.0) + 0.5 * (1.0 - 0.05 * 300)
-    assert torch.allclose(param1, torch.full_like(param1, reference))
