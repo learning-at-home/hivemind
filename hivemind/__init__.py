@@ -9,17 +9,7 @@ from hivemind.moe import (
     Server,
     register_expert_class,
 )
-from hivemind.optim import (
-    CollaborativeAdaptiveOptimizer,
-    CollaborativeOptimizer,
-    DecentralizedAdam,
-    DecentralizedOptimizer,
-    DecentralizedOptimizerBase,
-    DecentralizedSGD,
-    GradScaler,
-    Optimizer,
-    TrainingAverager,
-)
+from hivemind.optim import GradScaler, Optimizer, TrainingAverager
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, PeerInfo
 from hivemind.utils import *
 

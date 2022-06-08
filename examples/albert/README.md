@@ -3,7 +3,7 @@
 This tutorial will walk you through the steps to set up collaborative training with the ALBERT-large-v2 model and the
 WikiText103 dataset. It uses Hugging Face [datasets](https://github.com/huggingface/datasets)
 and [transformers](https://github.com/huggingface/transformers/) libraries to compute local updates,
-using `hivemind.CollaborativeOptimizer` to exchange information between peers.
+using `hivemind.Optimizer` to exchange information between peers.
 
 ## Preparation
 
@@ -143,7 +143,7 @@ you need to **(a)** make it listen a specific TCP/UDP port and **(b)** provide a
 
 The optimal training parameters for each peer depend on its GPU and internet connection. If a peer cannot accept
 incoming connections (e.g. when in colab or behind a firewall), add `--client_mode` to the training script (see example
-below). In case of high network latency, you may want to increase `--averaging_expiration` by a few seconds or
+below). In case of high network latency, you may want to increase `--matchmaking_time` by a few seconds or
 set `--batch_size_lead` to start averaging a bit earlier than the rest of the collaboration. GPU-wise, each peer should
 be able to process one local microbatch each 0.5–1 seconds (see trainer's progress bar). To achieve that, we
 recommend tuning `--per_device_train_batch_size` and `--gradient_accumulation_steps`.
@@ -182,7 +182,7 @@ Here's an example of a full trainer script for Google Colab:
 !ulimit -n 4096 && ./hivemind/examples/albert/run_trainer.py \
     --initial_peers ONE_OR_MORE_PEERS \
     --logging_dir ./logs --logging_first_step --output_dir ./outputs --overwrite_output_dir \
-    --client_mode --averaging_expiration 10 --batch_size_lead 300 --gradient_accumulation_steps 1
+    --client_mode --matchmaking_time 10 --batch_size_lead 300 --gradient_accumulation_steps 1
 ```
 
 ### Using IPFS

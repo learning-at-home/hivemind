@@ -6,7 +6,7 @@ import pytest
 import torch
 
 import hivemind
-import hivemind.averaging.averager
+from hivemind.averaging import DecentralizedAverager
 from hivemind.averaging.allreduce import AveragingMode
 from hivemind.averaging.control import AveragingStage
 from hivemind.averaging.key_manager import GroupKeyManager
@@ -78,11 +78,11 @@ def _test_allreduce_once(n_clients, n_aux):
 
     dht_instances = launch_dht_instances(len(peer_tensors))
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             tensors,
             dht=dht,
             target_group_size=4,
-            averaging_expiration=15,
+            min_matchmaking_time=15,
             prefix="mygroup",
             client_mode=mode == AveragingMode.CLIENT,
             auxiliary=mode == AveragingMode.AUX,
@@ -135,11 +135,11 @@ def test_allreduce_weighted(n_client_mode_peers: int = 2):
 
     dht_instances = launch_dht_instances(4)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             tensors,
             dht=dht,
             target_group_size=4,
-            averaging_expiration=15,
+            min_matchmaking_time=15,
             prefix="mygroup",
             client_mode=client_mode,
             start=True,
@@ -185,7 +185,7 @@ def compute_mean_std(averagers, unbiased=True):
 def test_allreduce_grid():
     dht_instances = launch_dht_instances(8)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             target_group_size=2,
@@ -221,11 +221,11 @@ def test_allreduce_grid():
 def test_allgather(n_averagers=8, target_group_size=4):
     dht_instances = launch_dht_instances(n_averagers)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             [torch.ones(1)],
             dht=dht,
             target_group_size=target_group_size,
-            averaging_expiration=15,
+            min_matchmaking_time=15,
             prefix="mygroup",
             initial_group_bits="000",
             start=True,
@@ -297,11 +297,11 @@ def test_load_balancing():
 def test_too_few_peers():
     dht_instances = launch_dht_instances(4)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             target_group_size=2,
-            averaging_expiration=1,
+            min_matchmaking_time=1,
             request_timeout=0.5,
             prefix="mygroup",
             initial_group_bits=bin(i)[2:].rjust(3, "0"),
@@ -327,11 +327,11 @@ def test_too_few_peers():
 def test_overcrowded(num_peers=16):
     dht_instances = launch_dht_instances(num_peers)
     averagers = [
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             target_group_size=2,
-            averaging_expiration=1,
+            min_matchmaking_time=1,
             request_timeout=0.5,
             prefix="mygroup",
             initial_group_bits="",
@@ -353,7 +353,7 @@ def test_load_state_from_peers():
     super_metadata = dict(x=123)
     super_tensors = (torch.randn(3), torch.randint(0, 5, (3,)))
 
-    class TestAverager(hivemind.averaging.DecentralizedAverager):
+    class TestAverager(DecentralizedAverager):
         def get_current_state(self):
             """
             Get current state and send it to a peer. executed in the host process. Meant to be overriden.
@@ -455,7 +455,7 @@ def test_load_state_priority():
 @pytest.mark.forked
 def test_getset_bits():
     dht = hivemind.DHT(start=True)
-    averager = hivemind.averaging.DecentralizedAverager(
+    averager = DecentralizedAverager(
         [torch.randn(3)],
         dht=dht,
         start=True,
@@ -469,7 +469,7 @@ def test_getset_bits():
 @pytest.mark.forked
 def test_averaging_trigger():
     averagers = tuple(
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             min_matchmaking_time=0.5,
@@ -514,7 +514,7 @@ def test_averaging_trigger():
 @pytest.mark.forked
 def test_averaging_cancel():
     averagers = tuple(
-        hivemind.averaging.DecentralizedAverager(
+        DecentralizedAverager(
             averaged_tensors=[torch.randn(3)],
             dht=dht,
             min_matchmaking_time=0.5,
@@ -540,67 +540,3 @@ def test_averaging_cancel():
 
     for averager in averagers:
         averager.shutdown()
-
-
-@pytest.mark.forked
-def test_training_averager(n_steps: int = 10, n_dims: int = 16):
-    torch.manual_seed(42)
-
-    dht_instances = launch_dht_instances(2)
-    common_kwargs = {
-        "start": True,
-        "prefix": "demo-run",
-        "target_group_size": 2,
-    }
-
-    x1 = torch.randn(n_dims, requires_grad=True)
-    opt1 = torch.optim.Adam([x1], lr=0.05)
-    averager1 = hivemind.TrainingAverager(
-        opt1,
-        average_gradients=True,
-        average_parameters=True,
-        average_opt_statistics=["exp_avg_sq"],
-        dht=dht_instances[0],
-        **common_kwargs
-    )
-
-    x2 = torch.randn(n_dims, requires_grad=True)
-    opt2 = torch.optim.Adam([x2], lr=0.05)
-    averager2 = hivemind.TrainingAverager(
-        opt2,
-        average_gradients=True,
-        average_parameters=True,
-        average_opt_statistics=["exp_avg_sq"],
-        dht=dht_instances[1],
-        **common_kwargs
-    )
-    a = torch.ones(n_dims)
-
-    for i in range(n_steps):
-        opt1.zero_grad()
-        opt2.zero_grad()
-        (x1 - a).pow(2).sum().backward()
-        (x2 - a).pow(2).sum().backward()
-        opt1.step()
-        opt2.step()
-
-        with torch.no_grad():
-            x_avg = 0.5 * (x1 + x2)
-            grad_avg = 0.5 * (x1.grad + x2.grad)
-            stats_avg = 0.5 * (opt1.state[x1]["exp_avg_sq"] + opt2.state[x2]["exp_avg_sq"])
-
-        # we set wait=False in order to prevent deadlock, when averager1 locks and waits for averager2
-        f1 = averager1.step(wait=False)
-        f2 = averager2.step(wait=False)
-        f1.result()
-        f2.result()
-
-        assert torch.allclose(x1, x_avg)
-        assert torch.allclose(x2, x_avg)
-        assert torch.allclose(x1.grad, grad_avg)
-        assert torch.allclose(x2.grad, grad_avg)
-        assert torch.allclose(opt1.state[x1]["exp_avg_sq"], stats_avg)
-        assert torch.allclose(opt2.state[x2]["exp_avg_sq"], stats_avg)
-
-    for instance in [averager1, averager2] + dht_instances:
-        instance.shutdown()

@@ -6,10 +6,9 @@ import time
 import torch
 
 import hivemind
-from hivemind.proto import runtime_pb2
+from hivemind.compression import Float16Compression
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
-from hivemind.utils.networking import LOCALHOST
 
 use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
@@ -38,7 +37,7 @@ def benchmark_averaging(
     num_peers: int,
     target_group_size: int,
     num_rounds: int,
-    averaging_expiration: float,
+    min_matchmaking_time: float,
     request_timeout: float,
     round_timeout: float,
     hid_size: int,
@@ -64,9 +63,9 @@ def benchmark_averaging(
             dht,
             prefix="my_tensor",
             initial_group_bits=initial_bits,
-            compression_type=runtime_pb2.CompressionType.FLOAT16,
+            compression=Float16Compression(),
             target_group_size=target_group_size,
-            averaging_expiration=averaging_expiration,
+            min_matchmaking_time=min_matchmaking_time,
             request_timeout=request_timeout,
             start=True,
         )
@@ -108,7 +107,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_rounds", type=int, default=5, required=False)
     parser.add_argument("--hid_size", type=int, default=256, required=False)
     parser.add_argument("--num_layers", type=int, default=3, required=False)
-    parser.add_argument("--averaging_expiration", type=float, default=5, required=False)
+    parser.add_argument("--min_matchmaking_time", type=float, default=5, required=False)
     parser.add_argument("--round_timeout", type=float, default=15, required=False)
     parser.add_argument("--request_timeout", type=float, default=1, required=False)
     parser.add_argument("--spawn_dtime", type=float, default=0.1, required=False)

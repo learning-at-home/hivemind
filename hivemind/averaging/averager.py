@@ -117,7 +117,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         target_group_size: Optional[int] = None,
         min_group_size: int = 2,
         initial_group_bits: str = "",
-        averaging_expiration: Optional[float] = None,
         min_matchmaking_time: float = 5.0,
         request_timeout: float = 3.0,
         averaging_alpha: float = 1.0,
@@ -144,11 +143,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         ), "bandwidth must be a non-negative float32"
         assert all(bit in "01" for bit in initial_group_bits)
         assert not client_mode or not auxiliary, "auxiliary peers must accept incoming connections"
-
-        if averaging_expiration is not None:
-            logger.warning("averaging_expiration is deprecated and will be removed soon, use min_matchmaking_time")
-            assert min_matchmaking_time == 5.0, "Can't set both averaging_expiration and min_matchmaking_time"
-            min_matchmaking_time = averaging_expiration
 
         super().__init__()
         self.dht = dht
