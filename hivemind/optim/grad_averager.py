@@ -106,11 +106,11 @@ class GradientAverager(DecentralizedAverager):
                     grad.detach().cpu().clone().share_memory_() for grad in self._grads_from_parameters()
                 )
             else:
-                if all(
-                    params_grad.size() == grad.size()
-                    for param_grad, grad in zip(self._grads_from_parameters(), averaged_grad)
+                if any(
+                    param_grad.size() != grad.size()
+                    for param_grad, grad in zip(self._grads_from_parameters(), averaged_grads)
                 ):
-                    raise ValueError("Averaged gradients doesn't have same shape as gradients from parameters")
+                    raise ValueError("Averaged gradients don't have same shape as gradients from parameters")
         super().__init__(averaged_tensors=averaged_grads, dht=dht, prefix=prefix, client_mode=client_mode, **kwargs)
 
     def _grads_from_parameters(self) -> Iterator[torch.Tensor]:
