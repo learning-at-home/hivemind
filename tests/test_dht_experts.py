@@ -7,8 +7,8 @@ import pytest
 
 import hivemind
 from hivemind import get_dht_time
-from hivemind.moe.client.beam_search import MoEBeamSearcher
 from hivemind.dht.node import DHTNode
+from hivemind.moe.client.beam_search import MoEBeamSearcher
 from hivemind.moe.expert_uid import ExpertInfo, is_valid_prefix, is_valid_uid, split_uid
 from hivemind.moe.server.dht_handler import declare_experts, get_experts
 
@@ -61,11 +61,7 @@ def test_beam_search(
     )
     for batch_start in range(0, len(real_experts), batch_size):
         dht = random.choice(dht_instances)
-        declare_experts(
-            dht,
-            real_experts[batch_start : batch_start + batch_size],
-            expiration_time=get_dht_time() + 30
-        )
+        declare_experts(dht, real_experts[batch_start : batch_start + batch_size], expiration_time=get_dht_time() + 30)
 
     neighbors = sum(
         [peer.get_visible_maddrs() for peer in random.sample(dht_instances, min(3, len(dht_instances)))], []
