@@ -10,7 +10,7 @@ from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.moe.server import ExpertBackend, Server, background_server, declare_experts
 from hivemind.moe.server.layers import name_to_block
 from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError
-from hivemind.utils.tensor_descr import BatchTensorDescriptor
+from hivemind.utils import BatchTensorDescriptor, get_dht_time
 
 
 @pytest.mark.forked
@@ -163,7 +163,7 @@ def test_remote_module_call(hidden_dim=16):
 def test_beam_search_correctness():
     all_expert_uids = [f"ffn.{5 + i}.{10 + j}.{15 + k}" for i in range(10) for j in range(10) for k in range(10)]
     dht = DHT(start=True)
-    assert all(declare_experts(dht, all_expert_uids))
+    assert all(declare_experts(dht, all_expert_uids, expiration_time=get_dht_time() + 30))
 
     dmoe = RemoteMixtureOfExperts(in_features=32, grid_size=(32, 32, 32), dht=dht, k_best=4, uid_prefix="ffn.")
 
