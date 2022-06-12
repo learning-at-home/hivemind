@@ -61,7 +61,7 @@ def test_beam_search(
     )
     for batch_start in range(0, len(real_experts), batch_size):
         dht = random.choice(dht_instances)
-        declare_experts(dht, real_experts[batch_start : batch_start + batch_size], expiration_time=get_dht_time() + 30)
+        declare_experts(dht, real_experts[batch_start : batch_start + batch_size], get_dht_time() + 30)
 
     neighbors = sum(
         [peer.get_visible_maddrs() for peer in random.sample(dht_instances, min(3, len(dht_instances)))], []
