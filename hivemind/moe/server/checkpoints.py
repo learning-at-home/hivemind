@@ -34,7 +34,7 @@ def copy_tree(src: str, dst: str):
 
 
 class CheckpointSaver(threading.Thread):
-    def __init__(self, expert_backends: Dict[str, ExpertBackend], checkpoint_dir: Path, update_period: int):
+    def __init__(self, expert_backends: Dict[str, ExpertBackend], checkpoint_dir: Path, update_period: float):
         super().__init__()
         assert is_directory(checkpoint_dir)
         self.expert_backends = expert_backends

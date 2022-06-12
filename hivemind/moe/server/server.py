@@ -46,6 +46,7 @@ class Server(threading.Thread):
         if too small for normal functioning, we recommend 4 handlers per expert backend.
     :param update_period: how often will server attempt to publish its state (i.e. experts) to the DHT;
         if dht is None, this parameter is ignored.
+    :param expiration: when server declares its experts to the DHT, these entries will expire after this many seconds
     :param start: if True, the server will immediately start as a background thread and returns control after server
         is ready (see .ready below)
     """
@@ -55,7 +56,8 @@ class Server(threading.Thread):
         dht: DHT,
         expert_backends: Dict[str, ExpertBackend],
         num_connection_handlers: int = 1,
-        update_period: int = 30,
+        update_period: float = 30,
+        expiration: Optional[float] = None,
         start=False,
         checkpoint_dir=None,
         **kwargs,
@@ -75,6 +77,7 @@ class Server(threading.Thread):
                 experts=self.experts,
                 dht=self.dht,
                 update_period=self.update_period,
+                expiration=expiration,
                 daemon=True,
             )
 
