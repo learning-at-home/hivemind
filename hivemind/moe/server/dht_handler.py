@@ -20,17 +20,18 @@ from hivemind.utils import MPFuture, get_dht_time
 
 
 class DHTHandlerThread(threading.Thread):
-    def __init__(self, experts, dht: DHT, update_period: int = 5, **kwargs):
+    def __init__(self, experts, dht: DHT, update_period: int = 30, expiration: Optional[int] = None, **kwargs):
         super().__init__(**kwargs)
         self.experts = experts
         self.dht = dht
         self.update_period = update_period
+        self.expiration = expiration if expiration is not None else 2 * update_period
         self.stop = threading.Event()
 
     def run(self) -> None:
         declare_experts(self.dht, self.experts.keys())
         while not self.stop.wait(self.update_period):
-            declare_experts(self.dht, self.experts.keys())
+            declare_experts(self.dht, self.experts.keys(), expiration=self.expiration)
 
 
 def declare_experts(
