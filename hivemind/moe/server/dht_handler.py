@@ -31,20 +31,20 @@ class DHTHandlerThread(threading.Thread):
         self.stop = threading.Event()
 
     def run(self) -> None:
-        declare_experts(self.dht, self.experts.keys())
+        declare_experts(self.dht, self.experts.keys(), expiration_time=get_dht_time() + self.expiration)
         while not self.stop.wait(self.update_period):
-            declare_experts(self.dht, self.experts.keys(), expiration=self.expiration)
+            declare_experts(self.dht, self.experts.keys(), expiration_time=get_dht_time() + self.expiration)
 
 
 def declare_experts(
-    dht: DHT, uids: Sequence[ExpertUID], expiration: DHTExpiration, wait: bool = True
+    dht: DHT, uids: Sequence[ExpertUID], expiration_time: DHTExpiration, wait: bool = True
 ) -> Union[Dict[ExpertUID, bool], MPFuture[Dict[ExpertUID, bool]]]:
     """
     Make experts visible to all DHT peers; update timestamps if declared previously.
 
     :param uids: a list of expert ids to update
     :param wait: if True, awaits for declaration to finish, otherwise runs in background
-    :param expiration: experts will be visible for this many seconds
+    :param expiration_time: experts will be visible for this many seconds
     :returns: if wait, returns store status for every key (True = store succeeded, False = store rejected)
     """
     assert not isinstance(uids, str), "Please send a list / tuple of expert uids."
@@ -52,14 +52,15 @@ def declare_experts(
         uids = list(uids)
     for uid in uids:
         assert is_valid_uid(uid), f"{uid} is not a valid expert uid. All uids must follow {UID_PATTERN.pattern}"
-    return dht.run_coroutine(partial(_declare_experts, uids=uids, expiration=expiration), return_future=not wait)
+    return dht.run_coroutine(
+        partial(_declare_experts, uids=uids, expiration_time=expiration_time), return_future=not wait
+    )
 
 
 async def _declare_experts(
-    dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration: DHTExpiration
+    dht: DHT, node: DHTNode, uids: List[ExpertUID], expiration_time: DHTExpiration
 ) -> Dict[ExpertUID, bool]:
     num_workers = len(uids) if dht.num_workers is None else min(len(uids), dht.num_workers)
-    expiration_time = get_dht_time() + expiration
     data_to_store: Dict[Tuple[ExpertPrefix, Optional[Coordinate]], DHTValue] = {}
     peer_id_base58 = dht.peer_id.to_base58()
 
