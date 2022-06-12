@@ -8,6 +8,7 @@ import pytest
 import hivemind
 from hivemind import get_dht_time
 from hivemind.moe.client.beam_search import MoEBeamSearcher
+from hivemind.dht.node import DHTNode
 from hivemind.moe.expert_uid import ExpertInfo, is_valid_prefix, is_valid_uid, split_uid
 from hivemind.moe.server.dht_handler import declare_experts, get_experts
 
@@ -205,7 +206,7 @@ async def test_negative_caching(n_peers=10):
     # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
     assert len(beam_search.get_initial_beam(scores=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6], beam_size=3)) == 2
 
-    node = await declare_expertsDHTNode.create(initial_peers=neighbors)
+    node = await DHTNode.create(initial_peers=neighbors)
     fetched = await asyncio.gather(*(node.get(f"ffn.{i}.") for i in range(10)))
     for i in range(6):
         assert fetched[i] is not None, f"node should have cached ffn.{i}."
