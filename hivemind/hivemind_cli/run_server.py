@@ -50,6 +50,10 @@ def main():
                         help='LR scheduler type to use')
     parser.add_argument('--num_warmup_steps', type=int, required=False,
                         help='The number of warmup steps for LR schedule')
+    parser.add_argument('--update_period', type=float, required=False, default=30,
+                        help='Server will report experts to DHT once in this many seconds')
+    parser.add_argument('--expiration', type=float, required=False, default=None,
+                        help='DHT entries will expire after this many seconds')
     parser.add_argument('--num_total_steps', type=int, required=False, help='The total number of steps for LR schedule')
     parser.add_argument('--clip_grad_norm', type=float, required=False, help='Maximum gradient norm used for clipping')
 

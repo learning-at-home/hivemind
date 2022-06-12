@@ -106,6 +106,8 @@ class Server(threading.Thread):
         compression=CompressionType.NONE,
         stats_report_interval: Optional[int] = None,
         custom_module_path=None,
+        update_period: float = 30,
+        expiration: Optional[float] = None,
         *,
         start: bool,
         **kwargs,
@@ -216,6 +218,8 @@ class Server(threading.Thread):
             device=device,
             checkpoint_dir=checkpoint_dir,
             stats_report_interval=stats_report_interval,
+            update_period=update_period,
+            expiration=expiration,
             start=start,
         )
 
