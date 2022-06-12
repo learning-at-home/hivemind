@@ -16,16 +16,18 @@ from hivemind.moe.expert_uid import (
     split_uid,
 )
 from hivemind.p2p import PeerID
-from hivemind.utils import MPFuture, get_dht_time
+from hivemind.utils import MAX_DHT_TIME_DISCREPANCY_SECONDS, MPFuture, get_dht_time
 
 
 class DHTHandlerThread(threading.Thread):
     def __init__(self, experts, dht: DHT, update_period: int = 30, expiration: Optional[int] = None, **kwargs):
         super().__init__(**kwargs)
+        if expiration is None:
+            expiration = max(2 * update_period, MAX_DHT_TIME_DISCREPANCY_SECONDS)
         self.experts = experts
         self.dht = dht
         self.update_period = update_period
-        self.expiration = expiration if expiration is not None else 2 * update_period
+        self.expiration = expiration
         self.stop = threading.Event()
 
     def run(self) -> None:
