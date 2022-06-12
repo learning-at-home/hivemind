@@ -37,7 +37,7 @@ class DHTHandlerThread(threading.Thread):
 
 
 def declare_experts(
-    dht: DHT, uids: Sequence[ExpertUID], expiration: DHTExpiration = 300, wait: bool = True
+    dht: DHT, uids: Sequence[ExpertUID], expiration: DHTExpiration, wait: bool = True
 ) -> Union[Dict[ExpertUID, bool], MPFuture[Dict[ExpertUID, bool]]]:
     """
     Make experts visible to all DHT peers; update timestamps if declared previously.
