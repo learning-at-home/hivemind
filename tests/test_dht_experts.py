@@ -44,7 +44,7 @@ def test_store_get_experts(n_peers=10):
     time.sleep(1.0)
     remaining_peer1 = random.choice([peer for peer in peers if peer.is_alive()])
     remaining_peer2 = random.choice([peer for peer in peers if peer.is_alive()])
-    assert all(declare_experts(remaining_peer1, ["new_expert.1"], expiration_time=hivemind.get_dht_time() + 30))
+    assert all(declare_experts(remaining_peer1, ["new_expert.1"], expiration_time=get_dht_time() + 30))
     assert get_experts(remaining_peer2, ["new_expert.1"])[0].peer_id == remaining_peer1.peer_id
 
 
