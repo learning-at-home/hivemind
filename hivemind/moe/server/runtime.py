@@ -54,7 +54,7 @@ class Runtime(threading.Thread):
     ):
         super().__init__()
         self.backends = backends
-        self.pools = tuple(chain(*(expert.get_pools() for expert in backends.values())))
+        self.pools = tuple(chain(*(backend.get_pools() for backend in backends.values())))
         self.device, self.prefetch_batches, self.sender_threads = device, prefetch_batches, sender_threads
         self.shutdown_recv, self.shutdown_send = mp.Pipe(duplex=False)
         self.shutdown_trigger = mp.Event()
