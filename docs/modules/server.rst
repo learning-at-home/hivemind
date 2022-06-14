@@ -27,7 +27,7 @@ The hivemind.moe.server module is organized as follows:
 
 .. _ExpertBackend:
 .. autoclass:: ExpertBackend
-    :members: forward, backward, apply_gradients, get_info, get_pools
+    :members: forward, backward, on_backward, get_info, get_pools
     :member-order: bysource
 
 .. currentmodule:: hivemind.moe.server.runtime
