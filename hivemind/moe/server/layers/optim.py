@@ -4,8 +4,8 @@ import torch
 class OptimizerWrapper(torch.optim.Optimizer):
     """A wrapper for pytorch.optim.Optimizer that forwards all methods to the wrapped optimizer"""
 
+    # noinspection PyMissingConstructor
     def __init__(self, optim: torch.optim.Optimizer):
-        object.__init__(self)
         self.optim = optim
 
     @property
