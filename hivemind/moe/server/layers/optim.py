@@ -46,7 +46,7 @@ class OptimizerWrapper(torch.optim.Optimizer):
 
 
 class ClippingWrapper(OptimizerWrapper):
-    """A wrapper to pytorch.optimizer that clips gradients by global norm before each step"""
+    """A wrapper of torch.Optimizer that clips gradients by global norm before each step"""
 
     def __init__(self, optim: torch.optim.Optimizer, clip_grad_norm: float):
         super().__init__(optim)
