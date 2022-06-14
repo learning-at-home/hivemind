@@ -20,20 +20,20 @@ from hivemind.utils import MAX_DHT_TIME_DISCREPANCY_SECONDS, MPFuture, get_dht_t
 
 
 class DHTHandlerThread(threading.Thread):
-    def __init__(self, experts, dht: DHT, update_period: float = 30, expiration: Optional[int] = None, **kwargs):
+    def __init__(self, backends, dht: DHT, update_period: float = 30, expiration: Optional[int] = None, **kwargs):
         super().__init__(**kwargs)
         if expiration is None:
             expiration = max(2 * update_period, MAX_DHT_TIME_DISCREPANCY_SECONDS)
-        self.experts = experts
+        self.backends = backends
         self.dht = dht
         self.update_period = update_period
         self.expiration = expiration
         self.stop = threading.Event()
 
     def run(self) -> None:
-        declare_experts(self.dht, self.experts.keys(), expiration_time=get_dht_time() + self.expiration)
+        declare_experts(self.dht, self.backends.keys(), expiration_time=get_dht_time() + self.expiration)
         while not self.stop.wait(self.update_period):
-            declare_experts(self.dht, self.experts.keys(), expiration_time=get_dht_time() + self.expiration)
+            declare_experts(self.dht, self.backends.keys(), expiration_time=get_dht_time() + self.expiration)
 
 
 def declare_experts(
