@@ -202,7 +202,7 @@ class Server(threading.Thread):
             optimizer = optim_cls(expert.parameters()) if optim_cls is not None else None
             scheduler = scheduler_cls(optimizer) if scheduler_cls is not None else None
             if clip_grad_norm is not None:
-                scheduler = ClippingWrapper(scheduler, clip_grad_norm)
+                optimizer = ClippingWrapper(optimizer, clip_grad_norm)
             experts[expert_uid] = ExpertBackend(
                 name=expert_uid,
                 module=expert,
