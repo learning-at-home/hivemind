@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 
 class Server(threading.Thread):
     """
-    Server allows you to host "experts" - pytorch subnetworks used by Decentralized Mixture of Experts.
+    Server allows you to host "experts" - pytorch subnetworks that can be accessed by your peers in the swarm.
     After creation, a server should be started: see Server.run or Server.run_in_background.
 
     A working server does two things:
@@ -42,7 +42,7 @@ class Server(threading.Thread):
      - publishes updates to expert status every :update_period: seconds
 
     :type dht: an instance of hivemind.DHT. Server will use DHT for all network interactions.
-    :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
+    :param backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
     :param num_connection_handlers: maximum number of simultaneous requests. Please note that the default value of 1
         if too small for normal functioning, we recommend 4 handlers per expert backend.
     :param update_period: how often will server attempt to publish its state (i.e. experts) to the DHT;
@@ -55,7 +55,7 @@ class Server(threading.Thread):
     def __init__(
         self,
         dht: DHT,
-        expert_backends: Dict[str, ExpertBackend],
+        backends: Dict[str, ExpertBackend],
         num_connection_handlers: int = 1,
         update_period: float = 30,
         expiration: Optional[float] = None,
@@ -64,18 +64,18 @@ class Server(threading.Thread):
         **kwargs,
     ):
         super().__init__()
-        self.dht, self.experts, self.update_period = dht, expert_backends, update_period
+        self.dht, self.backends, self.update_period = dht, backends, update_period
 
-        self.conn_handlers = [ConnectionHandler(dht, self.experts) for _ in range(num_connection_handlers)]
+        self.conn_handlers = [ConnectionHandler(dht, self.backends) for _ in range(num_connection_handlers)]
         if checkpoint_dir is not None:
-            self.checkpoint_saver = CheckpointSaver(expert_backends, checkpoint_dir, update_period)
+            self.checkpoint_saver = CheckpointSaver(backends, checkpoint_dir, update_period)
         else:
             self.checkpoint_saver = None
-        self.runtime = Runtime(self.experts, **kwargs)
+        self.runtime = Runtime(self.backends, **kwargs)
 
-        if self.experts:
+        if self.backends:
             self.dht_handler_thread = DHTHandlerThread(
-                experts=self.experts,
+                backends=self.backends,
                 dht=self.dht,
                 update_period=self.update_period,
                 expiration=expiration,
@@ -114,7 +114,7 @@ class Server(threading.Thread):
         **kwargs,
     ) -> Server:
         """
-        Instantiate a server with several identical experts. See argparse comments below for details
+        Instantiate a server with several identical modules. See argparse comments below for details
 
         :param num_experts: run this many identical experts
         :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]\
@@ -233,15 +233,15 @@ class Server(threading.Thread):
         Starts Server in the current thread. Initializes dht if necessary, starts connection handlers,
         runs Runtime (self.runtime) to process incoming requests.
         """
-        logger.info(f"Server started with {len(self.experts)} experts:")
-        for expert_name, backend in self.experts.items():
+        logger.info(f"Server started with {len(self.backends)} modules:")
+        for expert_name, backend in self.backends.items():
             num_parameters = sum(p.numel() for p in backend.module.parameters() if p.requires_grad)
             logger.info(f"{expert_name}: {backend.module.__class__.__name__}, {num_parameters} parameters")
 
         if not self.dht.is_alive():
             self.dht.run_in_background(await_ready=True)
 
-        if self.experts:
+        if self.backends:
             self.dht_handler_thread.start()
 
         if self.checkpoint_saver is not None:
@@ -292,7 +292,7 @@ class Server(threading.Thread):
             process.join()
         logger.debug("Connection handlers terminated")
 
-        if self.experts:
+        if self.backends:
             self.dht_handler_thread.stop.set()
             self.dht_handler_thread.join()
 

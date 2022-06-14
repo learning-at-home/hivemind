@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 class Runtime(threading.Thread):
     """
-    A group of processes that processes incoming requests for multiple experts on a shared device.
+    A group of processes that processes incoming requests for multiple module backends on a shared device.
     Runtime is usually created and managed by Server, humans need not apply.
 
     For debugging, you can start runtime manually with .start() or .run()
@@ -29,11 +29,11 @@ class Runtime(threading.Thread):
     >>> runtime = Runtime(expert_backends)
     >>> runtime.start()  # start runtime in background thread. To start in current thread, use runtime.run()
     >>> runtime.ready.wait()  # await for runtime to load all experts on device and create request pools
-    >>> future = runtime.expert_backends['expert_name'].forward_pool.submit_task(*expert_inputs)
+    >>> future = runtime.backends['expert_name'].forward_pool.submit_task(*expert_inputs)
     >>> print("Returned:", future.result())
     >>> runtime.shutdown()
 
-    :param expert_backends: a dict [expert uid -> ExpertBackend]
+    :param backends: a dict [expert uid -> ExpertBackend]
     :param prefetch_batches: form up to this many batches in advance
     :param sender_threads: dispatches outputs from finished batches using this many asynchronous threads
     :param device: if specified, moves all experts and data to this device via .to(device=device).
@@ -46,15 +46,15 @@ class Runtime(threading.Thread):
 
     def __init__(
         self,
-        expert_backends: Dict[str, ExpertBackend],
+        backends: Dict[str, ExpertBackend],
         prefetch_batches=64,
         sender_threads: int = 1,
         device: torch.device = None,
         stats_report_interval: Optional[int] = None,
     ):
         super().__init__()
-        self.expert_backends = expert_backends
-        self.pools = tuple(chain(*(expert.get_pools() for expert in expert_backends.values())))
+        self.backends = backends
+        self.pools = tuple(chain(*(expert.get_pools() for expert in backends.values())))
         self.device, self.prefetch_batches, self.sender_threads = device, prefetch_batches, sender_threads
         self.shutdown_recv, self.shutdown_send = mp.Pipe(duplex=False)
         self.shutdown_trigger = mp.Event()
@@ -69,8 +69,8 @@ class Runtime(threading.Thread):
             if not pool.is_alive():
                 pool.start()
         if self.device is not None:
-            for expert_backend in self.expert_backends.values():
-                expert_backend.module.to(self.device)
+            for backend in self.backends.values():
+                backend.module.to(self.device)
 
         with mp.pool.ThreadPool(self.sender_threads) as output_sender_pool:
             try:

@@ -133,7 +133,7 @@ def benchmark_throughput(
 
         server = Server(
             dht=server_dht,
-            expert_backends=experts,
+            backends=experts,
             num_connection_handlers=num_handlers,
             device=device,
         )
