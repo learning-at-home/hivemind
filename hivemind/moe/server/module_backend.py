@@ -4,11 +4,11 @@ import torch
 from torch import nn
 
 from hivemind.moe.server.task_pool import TaskPool
-from hivemind.optim.state_averager import LRSchedulerBase
 from hivemind.utils.logging import get_logger
 from hivemind.utils.nested import nested_compare, nested_flatten, nested_map, nested_pack
 from hivemind.utils.tensor_descr import DUMMY_BATCH_SIZE, BatchTensorDescriptor
 
+LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
 logger = get_logger(__name__)
 
 
