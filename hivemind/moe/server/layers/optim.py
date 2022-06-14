@@ -6,6 +6,7 @@ class OptimizerWrapper(torch.optim.Optimizer):
 
     # noinspection PyMissingConstructor
     def __init__(self, optim: torch.optim.Optimizer):
+        super().__init__(optim.param_groups, optim.defaults)
         self.optim = optim
 
     @property
