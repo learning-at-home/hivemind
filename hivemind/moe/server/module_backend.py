@@ -160,7 +160,7 @@ class ModuleBackend:
             self.scheduler.step()
 
     def state_dict(self) -> Dict:
-        """ Return the current state of the module, optimizer, and scheduler """
+        """Return the current state of the module, optimizer, and scheduler"""
         full_state = dict(module=self.module.state_dict())
         if self.optimizer is not None:
             full_state["optimizer"] = self.optimizer.state_dict()

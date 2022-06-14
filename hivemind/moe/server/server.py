@@ -15,7 +15,6 @@ from hivemind.moe.expert_uid import UID_DELIMITER
 from hivemind.moe.server.checkpoints import CheckpointSaver, is_directory, load_experts
 from hivemind.moe.server.connection_handler import ConnectionHandler
 from hivemind.moe.server.dht_handler import DHTHandlerThread, get_experts
-from hivemind.moe.server.module_backend import ModuleBackend
 from hivemind.moe.server.layers import (
     add_custom_models_from_file,
     name_to_block,
@@ -23,6 +22,7 @@ from hivemind.moe.server.layers import (
     schedule_name_to_scheduler,
 )
 from hivemind.moe.server.layers.optim import ClippingWrapper
+from hivemind.moe.server.module_backend import ModuleBackend
 from hivemind.moe.server.runtime import Runtime
 from hivemind.p2p import PeerInfo
 from hivemind.proto.runtime_pb2 import CompressionType

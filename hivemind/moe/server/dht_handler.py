@@ -20,7 +20,9 @@ from hivemind.utils import MAX_DHT_TIME_DISCREPANCY_SECONDS, MPFuture, get_dht_t
 
 
 class DHTHandlerThread(threading.Thread):
-    def __init__(self, module_backends, dht: DHT, update_period: float = 30, expiration: Optional[int] = None, **kwargs):
+    def __init__(
+        self, module_backends, dht: DHT, update_period: float = 30, expiration: Optional[int] = None, **kwargs
+    ):
         super().__init__(**kwargs)
         if expiration is None:
             expiration = max(2 * update_period, MAX_DHT_TIME_DISCREPANCY_SECONDS)
