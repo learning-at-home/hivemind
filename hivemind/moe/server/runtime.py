@@ -12,7 +12,7 @@ from typing import Dict, NamedTuple, Optional
 import torch
 from prefetch_generator import BackgroundGenerator
 
-from hivemind.moe.server.expert_backend import ExpertBackend
+from hivemind.moe.server.module_backend import ModuleBackend
 from hivemind.utils import get_logger
 
 logger = get_logger(__name__)
@@ -25,7 +25,7 @@ class Runtime(threading.Thread):
 
     For debugging, you can start runtime manually with .start() or .run()
 
-    >>> expert_backends = {'expert_name': ExpertBackend(**kwargs)}
+    >>> expert_backends = {'expert_name': ModuleBackend(**kwargs)}
     >>> runtime = Runtime(expert_backends)
     >>> runtime.start()  # start runtime in background thread. To start in current thread, use runtime.run()
     >>> runtime.ready.wait()  # await for runtime to load all experts on device and create request pools
@@ -33,7 +33,7 @@ class Runtime(threading.Thread):
     >>> print("Returned:", future.result())
     >>> runtime.shutdown()
 
-    :param backends: a dict [expert uid -> ExpertBackend]
+    :param backends: a dict [expert uid -> ModuleBackend]
     :param prefetch_batches: form up to this many batches in advance
     :param sender_threads: dispatches outputs from finished batches using this many asynchronous threads
     :param device: if specified, moves all experts and data to this device via .to(device=device).
@@ -46,7 +46,7 @@ class Runtime(threading.Thread):
 
     def __init__(
         self,
-        backends: Dict[str, ExpertBackend],
+        backends: Dict[str, ModuleBackend],
         prefetch_batches=64,
         sender_threads: int = 1,
         device: torch.device = None,

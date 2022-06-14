@@ -10,7 +10,7 @@ from hivemind.dht import DHT
 from hivemind.moe.client.expert import RemoteExpert
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.moe.expert_uid import ExpertInfo
-from hivemind.moe.server import ExpertBackend, Server
+from hivemind.moe.server import ModuleBackend, Server
 from hivemind.moe.server.layers import name_to_block
 from hivemind.p2p import P2P
 from hivemind.utils.limits import increase_file_limit
@@ -121,7 +121,7 @@ def benchmark_throughput(
         experts = {}
         for i in range(num_experts):
             expert = torch.jit.script(name_to_block[expert_cls](hid_dim))
-            experts[f"expert.{i}"] = ExpertBackend(
+            experts[f"expert.{i}"] = ModuleBackend(
                 name=f"expert.{i}",
                 module=expert,
                 optimizer=torch.optim.Adam(expert.parameters()),

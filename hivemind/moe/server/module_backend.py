@@ -12,10 +12,10 @@ from hivemind.utils.tensor_descr import DUMMY_BATCH_SIZE, BatchTensorDescriptor
 logger = get_logger(__name__)
 
 
-class ExpertBackend:
+class ModuleBackend:
     """
-    ExpertBackend is a wrapper around torch module that allows it to run tasks asynchronously with Runtime
-    By default, ExpertBackend handles three types of requests:
+    ModuleBackend is a wrapper around torch module that allows it to run tasks asynchronously with Runtime
+    By default, ModuleBackend handles three types of requests:
 
      - forward - receive inputs and compute outputs. Concurrent requests will be batched for better GPU utilization.
      - backward - receive gradients w.r.t. outputs, compute gradients w.r.t. inputs and **update expert**. Also batched.
@@ -78,7 +78,7 @@ class ExpertBackend:
     def forward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
         Apply forward pass to an aggregated batch of requests. Used by Runtime, do not call this manually;
-        To submit a request for asynchronous processing, please use ``ExpertBackend.forward_pool.submit_task``.
+        To submit a request for asynchronous processing, please use ``ModuleBackend.forward_pool.submit_task``.
 
         Subclassing:
            This method receives a sequence of torch tensors following ``nested_flatten(self.forward_schema)``;
@@ -98,7 +98,7 @@ class ExpertBackend:
     def backward(self, *inputs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
         """
         Apply backward pass to an aggregated batch of requests. Used by Runtime, do not call this manually
-        To submit a request for asynchronous processing, please use ``ExpertBackend.backward_pool.submit_task``.
+        To submit a request for asynchronous processing, please use ``ModuleBackend.backward_pool.submit_task``.
 
         Subclassing:
            This method receives a sequence of torch tensors following ``nested_flatten(self.backward_schema)``;
@@ -108,7 +108,7 @@ class ExpertBackend:
            Runtime doesn't guarantee that backward will be performed in the same order and for the same data
            as forward, so we recommend stateless backward pass that re-runs expert forward pass inside backward.
 
-           Please make sure to call ``ExpertBackend.apply_gradients`` here, otherwise the expert will not train
+           Please make sure to call ``ModuleBackend.apply_gradients`` here, otherwise the expert will not train
         """
         (args, kwargs), grad_outputs = nested_pack(inputs, structure=self.backward_schema)
 
@@ -149,7 +149,7 @@ class ExpertBackend:
 
     def on_backward(self, batch_size: int) -> None:
         """
-        Train the expert for one step. This method is called by ``ExpertBackend.backward`` after computing gradients.
+        Train the expert for one step. This method is called by ``ModuleBackend.backward`` after computing gradients.
         """
         if self.optimizer is not None:
             self.optimizer.step()

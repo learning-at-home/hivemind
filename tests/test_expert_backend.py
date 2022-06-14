@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch.nn import Linear
 
-from hivemind import BatchTensorDescriptor, ExpertBackend
+from hivemind import BatchTensorDescriptor, ModuleBackend
 from hivemind.moe.server.checkpoints import load_experts, store_experts
 from hivemind.moe.server.layers.lr_schedule import get_linear_schedule_with_warmup
 
@@ -22,7 +22,7 @@ def example_experts():
     opt = torch.optim.SGD(expert.parameters(), PEAK_LR)
 
     args_schema = (BatchTensorDescriptor(1),)
-    expert_backend = ExpertBackend(
+    expert_backend = ModuleBackend(
         name=EXPERT_NAME,
         module=expert,
         optimizer=opt,

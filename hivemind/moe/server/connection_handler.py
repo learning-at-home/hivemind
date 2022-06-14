@@ -6,7 +6,7 @@ import torch
 
 from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.dht import DHT
-from hivemind.moe.server.expert_backend import ExpertBackend
+from hivemind.moe.server.module_backend import ModuleBackend
 from hivemind.moe.server.task_pool import TaskPool
 from hivemind.p2p import P2PContext, ServicerBase
 from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE, P2P
@@ -25,10 +25,10 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
 
     :note: ConnectionHandler is designed so as to allow using multiple handler processes for the same port
     :param dht: a running hivemind.dht.DHT, used to let other peers connect to this one
-    :param experts: a dict [UID -> ExpertBackend] with all active experts
+    :param experts: a dict [UID -> ModuleBackend] with all active experts
     """
 
-    def __init__(self, dht: DHT, experts: Dict[str, ExpertBackend]):
+    def __init__(self, dht: DHT, experts: Dict[str, ModuleBackend]):
         super().__init__()
         self.dht, self.experts = dht, experts
         self._p2p: Optional[P2P] = None

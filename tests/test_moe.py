@@ -7,7 +7,7 @@ from hivemind.moe.client.expert import RemoteExpert, create_remote_experts
 from hivemind.moe.client.moe import DUMMY, RemoteMixtureOfExperts, _RemoteCallMany
 from hivemind.moe.client.switch_moe import RemoteSwitchMixtureOfExperts
 from hivemind.moe.expert_uid import ExpertInfo
-from hivemind.moe.server import ExpertBackend, Server, background_server, declare_experts
+from hivemind.moe.server import ModuleBackend, Server, background_server, declare_experts
 from hivemind.moe.server.layers import name_to_block
 from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError
 from hivemind.utils import BatchTensorDescriptor, get_dht_time
@@ -257,7 +257,7 @@ def test_client_anomaly_detection():
     experts = {}
     for i in range(4):
         expert = name_to_block["ffn"](HID_DIM)
-        experts[f"expert.{i}"] = ExpertBackend(
+        experts[f"expert.{i}"] = ModuleBackend(
             name=f"expert.{i}",
             module=expert,
             optimizer=torch.optim.Adam(expert.parameters()),

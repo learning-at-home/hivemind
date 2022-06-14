@@ -15,7 +15,7 @@ from hivemind.moe.expert_uid import UID_DELIMITER
 from hivemind.moe.server.checkpoints import CheckpointSaver, is_directory, load_experts
 from hivemind.moe.server.connection_handler import ConnectionHandler
 from hivemind.moe.server.dht_handler import DHTHandlerThread, get_experts
-from hivemind.moe.server.expert_backend import ExpertBackend
+from hivemind.moe.server.module_backend import ModuleBackend
 from hivemind.moe.server.layers import (
     add_custom_models_from_file,
     name_to_block,
@@ -42,7 +42,7 @@ class Server(threading.Thread):
      - publishes updates to expert status every :update_period: seconds
 
     :type dht: an instance of hivemind.DHT. Server will use DHT for all network interactions.
-    :param backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
+    :param backends: dict{expert uid (str) : ModuleBackend} for all expert hosted by this server.
     :param num_connection_handlers: maximum number of simultaneous requests. Please note that the default value of 1
         if too small for normal functioning, we recommend 4 handlers per expert backend.
     :param update_period: how often will server attempt to publish its state (i.e. experts) to the DHT;
@@ -55,7 +55,7 @@ class Server(threading.Thread):
     def __init__(
         self,
         dht: DHT,
-        backends: Dict[str, ExpertBackend],
+        backends: Dict[str, ModuleBackend],
         num_connection_handlers: int = 1,
         update_period: float = 30,
         expiration: Optional[float] = None,
@@ -139,7 +139,7 @@ class Server(threading.Thread):
 
         :param compression: if specified, use this compression to pack all inputs, outputs and gradients by all experts
             hosted on this server. For a more fine-grained compression, start server in python and specify compression
-            for each BatchTensorProto in ExpertBackend for the respective experts.
+            for each BatchTensorProto in ModuleBackend for the respective experts.
 
         :param start: if True, starts server right away and returns when server is ready for requests
         :param stats_report_interval: interval between two reports of batch processing performance statistics
@@ -203,7 +203,7 @@ class Server(threading.Thread):
             scheduler = scheduler_cls(optimizer) if scheduler_cls is not None else None
             if clip_grad_norm is not None:
                 optimizer = ClippingWrapper(optimizer, clip_grad_norm)
-            experts[expert_uid] = ExpertBackend(
+            experts[expert_uid] = ModuleBackend(
                 name=expert_uid,
                 module=expert,
                 args_schema=args_schema,
