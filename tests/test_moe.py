@@ -259,14 +259,14 @@ def test_client_anomaly_detection():
         expert = name_to_block["ffn"](HID_DIM)
         experts[f"expert.{i}"] = ExpertBackend(
             name=f"expert.{i}",
-            expert=expert,
+            module=expert,
             optimizer=torch.optim.Adam(expert.parameters()),
             args_schema=(BatchTensorDescriptor(HID_DIM),),
             outputs_schema=BatchTensorDescriptor(HID_DIM),
             max_batch_size=16,
         )
 
-    experts["expert.3"].expert.ffn.weight.data[0, 0] = float("nan")
+    experts["expert.3"].module.ffn.weight.data[0, 0] = float("nan")
 
     dht = DHT(start=True)
     server = Server(dht, experts, num_connection_handlers=1)

@@ -59,7 +59,7 @@ def store_experts(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
             expert_dir = Path(tmpdirname) / expert_name
             expert_dir.mkdir()
             checkpoint_name = expert_dir / f"checkpoint_{timestamp}.pt"
-            torch.save(expert_backend.get_full_state(), checkpoint_name)
+            torch.save(expert_backend.state_dict(), checkpoint_name)
             os.symlink(checkpoint_name, expert_dir / "checkpoint_last.pt")
         copy_tree(tmpdirname, str(checkpoint_dir))
 
@@ -70,6 +70,6 @@ def load_experts(experts: Dict[str, ExpertBackend], checkpoint_dir: Path):
         checkpoints_folder = checkpoint_dir / expert_name
         latest_checkpoint = checkpoints_folder / "checkpoint_last.pt"
         if latest_checkpoint.exists():
-            expert.load_full_state(torch.load(latest_checkpoint))
+            expert.load_state_dict(torch.load(latest_checkpoint))
         else:
             logger.warning(f"Failed to load checkpoint for expert {expert_name}")

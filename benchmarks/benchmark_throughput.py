@@ -123,7 +123,7 @@ def benchmark_throughput(
             expert = torch.jit.script(name_to_block[expert_cls](hid_dim))
             experts[f"expert.{i}"] = ExpertBackend(
                 name=f"expert.{i}",
-                expert=expert,
+                module=expert,
                 optimizer=torch.optim.Adam(expert.parameters()),
                 args_schema=(BatchTensorDescriptor(hid_dim),),
                 outputs_schema=BatchTensorDescriptor(hid_dim),

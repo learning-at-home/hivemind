@@ -70,7 +70,7 @@ class Runtime(threading.Thread):
                 pool.start()
         if self.device is not None:
             for expert_backend in self.expert_backends.values():
-                expert_backend.expert.to(self.device)
+                expert_backend.module.to(self.device)
 
         with mp.pool.ThreadPool(self.sender_threads) as output_sender_pool:
             try:
