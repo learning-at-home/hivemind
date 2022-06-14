@@ -56,7 +56,7 @@ class ExpertBackend:
         self.args_schema = args_schema = tuple(args_schema or ())
         self.kwargs_schema = kwargs_schema = dict(kwargs_schema or {})
         assert args_schema or kwargs_schema, (
-            f"{self.__class__.__name__} must receive at least one positional or keyword input."
+            f"Module must take at least one positional or keyword input."
             " Did you forget to provide args_schema/kwargs_schema?"
         )
 
