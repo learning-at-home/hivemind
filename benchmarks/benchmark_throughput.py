@@ -118,10 +118,10 @@ def benchmark_throughput(
         timestamps["launched_clients"] = timestamps["began_launching_server"] = time.perf_counter()
 
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        experts = {}
+        module_backends = {}
         for i in range(num_experts):
             expert = torch.jit.script(name_to_block[expert_cls](hid_dim))
-            experts[f"expert.{i}"] = ModuleBackend(
+            module_backends[f"expert.{i}"] = ModuleBackend(
                 name=f"expert.{i}",
                 module=expert,
                 optimizer=torch.optim.Adam(expert.parameters()),
@@ -133,7 +133,7 @@ def benchmark_throughput(
 
         server = Server(
             dht=server_dht,
-            backends=experts,
+            module_backends=module_backends,
             num_connection_handlers=num_handlers,
             device=device,
         )

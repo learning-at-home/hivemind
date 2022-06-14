@@ -34,20 +34,20 @@ def copy_tree(src: str, dst: str):
 
 
 class CheckpointSaver(threading.Thread):
-    def __init__(self, backends: Dict[str, ModuleBackend], checkpoint_dir: Path, update_period: float):
+    def __init__(self, module_backends: Dict[str, ModuleBackend], checkpoint_dir: Path, update_period: float):
         super().__init__()
         assert is_directory(checkpoint_dir)
-        self.backends = backends
+        self.module_backends = module_backends
         self.update_period = update_period
         self.checkpoint_dir = checkpoint_dir
         self.stop = threading.Event()
 
         # create expert directories to ensure that the directory is writable and checkpoints can be loaded
-        store_experts(self.backends, self.checkpoint_dir)
+        store_experts(self.module_backends, self.checkpoint_dir)
 
     def run(self) -> None:
         while not self.stop.wait(self.update_period):
-            store_experts(self.backends, self.checkpoint_dir)
+            store_experts(self.module_backends, self.checkpoint_dir)
 
 
 def store_experts(experts: Dict[str, ModuleBackend], checkpoint_dir: Path):

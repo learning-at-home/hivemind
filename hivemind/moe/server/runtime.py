@@ -25,15 +25,15 @@ class Runtime(threading.Thread):
 
     For debugging, you can start runtime manually with .start() or .run()
 
-    >>> expert_backends = {'expert_name': ModuleBackend(**kwargs)}
-    >>> runtime = Runtime(expert_backends)
+    >>> module_backends = {'expert_name': ModuleBackend(**kwargs)}
+    >>> runtime = Runtime(module_backends)
     >>> runtime.start()  # start runtime in background thread. To start in current thread, use runtime.run()
     >>> runtime.ready.wait()  # await for runtime to load all experts on device and create request pools
-    >>> future = runtime.backends['expert_name'].forward_pool.submit_task(*expert_inputs)
+    >>> future = runtime.module_backends['expert_name'].forward_pool.submit_task(*module_inputs)
     >>> print("Returned:", future.result())
     >>> runtime.shutdown()
 
-    :param backends: a dict [expert uid -> ModuleBackend]
+    :param module_backends: a dict [expert uid -> ModuleBackend]
     :param prefetch_batches: form up to this many batches in advance
     :param sender_threads: dispatches outputs from finished batches using this many asynchronous threads
     :param device: if specified, moves all experts and data to this device via .to(device=device).
@@ -46,15 +46,15 @@ class Runtime(threading.Thread):
 
     def __init__(
         self,
-        backends: Dict[str, ModuleBackend],
+        module_backends: Dict[str, ModuleBackend],
         prefetch_batches=64,
         sender_threads: int = 1,
         device: torch.device = None,
         stats_report_interval: Optional[int] = None,
     ):
         super().__init__()
-        self.backends = backends
-        self.pools = tuple(chain(*(backend.get_pools() for backend in backends.values())))
+        self.module_backends = module_backends
+        self.pools = tuple(chain(*(backend.get_pools() for backend in module_backends.values())))
         self.device, self.prefetch_batches, self.sender_threads = device, prefetch_batches, sender_threads
         self.shutdown_recv, self.shutdown_send = mp.Pipe(duplex=False)
         self.shutdown_trigger = mp.Event()
@@ -69,7 +69,7 @@ class Runtime(threading.Thread):
             if not pool.is_alive():
                 pool.start()
         if self.device is not None:
-            for backend in self.backends.values():
+            for backend in self.module_backends.values():
                 backend.module.to(self.device)
 
         with mp.pool.ThreadPool(self.sender_threads) as output_sender_pool:
