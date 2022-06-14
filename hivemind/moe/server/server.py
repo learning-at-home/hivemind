@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 
 class Server(threading.Thread):
     """
-    Server allows you to host "experts" - pytorch subnetworks that can be accessed by your peers in the swarm.
+    Server allows you to host "experts" - pytorch subnetworks that can be accessed remotely by peers.
     After creation, a server should be started: see Server.run or Server.run_in_background.
 
     A working server does two things:
