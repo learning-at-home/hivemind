@@ -59,6 +59,7 @@ class ModuleBackend:
             f"Module must take at least one positional or keyword input."
             " Did you forget to provide args_schema/kwargs_schema?"
         )
+        assert optimizer is not None or scheduler is None, "scheduler should only be used if optimizer is not None"
 
         if outputs_schema is None:
             # run expert once to get outputs schema
