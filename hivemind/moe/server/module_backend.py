@@ -81,6 +81,9 @@ class ModuleBackend:
         Apply forward pass to an aggregated batch of requests. Used by Runtime, do not call this manually;
         To submit a request for asynchronous processing, please use ``ModuleBackend.forward_pool.submit_task``.
 
+        .. warning: if the underlying module performs non-gradient updates (e.g. batchnorm), it will be updated twice:
+           once during forward pass, and again during backward. This behavior is similar to gradient checkpointing.
+
         Subclassing:
            This method receives a sequence of torch tensors following ``nested_flatten(self.forward_schema)``;
            It should return gradients w.r.t. inputs that follow ``nested_flatten(self.outputs_schema)``;
