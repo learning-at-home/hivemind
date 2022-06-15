@@ -15,13 +15,14 @@ from hivemind.moe.expert_uid import UID_DELIMITER
 from hivemind.moe.server.checkpoints import CheckpointSaver, is_directory, load_experts
 from hivemind.moe.server.connection_handler import ConnectionHandler
 from hivemind.moe.server.dht_handler import DHTHandlerThread, get_experts
-from hivemind.moe.server.expert_backend import ExpertBackend
 from hivemind.moe.server.layers import (
     add_custom_models_from_file,
     name_to_block,
     name_to_input,
     schedule_name_to_scheduler,
 )
+from hivemind.moe.server.layers.optim import ClippingWrapper
+from hivemind.moe.server.module_backend import ModuleBackend
 from hivemind.moe.server.runtime import Runtime
 from hivemind.p2p import PeerInfo
 from hivemind.proto.runtime_pb2 import CompressionType
@@ -33,7 +34,7 @@ logger = get_logger(__name__)
 
 class Server(threading.Thread):
     """
-    Server allows you to host "experts" - pytorch subnetworks used by Decentralized Mixture of Experts.
+    Server allows you to host "experts" - pytorch subnetworks that can be accessed remotely by peers.
     After creation, a server should be started: see Server.run or Server.run_in_background.
 
     A working server does two things:
@@ -41,7 +42,7 @@ class Server(threading.Thread):
      - publishes updates to expert status every :update_period: seconds
 
     :type dht: an instance of hivemind.DHT. Server will use DHT for all network interactions.
-    :param expert_backends: dict{expert uid (str) : ExpertBackend} for all expert hosted by this server.
+    :param module_backends: dict{expert uid (str) : ModuleBackend} for all expert hosted by this server.
     :param num_connection_handlers: maximum number of simultaneous requests. Please note that the default value of 1
         if too small for normal functioning, we recommend 4 handlers per expert backend.
     :param update_period: how often will server attempt to publish its state (i.e. experts) to the DHT;
@@ -54,7 +55,7 @@ class Server(threading.Thread):
     def __init__(
         self,
         dht: DHT,
-        expert_backends: Dict[str, ExpertBackend],
+        module_backends: Dict[str, ModuleBackend],
         num_connection_handlers: int = 1,
         update_period: float = 30,
         expiration: Optional[float] = None,
@@ -63,18 +64,18 @@ class Server(threading.Thread):
         **kwargs,
     ):
         super().__init__()
-        self.dht, self.experts, self.update_period = dht, expert_backends, update_period
+        self.dht, self.module_backends, self.update_period = dht, module_backends, update_period
 
-        self.conn_handlers = [ConnectionHandler(dht, self.experts) for _ in range(num_connection_handlers)]
+        self.conn_handlers = [ConnectionHandler(dht, self.module_backends) for _ in range(num_connection_handlers)]
         if checkpoint_dir is not None:
-            self.checkpoint_saver = CheckpointSaver(expert_backends, checkpoint_dir, update_period)
+            self.checkpoint_saver = CheckpointSaver(module_backends, checkpoint_dir, update_period)
         else:
             self.checkpoint_saver = None
-        self.runtime = Runtime(self.experts, **kwargs)
+        self.runtime = Runtime(self.module_backends, **kwargs)
 
-        if self.experts:
+        if self.module_backends:
             self.dht_handler_thread = DHTHandlerThread(
-                experts=self.experts,
+                module_backends=self.module_backends,
                 dht=self.dht,
                 update_period=self.update_period,
                 expiration=expiration,
@@ -95,7 +96,7 @@ class Server(threading.Thread):
         optim_cls=torch.optim.Adam,
         scheduler: str = "none",
         num_warmup_steps=None,
-        num_total_steps=None,
+        num_training_steps=None,
         clip_grad_norm=None,
         num_handlers=None,
         min_batch_size=1,
@@ -113,7 +114,7 @@ class Server(threading.Thread):
         **kwargs,
     ) -> Server:
         """
-        Instantiate a server with several identical experts. See argparse comments below for details
+        Instantiate a server with several identical modules. See argparse comments below for details
 
         :param num_experts: run this many identical experts
         :param expert_pattern: a string pattern or a list of expert uids,  example: myprefix.[0:32].[0:256]\
@@ -129,7 +130,7 @@ class Server(threading.Thread):
         :param optim_cls: uses this optimizer to train all experts
         :param scheduler: if not `none`, the name of the expert LR scheduler
         :param num_warmup_steps: the number of warmup steps for LR schedule
-        :param num_total_steps: the total number of steps for LR schedule
+        :param num_training_steps: the total number of steps for LR schedule
         :param clip_grad_norm: maximum gradient norm used for clipping
 
         :param initial_peers: multiaddrs of one or more active DHT peers (if you want to join an existing DHT)
@@ -138,7 +139,7 @@ class Server(threading.Thread):
 
         :param compression: if specified, use this compression to pack all inputs, outputs and gradients by all experts
             hosted on this server. For a more fine-grained compression, start server in python and specify compression
-            for each BatchTensorProto in ExpertBackend for the respective experts.
+            for each BatchTensorProto in ModuleBackend for the respective experts.
 
         :param start: if True, starts server right away and returns when server is ready for requests
         :param stats_report_interval: interval between two reports of batch processing performance statistics
@@ -180,7 +181,6 @@ class Server(threading.Thread):
 
         num_experts = len(expert_uids)
         num_handlers = num_handlers if num_handlers is not None else num_experts * 8
-        optim_cls = optim_cls if optim_cls is not None else partial(torch.optim.SGD, lr=0.0)
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
         sample_input = name_to_input[expert_cls](DUMMY_BATCH_SIZE, hidden_dim)
@@ -189,21 +189,26 @@ class Server(threading.Thread):
         else:
             args_schema = (BatchTensorDescriptor.from_tensor(sample_input, compression),)
 
-        scheduler = schedule_name_to_scheduler[scheduler]
+        scheduler_cls = schedule_name_to_scheduler[scheduler]
+        if scheduler_cls is not None:
+            scheduler_cls = partial(
+                scheduler_cls, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps
+            )
 
         # initialize experts
         experts = {}
         for expert_uid in expert_uids:
             expert = name_to_block[expert_cls](hidden_dim)
-            experts[expert_uid] = ExpertBackend(
+            optimizer = optim_cls(expert.parameters()) if optim_cls is not None else None
+            scheduler = scheduler_cls(optimizer) if scheduler_cls is not None else None
+            if clip_grad_norm is not None:
+                optimizer = ClippingWrapper(optimizer, clip_grad_norm)
+            experts[expert_uid] = ModuleBackend(
                 name=expert_uid,
-                expert=expert,
+                module=expert,
                 args_schema=args_schema,
-                optimizer=optim_cls(expert.parameters()),
+                optimizer=optimizer,
                 scheduler=scheduler,
-                num_warmup_steps=num_warmup_steps,
-                num_total_steps=num_total_steps,
-                clip_grad_norm=clip_grad_norm,
                 min_batch_size=min_batch_size,
                 max_batch_size=max_batch_size,
             )
@@ -228,15 +233,15 @@ class Server(threading.Thread):
         Starts Server in the current thread. Initializes dht if necessary, starts connection handlers,
         runs Runtime (self.runtime) to process incoming requests.
         """
-        logger.info(f"Server started with {len(self.experts)} experts:")
-        for expert_name, backend in self.experts.items():
-            num_parameters = sum(p.numel() for p in backend.expert.parameters() if p.requires_grad)
-            logger.info(f"{expert_name}: {backend.expert.__class__.__name__}, {num_parameters} parameters")
+        logger.info(f"Server started with {len(self.module_backends)} modules:")
+        for expert_name, backend in self.module_backends.items():
+            num_parameters = sum(p.numel() for p in backend.module.parameters() if p.requires_grad)
+            logger.info(f"{expert_name}: {backend.module.__class__.__name__}, {num_parameters} parameters")
 
         if not self.dht.is_alive():
             self.dht.run_in_background(await_ready=True)
 
-        if self.experts:
+        if self.module_backends:
             self.dht_handler_thread.start()
 
         if self.checkpoint_saver is not None:
@@ -287,7 +292,7 @@ class Server(threading.Thread):
             process.join()
         logger.debug("Connection handlers terminated")
 
-        if self.experts:
+        if self.module_backends:
             self.dht_handler_thread.stop.set()
             self.dht_handler_thread.join()
 

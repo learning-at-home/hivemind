@@ -10,7 +10,7 @@ import torch
 from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.dht import DHT
 from hivemind.moe.server.connection_handler import ConnectionHandler
-from hivemind.moe.server.expert_backend import ExpertBackend
+from hivemind.moe.server.module_backend import ModuleBackend
 from hivemind.moe.server.task_pool import TaskPool
 from hivemind.p2p.p2p_daemon_bindings.control import DEFAULT_MAX_MSG_SIZE, P2PHandlerError
 from hivemind.proto import runtime_pb2
@@ -25,7 +25,7 @@ from hivemind.utils.tensor_descr import BatchTensorDescriptor
 async def test_connection_handler_info():
     handler = ConnectionHandler(
         DHT(start=True),
-        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        dict(expert1=DummyModuleBackend("expert1", k=1), expert2=DummyModuleBackend("expert2", k=2)),
     )
     handler.start()
 
@@ -48,7 +48,7 @@ async def test_connection_handler_info():
 async def test_connection_handler_forward():
     handler = ConnectionHandler(
         DHT(start=True),
-        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        dict(expert1=DummyModuleBackend("expert1", k=1), expert2=DummyModuleBackend("expert2", k=2)),
     )
     handler.start()
 
@@ -109,7 +109,7 @@ async def test_connection_handler_forward():
 async def test_connection_handler_backward():
     handler = ConnectionHandler(
         DHT(start=True),
-        dict(expert1=DummyExpertBackend("expert1", k=1), expert2=DummyExpertBackend("expert2", k=2)),
+        dict(expert1=DummyModuleBackend("expert1", k=1), expert2=DummyModuleBackend("expert2", k=2)),
     )
     handler.start()
 
@@ -179,7 +179,7 @@ class DummyPool(TaskPool):
         return [inputs[0] * self.k]
 
 
-class DummyExpertBackend(ExpertBackend):
+class DummyModuleBackend(ModuleBackend):
     def __init__(self, name: str, k: float):
         self.name = name
         self.outputs_schema = [BatchTensorDescriptor.from_tensor(torch.randn(1, 2))]

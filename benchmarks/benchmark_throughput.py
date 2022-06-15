@@ -10,7 +10,7 @@ from hivemind.dht import DHT
 from hivemind.moe.client.expert import RemoteExpert
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.moe.expert_uid import ExpertInfo
-from hivemind.moe.server import ExpertBackend, Server
+from hivemind.moe.server import ModuleBackend, Server
 from hivemind.moe.server.layers import name_to_block
 from hivemind.p2p import P2P
 from hivemind.utils.limits import increase_file_limit
@@ -118,12 +118,12 @@ def benchmark_throughput(
         timestamps["launched_clients"] = timestamps["began_launching_server"] = time.perf_counter()
 
         device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        experts = {}
+        module_backends = {}
         for i in range(num_experts):
             expert = torch.jit.script(name_to_block[expert_cls](hid_dim))
-            experts[f"expert.{i}"] = ExpertBackend(
+            module_backends[f"expert.{i}"] = ModuleBackend(
                 name=f"expert.{i}",
-                expert=expert,
+                module=expert,
                 optimizer=torch.optim.Adam(expert.parameters()),
                 args_schema=(BatchTensorDescriptor(hid_dim),),
                 outputs_schema=BatchTensorDescriptor(hid_dim),
@@ -133,7 +133,7 @@ def benchmark_throughput(
 
         server = Server(
             dht=server_dht,
-            expert_backends=experts,
+            module_backends=module_backends,
             num_connection_handlers=num_handlers,
             device=device,
         )
