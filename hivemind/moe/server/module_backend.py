@@ -112,7 +112,7 @@ class ModuleBackend:
            Runtime doesn't guarantee that backward will be performed in the same order and for the same data
            as forward, so we recommend stateless backward pass that re-runs expert forward pass inside backward.
 
-           Please make sure to call ``ModuleBackend.apply_gradients`` here, otherwise the expert will not train
+           Please make sure to call ``ModuleBackend.on_backward`` after each call to backward
         """
         (args, kwargs), grad_outputs = nested_pack(inputs, structure=self.backward_schema)
 
