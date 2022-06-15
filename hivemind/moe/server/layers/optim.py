@@ -56,8 +56,3 @@ class ClippingWrapper(OptimizerWrapper):
         parameters = tuple(param for group in self.param_groups for param in group["params"])
         torch.nn.utils.clip_grad_norm_(parameters, self.clip_grad_norm)
         return super().step(*args, **kwargs)
-
-    @classmethod
-    def create(cls, optim_cls: type, *args, clip_grad_norm: float, **kwargs):
-        """Create a wrapped optimizer and wrap it with clipping"""
-        return cls(optim=optim_cls(*args, **kwargs), clip_grad_norm=clip_grad_norm)
