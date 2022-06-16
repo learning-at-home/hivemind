@@ -162,6 +162,7 @@ setup(
     package_data={"hivemind": ["proto/*", "hivemind_cli/*"]},
     include_package_data=True,
     license="MIT",
+    setup_requires=["grpcio-tools"],
     install_requires=install_requires,
     extras_require=extras,
     classifiers=[
