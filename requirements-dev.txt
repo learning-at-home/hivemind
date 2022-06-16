@@ -9,3 +9,4 @@ torchvision
 black==22.3.0
 isort==5.10.1
 psutil
+grpcio-tools>=1.33.2
