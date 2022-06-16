@@ -53,7 +53,6 @@ To install hivemind from source, simply run the following:
 ```
 git clone https://github.com/learning-at-home/hivemind.git
 cd hivemind
-pip install "grpcio-tools>=1.33.2" # for protobuf compilation
 pip install .
 ```
 
