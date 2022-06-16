@@ -4,17 +4,6 @@ import "auth.proto";
 // this protocol defines how Hivemind nodes form a distributed hash table.
 // For more info, see https://learning-at-home.readthedocs.io/en/latest/modules/dht.html or help(hivemind.dht.DHTNode)
 
-service DHT {
-  // find out recipient's DHTID and possibly update its routing table
-  rpc rpc_ping(PingRequest) returns (PingResponse);
-
-  // request a node to store one or multiple data items (key - value - expiration)
-  rpc rpc_store(StoreRequest) returns (StoreResponse);
-
-  // for given keys, request values (if stored) or a list of peers that are likely to have them
-  rpc rpc_find(FindRequest) returns (FindResponse);
-}
-
 message NodeInfo {
   // note: both node_id and port are optional: if specified, ask peer to add you to its routing table;
   // if either node_id or port is absent, simply request recipient info (for client-only mode)

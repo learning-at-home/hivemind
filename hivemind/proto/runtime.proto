@@ -1,14 +1,6 @@
 syntax = "proto3";
 
 
-service ConnectionHandler {
-  // Listens to incoming requests for expert computation
-  rpc info(ExpertUID) returns (ExpertInfo);
-  rpc forward(ExpertRequest) returns (ExpertResponse);
-  rpc backward(ExpertRequest) returns (ExpertResponse);
-}
-
-
 message ExpertUID {
   string uid = 1;
 }
