@@ -10,8 +10,9 @@ from typing import NamedTuple
 from multiaddr import Multiaddr, protocols
 from pkg_resources import resource_filename
 
-from hivemind import get_free_port
 from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
+
+from test_utils.networking import get_free_port
 
 TIMEOUT_DURATION = 30  # seconds
 P2PD_PATH = resource_filename("hivemind", "hivemind_cli/p2pd")

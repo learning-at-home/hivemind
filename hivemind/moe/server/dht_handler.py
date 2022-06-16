@@ -2,7 +2,7 @@ import threading
 from functools import partial
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
-from hivemind.dht import DHT, DHTExpiration, DHTNode, DHTValue
+from hivemind.dht import DHT, DHTNode, DHTValue
 from hivemind.moe.client.expert import RemoteExpert, create_remote_experts
 from hivemind.moe.expert_uid import (
     FLAT_EXPERT,
@@ -16,7 +16,7 @@ from hivemind.moe.expert_uid import (
     split_uid,
 )
 from hivemind.p2p import PeerID
-from hivemind.utils import MAX_DHT_TIME_DISCREPANCY_SECONDS, MPFuture, get_dht_time
+from hivemind.utils import MAX_DHT_TIME_DISCREPANCY_SECONDS, DHTExpiration, MPFuture, get_dht_time
 
 
 class DHTHandlerThread(threading.Thread):

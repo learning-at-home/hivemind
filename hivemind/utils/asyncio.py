@@ -78,13 +78,6 @@ async def asingle(aiter: AsyncIterable[T]) -> T:
     return item
 
 
-async def afirst(aiter: AsyncIterable[T], default: Optional[T] = None) -> Optional[T]:
-    """Returns the first item of ``aiter`` or ``default`` if ``aiter`` is empty."""
-    async for item in aiter:
-        return item
-    return default
-
-
 async def await_cancelled(awaitable: Awaitable) -> bool:
     try:
         await awaitable

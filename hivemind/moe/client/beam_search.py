@@ -4,7 +4,7 @@ from collections import deque
 from functools import partial
 from typing import Deque, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
-from hivemind.dht import DHT, DHTExpiration, DHTNode
+from hivemind.dht import DHT, DHTNode
 from hivemind.moe.client.expert import RemoteExpert, batch_create_remote_experts, create_remote_experts
 from hivemind.moe.expert_uid import (
     FLAT_EXPERT,
@@ -19,7 +19,7 @@ from hivemind.moe.expert_uid import (
     is_valid_uid,
 )
 from hivemind.p2p import PeerID
-from hivemind.utils import MPFuture, ValueWithExpiration, get_dht_time, get_logger
+from hivemind.utils import DHTExpiration, MPFuture, ValueWithExpiration, get_dht_time, get_logger
 
 logger = get_logger(__name__)
 

@@ -4,7 +4,7 @@ Utilities for streaming tensors
 
 from __future__ import annotations
 
-from typing import Iterable, Iterator, TypeVar
+from typing import Iterable, Iterator
 
 from hivemind.proto import runtime_pb2
 from hivemind.utils.logging import get_logger
@@ -44,6 +44,3 @@ def combine_from_streaming(stream: Iterable[runtime_pb2.Tensor]) -> runtime_pb2.
         buffer_chunks.append(tensor_part.buffer)
     serialized_tensor.buffer = b"".join(buffer_chunks)
     return serialized_tensor
-
-
-StreamMessage = TypeVar("StreamMessage")

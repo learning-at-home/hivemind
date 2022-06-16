@@ -13,8 +13,9 @@ from multiaddr import Multiaddr
 
 from hivemind.p2p import P2P, P2PDaemonError, P2PHandlerError
 from hivemind.proto import dht_pb2, test_pb2
-from hivemind.utils.networking import get_free_port
 from hivemind.utils.serializer import MSGPackSerializer
+
+from test_utils.networking import get_free_port
 
 
 def is_process_running(pid: int) -> bool:
