@@ -16,7 +16,6 @@ from hivemind.utils import BatchTensorDescriptor, DHTExpiration, HeapEntry, MSGP
 from hivemind.utils.asyncio import (
     achain,
     aenumerate,
-    afirst,
     aiter_with_timeout,
     amap_in_executor,
     anext,
@@ -429,11 +428,6 @@ async def test_asyncio_utils():
         await asingle(as_aiter())
     with pytest.raises(ValueError):
         await asingle(as_aiter(1, 2, 3))
-
-    assert await afirst(as_aiter(1)) == 1
-    assert await afirst(as_aiter()) is None
-    assert await afirst(as_aiter(), -1) == -1
-    assert await afirst(as_aiter(1, 2, 3)) == 1
 
     async def iterate_with_delays(delays):
         for i, delay in enumerate(delays):
