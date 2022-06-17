@@ -34,8 +34,9 @@ jobs:
           pip install .
       - name: Test
         run: |
+          cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
-          pytest --durations=0 --durations-min=1.0 -v --maxfail=5 tests/
+          pytest --durations=0 --durations-min=1.0 -v
   build_and_test_p2pd:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -64,8 +65,9 @@ jobs:
           pip install . --global-option=build_py --global-option="--buildgo" --no-use-pep517
       - name: Test
         run: |
+          cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
-          pytest -k "p2p" -v tests
+          pytest -k "p2p" -v
   codecov_in_develop_mode:
 
     runs-on: ubuntu-latest
