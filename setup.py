@@ -37,7 +37,6 @@ def sha256(path):
 def proto_compile(output_path):
     import grpc_tools.protoc
 
-
     cli_args = [
         "grpc_tools.protoc",
         "--proto_path=hivemind/proto",
