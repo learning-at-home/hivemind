@@ -35,13 +35,8 @@ def sha256(path):
 
 
 def proto_compile(output_path):
-    try:
-        import grpc_tools.protoc
-    except ImportError:
-        raise ImportError(
-            "Unable to find the `grpcio-tools` package required for protobuf compilation. "
-            'Please install it with `pip install "grpcio-tools>=1.33.2"`.'
-        )
+    import grpc_tools.protoc
+
 
     cli_args = [
         "grpc_tools.protoc",
@@ -162,7 +157,7 @@ setup(
     package_data={"hivemind": ["proto/*", "hivemind_cli/*"]},
     include_package_data=True,
     license="MIT",
-    setup_requires=["grpcio-tools>=1.33.2"],
+    setup_requires=["grpcio-tools"],
     install_requires=install_requires,
     extras_require=extras,
     classifiers=[
