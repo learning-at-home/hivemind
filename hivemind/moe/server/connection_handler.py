@@ -59,7 +59,8 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             logger.debug("Caught KeyboardInterrupt, shutting down")
 
     async def rpc_info(self, request: runtime_pb2.ExpertUID, context: P2PContext) -> runtime_pb2.ExpertInfo:
-        return runtime_pb2.ExpertInfo(serialized_info=MSGPackSerializer.dumps(self.module_backends[request.uid].get_info()))
+        module_info = self.module_backends[request.uid].get_info()
+        return runtime_pb2.ExpertInfo(serialized_info=MSGPackSerializer.dumps(module_info))
 
     async def _gather_inputs(
         self, requests: AsyncIterator[runtime_pb2.ExpertRequest], context: P2PContext
