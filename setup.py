@@ -41,7 +41,6 @@ def proto_compile(output_path):
         "grpc_tools.protoc",
         "--proto_path=hivemind/proto",
         f"--python_out={output_path}",
-        f"--grpc_python_out={output_path}",
     ] + glob.glob("hivemind/proto/*.proto")
 
     code = grpc_tools.protoc.main(cli_args)
