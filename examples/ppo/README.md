@@ -1,6 +1,6 @@
 # Training PPO with decentralized averaging
 
-This tutorial will walk you through the steps to set up collaborative training of an off-policy reinforcement learning algorighm [PPO](https://arxiv.org/pdf/1707.06347.pdf) to play Atari Breakout. It uses [stable-baselines3 implementation of PPO](https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html), hyperparameters for the algorithm are taken from [rl-baselines3-zoo](https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml), collaborative training is built on `hivemind.Optimizer` to exchange information between peers.
+This tutorial will walk you through the steps to set up collaborative training of an on-policy reinforcement learning algorighm [PPO](https://arxiv.org/pdf/1707.06347.pdf) to play Atari Breakout. It uses [stable-baselines3 implementation of PPO](https://stable-baselines3.readthedocs.io/en/master/modules/ppo.html), hyperparameters for the algorithm are taken from [rl-baselines3-zoo](https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml), collaborative training is built on `hivemind.Optimizer` to exchange information between peers.
 
 ## Preparation
 
