@@ -1,0 +1,1 @@
+stable-baselines3[extra]==1.5.0
