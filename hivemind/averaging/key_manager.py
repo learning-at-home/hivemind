@@ -7,7 +7,7 @@ import numpy as np
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.dht import DHT
 from hivemind.p2p import PeerID
-from hivemind.utils import DHTExpiration, ValueWithExpiration, get_dht_time, get_logger
+from hivemind.utils import DHTExpiration, get_logger
 
 GroupKey = str
 GROUP_PATTERN = re.compile("^(([^.])+)[.]0b[01]*$")  # e.g. bert_exp4_averaging.0b01001101

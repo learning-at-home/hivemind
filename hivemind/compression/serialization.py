@@ -1,4 +1,6 @@
-from typing import Dict, Optional
+from __future__ import annotations
+
+from typing import AsyncIterator, Dict, Iterable, List, Optional
 
 import torch
 
@@ -6,6 +8,7 @@ from hivemind.compression.base import CompressionBase, CompressionInfo, NoCompre
 from hivemind.compression.floating import Float16Compression, ScaledFloat16Compression
 from hivemind.compression.quantization import Quantile8BitQuantization, Uniform8BitQuantization
 from hivemind.proto import runtime_pb2
+from hivemind.utils.streaming import combine_from_streaming
 
 BASE_COMPRESSION_TYPES: Dict[str, CompressionBase] = dict(
     NONE=NoCompression(),
@@ -41,3 +44,24 @@ def deserialize_torch_tensor(serialized_tensor: runtime_pb2.Tensor) -> torch.Ten
     """Restore a pytorch tensor from a protobuf message"""
     compression = BASE_COMPRESSION_TYPES[runtime_pb2.CompressionType.Name(serialized_tensor.compression)]
     return compression.extract(serialized_tensor).requires_grad_(serialized_tensor.requires_grad)
+
+
+async def deserialize_tensor_stream(
+    stream: AsyncIterator[Iterable[runtime_pb2.Tensor]],
+) -> List[torch.Tensor]:
+    """Async wrapper of combine_from_streaming that combines tensors from a stream of parts and deserializes them"""
+
+    tensors = []
+    tensor_parts = []
+
+    async for parts in stream:
+        for part in parts:
+            if part.dtype and tensor_parts:
+                tensors.append(deserialize_torch_tensor(combine_from_streaming(tensor_parts)))
+                tensor_parts = []
+
+            tensor_parts.append(part)
+    if tensor_parts:
+        tensors.append(deserialize_torch_tensor(combine_from_streaming(tensor_parts)))
+
+    return tensors

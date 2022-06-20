@@ -5,7 +5,7 @@ import pytest
 import torch
 from torch.nn import Linear
 
-from hivemind import BatchTensorDescriptor, ExpertBackend
+from hivemind import BatchTensorDescriptor, ModuleBackend
 from hivemind.moe.server.checkpoints import load_experts, store_experts
 from hivemind.moe.server.layers.lr_schedule import get_linear_schedule_with_warmup
 
@@ -22,13 +22,15 @@ def example_experts():
     opt = torch.optim.SGD(expert.parameters(), PEAK_LR)
 
     args_schema = (BatchTensorDescriptor(1),)
-    expert_backend = ExpertBackend(
+    expert_backend = ModuleBackend(
         name=EXPERT_NAME,
-        expert=expert,
+        module=expert,
         optimizer=opt,
-        scheduler=get_linear_schedule_with_warmup,
-        num_warmup_steps=BACKWARD_PASSES_BEFORE_SAVE,
-        num_total_steps=BACKWARD_PASSES_BEFORE_SAVE + BACKWARD_PASSES_AFTER_SAVE,
+        scheduler=get_linear_schedule_with_warmup(
+            opt,
+            num_warmup_steps=BACKWARD_PASSES_BEFORE_SAVE,
+            num_training_steps=BACKWARD_PASSES_BEFORE_SAVE + BACKWARD_PASSES_AFTER_SAVE,
+        ),
         args_schema=args_schema,
         outputs_schema=BatchTensorDescriptor(1),
         max_batch_size=1,
@@ -39,7 +41,7 @@ def example_experts():
 
 @pytest.mark.forked
 def test_save_load_checkpoints(example_experts):
-    expert = example_experts[EXPERT_NAME].expert
+    expert = example_experts[EXPERT_NAME].module
 
     with TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
@@ -79,7 +81,7 @@ def test_restore_update_count(example_experts):
             expert_backend.backward(batch, loss_grad)
 
         load_experts(example_experts, tmp_path)
-        assert expert_backend.update_count == BACKWARD_PASSES_BEFORE_SAVE
+        assert expert_backend.scheduler._step_count == BACKWARD_PASSES_BEFORE_SAVE + 1
 
 
 @pytest.mark.forked

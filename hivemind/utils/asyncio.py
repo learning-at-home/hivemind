@@ -2,7 +2,7 @@ import asyncio
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, asynccontextmanager
-from typing import AsyncIterable, AsyncIterator, Awaitable, Callable, ContextManager, Optional, Tuple, TypeVar, Union
+from typing import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterable, Optional, Tuple, TypeVar, Union
 
 import uvloop
 
@@ -27,6 +27,12 @@ def switch_to_uvloop() -> asyncio.AbstractEventLoop:
 async def anext(aiter: AsyncIterator[T]) -> Union[T, StopAsyncIteration]:
     """equivalent to next(iter) for asynchronous iterators. Modifies aiter in-place!"""
     return await aiter.__anext__()
+
+
+async def iter_as_aiter(iterable: Iterable[T]) -> AsyncIterator[T]:
+    """create an asynchronous iterator from single iterable"""
+    for elem in iterable:
+        yield elem
 
 
 async def as_aiter(*args: T) -> AsyncIterator[T]:
@@ -70,13 +76,6 @@ async def asingle(aiter: AsyncIterable[T]) -> T:
     if count == 0:
         raise ValueError("asingle() expected an iterable with exactly one item, but got an empty iterable")
     return item
-
-
-async def afirst(aiter: AsyncIterable[T], default: Optional[T] = None) -> Optional[T]:
-    """Returns the first item of ``aiter`` or ``default`` if ``aiter`` is empty."""
-    async for item in aiter:
-        return item
-    return default
 
 
 async def await_cancelled(awaitable: Awaitable) -> bool:

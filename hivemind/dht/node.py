@@ -146,7 +146,7 @@ class DHTNode:
         :param cache_locally: if True, caches all values (stored or found) in a node-local cache
         :param cache_on_store: if True, update cache entries for a key after storing a new item for that key
         :param cache_nearest: whenever DHTNode finds a value, it will also store (cache) this value on this many
-          nodes nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet
+          nearest nodes visited by search algorithm. Prefers nodes that are nearest to :key: but have no value yet
         :param cache_size: if specified, local cache will store up to this many records (as in LRU cache)
         :param cache_refresh_before_expiry: if nonzero, refreshes locally cached values
           if they are accessed this many seconds before expiration time.
@@ -341,7 +341,7 @@ class DHTNode:
     ) -> bool:
         """
         Find num_replicas best nodes to store (key, value) and store it there at least until expiration time.
-        :note: store is a simplified interface to store_many, all kwargs are be forwarded there
+        :note: store is a simplified interface to store_many, all kwargs are forwarded there
         :returns: True if store succeeds, False if it fails (due to no response or newer value)
         """
         store_ok = await self.store_many([key], [value], [expiration_time], subkeys=[subkey], **kwargs)

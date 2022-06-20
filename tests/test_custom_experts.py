@@ -3,7 +3,9 @@ import os
 import pytest
 import torch
 
-from hivemind import RemoteExpert
+from hivemind.dht import DHT
+from hivemind.moe.client.expert import create_remote_experts
+from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.moe.server import background_server
 
 CUSTOM_EXPERTS_PATH = os.path.join(os.path.dirname(__file__), "test_utils", "custom_networks.py")
@@ -17,11 +19,16 @@ def test_custom_expert(hid_dim=16):
         device="cpu",
         hidden_dim=hid_dim,
         num_handlers=2,
-        no_dht=True,
         custom_module_path=CUSTOM_EXPERTS_PATH,
-    ) as (server_endpoint, _):
-        expert0 = RemoteExpert("expert.0", server_endpoint)
-        expert1 = RemoteExpert("expert.1", server_endpoint)
+    ) as server_peer_info:
+        dht = DHT(initial_peers=server_peer_info.addrs, start=True)
+        expert0, expert1 = create_remote_experts(
+            [
+                ExpertInfo(uid="expert.0", peer_id=server_peer_info.peer_id),
+                ExpertInfo(uid="expert.1", peer_id=server_peer_info.peer_id),
+            ],
+            dht=dht,
+        )
 
         for batch_size in (1, 4):
             batch = torch.randn(batch_size, hid_dim)
@@ -43,11 +50,16 @@ def test_multihead_expert(hid_dim=16):
         device="cpu",
         hidden_dim=hid_dim,
         num_handlers=2,
-        no_dht=True,
         custom_module_path=CUSTOM_EXPERTS_PATH,
-    ) as (server_endpoint, _):
-        expert0 = RemoteExpert("expert.0", server_endpoint)
-        expert1 = RemoteExpert("expert.1", server_endpoint)
+    ) as server_peer_info:
+        dht = DHT(initial_peers=server_peer_info.addrs, start=True)
+        expert0, expert1 = create_remote_experts(
+            [
+                ExpertInfo(uid="expert.0", peer_id=server_peer_info.peer_id),
+                ExpertInfo(uid="expert.1", peer_id=server_peer_info.peer_id),
+            ],
+            dht=dht,
+        )
 
         for batch_size in (1, 4):
             batch = (

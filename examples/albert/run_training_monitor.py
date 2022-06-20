@@ -14,6 +14,7 @@ from transformers import AlbertConfig, AlbertForPreTraining, HfArgumentParser, g
 import hivemind
 from hivemind.optim.state_averager import TrainingStateAverager
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
+from hivemind.utils.networking import log_visible_maddrs
 
 import utils
 from arguments import AveragerArguments, BaseTrainingArguments, OptimizerArguments
@@ -168,7 +169,7 @@ if __name__ == "__main__":
         announce_maddrs=monitor_args.announce_maddrs,
         identity_path=monitor_args.identity_path,
     )
-    utils.log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=monitor_args.use_ipfs)
+    log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=monitor_args.use_ipfs)
 
     if monitor_args.wandb_project is not None:
         wandb.init(project=monitor_args.wandb_project)

@@ -50,7 +50,7 @@ class GradScaler(TorchGradScaler):
 
     def unscale_(self, optimizer: TorchOptimizer) -> bool:
         with self._lock:
-            assert isinstance(optimizer, (hivemind.Optimizer, hivemind.DecentralizedOptimizerBase))
+            assert isinstance(optimizer, hivemind.Optimizer)
             if self._is_running_global_step:
                 super().unscale_(optimizer)
                 self._inner_optimizer_states[id(optimizer.opt)] = deepcopy(self._per_optimizer_states[id(optimizer)])

@@ -3,8 +3,8 @@ import operator
 import random
 from itertools import chain, zip_longest
 
-from hivemind import LOCALHOST
 from hivemind.dht.routing import DHTID, RoutingTable
+from hivemind.utils.networking import LOCALHOST
 
 
 def test_ids_basic():

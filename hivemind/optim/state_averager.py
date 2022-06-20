@@ -14,7 +14,7 @@ from hivemind.averaging import DecentralizedAverager
 from hivemind.averaging.control import StepControl
 from hivemind.compression import CompressionInfo, TensorRole
 from hivemind.optim.grad_scaler import GradScaler
-from hivemind.utils import DHTExpiration, PerformanceEMA, get_dht_time, get_logger, nested_flatten, nested_pack
+from hivemind.utils import DHTExpiration, PerformanceEMA, get_logger, nested_flatten, nested_pack
 
 logger = get_logger(__name__)
 
