@@ -156,7 +156,7 @@ def test_remote_module_call(hidden_dim=16):
         try:
             real_expert(torch.randn(3, 11))
         except P2PHandlerError as e:
-            assert str(11) in repr(e)
+            assert str(11) in repr(e), "Exception must relay the remote server error (i.e. incorrect dimensions)"
         with pytest.raises(P2PHandlerError):
             fake_expert(dummy_x)
 
