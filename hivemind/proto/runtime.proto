@@ -17,7 +17,7 @@ message ExpertRequest {
 
 message ExpertResponse {
   repeated Tensor tensors = 2;
-  string metadata = 5;
+  string metadata = 3;
 }
 
 enum CompressionType{
