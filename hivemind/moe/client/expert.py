@@ -13,7 +13,7 @@ from hivemind.dht import DHT
 from hivemind.moe.client.remote_expert_worker import RemoteExpertWorker
 from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.p2p import P2P, PeerID, StubBase
-from hivemind.p2p.p2p_daemon import DEFAULT_MAX_MSG_SIZE
+from hivemind.p2p.p2p_daemon_bindings.control import DEFAULT_MAX_MSG_SIZE, MAX_UNARY_PAYLOAD_SIZE
 from hivemind.proto import runtime_pb2
 from hivemind.utils.asyncio import amap_in_executor, iter_as_aiter
 from hivemind.utils.mpfuture import MPFuture
@@ -152,7 +152,7 @@ async def expert_backward(
     size = 0
     for t in inputs_and_grads:
         size += t.element_size() * t.nelement()
-        if size > DEFAULT_MAX_MSG_SIZE:
+        if size > MAX_UNARY_PAYLOAD_SIZE:
             return await _backward_stream(uid, serialized_tensors, stub)
     else:
         return await _backward_unary(uid, serialized_tensors, stub)
@@ -185,7 +185,7 @@ async def expert_forward(
     size = 0
     for t in inputs:
         size += t.element_size() * t.nelement()
-        if size > DEFAULT_MAX_MSG_SIZE:
+        if size > MAX_UNARY_PAYLOAD_SIZE:
             return await _forward_stream(uid, serialized_tensors, stub)
     else:
         return await _forward_unary(uid, serialized_tensors, stub)
