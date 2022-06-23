@@ -203,7 +203,7 @@ class TaskPool(TaskPoolBase):
                 exception = batch_outputs_or_exception
                 for task in batch_tasks:
                     try:
-                        task.future.set_result(exception)
+                        task.future.set_exception(exception)
                     except InvalidStateError as e:
                         logger.debug(f"Failed to send runtime error to a task: {e}")
 
