@@ -9,7 +9,7 @@ from hivemind.moe.client.switch_moe import RemoteSwitchMixtureOfExperts
 from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.moe.server import ModuleBackend, Server, background_server, declare_experts
 from hivemind.moe.server.layers import name_to_block
-from hivemind.p2p.p2p_daemon_bindings.control import P2PDaemonError
+from hivemind.p2p.p2p_daemon_bindings.control import P2PHandlerError
 from hivemind.utils import BatchTensorDescriptor, get_dht_time
 
 
@@ -153,10 +153,14 @@ def test_remote_module_call(hidden_dim=16):
         out3_again.norm().backward()
         assert dummy_x.grad is not None and dummy_x.grad.norm() > 0
 
-        with pytest.raises(P2PDaemonError):
+        with pytest.raises(P2PHandlerError):
             real_expert(torch.randn(3, 11))
-        with pytest.raises(P2PDaemonError):
+        with pytest.raises(P2PHandlerError):
             fake_expert(dummy_x)
+
+        # check that the server is still alive after processing a malformed request
+        out3_yet_again = real_expert(dummy_x[1:])
+        assert torch.allclose(out3_yet_again, out3[1:])
 
 
 @pytest.mark.forked
