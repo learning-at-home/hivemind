@@ -99,7 +99,7 @@ class Runtime(threading.Thread):
                     except KeyboardInterrupt:
                         raise
                     except BaseException as exception:
-                        logger.exception(f"Caught {exception}, attempting to recover", exc_info=True)
+                        logger.exception(f"Caught {exception}, attempting to recover")
                         output_sender_pool.apply_async(pool.send_exception_from_runtime, args=[batch_index, exception])
 
             finally:
