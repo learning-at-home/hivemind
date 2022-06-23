@@ -153,8 +153,10 @@ def test_remote_module_call(hidden_dim=16):
         out3_again.norm().backward()
         assert dummy_x.grad is not None and dummy_x.grad.norm() > 0
 
-        with pytest.raises(P2PHandlerError):
+        try:
             real_expert(torch.randn(3, 11))
+        except P2PHandlerError as e:
+            assert str(11) in repr(e)
         with pytest.raises(P2PHandlerError):
             fake_expert(dummy_x)
 
