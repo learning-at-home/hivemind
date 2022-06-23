@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 
 DEFAULT_MAX_MSG_SIZE = 4 * 1024**2
 MAX_UNARY_PAYLOAD_SIZE = DEFAULT_MAX_MSG_SIZE // 2
-# note: we check v.s. 2x max message size to account for serialization overhead. The actual overhead is
+# note: we check vs. 2x max message size to account for serialization overhead. The actual overhead is
 # typically smaller. We err on the side of streaming, because even 2MB messages can be streamed efficiently.
 
 
