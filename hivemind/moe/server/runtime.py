@@ -85,16 +85,23 @@ class Runtime(threading.Thread):
                     logger.debug(f"Processing batch {batch_index} from pool {pool.name}")
 
                     start = time()
-                    outputs = pool.process_func(*batch)
-                    batch_processing_time = time() - start
+                    try:
+                        outputs = pool.process_func(*batch)
+                        batch_processing_time = time() - start
 
-                    batch_size = outputs[0].size(0)
-                    logger.debug(f"Pool {pool.name}: batch {batch_index} processed, size {batch_size}")
+                        batch_size = outputs[0].size(0)
+                        logger.debug(f"Pool {pool.name}: batch {batch_index} processed, size {batch_size}")
 
-                    if self.stats_report_interval is not None:
-                        self.stats_reporter.report_stats(pool.name, batch_size, batch_processing_time)
+                        if self.stats_report_interval is not None:
+                            self.stats_reporter.report_stats(pool.name, batch_size, batch_processing_time)
 
-                    output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
+                        output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
+                    except KeyboardInterrupt:
+                        raise
+                    except BaseException as exception:
+                        logger.exception(f"Caught {exception}, attempting to recover")
+                        output_sender_pool.apply_async(pool.send_exception_from_runtime, args=[batch_index, exception])
+
             finally:
                 if not self.shutdown_trigger.is_set():
                     self.shutdown()
