@@ -41,5 +41,7 @@ if __name__ == "__main__":
         total_time /= args.num_iters
         compression_error /= args.num_iters
         total_size /= args.num_iters
-        logger.info(f"Compression type: {name}, time: {total_time:.5f}, compression error: {compression_error:.5f}, "
-                    f"size: {int(total_size):d}")
+        logger.info(
+            f"Compression type: {name}, time: {total_time:.5f}, compression error: {compression_error:.5f}, "
+            f"size: {int(total_size):d}"
+        )

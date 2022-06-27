@@ -140,8 +140,9 @@ with open("requirements-dev.txt") as dev_requirements_file:
 with open("requirements-docs.txt") as docs_requirements_file:
     extras["docs"] = list(map(str, parse_requirements(docs_requirements_file)))
 
-if os.environ["CUDA_VERSION"] is not None:
-    extras["bitsandbytes"] = f"bitsandbytes-cuda{os.environ['CUDA_VERSION']}==0.26.0"
+cuda_version = os.getenv("CUDA_VERSION")
+if cuda_version is not None:
+    extras["bitsandbytes"] = f"bitsandbytes-cuda{cuda_version}==0.26.0"
 
 extras["all"] = extras["dev"] + extras["docs"]
 
