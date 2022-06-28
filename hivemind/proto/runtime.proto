@@ -12,12 +12,12 @@ message ExpertInfo {
 message ExpertRequest {
   string uid = 1;
   repeated Tensor tensors = 2;
-  string metadata = 3;
+  bytes metadata = 3;
 }
 
 message ExpertResponse {
   repeated Tensor tensors = 2;
-  string metadata = 3;
+  bytes metadata = 3;
 }
 
 enum CompressionType{
