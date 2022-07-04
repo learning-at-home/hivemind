@@ -22,8 +22,10 @@ We assume that you are already familiar with the official [CIFAR-10 example](htt
 from the PyTorch website.
 
 We build on top of the official example to spin up distributed training of a two-layer neural network by averaging weights.
-For simplicity, this tutorial will use two non-GPU peers running on the same machine. If you get to the end of this
-tutorial, we'll give you an example of actual distributed training of Transformers ;)
+For simplicity, this tutorial will use two non-GPU peers running on the same machine. If you try to run this example on two
+separate machines with different IPs, this example will not work. To read more about how to perform training on more
+than one machine check out [DHT - Running Across the Internet](https://learning-at-home.readthedocs.io/en/latest/user/dht.html#running-across-the-internet).
+If you get to the end of this tutorial, we'll give you an example of actual distributed training of Transformers ;)
 
 For now, let's run our first training peer:
 ```python
@@ -187,4 +189,3 @@ If you want to learn more about each individual component,
 - Learn the underlying math behind hivemind.Optimizer in [Diskin et al., (2021)](https://arxiv.org/abs/2106.10207), 
   [Li et al. (2020)](https://arxiv.org/abs/2005.00124) and [Ryabinin et al. (2021)](https://arxiv.org/abs/2103.03239).
 - Read about setting up Mixture-of-Experts training in [this guide](https://learning-at-home.readthedocs.io/en/latest/user/moe.html),
- 
