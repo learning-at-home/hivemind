@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import multiprocessing as mp
 import os
+import signal
 from functools import partial
 from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, TypeVar, Union
 
@@ -94,6 +95,9 @@ class DHT(mp.Process):
         loop.add_reader(self._inner_pipe.fileno(), pipe_semaphore.release)
 
         async def _run():
+            # Set SIG_IGN handler to SIGINT
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+
             try:
                 if self._daemon_listen_maddr is not None:
                     replicated_p2p = await P2P.replicate(self._daemon_listen_maddr)
