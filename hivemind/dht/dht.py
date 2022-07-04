@@ -54,6 +54,9 @@ class DHT(mp.Process):
         await_ready: bool = True,
         **kwargs,
     ):
+        # Set SIG_IGN handler tp SIGINT
+        original_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         self._parent_pid = os.getpid()
         self._origin_pid = os.getpid()
         super().__init__()
@@ -85,6 +88,9 @@ class DHT(mp.Process):
 
         if start:
             self.run_in_background(await_ready=await_ready)
+
+        # Set the original SIGINT handler back
+        signal.signal(signal.SIGINT, original_handler)
 
     def run(self) -> None:
         """Serve DHT forever. This function will not return until DHT node is shut down"""
