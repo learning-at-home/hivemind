@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import multiprocessing as mp
 import os
+import signal
 from functools import partial
 from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, TypeVar, Union
 
