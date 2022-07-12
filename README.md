@@ -186,7 +186,7 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 ["Training Transformers Together"](https://arxiv.org/abs/2207.03481)
 
 ```bibtex
-@misc{alex2022training,
+@misc{borzunov2022training,
   title = {Training Transformers Together},
   author = {Alexander Borzunov and Max Ryabinin and Tim Dettmers and Quentin Lhoest and Lucile Saulnier and Michael Diskin and Yacine Jernite and Thomas Wolf},
   year = 2022,
