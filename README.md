@@ -191,7 +191,6 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
   publisher =    {PMLR},
   pdf = 	 {https://proceedings.mlr.press/v162/gorbunov22a/gorbunov22a.pdf},
   url = 	 {https://proceedings.mlr.press/v162/gorbunov22a.html},
-  abstract = 	 {Many areas of deep learning benefit from using increasingly larger neural networks trained on public data, as is the case for pre-trained models for NLP and computer vision. Training such models requires a lot of computational resources (e.g., HPC clusters) that are not available to small research groups and independent researchers. One way to address it is for several smaller groups to pool their computational resources together and train a model that benefits all participants. Unfortunately, in this case, any participant can jeopardize the entire training run by sending incorrect updates, deliberately or by mistake. Training in presence of such peers requires specialized distributed training algorithms with Byzantine tolerance. These algorithms often sacrifice efficiency by introducing redundant communication or passing all updates through a trusted server, making it infeasible to apply them to large-scale deep learning, where models can have billions of parameters. In this work, we propose a novel protocol for secure (Byzantine-tolerant) decentralized training that emphasizes communication efficiency.}
 }
 
 ```
