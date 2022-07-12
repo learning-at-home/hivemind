@@ -171,7 +171,7 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 ["Secure Distributed Training at Scale"](https://arxiv.org/abs/2106.11257)
 
 ```bibtex
-@inproceedings{pmlr-v162-gorbunov22a,
+@inproceedings{gorbunov2022secure,
   title = {Secure Distributed Training at Scale},
   author = {Gorbunov, Eduard and Borzunov, Alexander and Diskin, Michael and Ryabinin, Max},
   year = 2022,
