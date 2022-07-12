@@ -28,7 +28,7 @@ see the [full list](https://github.com/learning-at-home/hivemind/tree/refer-to-d
 
 ## Example Applications and Use Cases
 
-This section lists external projects that leverage hivemind for decentralized training. 
+This section lists projects that leverage hivemind for decentralized training. 
 If you have succesfully trained a model or created a downstream repository with the help of our library, 
 feel free to submit a pull request that adds your project to this list.
 
