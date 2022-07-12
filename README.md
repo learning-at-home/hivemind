@@ -12,10 +12,6 @@ large model on hundreds of computers from different universities, companies, and
 
 ![img](https://i.imgur.com/GPxolxb.gif)
 
-## Live Demo
-
-Check out our NeurIPS 2021 demonstration ["Training Transformers Together"](https://training-transformers-together.github.io/) to see hivemind in action, join an ongoing collaborative experiment, and learn more about the technologies behind it!
-
 ## Key Features
 
 * Distributed training without a master node: Distributed Hash Table allows connecting computers in a decentralized
@@ -29,6 +25,17 @@ Check out our NeurIPS 2021 demonstration ["Training Transformers Together"](http
 
 To learn more about the ideas behind this library,
 see the [full list](https://github.com/learning-at-home/hivemind/tree/refer-to-discord-in-docs#citation) of our papers below.
+
+## Example Applications and Use Cases
+
+This section lists projects that leverage hivemind for decentralized training. 
+If you have succesfully trained a model or created a downstream repository with the help of our library, 
+feel free to submit a pull request that adds your project to this list.
+
+* [sahajBERT](https://github.com/tanmoyio/sahajbert) — a collaboratively pretrained ALBERT-xlarge for the Bengali language.
+* [CALM](https://github.com/NCAI-Research/CALM) (Collaborative Arabic Language Model) — a masked language model trained on a combination of Arabic datasets.
+* [Training Transformers Together](https://training-transformers-together.github.io/) — a NeurIPS 2021 demonstration that trained a collaborative text-to-image Transformer model.
+* [HivemindStrategy](https://pytorch-lightning.readthedocs.io/en/latest/api/pytorch_lightning.strategies.HivemindStrategy.html) in PyTorch Lightning allows adapting your existing pipelines to training over slow network with unreliable peers.
 
 ## Installation
 
@@ -111,10 +118,10 @@ If you found hivemind or its underlying algorithms useful for your research, ple
 
 ```bibtex
 @misc{hivemind,
-  author = {Learning{@}home team},
   title = {{H}ivemind: a {L}ibrary for {D}ecentralized {D}eep {L}earning},
+  author = {Learning{@}home team},
   year = 2020,
-  howpublished = {\url{https://github.com/learning-at-home/hivemind}},
+  howpublished = {\url{https://github.com/learning-at-home/hivemind}}
 }
 ```
 
@@ -124,15 +131,12 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 ```bibtex
 @inproceedings{ryabinin2020crowdsourced,
-  author = {Ryabinin, Max and Gusev, Anton},
-  booktitle = {Advances in Neural Information Processing Systems},
-  editor = {H. Larochelle and M. Ranzato and R. Hadsell and M. F. Balcan and H. Lin},
-  pages = {3659--3672},
-  publisher = {Curran Associates, Inc.},
   title = {Towards Crowdsourced Training of Large Neural Networks using Decentralized Mixture-of-Experts},
-  url = {https://proceedings.neurips.cc/paper/2020/file/25ddc0f8c9d3e22e03d3076f98d83cb2-Paper.pdf},
-  volume = {33},
-  year = {2020}
+  author = {Ryabinin, Max and Gusev, Anton},
+  year = 2020,
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume = 33,
+  url = {https://proceedings.neurips.cc/paper/2020/file/25ddc0f8c9d3e22e03d3076f98d83cb2-Paper.pdf}
 }
 ```
 
@@ -142,39 +146,53 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 ["Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices"](https://arxiv.org/abs/2103.03239)
 
 ```bibtex
-@misc{ryabinin2021moshpit,
+@inproceedings{ryabinin2021moshpit,
   title = {Moshpit SGD: Communication-Efficient Decentralized Training on Heterogeneous Unreliable Devices},
-  author = {Max Ryabinin and Eduard Gorbunov and Vsevolod Plokhotnyuk and Gennady Pekhimenko},
-  year = {2021},
-  eprint = {2103.03239},
-  archivePrefix = {arXiv},
-  primaryClass = {cs.LG}
+  author = {Ryabinin, Max and Gorbunov, Eduard and Plokhotnyuk, Vsevolod and Pekhimenko, Gennady},
+  year = 2021,
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume = 34,
+  url = {https://proceedings.neurips.cc/paper/2021/file/97275a23ca44226c9964043c8462be96-Paper.pdf}
 }
 ```
 
 ["Distributed Deep Learning in Open Collaborations"](https://arxiv.org/abs/2106.10207)
 
 ```bibtex
-@misc{diskin2021distributed,
-  title = {Distributed Deep Learning in Open Collaborations},
-  author = {Michael Diskin and Alexey Bukhtiyarov and Max Ryabinin and Lucile Saulnier and Quentin Lhoest and Anton Sinitsin and Dmitry Popov and Dmitry Pyrkin and Maxim Kashirin and Alexander Borzunov and Albert Villanova del Moral and Denis Mazur and Ilia Kobelev and Yacine Jernite and Thomas Wolf and Gennady Pekhimenko},
-  year = {2021},
-  eprint = {2106.10207},
-  archivePrefix = {arXiv},
-  primaryClass = {cs.LG}
+@inproceedings{diskin2021distributed,
+  title = {Distributed Deep Learning In Open Collaborations},
+  author = {Michael Diskin and Alexey Bukhtiyarov and Max Ryabinin and Lucile Saulnier and Quentin Lhoest and Anton Sinitsin and Dmitry Popov and Dmitriy Pyrkin and Maxim Kashirin and Alexander Borzunov and Albert Villanova del Moral and Denis Mazur and Ilia Kobelev and Yacine Jernite and Thomas Wolf and Gennady Pekhimenko},
+  year = 2021,
+  booktitle = {Advances in Neural Information Processing Systems},
+  url = {https://openreview.net/forum?id=FYHktcK-7v}
 }
 ```
 
 ["Secure Distributed Training at Scale"](https://arxiv.org/abs/2106.11257)
 
 ```bibtex
-@misc{gorbunov2021secure,
+@inproceedings{gorbunov2022secure,
   title = {Secure Distributed Training at Scale},
-  author = {Eduard Gorbunov and Alexander Borzunov and Michael Diskin and Max Ryabinin},
-  year = {2021},
-  eprint = {2106.11257},
-  archivePrefix = {arXiv},
-  primaryClass = {cs.LG}
+  author = {Gorbunov, Eduard and Borzunov, Alexander and Diskin, Michael and Ryabinin, Max},
+  year = 2022,
+  month = {17--23 Jul},
+  booktitle = {Proceedings of the 39th International Conference on Machine Learning},
+  series = {Proceedings of Machine Learning Research},
+  volume = 162,
+  url = {https://proceedings.mlr.press/v162/gorbunov22a.html}
+}
+```
+
+["Training Transformers Together"](https://arxiv.org/abs/2207.03481)
+
+```bibtex
+@misc{borzunov2022training,
+  title = {Training Transformers Together},
+  author = {Alexander Borzunov and Max Ryabinin and Tim Dettmers and Quentin Lhoest and Lucile Saulnier and Michael Diskin and Yacine Jernite and Thomas Wolf},
+  year = 2022,
+  eprint = {2207.03481},
+  archiveprefix = {arXiv},
+  primaryclass = {cs.LG}
 }
 ```
 
