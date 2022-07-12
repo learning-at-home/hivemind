@@ -26,7 +26,7 @@ large model on hundreds of computers from different universities, companies, and
 To learn more about the ideas behind this library,
 see the [full list](https://github.com/learning-at-home/hivemind/tree/refer-to-discord-in-docs#citation) of our papers below.
 
-## Hivemind in Action: Applications and Use Cases
+## Example Applications and Use Cases
 
 This section lists external projects that leverage hivemind for decentralized training. 
 If you have succesfully trained a model or created a downstream repository with the help of our library, 
