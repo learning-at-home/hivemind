@@ -32,10 +32,10 @@ This section lists projects that leverage hivemind for decentralized training.
 If you have succesfully trained a model or created a downstream repository with the help of our library, 
 feel free to submit a pull request that adds your project to this list.
 
-* [sahajBERT](https://github.com/tanmoyio/sahajbert) — a collaboratively pretrained ALBERT-xlarge for the Bengali language
-* [CALM](https://github.com/NCAI-Research/CALM) (Collaborative Arabic Language Model) — a masked language model trained on a combination of Arabic datasets
-* [Training Transformers Together](https://training-transformers-together.github.io/) — a NeurIPS 2021 demonstration that trained a collaborative text-to-image Transformer model
-* [HivemindStrategy](https://pytorch-lightning.readthedocs.io/en/latest/api/pytorch_lightning.strategies.HivemindStrategy.html) in PyTorch Lightning allows adapting your existing pipelines to training over slow network with unreliable peers
+* [sahajBERT](https://github.com/tanmoyio/sahajbert) — a collaboratively pretrained ALBERT-xlarge for the Bengali language.
+* [CALM](https://github.com/NCAI-Research/CALM) (Collaborative Arabic Language Model) — a masked language model trained on a combination of Arabic datasets.
+* [Training Transformers Together](https://training-transformers-together.github.io/) — a NeurIPS 2021 demonstration that trained a collaborative text-to-image Transformer model.
+* [HivemindStrategy](https://pytorch-lightning.readthedocs.io/en/latest/api/pytorch_lightning.strategies.HivemindStrategy.html) in PyTorch Lightning allows adapting your existing pipelines to training over slow network with unreliable peers.
 
 ## Installation
 
