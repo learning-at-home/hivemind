@@ -117,6 +117,7 @@ class TrainingStateAverager(DecentralizedAverager):
         self.opt_keys_for_averaging, self.extra_tensors = average_opt_statistics, extra_tensors
         self.sync_epoch_when_averaging = sync_epoch_when_averaging
         self.local_epoch = 0
+        self.gathered_peers = {}
 
         self.delay_before_averaging = PerformanceEMA(alpha=performance_ema_alpha)
         self.step_executor = ThreadPoolExecutor(max_workers=2 if self.delta_rule_averaging else 1)
@@ -533,17 +534,17 @@ class TrainingStateAverager(DecentralizedAverager):
                     self.delay_before_averaging.update(task_size=1, interval=time.perf_counter() - start_time)
                     try:
                         averaging_control.allow_allreduce()
-                        gathered = averaging_control.result(timeout=timeout)
-                        logger.log(self.status_loglevel, f"Averaged parameters with {len(gathered)} peers")
+                        self.gathered_peers = averaging_control.result(timeout=timeout)
+                        logger.log(self.status_loglevel, f"Averaged parameters with {len(self.gathered_peers)} peers")
                     except BaseException as e:
                         logger.log(self.status_loglevel, f"Averaging failed with {type(e)}")
-                        gathered = {}
+                        self.gathered_peers = {}
 
                     self.finished_averaging_round.set()
 
                 if self.sync_epoch_when_averaging:
                     old_epoch = self.local_epoch
-                    for peer_epoch in gathered.values():
+                    for peer_epoch in self.gathered_peers.values():
                         self.local_epoch = max(self.local_epoch, peer_epoch)
                     if self.local_epoch != old_epoch:
                         logger.log(self.status_loglevel, f"Found peer with newer epoch ({self.local_epoch})")

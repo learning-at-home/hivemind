@@ -345,6 +345,13 @@ class Optimizer(torch.optim.Optimizer):
         return self.state_averager.is_alive()
 
     @property
+    def gathered_peers(self) -> int:
+        """
+        The number of peers that participated in the last averaging round with this worker.
+        """
+        return len(self.state_averager.gathered_peers)
+
+    @property
     def local_epoch(self) -> int:
         """
         This worker's current epoch, kept synchronized with peers. If peer's local_epoch lags behind others, it will
