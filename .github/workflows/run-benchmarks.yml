@@ -26,6 +26,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+      - name: Build bitsandbytes
+        run: |
+          git clone https://github.com/TimDettmers/bitsandbytes.git
+          cd bitsandbytes
+          make cpuonly
+          pip install .
+          cd -
       - name: Build hivemind
         run: |
           pip install .
