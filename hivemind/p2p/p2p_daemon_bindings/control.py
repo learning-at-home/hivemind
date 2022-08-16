@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 from multiaddr import Multiaddr, protocols
 
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
-from hivemind.p2p.p2p_daemon_bindings.utils import DispatchFailure, raise_if_failed, read_pbmsg_safe, write_pbmsg
+from hivemind.p2p.p2p_daemon_bindings.utils import P2PDaemonError, P2PHandlerError, DispatchFailure, raise_if_failed, read_pbmsg_safe, write_pbmsg
 from hivemind.proto import p2pd_pb2 as p2pd_pb
 from hivemind.utils.logging import get_logger
 
@@ -416,15 +416,3 @@ class ControlClient:
         raise_if_failed(resp)
 
         del self.handlers[proto]
-
-
-class P2PHandlerError(Exception):
-    """
-    Raised if remote handled a request with an exception
-    """
-
-
-class P2PDaemonError(Exception):
-    """
-    Raised if daemon failed to handle request
-    """

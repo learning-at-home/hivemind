@@ -24,8 +24,7 @@ from hivemind.averaging.matchmaking import Matchmaking, MatchmakingException
 from hivemind.averaging.partition import DEFAULT_PART_SIZE_BYTES
 from hivemind.compression import CompressionBase, CompressionInfo, NoCompression, deserialize_torch_tensor
 from hivemind.dht import DHT, DHTID
-from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, ServicerBase
-from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure, DispatchFailure
+from hivemind.p2p import P2P, P2PContext, P2PDaemonError, P2PHandlerError, PeerID, ServicerBase
 from hivemind.proto import averaging_pb2
 from hivemind.utils import MPFuture, TensorDescriptor, get_logger
 from hivemind.utils.asyncio import (
@@ -469,8 +468,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     asyncio.CancelledError,
                     asyncio.InvalidStateError,
                     P2PHandlerError,
-                    DispatchFailure,
-                    ControlFailure,
+                    P2PDaemonError,
                 ) as e:
                     if step.done() or not step.allow_retries or get_dht_time() >= step.deadline:
                         if not step.cancelled():
