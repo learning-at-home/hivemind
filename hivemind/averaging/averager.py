@@ -349,6 +349,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             logger.exception("Averager shutdown has no effect: the process is already not alive")
 
     async def _shutdown(self, timeout: Optional[float]) -> None:
+        if not self.client_mode:
+            await self.remove_p2p_handlers(self._p2p, namespace=self.prefix)
+
         remaining_tasks = set()
         for group in self._running_groups.values():
             remaining_tasks.update(group.finalize(cancel=True))
