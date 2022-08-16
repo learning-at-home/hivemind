@@ -12,7 +12,14 @@ from uuid import UUID, uuid4
 from multiaddr import Multiaddr, protocols
 
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
-from hivemind.p2p.p2p_daemon_bindings.utils import P2PDaemonError, P2PHandlerError, DispatchFailure, raise_if_failed, read_pbmsg_safe, write_pbmsg
+from hivemind.p2p.p2p_daemon_bindings.utils import (
+    DispatchFailure,
+    P2PDaemonError,
+    P2PHandlerError,
+    raise_if_failed,
+    read_pbmsg_safe,
+    write_pbmsg,
+)
 from hivemind.proto import p2pd_pb2 as p2pd_pb
 from hivemind.utils.logging import get_logger
 
