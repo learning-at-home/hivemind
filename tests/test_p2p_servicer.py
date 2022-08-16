@@ -167,7 +167,7 @@ async def test_removing_unary_handlers(server_client):
         assert await stub.rpc_square(test_pb2.TestRequest(number=10)) == test_pb2.TestResponse(number=100)
 
         await servicer.remove_p2p_handlers(server)
-        with pytest.raises(P2PDaemonError):
+        with pytest.raises((P2PDaemonError, ConnectionError)):
             await stub.rpc_square(test_pb2.TestRequest(number=10))
 
     await asyncio.gather(server2.shutdown())
@@ -186,7 +186,7 @@ async def test_removing_stream_handlers(server_client):
         assert [item.number async for item in stream] == list(range(10))
 
         await servicer.remove_p2p_handlers(server)
-        with pytest.raises(P2PDaemonError):
+        with pytest.raises((P2PDaemonError, ConnectionError)):
             stream = await stub.rpc_count(test_pb2.TestRequest(number=10))
             outputs = [item.number async for item in stream]
             if not outputs:
