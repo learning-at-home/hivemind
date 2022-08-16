@@ -187,6 +187,9 @@ async def test_removing_stream_handlers(server_client):
 
         await servicer.remove_p2p_handlers(server)
         with pytest.raises(P2PDaemonError):
-            await stub.rpc_count(test_pb2.TestRequest(number=10))
+            stream = await stub.rpc_count(test_pb2.TestRequest(number=10))
+            outputs = [item.number async for item in stream]
+            if not outputs:
+                raise P2PDaemonError("Daemon has reset the connection")
 
     await asyncio.gather(server2.shutdown())
