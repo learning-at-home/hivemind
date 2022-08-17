@@ -13,8 +13,7 @@ from hivemind.averaging.control import StepControl
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.key_manager import GroupKey, GroupKeyManager
 from hivemind.dht import DHT, DHTID
-from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, ServicerBase
-from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure, DispatchFailure
+from hivemind.p2p import P2P, P2PContext, P2PDaemonError, P2PHandlerError, PeerID, ServicerBase
 from hivemind.proto import averaging_pb2
 from hivemind.utils import DHTExpiration, TimedStorage, get_dht_time, get_logger, timed_storage
 from hivemind.utils.asyncio import anext, cancel_and_wait
@@ -239,7 +238,7 @@ class Matchmaking:
         except asyncio.TimeoutError:
             logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             return None
-        except (P2PHandlerError, ControlFailure, DispatchFailure, StopAsyncIteration) as e:
+        except (P2PDaemonError, P2PHandlerError, StopAsyncIteration) as e:
             logger.debug(f"{self} - failed to request potential leader {leader}:", exc_info=True)
             return None
 

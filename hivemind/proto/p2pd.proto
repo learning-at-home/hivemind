@@ -12,12 +12,12 @@ message Request {
     CONNECT                  = 1;
     STREAM_OPEN              = 2;
     STREAM_HANDLER           = 3;
+    REMOVE_STREAM_HANDLER    = 10;
     DHT                      = 4;
     LIST_PEERS               = 5;
     CONNMANAGER              = 6;
     DISCONNECT               = 7;
     PUBSUB                   = 8;
-
     PERSISTENT_CONN_UPGRADE  = 9;
   }
 
@@ -26,6 +26,7 @@ message Request {
   optional ConnectRequest connect = 2;
   optional StreamOpenRequest streamOpen = 3;
   optional StreamHandlerRequest streamHandler = 4;
+  optional RemoveStreamHandlerRequest removeStreamHandler = 9;
   optional DHTRequest dht = 5;
   optional ConnManagerRequest connManager = 6;
   optional DisconnectRequest disconnect = 7;
@@ -52,6 +53,7 @@ message PersistentConnectionRequest {
 
   oneof message {
     AddUnaryHandlerRequest addUnaryHandler = 2;
+    RemoveUnaryHandlerRequest removeUnaryHandler = 6;
     CallUnaryRequest  callUnary = 3;
     CallUnaryResponse unaryResponse = 4;
     Cancel cancel = 5;
@@ -91,6 +93,11 @@ message StreamHandlerRequest {
   required bytes addr = 1;
   repeated string proto = 2;
   required bool balanced = 3;
+}
+
+message RemoveStreamHandlerRequest {
+  required bytes addr = 1;
+  repeated string proto = 2;
 }
 
 message ErrorResponse {
@@ -203,6 +210,10 @@ message CallUnaryResponse {
 message AddUnaryHandlerRequest {
   required string proto = 1;
   required bool balanced = 2;
+}
+
+message RemoveUnaryHandlerRequest {
+  required string proto = 1;
 }
 
 message DaemonError {
