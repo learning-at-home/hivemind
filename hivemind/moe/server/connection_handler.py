@@ -28,10 +28,10 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     :param module_backends: a dict [UID -> ModuleBackend] with all active experts
     """
 
-    def __init__(self, dht: DHT, module_backends: Dict[str, ModuleBackend], *, shutdown_timeout: float = 3):
+    def __init__(self, dht: DHT, module_backends: Dict[str, ModuleBackend], *, balanced: bool = True, shutdown_timeout: float = 3):
         super().__init__()
         self.dht, self.module_backends = dht, module_backends
-        self.shutdown_timeout = shutdown_timeout
+        self.balanced, self.shutdown_timeout = balanced, shutdown_timeout
         self._p2p: Optional[P2P] = None
 
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=False)
@@ -46,7 +46,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         async def _run():
             try:
                 self._p2p = await self.dht.replicate_p2p()
-                await self.add_p2p_handlers(self._p2p, balanced=True)
+                await self.add_p2p_handlers(self._p2p, balanced=self.balanced)
                 self.ready.set_result(None)
             except Exception as e:
                 logger.error("ConnectionHandler failed to start:", exc_info=True)
