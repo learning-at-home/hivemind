@@ -28,7 +28,14 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     :param module_backends: a dict [UID -> ModuleBackend] with all active experts
     """
 
-    def __init__(self, dht: DHT, module_backends: Dict[str, ModuleBackend], *, balanced: bool = True, shutdown_timeout: float = 3):
+    def __init__(
+        self,
+        dht: DHT,
+        module_backends: Dict[str, ModuleBackend],
+        *,
+        balanced: bool = True,
+        shutdown_timeout: float = 3
+    ):
         super().__init__()
         self.dht, self.module_backends = dht, module_backends
         self.balanced, self.shutdown_timeout = balanced, shutdown_timeout
