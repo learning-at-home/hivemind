@@ -34,7 +34,8 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         module_backends: Dict[str, ModuleBackend],
         *,
         balanced: bool = True,
-        shutdown_timeout: float = 3
+        shutdown_timeout: float = 3,
+        start: bool = False,
     ):
         super().__init__()
         self.dht, self.module_backends = dht, module_backends
@@ -43,6 +44,9 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
 
         self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=False)
         self.ready = MPFuture()
+
+        if start:
+            self.run_in_background(await_ready=True)
 
     def run(self):
         torch.set_num_threads(1)
@@ -68,6 +72,18 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
             loop.run_until_complete(_run())
         except KeyboardInterrupt:
             logger.debug("Caught KeyboardInterrupt, shutting down")
+
+    def run_in_background(self, await_ready: bool = True, timeout: Optional[float] = None) -> None:
+        """
+        Starts ConnectionHandler in a background process. If :await_ready:, this method will wait until
+        it is ready to process incoming requests or for :timeout: seconds max.
+        """
+        self.start()
+        if await_ready:
+            self.wait_until_ready(timeout)
+
+    def wait_until_ready(self, timeout: Optional[float] = None) -> None:
+        self.ready.result(timeout=timeout)
 
     def shutdown(self):
         if self.is_alive():

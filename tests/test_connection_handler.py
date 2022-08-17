@@ -24,9 +24,7 @@ from hivemind.utils.tensor_descr import BatchTensorDescriptor
 async def client_stub():
     handler_dht = DHT(start=True)
     module_backends = {"expert1": DummyModuleBackend("expert1", k=1), "expert2": DummyModuleBackend("expert2", k=2)}
-    handler = ConnectionHandler(handler_dht, module_backends)
-    handler.start()
-    assert handler.ready.exception() is None
+    handler = ConnectionHandler(handler_dht, module_backends, start=True)
 
     client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
     client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
@@ -164,10 +162,8 @@ async def test_connection_handler_shutdown():
     module_backends = {"expert1": DummyModuleBackend("expert1", k=1), "expert2": DummyModuleBackend("expert2", k=2)}
 
     for _ in range(3):
-        handler = ConnectionHandler(handler_dht, module_backends, balanced=False)
-        handler.start()
-        # handler.ready would contain an exception if the previous handlers were not removed from hivemind.P2P
-        assert handler.ready.exception() is None
+        handler = ConnectionHandler(handler_dht, module_backends, balanced=False, start=True)
+        # The line above would raise an exception if the previous handlers were not removed from hivemind.P2P
         handler.shutdown()
 
     handler_dht.shutdown()
