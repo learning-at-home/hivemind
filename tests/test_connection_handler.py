@@ -20,19 +20,25 @@ from hivemind.utils.streaming import split_for_streaming
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 
-@pytest.mark.forked
-@pytest.mark.asyncio
-async def test_connection_handler_info():
-    handler = ConnectionHandler(
-        DHT(start=True),
-        dict(expert1=DummyModuleBackend("expert1", k=1), expert2=DummyModuleBackend("expert2", k=2)),
-    )
-    handler.start()
+@pytest.fixture
+async def client_stub():
+    handler_dht = DHT(start=True)
+    module_backends = {"expert1": DummyModuleBackend("expert1", k=1), "expert2": DummyModuleBackend("expert2", k=2)}
+    handler = ConnectionHandler(handler_dht, module_backends, start=True)
 
     client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
     client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
 
-    # info
+    yield client_stub
+
+    client_dht.shutdown()
+    handler.shutdown()
+    handler_dht.shutdown()
+
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_connection_handler_info(client_stub):
     response = await client_stub.rpc_info(runtime_pb2.ExpertUID(uid="expert1"))
     assert MSGPackSerializer.loads(response.serialized_info) == dict(name="expert1")
 
@@ -45,16 +51,7 @@ async def test_connection_handler_info():
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_connection_handler_forward():
-    handler = ConnectionHandler(
-        DHT(start=True),
-        dict(expert1=DummyModuleBackend("expert1", k=1), expert2=DummyModuleBackend("expert2", k=2)),
-    )
-    handler.start()
-
-    client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
-    client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
-
+async def test_connection_handler_forward(client_stub):
     inputs = torch.randn(1, 2)
     inputs_long = torch.randn(2**21, 2)
 
@@ -106,16 +103,7 @@ async def test_connection_handler_forward():
 
 @pytest.mark.forked
 @pytest.mark.asyncio
-async def test_connection_handler_backward():
-    handler = ConnectionHandler(
-        DHT(start=True),
-        dict(expert1=DummyModuleBackend("expert1", k=1), expert2=DummyModuleBackend("expert2", k=2)),
-    )
-    handler.start()
-
-    client_dht = DHT(start=True, client_mode=True, initial_peers=handler.dht.get_visible_maddrs())
-    client_stub = ConnectionHandler.get_stub(await client_dht.replicate_p2p(), handler.dht.peer_id)
-
+async def test_connection_handler_backward(client_stub):
     inputs = torch.randn(1, 2)
     inputs_long = torch.randn(2**21, 2)
 
@@ -165,8 +153,20 @@ async def test_connection_handler_backward():
     # check that handler did not crash after failed request
     await client_stub.rpc_forward(runtime_pb2.ExpertRequest(uid="expert1", tensors=[serialize_torch_tensor(inputs)]))
 
-    handler.terminate()
-    handler.join()
+
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_connection_handler_shutdown():
+    # Here, all handlers will have the common hivemind.DHT and hivemind.P2P instances
+    handler_dht = DHT(start=True)
+    module_backends = {"expert1": DummyModuleBackend("expert1", k=1), "expert2": DummyModuleBackend("expert2", k=2)}
+
+    for _ in range(3):
+        handler = ConnectionHandler(handler_dht, module_backends, balanced=False, start=True)
+        # The line above would raise an exception if the previous handlers were not removed from hivemind.P2P
+        handler.shutdown()
+
+    handler_dht.shutdown()
 
 
 class DummyPool(TaskPool):

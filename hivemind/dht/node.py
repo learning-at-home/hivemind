@@ -271,6 +271,7 @@ class DHTNode:
     async def shutdown(self):
         """Process existing requests, close all connections and stop the server"""
         self.is_alive = False
+        await self.protocol.shutdown()
         if self._should_shutdown_p2p:
             await self.p2p.shutdown()
 

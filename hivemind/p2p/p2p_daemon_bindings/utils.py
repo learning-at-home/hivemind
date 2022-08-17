@@ -13,11 +13,23 @@ from hivemind.proto import p2pd_pb2 as p2pd_pb
 DEFAULT_MAX_BITS: int = 64
 
 
-class ControlFailure(Exception):
+class P2PHandlerError(Exception):
+    """
+    Raised if remote handled a request with an exception
+    """
+
+
+class P2PDaemonError(Exception):
+    """
+    Raised if daemon failed to handle request
+    """
+
+
+class ControlFailure(P2PDaemonError):
     pass
 
 
-class DispatchFailure(Exception):
+class DispatchFailure(P2PDaemonError):
     pass
 
 

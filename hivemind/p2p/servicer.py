@@ -124,6 +124,20 @@ class ServicerBase:
             ]
         )
 
+    async def remove_p2p_handlers(self, p2p: P2P, *, namespace: Optional[str] = None) -> None:
+        self._collect_rpc_handlers()
+
+        await asyncio.gather(
+            *[
+                p2p.remove_protobuf_handler(
+                    self._get_handle_name(namespace, handler.method_name),
+                    stream_input=handler.stream_input,
+                    stream_output=handler.stream_output,
+                )
+                for handler in self._rpc_handlers
+            ]
+        )
+
     @classmethod
     def get_stub(cls, p2p: P2P, peer: PeerID, *, namespace: Optional[str] = None) -> StubBase:
         cls._collect_rpc_handlers()

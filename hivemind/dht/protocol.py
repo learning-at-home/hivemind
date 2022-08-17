@@ -70,7 +70,7 @@ class DHTProtocol(ServicerBase):
         self.record_validator = record_validator
         self.authorizer = authorizer
 
-        if not client_mode:
+        if not self.client_mode:
             await self.add_p2p_handlers(self.p2p, AuthRPCWrapper(self, AuthRole.SERVICER, self.authorizer))
 
             self.node_info = dht_pb2.NodeInfo(node_id=node_id.to_bytes())
@@ -78,6 +78,10 @@ class DHTProtocol(ServicerBase):
             # note: use empty node_info so peers won't add you to their routing tables
             self.node_info = dht_pb2.NodeInfo()
         return self
+
+    async def shutdown(self) -> None:
+        if not self.client_mode:
+            await self.remove_p2p_handlers(self.p2p)
 
     def __init__(self, *, _initialized_with_create=False):
         """Internal init method. Please use DHTProtocol.create coroutine to spawn new protocol instances"""

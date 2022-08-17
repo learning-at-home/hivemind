@@ -475,6 +475,19 @@ class P2P:
 
         await self._add_protobuf_stream_handler(name, _stream_handler, input_protobuf_type, balanced=balanced)
 
+    async def remove_protobuf_handler(
+        self,
+        name: str,
+        *,
+        stream_input: bool = False,
+        stream_output: bool = False,
+    ) -> None:
+        if not stream_input and not stream_output:
+            await self._client.remove_unary_handler(name)
+            return
+
+        await self.remove_binary_stream_handler(name)
+
     async def _add_protobuf_unary_handler(
         self,
         handle_name: str,
@@ -552,6 +565,9 @@ class P2P:
         if self._listen_task is None:
             self._start_listening()
         await self._client.stream_handler(name, handler, balanced)
+
+    async def remove_binary_stream_handler(self, name: str) -> None:
+        await self._client.remove_stream_handler(name)
 
     async def call_binary_stream_handler(
         self, peer_id: PeerID, handler_name: str

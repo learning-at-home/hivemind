@@ -61,8 +61,11 @@ class Client:
         async with self.control.listen():
             yield self
 
-    async def add_unary_handler(self, proto: str, handler: TUnaryHandler, balanced: bool = False):
+    async def add_unary_handler(self, proto: str, handler: TUnaryHandler, balanced: bool = False) -> None:
         await self.control.add_unary_handler(proto, handler, balanced=balanced)
+
+    async def remove_unary_handler(self, proto: str) -> None:
+        await self.control.remove_unary_handler(proto)
 
     async def call_unary_handler(self, peer_id: PeerID, proto: str, data: bytes) -> bytes:
         return await self.control.call_unary_handler(peer_id, proto, data)
@@ -114,3 +117,6 @@ class Client:
         :return:
         """
         await self.control.stream_handler(proto=proto, handler_cb=handler_cb, balanced=balanced)
+
+    async def remove_stream_handler(self, proto: str) -> None:
+        await self.control.remove_stream_handler(proto=proto)
