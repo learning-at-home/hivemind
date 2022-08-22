@@ -90,7 +90,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build bitsandbytes
         run: |
-          pip install bitsandbytes==0.32.1
+          pip install bitsandbytes==0.31.8
       - name: Build hivemind
         run: |
           pip install -e . --no-use-pep517
