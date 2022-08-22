@@ -15,6 +15,8 @@ def test_dht_connection_successful():
         encoding="utf-8",
     )
 
+    # skip bitsandbytes warning
+    _ = dht_proc.stderr.readline()
     first_line = dht_proc.stderr.readline()
     second_line = dht_proc.stderr.readline()
     dht_pattern_match = DHT_START_PATTERN.search(first_line)
@@ -30,8 +32,8 @@ def test_dht_connection_successful():
         encoding="utf-8",
     )
 
-    # skip first two lines with connectivity info
-    for _ in range(2):
+    # skip first three lines with connectivity and bitsandbytes info
+    for _ in range(3):
         dht_client_proc.stderr.readline()
     first_report_msg = dht_client_proc.stderr.readline()
 
