@@ -118,6 +118,11 @@ def quantile_qq_approximation(array: np.ndarray, n_quantiles: int, min_chunk_siz
     return np.quantile(partition_quantiles, quantiles)
 
 
+BNB_MISSING_MESSAGE = """BlockwiseQuantization requires bitsandbytes to function properly. 
+Please install it with `pip install bitsandbytes` 
+or using the instruction from https://github.com/TimDettmers/bitsandbytes."""
+
+
 class BlockwiseQuantization(Quantization):
     compression_type = runtime_pb2.BLOCKWISE_8BIT
     codebook_dtype, indices_dtype = np.float32, np.uint8
@@ -128,11 +133,7 @@ class BlockwiseQuantization(Quantization):
         try:
             quantized, (absmax, codebook) = quantize_blockwise(tensor)
         except NameError:
-            raise ImportError(
-                "BlockwiseQuantization requires bitsandbytes to function. "
-                "Please install it using the following guide: "
-                "https://github.com/facebookresearch/bitsandbytes#requirements--installation"
-            )
+            raise ImportError(BNB_MISSING_MESSAGE)
         return quantized.numpy(), (absmax.numpy(), codebook.numpy())
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
@@ -171,8 +172,4 @@ class BlockwiseQuantization(Quantization):
         try:
             return dequantize_blockwise(quantized, (absmax, codebook))
         except NameError:
-            raise ImportError(
-                "BlockwiseQuantization requires bitsandbytes to function. "
-                "Please install it using the following guide: "
-                "https://github.com/facebookresearch/bitsandbytes#requirements--installation"
-            )
+            raise ImportError(BNB_MISSING_MESSAGE)
