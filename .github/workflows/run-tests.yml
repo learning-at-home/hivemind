@@ -60,6 +60,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+      - name: Build bitsandbytes
+        run: |
+          git clone https://github.com/TimDettmers/bitsandbytes.git
+          cd bitsandbytes
+          git checkout 4cd7ea62b2f51c68aacde2f62e7141765e476111
+          make cpuonly
+          pip install .
+          cd -
       - name: Build hivemind
         run: |
           pip install . --global-option=build_py --global-option="--buildgo" --no-use-pep517
