@@ -28,9 +28,8 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build bitsandbytes
         run: |
-          git clone https://github.com/TimDettmers/bitsandbytes.git
+          git clone --depth 1 --branch 0.32.1 https://github.com/TimDettmers/bitsandbytes.git
           cd bitsandbytes
-          git checkout cbb901ac51bd6c41e4243ffb936ef0e2f7ca8ada
           make cpuonly
           pip install .
           cd -
