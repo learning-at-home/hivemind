@@ -90,7 +90,12 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build bitsandbytes
         run: |
-          pip install bitsandbytes==0.31.8
+          git clone https://github.com/TimDettmers/bitsandbytes.git
+          git checkout cbb901ac51bd6c41e4243ffb936ef0e2f7ca8ada
+          cd bitsandbytes
+          make cpuonly
+          pip install .
+          cd -
       - name: Build hivemind
         run: |
           pip install -e . --no-use-pep517
