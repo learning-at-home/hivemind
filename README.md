@@ -55,7 +55,8 @@ pip install hivemind
 
 Also, if you want to use blockwise 8-bit compression from [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) 
 during data transfer, you can [build it from source](https://github.com/TimDettmers/bitsandbytes#compile-from-source) 
-or install it with `pip install "bitsandbytes==0.32.1` and use the `BlockwiseQuantization` class in [hivemind.compression](./hivemind/compression)
+(for CPU-only builds, use commit [`4cd7ea6`](https://github.com/TimDettmers/bitsandbytes/commit/4cd7ea62b2f51c68aacde2f62e7141765e476111)) 
+or install with `pip install "bitsandbytes==0.32.1`. After that, you can use the `BlockwiseQuantization` class in [hivemind.compression](./hivemind/compression)
 
 ### From source
 
