@@ -11,7 +11,7 @@ from hivemind.proto import runtime_pb2
 from hivemind.utils.tensor_descr import TensorDescriptor
 
 # While converting read-only NumPy arrays into PyTorch tensors, we don't make extra copies for efficiency
-warnings.filterwarnings("ignore", message="The given NumPy array is not writeable", category=UserWarning)
+warnings.filterwarnings("ignore", message="The given NumPy array is not writable", category=UserWarning)
 
 
 Key = Any
