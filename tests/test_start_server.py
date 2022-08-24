@@ -11,9 +11,11 @@ def test_background_server_identity_path():
     with TemporaryDirectory() as tempdir:
         id_path = os.path.join(tempdir, "id")
 
-        with background_server(num_experts=1, identity_path=id_path) as server_info_1, background_server(
-            num_experts=1, identity_path=id_path
-        ) as server_info_2, background_server(num_experts=1, identity_path=None) as server_info_3:
+        server_runner = partial(background_server, num_experts=1, device="cpu", hidden_dim=1)
+
+        with server_runner(identity_path=id_path) as server_info_1, server_runner(
+            identity_path=id_path
+        ) as server_info_2, server_runner(identity_path=None) as server_info_3:
             assert server_info_1.peer_id == server_info_2.peer_id
             assert server_info_1.peer_id != server_info_3.peer_id
             assert server_info_3.peer_id == server_info_3.peer_id
