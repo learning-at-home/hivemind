@@ -140,11 +140,9 @@ with open("requirements-dev.txt") as dev_requirements_file:
 with open("requirements-docs.txt") as docs_requirements_file:
     extras["docs"] = list(map(str, parse_requirements(docs_requirements_file)))
 
-cuda_version = os.getenv("CUDA_VERSION")
-if cuda_version is not None:
-    extras["bitsandbytes"] = f"bitsandbytes-cuda{cuda_version}==0.26.0"
+extras["bitsandbytes"] = "bitsandbytes==0.32.2"
 
-extras["all"] = extras["dev"] + extras["docs"]
+extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
 
 setup(
     name="hivemind",
