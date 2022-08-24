@@ -1,5 +1,6 @@
 import os
 import re
+from functools import partial
 from subprocess import PIPE, Popen
 from tempfile import TemporaryDirectory
 
@@ -31,11 +32,13 @@ def test_cli_run_server_identity_path():
             encoding="utf-8",
         )
 
-        # Skip line "UserWarning: The installed version of bitsandbytes was compiled without GPU support. <...>"
-        _ = server_1_proc.stderr.readline()
-        _ = server_1_proc.stderr.readline()
-        # Skip line "Generating new identity (libp2p private key) in {path to file}"
-        _ = server_1_proc.stderr.readline()
+        line = server_1_proc.stderr.readline()
+        if "UserWarning: The installed version of bitsandbytes was compiled without GPU support" in line:
+            # Skip the rest of the warning
+            server_1_proc.stderr.readline()
+            # Skip line "Generating new identity (libp2p private key) in {path to file}"
+            server_1_proc.stderr.readline()
+
         line = server_1_proc.stderr.readline()
         addrs_pattern_result = re.search(pattern, line)
         assert addrs_pattern_result is not None, line
@@ -51,10 +54,12 @@ def test_cli_run_server_identity_path():
             encoding="utf-8",
         )
 
-        # Skip line "UserWarning: The installed version of bitsandbytes was compiled without GPU support. <...>"
-        _ = server_2_proc.stderr.readline()
-        _ = server_2_proc.stderr.readline()
         line = server_2_proc.stderr.readline()
+        if "UserWarning: The installed version of bitsandbytes was compiled without GPU support" in line:
+            # skip the rest of the warning
+            server_2_proc.stderr.readline()
+            line = server_2_proc.stderr.readline()
+
         addrs_pattern_result = re.search(pattern, line)
         assert addrs_pattern_result is not None, line
         addrs_2 = set(addrs_pattern_result.group(1).split(", "))
@@ -69,10 +74,12 @@ def test_cli_run_server_identity_path():
             encoding="utf-8",
         )
 
-        # Skip line "UserWarning: The installed version of bitsandbytes was compiled without GPU support. <...>"
-        _ = server_3_proc.stderr.readline()
-        _ = server_3_proc.stderr.readline()
         line = server_3_proc.stderr.readline()
+        if "UserWarning: The installed version of bitsandbytes was compiled without GPU support" in line:
+            # skip the rest of the warning
+            server_3_proc.stderr.readline()
+            line = server_3_proc.stderr.readline()
+
         addrs_pattern_result = re.search(pattern, line)
         assert addrs_pattern_result is not None, line
         addrs_3 = set(addrs_pattern_result.group(1).split(", "))
