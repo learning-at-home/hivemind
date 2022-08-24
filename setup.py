@@ -37,10 +37,10 @@ def proto_compile(output_path):
     import grpc_tools.protoc
 
     cli_args = [
-                   "grpc_tools.protoc",
-                   "--proto_path=hivemind/proto",
-                   f"--python_out={output_path}",
-               ] + glob.glob("hivemind/proto/*.proto")
+        "grpc_tools.protoc",
+        "--proto_path=hivemind/proto",
+        f"--python_out={output_path}",
+    ] + glob.glob("hivemind/proto/*.proto")
 
     code = grpc_tools.protoc.main(cli_args)
     if code:  # hint: if you get this error in jupyter, run in console for richer error message
@@ -149,7 +149,7 @@ setup(
     cmdclass={"build_py": BuildPy, "develop": Develop},
     description="Decentralized deep learning in PyTorch",
     long_description="Decentralized deep learning in PyTorch. Built to train models on thousands of volunteers "
-                     "across the world.",
+    "across the world.",
     author="Learning@home & contributors",
     author_email="hivemind-team@hotmail.com",
     url="https://github.com/learning-at-home/hivemind",
