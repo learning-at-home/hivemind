@@ -162,7 +162,7 @@ def test_remote_module_call(hidden_dim=16):
 
         # check that the server is still alive after processing a malformed request
         out3_yet_again = real_expert(dummy_x[1:])
-        assert torch.allclose(out3_yet_again, out3[1:])
+        assert torch.allclose(out3_yet_again, out3[1:], atol=1e-5, rtol=0)
 
 
 @pytest.mark.forked
