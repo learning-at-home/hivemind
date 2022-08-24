@@ -16,11 +16,6 @@ def test_dht_connection_successful():
     )
 
     first_line = dht_proc.stderr.readline()
-    if "UserWarning: The installed version of bitsandbytes was compiled without GPU support" in first_line:
-        # skip the rest of the warning
-        _ = dht_proc.stderr.readline()
-        first_line = dht_proc.stderr.readline()
-
     second_line = dht_proc.stderr.readline()
     dht_pattern_match = DHT_START_PATTERN.search(first_line)
     assert dht_pattern_match is not None, first_line
@@ -35,14 +30,9 @@ def test_dht_connection_successful():
         encoding="utf-8",
     )
 
-    first_line = dht_client_proc.stderr.readline()
-    if "UserWarning: The installed version of bitsandbytes was compiled without GPU support" in first_line:
-        # skip the rest of the warning and the first line with connectivity info
+    # skip two lines with connectivity info
+    for _ in range(2):
         dht_client_proc.stderr.readline()
-        dht_client_proc.stderr.readline()
-
-    # skip the line with connectivity info
-    dht_client_proc.stderr.readline()
     first_report_msg = dht_client_proc.stderr.readline()
 
     assert "2 DHT nodes (including this one) are in the local routing table" in first_report_msg, first_report_msg

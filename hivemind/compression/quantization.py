@@ -1,6 +1,7 @@
 import importlib.util
 import math
 import os
+import warnings
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from typing import Tuple
@@ -9,6 +10,7 @@ import numpy as np
 import torch
 
 if importlib.util.find_spec("bitsandbytes") is not None:
+    warnings.filterwarnings("ignore", module="bitsandbytes", category=UserWarning)
     from bitsandbytes.functional import quantize_blockwise, dequantize_blockwise
 
 from hivemind.compression.base import CompressionBase, CompressionInfo
