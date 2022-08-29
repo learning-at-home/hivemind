@@ -168,6 +168,7 @@ async def attach_event_on_finished(iterable: AsyncIterable[T], event: asyncio.Ev
 
 class _AsyncContextWrapper(AbstractAsyncContextManager):
     """Wrapper for a non-async context manager that allows entering and exiting it in EventLoop-friendly manner"""
+
     EXECUTOR_PID = None
     CONTEXT_EXECUTOR = None
     EXECUTOR_LOCK = mp.Lock()
@@ -179,7 +180,7 @@ class _AsyncContextWrapper(AbstractAsyncContextManager):
     def get_process_wide_executor(cls):
         if os.getpid() != cls.EXECUTOR_PID:
             with cls.EXECUTOR_LOCK:
-                cls.CONTEXT_EXECUTOR = ThreadPoolExecutor(max_workers=float('inf'))
+                cls.CONTEXT_EXECUTOR = ThreadPoolExecutor(max_workers=float("inf"))
                 cls.EXECUTOR_PID = os.getpid()
         return cls.CONTEXT_EXECUTOR
 
