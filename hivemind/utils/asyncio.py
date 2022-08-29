@@ -180,8 +180,9 @@ class _AsyncContextWrapper(AbstractAsyncContextManager):
     def get_process_wide_executor(cls):
         if os.getpid() != cls.EXECUTOR_PID:
             with cls.EXECUTOR_LOCK:
-                cls.CONTEXT_EXECUTOR = ThreadPoolExecutor(max_workers=float("inf"))
-                cls.EXECUTOR_PID = os.getpid()
+                if os.getpid() != cls.EXECUTOR_PID:
+                    cls.CONTEXT_EXECUTOR = ThreadPoolExecutor(max_workers=float("inf"))
+                    cls.EXECUTOR_PID = os.getpid()
         return cls.CONTEXT_EXECUTOR
 
     async def __aenter__(self):

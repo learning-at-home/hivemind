@@ -514,7 +514,7 @@ async def test_async_context_flooding():
 
     Here's how the test below works: suppose that the thread pool has at most N workers;
     If at least N + 1 coroutines await lock1 concurrently, N of them occupy workers and the rest are awaiting workers;
-    When the first of N workers acquires lock1, it lets coroutine A inside lock1 and into await sleep(1e-3);
+    When the first of N workers acquires lock1, it lets coroutine A inside lock1 and into await sleep(1e-2);
     During that sleep, one of the worker-less coroutines will take up the worker freed by coroutine A.
     Finally, coroutine A finishes sleeping and immediately gets stuck at lock2, because there are no free workers.
     Thus, every single coroutine is either awaiting an already acquired lock, or awaiting for free workers in executor.
@@ -524,9 +524,9 @@ async def test_async_context_flooding():
 
     async def coro():
         async with enter_asynchronously(lock1):
-            await asyncio.sleep(1e-3)
+            await asyncio.sleep(1e-2)
             async with enter_asynchronously(lock2):
-                await asyncio.sleep(1e-3)
+                await asyncio.sleep(1e-2)
 
     num_coros = max(100, mp.cpu_count() * 5 + 1)
     # note: if we deprecate py3.7, this can be reduced to max(33, cpu + 5); see https://bugs.python.org/issue35279
