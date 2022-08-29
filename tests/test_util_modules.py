@@ -524,11 +524,12 @@ async def test_async_context_flooding():
 
     async def coro():
         async with enter_asynchronously(lock1):
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(1e-3)
             async with enter_asynchronously(lock2):
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(1e-3)
 
-    num_coros = max(100, mp.cpu_count() + 5)  # at least one more than default num workers
+    num_coros = max(100, mp.cpu_count() * 5 + 1)
+    # note: if we deprecate py3.7, this can be reduced to max(33, cpu + 5); see https://bugs.python.org/issue35279
     await asyncio.wait({coro() for _ in range(num_coros)})
 
 
