@@ -143,8 +143,8 @@ class Runtime(threading.Thread):
                 if self.SHUTDOWN_TRIGGER in ready_objects:
                     break  # someone asked us to shutdown, break from the loop
 
-                logger.debug("Choosing the pool with highest priority")
-                pool = max(ready_objects, key=lambda pool: pool.priority)
+                logger.debug("Choosing the pool with first priority")
+                pool = min(ready_objects, key=lambda pool: pool.priority)
 
                 logger.debug(f"Loading batch from {pool.name}")
                 batch_index, batch_tensors = pool.load_batch_to_runtime(timeout, self.device)
