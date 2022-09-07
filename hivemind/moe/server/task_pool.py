@@ -170,7 +170,7 @@ class TaskPool(TaskPoolBase):
             for skip_i in range(prev_num_tasks):
                 finished_task_timestamp = (
                     self.undispatched_task_timestamps.get()
-                )  # earlier timestamp = higher priority
+                )  # earlier timestamp = lower (better) priority
                 if skip_i == prev_num_tasks - 1:
                     self.priority = finished_task_timestamp
 
