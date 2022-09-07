@@ -38,7 +38,7 @@ class TaskPoolBase(mp.context.ForkProcess, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def iterate_minibatches(self, *args, **kwargs) -> Generator[List[Task], None, None]:
+    def load_batch_to_runtime(self, **kwargs) -> Tuple[Any, List[torch.Tensor]]:
         pass
 
     @property
