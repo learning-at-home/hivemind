@@ -78,7 +78,7 @@ class Runtime(threading.Thread):
                 if self.stats_report_interval is not None:
                     self.stats_reporter.start()
                 logger.info("Started")
-                
+
                 batch_iterator = self.iterate_minibatches_from_pools()
                 if self.prefetch_batches > 0:
                     batch_iterator = BackgroundGenerator(batch_iterator, self.prefetch_batches)
@@ -129,7 +129,7 @@ class Runtime(threading.Thread):
         self.shutdown_trigger.set()
 
     def iterate_minibatches_from_pools(self, timeout=None):
-        """ Iteratively select non-empty pool with highest priority and loads a batch from that pool """
+        """Iteratively select non-empty pool with highest priority and loads a batch from that pool"""
         with DefaultSelector() as selector:
             for pool in self.pools:
                 selector.register(pool.batch_receiver, EVENT_READ, pool)
