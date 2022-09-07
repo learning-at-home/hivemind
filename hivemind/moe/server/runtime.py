@@ -81,7 +81,7 @@ class Runtime(threading.Thread):
                 
                 batch_iterator = self.iterate_minibatches_from_pools()
                 if self.prefetch_batches > 0:
-                    batch_iterator = BackgroundGenerator(batch_iterator, self.prefetch_batches):
+                    batch_iterator = BackgroundGenerator(batch_iterator, self.prefetch_batches)
 
                 for pool, batch_index, batch in batch_iterator:
                     logger.debug(f"Processing batch {batch_index} from pool {pool.name}")
