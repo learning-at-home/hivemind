@@ -27,7 +27,7 @@ class TaskPoolBase(mp.context.ForkProcess, metaclass=ABCMeta):
     def __init__(self, process_func: callable, daemon=True, **kwargs):
         super().__init__(daemon=daemon, **kwargs)
         self.process_func = process_func
-        self._priority = mp.Value(ctypes.c_double, 1.0)  # higher priority = the more urgent to process this pool
+        self._priority = mp.Value(ctypes.c_double, 1.0)  # lower priority = the more urgent to process this pool
 
     @abstractmethod
     def run(self):
@@ -170,7 +170,7 @@ class TaskPool(TaskPoolBase):
             for skip_i in range(prev_num_tasks):
                 finished_task_timestamp = (
                     self.undispatched_task_timestamps.get()
-                )  # earlier timestamp = higher priority
+                )  # earlier timestamp = smaller (better) priority, earlier processing
                 if skip_i == prev_num_tasks - 1:
                     self.priority = finished_task_timestamp
 
