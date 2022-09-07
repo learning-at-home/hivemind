@@ -230,7 +230,7 @@ class TaskPool(TaskPoolBase):
         return not self.batch_receiver.poll()
 
     def load_batch_to_runtime(self, timeout=None, device=None) -> Tuple[Any, List[torch.Tensor]]:
-        """receive next batch of numpy arrays"""
+        """receive next batch of tensors"""
         if not self.batch_receiver.poll(timeout):
             raise TimeoutError()
 
