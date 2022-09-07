@@ -38,7 +38,7 @@ class TaskPoolBase(mp.context.ForkProcess, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def load_batch_to_runtime(self, **kwargs) -> Tuple[Any, List[torch.Tensor]]:
+    def load_batch_to_runtime(self) -> Tuple[Any, List[torch.Tensor]]:
         pass
 
     @property
