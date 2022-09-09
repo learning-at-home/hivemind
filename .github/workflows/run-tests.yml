@@ -31,7 +31,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build bitsandbytes
         run: |
-          pip install bitsandbytes==0.32.2
+          pip install bitsandbytes==0.32.3
       - name: Build hivemind
         run: |
           pip install .
@@ -93,7 +93,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build bitsandbytes
         run: |
-          pip install bitsandbytes==0.32.2
+          pip install bitsandbytes==0.32.3
       - name: Build hivemind
         run: |
           pip install -e . --no-use-pep517
