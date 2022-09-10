@@ -30,7 +30,7 @@ def test_dht_connection_successful():
         encoding="utf-8",
     )
 
-    # skip two lines with connectivity info
+    # skip first two lines with connectivity info
     for _ in range(2):
         dht_client_proc.stderr.readline()
     first_report_msg = dht_client_proc.stderr.readline()
