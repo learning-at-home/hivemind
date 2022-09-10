@@ -53,6 +53,10 @@ If your versions of Python and PyTorch match the requirements, you can install h
 pip install hivemind
 ```
 
+Also, if you want to use blockwise 8-bit compression from [bitsandbytes](https://github.com/TimDettmers/bitsandbytes) 
+during data transfer, you can install it with `pip install hivemind[bitsandbytes]`. 
+After that, you can use the `BlockwiseQuantization` class in [hivemind.compression](./hivemind/compression)
+
 ### From source
 
 To install hivemind from source, simply run the following:
