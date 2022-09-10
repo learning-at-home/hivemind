@@ -35,7 +35,7 @@ def test_dht_connection_successful():
         dht_client_proc.stderr.readline()
     first_report_msg = dht_client_proc.stderr.readline()
 
-    assert "2 DHT nodes (including this one) are in the local routing table" in first_report_msg
+    assert "2 DHT nodes (including this one) are in the local routing table" in first_report_msg, first_report_msg
 
     # ensure we get the output of dht_proc after the start of dht_client_proc
     sleep(dht_refresh_period)

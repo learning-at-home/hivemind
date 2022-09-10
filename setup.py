@@ -23,7 +23,6 @@ EXECUTABLES = {
     "p2pd": "1252a2a2095040cef8e317f5801df8b8c93559711783a2496a0aff2f3e177e39",
 }
 
-
 here = os.path.abspath(os.path.dirname(__file__))
 
 
@@ -140,7 +139,9 @@ with open("requirements-dev.txt") as dev_requirements_file:
 with open("requirements-docs.txt") as docs_requirements_file:
     extras["docs"] = list(map(str, parse_requirements(docs_requirements_file)))
 
-extras["all"] = extras["dev"] + extras["docs"]
+extras["bitsandbytes"] = ["bitsandbytes==0.32.3"]
+
+extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
 
 setup(
     name="hivemind",
