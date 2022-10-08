@@ -73,6 +73,32 @@ async def test_identity():
         P2P.generate_identity(id1_path)
 
 
+@pytest.mark.asyncio
+async def test_check_if_identity_free():
+    with tempfile.TemporaryDirectory() as tempdir:
+        id1_path = os.path.join(tempdir, "id1")
+        id2_path = os.path.join(tempdir, "id2")
+
+        p2ps = [await P2P.create(identity_path=id1_path)]
+        initial_peers = await p2ps[0].get_visible_maddrs()
+
+        p2ps.append(await P2P.create(initial_peers=initial_peers))
+        p2ps.append(await P2P.create(initial_peers=initial_peers, identity_path=id2_path))
+
+        with pytest.raises(P2PDaemonError, match=r"Identity.+is already taken by another peer"):
+            await P2P.create(initial_peers=initial_peers, identity_path=id1_path)
+        with pytest.raises(P2PDaemonError, match=r"Identity.+is already taken by another peer"):
+            await P2P.create(initial_peers=initial_peers, identity_path=id2_path)
+
+        # Must work if a P2P with a certain identity is restarted
+        await p2ps[-1].shutdown()
+        p2ps.pop()
+        p2ps.append(await P2P.create(initial_peers=initial_peers, identity_path=id2_path))
+
+        for instance in p2ps:
+            await instance.shutdown()
+
+
 @pytest.mark.parametrize(
     "host_maddrs",
     [

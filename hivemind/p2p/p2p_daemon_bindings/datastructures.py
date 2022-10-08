@@ -9,9 +9,10 @@ from typing import Any, Sequence, Union
 
 import base58
 import multihash
+from cryptography.hazmat.primitives import serialization
 from multiaddr import Multiaddr, protocols
 
-from hivemind.proto import p2pd_pb2
+from hivemind.proto import crypto_pb2, p2pd_pb2
 
 # NOTE: On inlining...
 # See: https://github.com/libp2p/specs/issues/138
@@ -87,6 +88,32 @@ class PeerID:
     def from_base58(cls, base58_id: str) -> "PeerID":
         peer_id_bytes = base58.b58decode(base58_id)
         return cls(peer_id_bytes)
+
+    @classmethod
+    def from_identity(cls, data: bytes) -> "PeerID":
+        """
+        See [1] for the specification of how this conversion should happen.
+
+        [1] https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md#peer-ids
+        """
+
+        key_data = crypto_pb2.PrivateKey.FromString(data).data
+        private_key = serialization.load_der_private_key(key_data, password=None)
+
+        encoded_public_key = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        encoded_public_key = crypto_pb2.PublicKey(
+            key_type=crypto_pb2.RSA,
+            data=encoded_public_key,
+        ).SerializeToString()
+
+        algo = multihash.Func.sha2_256
+        if ENABLE_INLINING and len(encoded_public_key) <= MAX_INLINE_KEY_LENGTH:
+            algo = IDENTITY_MULTIHASH_CODE
+        encoded_digest = multihash.digest(encoded_public_key, algo).encode()
+        return cls(encoded_digest)
 
 
 def sha256_digest(data: Union[str, bytes]) -> bytes:
