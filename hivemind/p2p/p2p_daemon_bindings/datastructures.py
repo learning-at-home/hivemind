@@ -91,6 +91,12 @@ class PeerID:
 
     @classmethod
     def from_identity(cls, data: bytes) -> "PeerID":
+        """
+        See [1] for the specification of how this conversion should happen.
+
+        [1] https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md#peer-ids
+        """
+
         key_data = crypto_pb2.PrivateKey.FromString(data).data
         private_key = serialization.load_der_private_key(key_data, password=None)
 
