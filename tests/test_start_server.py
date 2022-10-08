@@ -34,8 +34,9 @@ def test_cli_run_server_identity_path():
             encoding="utf-8",
         )
 
-        # Skip line "Generating new identity (libp2p private key) in {path to file}"
-        server_1_proc.stderr.readline()
+        line = server_1_proc.stderr.readline()
+        assert "Generating new identity" in line
+
         line = server_1_proc.stderr.readline()
         addrs_pattern_result = re.search(pattern, line)
         assert addrs_pattern_result is not None, line
