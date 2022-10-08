@@ -80,7 +80,7 @@ async def test_check_if_identity_free():
         id2_path = os.path.join(tempdir, "id2")
 
         p2ps = [await P2P.create(identity_path=id1_path)]
-        initial_peers = p2ps[0].get_visible_maddrs()
+        initial_peers = await p2ps[0].get_visible_maddrs()
 
         p2ps.append(await P2P.create(initial_peers=initial_peers))
         p2ps.append(await P2P.create(initial_peers=initial_peers, identity_path=id2_path))

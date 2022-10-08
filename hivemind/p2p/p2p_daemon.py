@@ -8,7 +8,6 @@ from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
 from dataclasses import dataclass
 from datetime import datetime
-from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure
 from importlib.resources import path
 from typing import Any, AsyncIterator, Awaitable, Callable, List, Optional, Sequence, Tuple, Type, TypeVar, Union
 
@@ -19,6 +18,7 @@ import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.control import DEFAULT_MAX_MSG_SIZE, P2PDaemonError, P2PHandlerError
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
+from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure
 from hivemind.proto import crypto_pb2
 from hivemind.proto.p2pd_pb2 import RPCError
 from hivemind.utils.asyncio import as_aiter, asingle
@@ -186,7 +186,7 @@ class P2P:
                         use_ipfs=use_ipfs,
                         use_relay=use_relay,
                     ):
-                        raise P2PDaemonError("Identity from `{identity_path}` is already taken by another peer")
+                        raise P2PDaemonError(f"Identity from `{identity_path}` is already taken by another peer")
             else:
                 logger.info(f"Generating new identity to be saved in `{identity_path}`")
                 self.generate_identity(identity_path)
@@ -246,7 +246,7 @@ class P2P:
         use_auto_relay: bool,
         use_ipfs: bool,
         use_relay: bool,
-    ) -> None:
+    ) -> bool:
         with open(identity_path, "rb") as f:
             peer_id = PeerID.from_identity(f.read())
 
