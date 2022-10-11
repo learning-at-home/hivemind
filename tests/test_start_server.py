@@ -53,9 +53,6 @@ def test_cli_run_server_identity_path():
         )
 
         line = server_2_proc.stderr.readline()
-        assert re.search(r"Checking that identity.+is not used by other peers", line) is not None
-
-        line = server_2_proc.stderr.readline()
         addrs_pattern_result = re.search(pattern, line)
         assert addrs_pattern_result is not None, line
         addrs_2 = set(addrs_pattern_result.group(1).split(", "))

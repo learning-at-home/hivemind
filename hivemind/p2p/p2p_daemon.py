@@ -131,7 +131,8 @@ class P2P:
         :param quic: Deprecated, has no effect since libp2p 0.17.0
         :param use_relay_hop: Deprecated, has no effect since libp2p 0.17.0
         :param use_relay_discovery: Deprecated, has no effect since libp2p 0.17.0
-        :param check_if_identity_free: If enabled (default) and ``identity_path`` is provided,
+        :param check_if_identity_free: If enabled (default), ``identity_path`` is provided,
+                                       and we are connecting to an existing swarm,
                                        ensure that this identity is not used by other peers already.
                                        This slows down ``P2P.create()`` but protects from unintuitive libp2p errors
                                        appearing in case of the identity collision.
@@ -176,7 +177,7 @@ class P2P:
 
         if identity_path is not None:
             if os.path.isfile(identity_path):
-                if check_if_identity_free:
+                if check_if_identity_free and need_bootstrap:
                     logger.info(f"Checking that identity from `{identity_path}` is not used by other peers")
                     if await cls.is_identity_taken(
                         identity_path,

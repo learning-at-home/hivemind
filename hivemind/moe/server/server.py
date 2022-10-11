@@ -247,10 +247,8 @@ class Server(threading.Thread):
         if self.checkpoint_saver is not None:
             self.checkpoint_saver.start()
 
-        for process in self.conn_handlers:
-            if not process.is_alive():
-                process.start()
-            process.ready.result()
+        for handler in self.conn_handlers:
+            handler.run_in_background()
 
         try:
             self.runtime.run()
@@ -287,9 +285,8 @@ class Server(threading.Thread):
         """
         self.ready.clear()
 
-        for process in self.conn_handlers:
-            process.terminate()
-            process.join()
+        for handler in self.conn_handlers:
+            handler.shutdown()
         logger.debug("Connection handlers terminated")
 
         if self.module_backends:
@@ -301,11 +298,10 @@ class Server(threading.Thread):
             self.checkpoint_saver.join()
 
         self.dht.shutdown()
-        self.dht.join()
 
         logger.debug(f"Shutting down runtime")
-
         self.runtime.shutdown()
+
         logger.info("Server shutdown succesfully")
 
 
