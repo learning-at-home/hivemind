@@ -45,7 +45,7 @@ hivemind-server --expert_cls ffn --hidden_dim 512 --num_experts 5 --expert_patte
 
 This server serves 5 feedforward experts with ReLU and LayerNorm
 (see
-architecture [here](https://github.com/learning-at-home/hivemind/blob/master/hivemind/server/layers/__init__.py#L7-L21))
+architecture [here](https://github.com/learning-at-home/hivemind/blob/master/hivemind/moe/server/layers/common.py#L19))
 . In order to connect to this server, you should copy its address from console outputs:
 ```shell
 [...][INFO][moe.server.create:156] Running DHT node on ['ADDRESS_WILL_BE_PRINTED_HERE']
