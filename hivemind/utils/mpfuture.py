@@ -4,11 +4,11 @@ import asyncio
 import concurrent.futures._base as base
 import multiprocessing as mp
 import os
-import pickle
 import threading
 import uuid
 from contextlib import nullcontext
 from enum import Enum, auto
+from multiprocessing.reduction import ForkingPickler
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 from weakref import ref
 
@@ -303,7 +303,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     def __getstate__(self):
         return dict(
             _sender_pipe=self._sender_pipe,
-            _shared_state_code=pickle.dumps(self._shared_state_code),
+            _shared_state_code=ForkingPickler.dumps(self._shared_state_code).tobytes(),
             _origin_pid=self._origin_pid,
             _uid=self._uid,
             _use_lock=self._use_lock,
@@ -314,7 +314,7 @@ class MPFuture(base.Future, Generic[ResultType]):
     def __setstate__(self, state):
         self._sender_pipe = state["_sender_pipe"]
         try:
-            self._shared_state_code = pickle.loads(state["_shared_state_code"])
+            self._shared_state_code = ForkingPickler.loads(state["_shared_state_code"])
         except RuntimeError:
             # If the origin process garbage-collects all instances of MPFuture using the same shmem buffer,
             # the underlying buffer is freed, and we will get RuntimeError ("unable to open shared memory object")
