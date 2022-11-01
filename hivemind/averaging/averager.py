@@ -310,7 +310,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     method, args, kwargs = self._inner_pipe.recv()
                 except (OSError, ConnectionError, RuntimeError) as e:
                     logger.exception(e)
-                    break
+                    await asyncio.sleep(self.request_timeout)
+                    continue
                 task = asyncio.create_task(getattr(self, method)(*args, **kwargs))
                 if method == "_shutdown":
                     await task
