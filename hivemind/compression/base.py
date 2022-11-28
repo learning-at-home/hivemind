@@ -81,16 +81,14 @@ class NoCompression(CompressionBase):
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
         tensor = tensor.detach()
+        dtype_name = str(tensor.dtype).lstrip("torch.")
         if tensor.dtype == torch.bfloat16:
-            array = tensor.to(torch.float32).numpy()
-            dtype_name = "bfloat16"
-        else:
-            array = tensor.numpy()
-            dtype_name = array.dtype.name
+            tensor = tensor.to(torch.float32)
+
         return runtime_pb2.Tensor(
             compression=self.compression_type,
-            buffer=array.tobytes(),
-            size=array.shape,
+            buffer=tensor.numpy().tobytes(),
+            size=tensor.shape,
             dtype=dtype_name,
             requires_grad=tensor.requires_grad,
         )
