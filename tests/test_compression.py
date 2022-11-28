@@ -72,7 +72,7 @@ def test_serialize_tensor():
 def test_serialize_bfloat16():
     tensor = torch.randn(4096, 16, dtype=torch.bfloat16)
     _check(tensor, CompressionType.NONE)
-    _check(tensor, CompressionType.BLOCKWISE_8BIT)
+    _check(tensor, CompressionType.BLOCKWISE_8BIT, rtol=0.1, atol=0.01, chunk_size=1024)
 
 
 @pytest.mark.forked
