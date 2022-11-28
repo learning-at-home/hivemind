@@ -51,7 +51,9 @@ def _check(tensor, compression, rtol=1e-5, atol=1e-8, chunk_size=30 * 1024):
     chunks = list(split_for_streaming(serialized_tensor, chunk_size))
     assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
     restored = combine_from_streaming(chunks)
-    assert torch.allclose(deserialize_torch_tensor(restored), tensor, rtol=rtol, atol=atol)
+    result = deserialize_torch_tensor(restored)
+    assert torch.allclose(result, tensor, rtol=rtol, atol=atol)
+    assert result.dtype == tensor.dtype
 
 
 @pytest.mark.forked
