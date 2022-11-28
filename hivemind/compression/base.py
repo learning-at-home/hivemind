@@ -80,18 +80,27 @@ class NoCompression(CompressionBase):
     compression_type = runtime_pb2.CompressionType.NONE
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        array = tensor.detach().numpy()
+        tensor = tensor.detach()
+        dtype_name = str(tensor.dtype).lstrip("torch.")
+        if tensor.dtype == torch.bfloat16:
+            tensor = tensor.to(torch.float32)
+
         return runtime_pb2.Tensor(
             compression=self.compression_type,
-            buffer=array.tobytes(),
-            size=array.shape,
-            dtype=array.dtype.name,
+            buffer=tensor.numpy().tobytes(),
+            size=tensor.shape,
+            dtype=dtype_name,
             requires_grad=tensor.requires_grad,
         )
 
     def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
-        array = np.frombuffer(serialized_tensor.buffer, dtype=np.dtype(serialized_tensor.dtype))
-        return torch.as_tensor(array).reshape(tuple(serialized_tensor.size))
+        if serialized_tensor.dtype == "bfloat16":
+            array = np.frombuffer(serialized_tensor.buffer, dtype=np.float32)
+            tensor = torch.as_tensor(array, dtype=torch.bfloat16)
+        else:
+            array = np.frombuffer(serialized_tensor.buffer, dtype=np.dtype(serialized_tensor.dtype))
+            tensor = torch.as_tensor(array)
+        return tensor.reshape(tuple(serialized_tensor.size))
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
         return 1.0
