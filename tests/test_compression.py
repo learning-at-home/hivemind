@@ -68,6 +68,7 @@ def test_serialize_tensor():
     _check(torch.tensor(1.0), CompressionType.FLOAT16)
 
 
+@pytest.mark.forked
 def test_serialize_bfloat16():
     tensor = torch.randn(4096, 16, dtype=torch.bfloat16)
     _check(tensor, CompressionType.NONE)
