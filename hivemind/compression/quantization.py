@@ -180,5 +180,5 @@ class BlockwiseQuantization(Quantization):
             result = dequantize_blockwise(quantized, (absmax, codebook))  # Always returns a float32 tensor
         except NameError:
             raise ImportError(BNB_MISSING_MESSAGE)
-        result = result.to(getattr(torch, serialized_tensor.dtype))
+        result = result.to(dtype=getattr(torch, serialized_tensor.dtype))
         return result
