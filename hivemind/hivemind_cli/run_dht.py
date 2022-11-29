@@ -20,7 +20,7 @@ async def report_status(dht: DHT, node: DHTNode):
     logger.debug(f"Local storage contents: {node.protocol.storage}")
 
     # Contact peers and keep the routing table healthy (remove stale PeerIDs)
-    await dht.get(f"heartbeat_{token_hex(16)}")
+    await node.get(f"heartbeat_{token_hex(16)}")
 
 
 def main():
