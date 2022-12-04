@@ -93,16 +93,12 @@ class P2P:
         identity_path: Optional[str] = None,
         idle_timeout: float = 30,
         nat_port_map: bool = True,
-        relay_hop_limit: int = 0,
         startup_timeout: float = 15,
         tls: bool = True,
         use_auto_relay: bool = False,
         use_ipfs: bool = False,
         use_relay: bool = True,
         persistent_conn_max_msg_size: int = DEFAULT_MAX_MSG_SIZE,
-        quic: Optional[bool] = None,
-        use_relay_hop: Optional[bool] = None,
-        use_relay_discovery: Optional[bool] = None,
         check_if_identity_free: bool = True,
     ) -> "P2P":
         """
@@ -122,15 +118,11 @@ class P2P:
         :param idle_timeout: kill daemon if client has been idle for a given number of
                              seconds before opening persistent streams
         :param nat_port_map: Enables NAT port mapping
-        :param relay_hop_limit: sets the hop limit for hop relays
         :param startup_timeout: raise a P2PDaemonError if the daemon does not start in ``startup_timeout`` seconds
         :param tls: Enables TLS1.3 channel security protocol
         :param use_auto_relay: enables autorelay
         :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
         :param use_relay: enables circuit relay
-        :param quic: Deprecated, has no effect since libp2p 0.17.0
-        :param use_relay_hop: Deprecated, has no effect since libp2p 0.17.0
-        :param use_relay_discovery: Deprecated, has no effect since libp2p 0.17.0
         :param check_if_identity_free: If enabled (default), ``identity_path`` is provided,
                                        and we are connecting to an existing swarm,
                                        ensure that this identity is not used by other peers already.
@@ -142,14 +134,6 @@ class P2P:
         assert not (
             initial_peers and use_ipfs
         ), "User-defined initial_peers and use_ipfs=True are incompatible, please choose one option"
-
-        if not all(arg is None for arg in [quic, use_relay_hop, use_relay_discovery]):
-            warnings.warn(
-                "Parameters `quic`, `use_relay_hop`, and `use_relay_discovery` of hivemind.P2P "
-                "have no effect since libp2p 0.17.0 and will be removed in hivemind 1.2.0+",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
         self = cls()
         with path(cli, P2PD_FILENAME) as p:
@@ -204,7 +188,6 @@ class P2P:
             listen=self._daemon_listen_maddr,
             natPortMap=nat_port_map,
             relay=use_relay,
-            relayHopLimit=relay_hop_limit,
             tls=tls,
             persistentConnMaxMsgSize=persistent_conn_max_msg_size,
             **process_kwargs,
@@ -244,7 +227,6 @@ class P2P:
         *,
         initial_peers: Optional[Sequence[Union[Multiaddr, str]]],
         tls: bool,
-        use_auto_relay: bool,
         use_ipfs: bool,
         use_relay: bool,
     ) -> bool:
@@ -255,7 +237,6 @@ class P2P:
             initial_peers=initial_peers,
             dht_mode="client",
             tls=tls,
-            use_auto_relay=use_auto_relay,
             use_ipfs=use_ipfs,
             use_relay=use_relay,
         )
