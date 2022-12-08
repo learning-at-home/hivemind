@@ -8,6 +8,7 @@ import ctypes
 import multiprocessing as mp
 import os
 import random
+import signal
 import threading
 import weakref
 from dataclasses import asdict
@@ -329,6 +330,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         Starts averager in a background process. if await_ready, this method will wait until background dht
         is ready to process incoming requests or for :timeout: seconds max.
         """
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         self.start()
         if await_ready:
             self.wait_until_ready(timeout)
