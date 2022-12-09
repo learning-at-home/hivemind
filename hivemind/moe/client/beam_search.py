@@ -171,7 +171,7 @@ class MoEBeamSearcher:
     ) -> Dict[ExpertPrefix, Dict[Coordinate, ExpertInfo]]:
         """
         :param prefixes: a list of prefix for which to find active successor uids
-        :param grid_size: if specified, only return successors if ther are in range [0, grid_size)
+        :param grid_size: if specified, only return successors if they are in range [0, grid_size)
         :param return_future: if False (default), find and return successors. Otherwise return MPFuture and fill later.
         :returns: for every expert, return a dict{active_next_coordinate: (matching_expert_uid, matching_endpoint)}
         :note: if a prefix is not found, get_active_successors will return an empty dictionary for that prefix
