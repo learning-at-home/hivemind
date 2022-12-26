@@ -20,6 +20,7 @@ ENV PATH="/opt/conda/bin:${PATH}"
 
 RUN conda install python~=3.8 pip && \
     pip install --no-cache-dir torch torchvision torchaudio && \
+    pip install --upgrade --no-cache-dir "pip>=20" && \
     conda clean --all
 
 COPY requirements.txt hivemind/requirements.txt
