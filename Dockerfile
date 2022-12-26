@@ -6,7 +6,7 @@ WORKDIR /home
 # Set en_US.UTF-8 locale by default
 RUN echo "LC_ALL=en_US.UTF-8" >> /etc/environment
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-RUN source "$HOME/.cargo/env"
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Install packages
 RUN apt-get update && apt-get install -y --no-install-recommends --force-yes \
