@@ -13,6 +13,7 @@ RUN rustc --version
 # Install packages
 RUN apt-get update && apt-get install -y --no-install-recommends --force-yes \
   build-essential \
+  curl \
   wget \
   git \
   vim \
@@ -23,7 +24,6 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 ENV PATH="/opt/conda/bin:${PATH}"
 
 RUN conda install python~=3.8 pip && \
-    pip install --upgrade pip rust setuptools-rust && \
     pip install --no-cache-dir torch torchvision torchaudio && \
     conda clean --all
 
