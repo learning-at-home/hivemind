@@ -5,6 +5,7 @@ LABEL repository="hivemind"
 WORKDIR /home
 # Set en_US.UTF-8 locale by default
 RUN echo "LC_ALL=en_US.UTF-8" >> /etc/environment
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 
 # Install packages
 RUN apt-get update && apt-get install -y --no-install-recommends --force-yes \
@@ -20,7 +21,6 @@ ENV PATH="/opt/conda/bin:${PATH}"
 
 RUN conda install python~=3.8 pip && \
     pip install --no-cache-dir torch torchvision torchaudio && \
-    pip install --upgrade --no-cache-dir "pip>=20" && \
     conda clean --all
 
 COPY requirements.txt hivemind/requirements.txt
