@@ -104,6 +104,8 @@ class P2P:
         use_relay_hop: Optional[bool] = None,
         use_relay_discovery: Optional[bool] = None,
         check_if_identity_free: bool = True,
+        no_listen: bool = False,
+        trustedRelays: Optional[Sequence[Union[Multiaddr, str]]] = ("",),
     ) -> "P2P":
         """
         Start a new p2pd process and connect to it.
@@ -171,10 +173,12 @@ class P2P:
             ("bootstrapPeers", initial_peers),
             ("hostAddrs", host_maddrs),
             ("announceAddrs", announce_maddrs),
+            ("trustedRelays", trustedRelays),
         ]:
             if value:
                 process_kwargs[param] = self._maddrs_to_str(value)
-
+        if no_listen:
+            process_kwargs["noListenAddrs"] = 1
         if identity_path is not None:
             if os.path.isfile(identity_path):
                 if check_if_identity_free and need_bootstrap:
