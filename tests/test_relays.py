@@ -18,7 +18,7 @@ async def ping_to_client(dht, node, peer_id: str):
         (False, False),
     ],
 )
-def test_client_pinging(use_auto_relay: bool, use_relay: bool):
+def test_autorelay(use_auto_relay: bool, use_relay: bool):
     dht_first_peer = hivemind.DHT(
         start=True,
         use_auto_relay=use_auto_relay,
@@ -29,9 +29,18 @@ def test_client_pinging(use_auto_relay: bool, use_relay: bool):
     initial_peers = dht_first_peer.get_visible_maddrs()
     assert dht_first_peer_id is not None
 
+    dht_third_peer = hivemind.DHT(
+        initial_peers=initial_peers,
+        host_maddrs=[],
+        start=True,
+        no_listen=True,
+        use_relay=use_relay,
+        client_mode=False,
+        use_auto_relay=use_auto_relay,
+    )
+    time.sleep(5)
     dht_second_peer = hivemind.DHT(
         initial_peers=initial_peers,
-        host_maddrs=["/ip4/0.0.0.0/tcp/0"],
         start=True,
         client_mode=False,
         no_listen=False,
@@ -39,30 +48,17 @@ def test_client_pinging(use_auto_relay: bool, use_relay: bool):
         use_auto_relay=use_auto_relay,
     )
 
-    dht_third_peer = hivemind.DHT(
-        initial_peers=initial_peers,
-        host_maddrs=["/ip4/0.0.0.0/tcp/0"],
-        start=True,
-        client_mode=False,
-        no_listen=True,
-        use_relay=use_relay,
-        use_auto_relay=use_auto_relay,
-    )
-
     assert dht_first_peer.is_alive() and dht_second_peer.is_alive() and dht_third_peer.is_alive()
 
-    time_passed = time.time()
-    while time.time() - time_passed < 10:
+    time_start = time.perf_counter()
+    while time.perf_counter() - time_start < 30:
         reached_ip = dht_second_peer.run_coroutine(partial(ping_to_client, peer_id=dht_third_peer.peer_id))
         if reached_ip:
+            assert use_relay
             break
         time.sleep(2)
-
-    if use_auto_relay and use_relay:
-        assert reached_ip is not None
     else:
-        assert reached_ip is None
+        assert not use_relay
 
-    dht_first_peer.shutdown()
-    dht_second_peer.shutdown()
-    dht_third_peer.shutdown()
+    for peer in dht_first_peer, dht_second_peer, dht_third_peer:
+        peer.shutdown()
