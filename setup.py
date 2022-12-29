@@ -13,14 +13,14 @@ from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
-P2PD_VERSION = "v0.3.15"
+P2PD_VERSION = "v0.3.16.dev1"
 
 P2PD_SOURCE_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz"
 P2PD_BINARY_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/"
 
 # The value is sha256 of the binary from the release page
 EXECUTABLES = {
-    "p2pd": "cdeb174741558c58e1def0c2c20fa3419d0e9dc8d828ea90622466f8a2ab29ba",
+    "p2pd": "5902dc2b0d2d17493b87fc9660edb8fd8bc0792c32ec7f69a034d7da784d04f5",
 }
 
 here = os.path.abspath(os.path.dirname(__file__))
