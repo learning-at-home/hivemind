@@ -10,6 +10,7 @@ async def ping_to_client(dht, node, peer_id: str):
     return await node.protocol.call_ping(hivemind.PeerID.from_base58(str(peer_id)))
 
 
+@pytest.mark.forked
 @pytest.mark.parametrize(
     "use_auto_relay,use_relay",
     [
@@ -19,10 +20,9 @@ async def ping_to_client(dht, node, peer_id: str):
 )
 def test_client_pinging(use_auto_relay: bool, use_relay: bool):
     dht_first_peer = hivemind.DHT(
-        host_maddrs=["/ip4/0.0.0.0/tcp/31330"],
         start=True,
-        use_auto_relay=True,
-        use_relay=True,
+        use_auto_relay=use_auto_relay,
+        use_relay=use_relay,
         force_reachability="public",
     )
     dht_first_peer_id = dht_first_peer.peer_id
@@ -34,7 +34,7 @@ def test_client_pinging(use_auto_relay: bool, use_relay: bool):
         host_maddrs=["/ip4/0.0.0.0/tcp/0"],
         start=True,
         client_mode=False,
-        no_listen=True,
+        no_listen=False,
         use_relay=use_relay,
         use_auto_relay=use_auto_relay,
     )
@@ -49,13 +49,20 @@ def test_client_pinging(use_auto_relay: bool, use_relay: bool):
         use_auto_relay=use_auto_relay,
     )
 
-    time.sleep(4*60)
     assert dht_first_peer.is_alive() and dht_second_peer.is_alive() and dht_third_peer.is_alive()
 
-    reached_ip = dht_second_peer.run_coroutine(partial(ping_to_client, peer_id=dht_third_peer.peer_id))
-
+    time_passed = time.time()
+    while time.time() - time_passed < 10:
+        reached_ip = dht_second_peer.run_coroutine(partial(ping_to_client, peer_id=dht_third_peer.peer_id))
+        if reached_ip:
+            break
+        time.sleep(2)
 
     if use_auto_relay and use_relay:
         assert reached_ip is not None
     else:
         assert reached_ip is None
+
+    dht_first_peer.shutdown()
+    dht_second_peer.shutdown()
+    dht_third_peer.shutdown()
