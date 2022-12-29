@@ -20,7 +20,7 @@ P2PD_BINARY_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/release
 
 # The value is sha256 of the binary from the release page
 EXECUTABLES = {
-    "p2pd": "51dbdc40657a955afc97aa58a8242e91b07b985f4f9299e2ae4a518e6e4887c4",
+    "p2pd": "cdeb174741558c58e1def0c2c20fa3419d0e9dc8d828ea90622466f8a2ab29ba",
 }
 
 here = os.path.abspath(os.path.dirname(__file__))
