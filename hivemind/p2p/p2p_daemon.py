@@ -173,7 +173,7 @@ class P2P:
             ("bootstrapPeers", initial_peers),
             ("hostAddrs", host_maddrs),
             ("announceAddrs", announce_maddrs),
-            ("trustedRelays", trustedRelays),
+            ("trustedRelays", trusted_relays),
         ]:
             if value:
                 process_kwargs[param] = self._maddrs_to_str(value)
