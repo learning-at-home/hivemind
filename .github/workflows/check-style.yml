@@ -26,6 +26,7 @@ jobs:
           isortVersion: "5.10.1"
 
   codespell:
+    runs-on: ubuntu-latest
     steps:
       - uses: codespell-project/actions-codespell@v1
         with:
