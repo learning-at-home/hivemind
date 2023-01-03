@@ -26,7 +26,7 @@ class TensorPartContainer:
     :param peer_fractions: for each peer, a target fraction of vector elements that this peer should average
     :param compression: optionally compress tensors with this compression algorithm before sending them to peers
     :param part_size_bytes: greedily split tensors into parts of up to this many bytes (after compression)
-    :param tensor_infos: CompressionInfo for each respective tensor; this determines how the tensor will be comressed
+    :param tensor_infos: CompressionInfo for each respective tensor; this determines how the tensor will be compressed
     :param return_deltas: if True, output tensors are differences (aggregated tensor - local tensor)
     :param prefetch: when compressing, pre-compute this many compressed tensors in background
     """

@@ -24,3 +24,8 @@ jobs:
       - uses: isort/isort-action@master
         with:
           isortVersion: "5.10.1"
+
+  codespell:
+    uses: codespell-project/actions-codespell@v1
+    with:
+      only_warn: 1
