@@ -27,6 +27,6 @@ jobs:
 
   codespell:
     steps:
-      uses: codespell-project/actions-codespell@v1
-      with:
-        only_warn: 1
+      - uses: codespell-project/actions-codespell@v1
+        with:
+          only_warn: 1
