@@ -9,12 +9,10 @@ from typing import Tuple
 import numpy as np
 import torch
 
-if importlib.util.find_spec("bitsandbytes") is not None:
-    warnings.filterwarnings("ignore", module="bitsandbytes", category=UserWarning)
-    from bitsandbytes.functional import quantize_blockwise, dequantize_blockwise
-
 from hivemind.compression.base import CompressionBase, CompressionInfo
 from hivemind.proto import runtime_pb2
+
+warnings.filterwarnings("ignore", module="bitsandbytes", category=UserWarning)
 
 EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("QUANTIZATION_THREADS", 128)))
 
@@ -132,6 +130,9 @@ class BlockwiseQuantization(Quantization):
     def quantize(
         self, tensor: torch.Tensor, allow_inplace: bool = False
     ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        # This runs actual import only on the 1st call, copies references after that
+        from bitsandbytes.functional import quantize_blockwise
+
         try:
             quantized, (absmax, codebook) = quantize_blockwise(tensor)
         except NameError:
@@ -163,6 +164,8 @@ class BlockwiseQuantization(Quantization):
         )
 
     def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
+        from bitsandbytes.functional import dequantize_blockwise
+
         absmax_size = int(np.frombuffer(serialized_tensor.buffer, count=1, dtype=np.int64))
         codebook_size = int(np.frombuffer(serialized_tensor.buffer, offset=8, count=1, dtype=np.int64))
         absmax = np.frombuffer(serialized_tensor.buffer, offset=16, count=absmax_size, dtype=self.codebook_dtype)
