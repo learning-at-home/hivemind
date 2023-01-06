@@ -11,7 +11,6 @@ import urllib.request
 from pkg_resources import parse_requirements, parse_version
 from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
-from setuptools.command.develop import develop
 
 P2PD_VERSION = "v0.3.16"
 
@@ -105,6 +104,11 @@ class BuildPy(build_py):
         super().initialize_options()
         self.buildgo = False
 
+    def get_source_files(self):
+        source_files = super().get_source_files()
+        proto_files = glob.glob(os.path.join("hivemind", "proto", "*.proto"))
+        return source_files + proto_files
+
     def run(self):
         if self.buildgo:
             build_p2p_daemon()
@@ -113,14 +117,12 @@ class BuildPy(build_py):
 
         super().run()
 
-        proto_compile(os.path.join(self.build_lib, "hivemind", "proto"))
+        if self.editable_mode:
+            proto_compile(os.path.join("hivemind", "proto"))
+        else:
+            proto_compile(os.path.join(self.build_lib, "hivemind", "proto"))
 
-
-class Develop(develop):
-    def run(self):
-        self.reinitialize_command("build_py", build_lib=here)
-        self.run_command("build_py")
-        super().run()
+        self.editable_mode = False
 
 
 with open("requirements.txt") as requirements_file:
@@ -146,7 +148,7 @@ extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
 setup(
     name="hivemind",
     version=version_string,
-    cmdclass={"build_py": BuildPy, "develop": Develop},
+    cmdclass={"build_py": BuildPy},
     description="Decentralized deep learning in PyTorch",
     long_description="Decentralized deep learning in PyTorch. Built to train models on thousands of volunteers "
     "across the world.",
