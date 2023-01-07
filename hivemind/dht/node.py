@@ -586,7 +586,7 @@ class DHTNode:
             If min_expiration_time=float('inf'), this method will find a value with _latest_ expiration
         :param beam_size: maintains up to this many nearest nodes when crawling dht, default beam_size = bucket_size
         :param num_workers: override for default num_workers, see traverse_dht num_workers param
-        :param return_futures: if True, immediately return asyncio.Future for every before interacting with the nework.
+        :param return_futures: if True, immediately return asyncio.Future for every before interacting with the network.
          The algorithm will populate these futures with (value, expiration) when it finds the corresponding key
          Note: canceling a future will stop search for the corresponding key
         :param _is_refresh: internal flag, set to True by an internal cache refresher (if enabled)

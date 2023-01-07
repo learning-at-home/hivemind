@@ -24,3 +24,11 @@ jobs:
       - uses: isort/isort-action@master
         with:
           isortVersion: "5.10.1"
+
+  codespell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: codespell-project/actions-codespell@v1
+        with:
+          only_warn: 1

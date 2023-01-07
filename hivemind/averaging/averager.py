@@ -62,7 +62,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
     :param min_matchmaking_time: when looking for group, wait for requests for at least this many seconds
     :param compression: optionally compress tensors with this compression algorithm before running all-reduce
     :param state_compression: a separate compression strategy for load_state_from_peers (default = no compression)
-    :param tensor_infos: CompressionInfo for each respective tensor; this determines how the tensor will be comressed
+    :param tensor_infos: CompressionInfo for each respective tensor; this determines how the tensor will be compressed
     :param averaging_alpha: optional "learning rate" for averaging. If specified, local parameters will be shifted
       towards the (estimated) average by this coefficient. By default, local parameters are set equal to average.
     :param request_timeout: when looking for group, wait for a response from leader for at most this many seconds.
@@ -376,7 +376,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         """
         Set up the averager to look for a group and run one round of averaging, return True on success, False on failure
 
-        :param gather: optionally send this informaton to all peers in the next group and gather it from every groupmate
+        :param gather: optionally send this information to all peers in the next group and gather it from every groupmate
           (this operation is known as all-gather). The gathered data will be available as the output of this function.
         :param scheduled_time: when matchmaking, assume that all-reduce will begin at this moment.
           By default, schedule all-reduce current time plus min_matchmaking_time seconds
@@ -651,7 +651,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
     def get_current_state(self) -> Tuple[Any, Sequence[torch.Tensor], Sequence[CompressionInfo]]:
         """
-        Get current state and send it to a peer. executed in the host process. Meant to be overriden.
+        Get current state and send it to a peer. executed in the host process. Meant to be overridden.
         :returns: a tuple of (small metadata, sequence of torch tensors)
         :note: metadata must be seriablizable with self.serializer (default = MSGPackSerializer)
         """

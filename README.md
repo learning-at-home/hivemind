@@ -29,7 +29,7 @@ see the [full list](#citation) of our papers below.
 ## Example Use Cases
 
 This section lists projects that leverage hivemind for decentralized training. 
-If you have succesfully trained a model or created a downstream repository with the help of our library, 
+If you have successfully trained a model or created a downstream repository with the help of our library, 
 feel free to submit a pull request that adds your project to this list.
 
 * **Petals** ([webpage](https://petals.ml), [code](https://github.com/bigscience-workshop/petals)) — a decentralized platform for inference and fine-tuning of 100B+ language models.

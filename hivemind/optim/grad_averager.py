@@ -29,7 +29,7 @@ class GradientAverager(DecentralizedAverager):
     (3) averaged gradients - gradient buffers that are aggregated in-place with peers, always in host memory
 
     :param parameters: pytorch parameters for which to aggregate gradients
-    :param dht: a DHT isntance connected to the rest of the swarm. See hivemind.DHT docs
+    :param dht: a DHT instance connected to the rest of the swarm. See hivemind.DHT docs
     :param prefix: a unique DHT key used for matchmaking. E.g. this can be your experiment name with optional suffixes
     :param reuse_grad_buffers: if True, use model's .grad buffers for accumulating gradients over multiple steps.
       This is more memory efficient, but it requires that the user does *not* call zero_grad or clip_by_whatever at all

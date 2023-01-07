@@ -51,7 +51,7 @@ async def store_and_get_task(
     latest: bool,
     node_killer: NodeKiller,
 ) -> Tuple[list, list, list, list, int, int]:
-    """Iteratively choose random peers to store data onto the dht, then retreive with another random subset of peers"""
+    """Iteratively choose random peers to store data onto the dht, then retrieve with another random subset of peers"""
 
     total_stores = total_gets = 0
     successful_stores = []
