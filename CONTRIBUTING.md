@@ -38,7 +38,8 @@ with the following rules:
   cannot be longer than 119 characters.
 * We use [black](https://github.com/psf/black) for code formatting and [isort](https://github.com/PyCQA/isort) for 
   import sorting. Before submitting a PR, make sure to install and run `black .` and `isort .` in the root of the
-  repository.
+  repository. Also, you may want to check your code for typos by running `codespell --skip=".git"`, though there
+  might be false positives.
 * We highly encourage the use of [typing](https://docs.python.org/3/library/typing.html) where applicable.
 * Use `get_logger` from `hivemind.utils.logging` to log any information instead of `print`ing directly to standard
   output/error streams.

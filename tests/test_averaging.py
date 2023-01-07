@@ -356,7 +356,7 @@ def test_load_state_from_peers():
     class TestAverager(DecentralizedAverager):
         def get_current_state(self):
             """
-            Get current state and send it to a peer. executed in the host process. Meant to be overriden.
+            Get current state and send it to a peer. executed in the host process. Meant to be overridden.
             :returns: a tuple of (serializable_small_metadata, sequence of torch tensors)
             """
             nonlocal num_calls, super_metadata, super_tensors

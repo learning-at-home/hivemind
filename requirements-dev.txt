@@ -8,4 +8,5 @@ scikit-learn
 torchvision
 black==22.3.0
 isort==5.10.1
+codespell==2.2.2
 psutil

@@ -302,7 +302,7 @@ class Server(threading.Thread):
         logger.debug(f"Shutting down runtime")
         self.runtime.shutdown()
 
-        logger.info("Server shutdown succesfully")
+        logger.info("Server shutdown successfully")
 
 
 @contextmanager

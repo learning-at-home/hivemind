@@ -119,7 +119,7 @@ dht = hivemind.DHT(
     ], start=True)
 ```
 
-Thats it, now the two DHT nodes are connected. If you connect additional peers to the network, you only need to specify
+That's it, now the two DHT nodes are connected. If you connect additional peers to the network, you only need to specify
 one (or a subset) of peers as `initial_peers`.
 In case your peer operates behind a restrictive firewall, you may find it beneficial to set `client_mode=True`. In this
  case, the DHT instance will access others, but it will not announce that other peers can connect to it.
