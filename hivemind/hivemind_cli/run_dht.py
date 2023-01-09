@@ -56,9 +56,6 @@ def main():
         "If the file does not exist, writes a new private key to this file.",
     )
     parser.add_argument(
-        "--refresh_period", type=int, default=30, help="Period (in seconds) for fetching the keys from DHT"
-    )
-    parser.add_argument(
         "--no_relay",
         action="store_false",
         dest="use_relay",
@@ -66,6 +63,9 @@ def main():
     )
     parser.add_argument(
         "--use_auto_relay", action="store_true", help="Look for libp2p relays to reach peers behind NATs/firewalls"
+    )
+    parser.add_argument(
+        "--refresh_period", type=int, default=30, help="Period (in seconds) for fetching the keys from DHT"
     )
 
     args = parser.parse_args()
