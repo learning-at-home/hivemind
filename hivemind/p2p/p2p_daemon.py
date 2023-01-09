@@ -127,9 +127,13 @@ class P2P:
         :param relay_hop_limit: sets the hop limit for hop relays
         :param startup_timeout: raise a P2PDaemonError if the daemon does not start in ``startup_timeout`` seconds
         :param tls: Enables TLS1.3 channel security protocol
-        :param use_auto_relay: enables autorelay
         :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
-        :param use_relay: enables circuit relay
+        :param use_relay: Enable circuit relay functionality in libp2p
+                          (see https://docs.libp2p.io/concepts/nat/circuit-relay/).
+                          If enabled (default), others can use you as a relay.
+                          If you want use relays yourself (to reach peers behind NATs/firewalls),
+                          please also pass `use_auto_relay=True`.
+        :param use_auto_relay: Look for libp2p relays to reach peers behind NATs/firewalls
         :param quic: Deprecated, has no effect since libp2p 0.17.0
         :param use_relay_hop: Deprecated, has no effect since libp2p 0.17.0
         :param use_relay_discovery: Deprecated, has no effect since libp2p 0.17.0

@@ -58,6 +58,15 @@ def main():
     parser.add_argument(
         "--refresh_period", type=int, default=30, help="Period (in seconds) for fetching the keys from DHT"
     )
+    parser.add_argument(
+        "--no_relay",
+        action="store_false",
+        dest="use_relay",
+        help="Disable circuit relay functionality in libp2p (see https://docs.libp2p.io/concepts/nat/circuit-relay/)",
+    )
+    parser.add_argument(
+        "--use_auto_relay", action="store_true", help="Look for libp2p relays to reach peers behind NATs/firewalls"
+    )
 
     args = parser.parse_args()
 
@@ -68,6 +77,8 @@ def main():
         announce_maddrs=args.announce_maddrs,
         use_ipfs=args.use_ipfs,
         identity_path=args.identity_path,
+        use_relay=args.use_relay,
+        use_auto_relay=args.use_auto_relay,
     )
     log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=args.use_ipfs)
 
