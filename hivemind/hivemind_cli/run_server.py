@@ -35,6 +35,15 @@ def main():
                         help='Multiaddrs to listen for external connections from other p2p instances; default: all IPv4 and TCP: /ip4/0.0.0.0/tcp/0')
     parser.add_argument('--announce_maddrs', type=list, nargs='+', default=None, required=False,
                         help='Visible multiaddrs the host announces for external connections from other p2p instances')
+    parser.add_argument(
+        "--no_relay",
+        action="store_false",
+        dest="use_relay",
+        help="Disable circuit relay functionality in libp2p (see https://docs.libp2p.io/concepts/nat/circuit-relay/)",
+    )
+    parser.add_argument(
+        "--use_auto_relay", action="store_true", help="Look for libp2p relays to reach peers behind NATs/firewalls"
+    )
 
     parser.add_argument('--num_handlers', type=int, default=None, required=False,
                         help='server will use this many processes to handle incoming requests')
