@@ -130,10 +130,10 @@ class P2P:
         :param use_ipfs: Bootstrap to IPFS (incompatible with initial_peers)
         :param use_relay: Enable circuit relay functionality in libp2p
                           (see https://docs.libp2p.io/concepts/nat/circuit-relay/).
-                          If enabled (default), others can use you as a relay.
-                          If you want use relays yourself (to reach peers behind NATs/firewalls),
-                          please also pass `use_auto_relay=True`.
-        :param use_auto_relay: Look for libp2p relays to reach peers behind NATs/firewalls
+                          If enabled (default), you can reach peers behind NATs/firewalls through libp2p relays.
+                          If you are behind NAT/firewall yourself,
+                          please pass `use_auto_relay=True` to become reachable.
+        :param use_auto_relay: Look for libp2p relays to become reachable if this peer is behind NAT/firewall
         :param quic: Deprecated, has no effect since libp2p 0.17.0
         :param use_relay_hop: Deprecated, has no effect since libp2p 0.17.0
         :param use_relay_discovery: Deprecated, has no effect since libp2p 0.17.0
