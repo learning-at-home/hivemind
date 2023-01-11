@@ -62,7 +62,9 @@ def main():
         help="Disable circuit relay functionality in libp2p (see https://docs.libp2p.io/concepts/nat/circuit-relay/)",
     )
     parser.add_argument(
-        "--use_auto_relay", action="store_true", help="Look for libp2p relays to reach peers behind NATs/firewalls"
+        "--use_auto_relay",
+        action="store_true",
+        help="Look for libp2p relays to become reachable if we are behind NAT/firewall",
     )
     parser.add_argument(
         "--refresh_period", type=int, default=30, help="Period (in seconds) for fetching the keys from DHT"
