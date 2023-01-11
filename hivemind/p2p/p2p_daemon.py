@@ -133,7 +133,7 @@ class P2P:
                           If enabled (default), you can reach peers behind NATs/firewalls through libp2p relays.
                           If you are behind NAT/firewall yourself,
                           please pass `use_auto_relay=True` to become reachable.
-        :param use_auto_relay: Look for libp2p relays to become reachable if this peer is behind NAT/firewall
+        :param use_auto_relay: Look for libp2p relays to become reachable if we are behind NAT/firewall
         :param quic: Deprecated, has no effect since libp2p 0.17.0
         :param use_relay_hop: Deprecated, has no effect since libp2p 0.17.0
         :param use_relay_discovery: Deprecated, has no effect since libp2p 0.17.0
