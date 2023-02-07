@@ -28,7 +28,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build bitsandbytes
         run: |
-          pip install bitsandbytes==0.34.0
+          pip install bitsandbytes==0.37.0
       - name: Build hivemind
         run: |
           pip install .
