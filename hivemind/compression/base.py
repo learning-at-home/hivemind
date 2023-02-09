@@ -7,7 +7,6 @@ from typing import Any, Optional
 
 import numpy as np
 import torch
-from packaging import version
 
 from hivemind.proto import runtime_pb2
 from hivemind.utils.tensor_descr import TensorDescriptor
@@ -15,8 +14,7 @@ from hivemind.utils.tensor_descr import TensorDescriptor
 # While converting read-only NumPy arrays into PyTorch tensors, we don't make extra copies for efficiency
 warnings.filterwarnings("ignore", message="The given NumPy array is not writable", category=UserWarning)
 
-LEGACY_BFLOAT16 = bool(int(os.environ.get("LEGACY_BFLOAT16", 1)))
-LEGACY_PYTORCH = version.parse(torch.__version__) < version.parse("1.13")
+USE_LEGACY_BFLOAT16 = bool(int(os.environ.get("USE_LEGACY_BFLOAT16", 1)))
 
 Key = Any
 
@@ -88,10 +86,11 @@ class NoCompression(CompressionBase):
         shape = tensor.shape
         dtype_name = str(tensor.dtype).lstrip("torch.")
         raw_data = tensor
-        if tensor.dtype == torch.bfloat16 and LEGACY_BFLOAT16:
+        if tensor.dtype == torch.bfloat16 and USE_LEGACY_BFLOAT16:
             raw_data = tensor.to(torch.float32)
-        elif tensor.dtype == torch.bfloat16 and not LEGACY_BFLOAT16:
-            storage = tensor.storage().untyped() if not LEGACY_PYTORCH else tensor.storage()._untyped()
+        elif tensor.dtype == torch.bfloat16 and not USE_LEGACY_BFLOAT16:
+            typed_storage = tensor.storage()
+            storage = typed_storage.untyped() if hasattr(typed_storage, 'untyped') else typed_storage._untyped()
             raw_data = torch.tensor(storage, dtype=torch.int8)
 
         return runtime_pb2.Tensor(
@@ -109,7 +108,7 @@ class NoCompression(CompressionBase):
                 array = np.frombuffer(serialized_tensor.buffer, dtype=np.float32)
                 tensor = torch.as_tensor(array, dtype=torch.bfloat16)
             else:  # efficient mode: send bfloat16 data directly
-                storage_type = torch.TypedStorage if not LEGACY_PYTORCH else torch._TypedStorage
+                storage_type = torch.TypedStorage if hasattr(torch, 'TypedStorage') else torch._TypedStorage
                 storage = storage_type.from_buffer(serialized_tensor.buffer, byte_order="little", dtype=torch.bfloat16)
                 tensor = torch.as_tensor(storage, dtype=torch.bfloat16)
         else:

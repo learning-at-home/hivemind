@@ -68,10 +68,10 @@ def test_serialize_tensor():
     _check(torch.tensor(1.0), CompressionType.FLOAT16)
 
 
-@pytest.mark.parametrize("legacy_bfloat16", [True, False])
+@pytest.mark.parametrize("use_legacy_bfloat16", [True, False])
 @pytest.mark.forked
-def test_serialize_bfloat16(legacy_bfloat16: bool):
-    hivemind.compression.base.LEGACY_BFLOAT16 = legacy_bfloat16
+def test_serialize_bfloat16(use_legacy_bfloat16: bool):
+    hivemind.compression.base.USE_LEGACY_BFLOAT16 = use_legacy_bfloat16
     tensor = torch.randn(4096, 16, dtype=torch.bfloat16)
     _check(tensor, CompressionType.NONE)
     _check(tensor, CompressionType.BLOCKWISE_8BIT, rtol=0.1, atol=0.01, chunk_size=1024)
