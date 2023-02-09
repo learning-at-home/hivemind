@@ -90,7 +90,7 @@ class NoCompression(CompressionBase):
             raw_data = tensor.to(torch.float32)
         elif tensor.dtype == torch.bfloat16 and not USE_LEGACY_BFLOAT16:
             typed_storage = tensor.storage()
-            storage = typed_storage.untyped() if hasattr(typed_storage, 'untyped') else typed_storage._untyped()
+            storage = typed_storage.untyped() if hasattr(typed_storage, "untyped") else typed_storage._untyped()
             raw_data = torch.tensor(storage, dtype=torch.int8)
 
         return runtime_pb2.Tensor(
@@ -108,7 +108,7 @@ class NoCompression(CompressionBase):
                 array = np.frombuffer(serialized_tensor.buffer, dtype=np.float32)
                 tensor = torch.as_tensor(array, dtype=torch.bfloat16)
             else:  # efficient mode: send bfloat16 data directly
-                storage_type = torch.TypedStorage if hasattr(torch, 'TypedStorage') else torch._TypedStorage
+                storage_type = torch.TypedStorage if hasattr(torch, "TypedStorage") else torch._TypedStorage
                 storage = storage_type.from_buffer(serialized_tensor.buffer, byte_order="little", dtype=torch.bfloat16)
                 tensor = torch.as_tensor(storage, dtype=torch.bfloat16)
         else:
