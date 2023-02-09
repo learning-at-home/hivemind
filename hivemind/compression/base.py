@@ -86,12 +86,13 @@ class NoCompression(CompressionBase):
         shape = tensor.shape
         dtype_name = str(tensor.dtype).lstrip("torch.")
         raw_data = tensor
-        if tensor.dtype == torch.bfloat16 and USE_LEGACY_BFLOAT16:
-            raw_data = tensor.to(torch.float32)
-        elif tensor.dtype == torch.bfloat16 and not USE_LEGACY_BFLOAT16:
-            typed_storage = tensor.storage()
-            storage = typed_storage.untyped() if hasattr(typed_storage, "untyped") else typed_storage._untyped()
-            raw_data = torch.tensor(storage, dtype=torch.int8)
+        if tensor.dtype == torch.bfloat16:
+            if USE_LEGACY_BFLOAT16:
+                raw_data = tensor.to(torch.float32)
+            else:
+                typed_storage = tensor.storage()
+                storage = typed_storage.untyped() if hasattr(typed_storage, "untyped") else typed_storage._untyped()
+                raw_data = torch.tensor(storage, dtype=torch.int8)
 
         return runtime_pb2.Tensor(
             compression=self.compression_type,
