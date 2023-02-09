@@ -162,7 +162,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                         target=cls._process_updates_in_background,
                         args=[receiver_pipe],
                         name=f"{__name__}.BACKEND",
-                        daemon=True
+                        daemon=True,
                     )
                     cls._pipe_waiter_thread.start()
 
