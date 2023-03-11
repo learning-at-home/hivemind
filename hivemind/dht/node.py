@@ -254,7 +254,7 @@ class DHTNode:
             await asyncio.wait(
                 [
                     asyncio.create_task(self.find_nearest_nodes([self.node_id])),
-                    asyncio.sleep(bootstrap_timeout - get_dht_time() + start_time),
+                    asyncio.create_task(asyncio.sleep(bootstrap_timeout - get_dht_time() + start_time)),
                 ],
                 return_when=asyncio.FIRST_COMPLETED,
             )
