@@ -1,5 +1,5 @@
 PyYAML
-torch>=1.9.0,<2.0.0
+torch>=1.9.0
 numpy>=1.17
 scipy>=1.2.1
 prefetch_generator>=1.0.1
