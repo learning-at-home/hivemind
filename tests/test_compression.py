@@ -49,7 +49,7 @@ def test_tensor_compression(size=(128, 128, 64), alpha=5e-08, beta=0.0008):
 def _check(tensor, compression, rtol=1e-5, atol=1e-8, chunk_size=30 * 1024):
     serialized_tensor = serialize_torch_tensor(tensor, compression)
     chunks = list(split_for_streaming(serialized_tensor, chunk_size))
-    assert len(chunks) == (len(serialized_tensor.buffer) - 1) // chunk_size + 1
+    assert len(chunks) == max((len(serialized_tensor.buffer) - 1) // chunk_size + 1, 1)
     restored = combine_from_streaming(chunks)
     result = deserialize_torch_tensor(restored)
     assert torch.allclose(result, tensor, rtol=rtol, atol=atol)
