@@ -22,7 +22,10 @@ logger = get_logger(__name__)
 Parameters = Iterable[torch.Tensor]
 ParamGroups = Iterable[Dict[str, Any]]
 TorchOptimizer = torch.optim.Optimizer
-LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
+try:
+    LRSchedulerBase = torch.optim.lr_scheduler.LRScheduler
+except AttributeError:  # torch < 2.0.0
+    LRSchedulerBase = torch.optim.lr_scheduler._LRScheduler
 OptimizerFactory = Callable[[Union[Parameters, ParamGroups]], TorchOptimizer]
 SchedulerFactory = Callable[[TorchOptimizer], LRSchedulerBase]
 

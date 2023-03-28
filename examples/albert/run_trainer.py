@@ -18,6 +18,7 @@ from transformers.trainer import Trainer
 from transformers.trainer_utils import is_main_process
 
 from hivemind import DHT, Float16Compression, Optimizer, get_dht_time
+from hivemind.optim.state_averager import LRSchedulerBase
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
 from hivemind.utils.networking import log_visible_maddrs
 
@@ -32,8 +33,6 @@ from arguments import (
 
 use_hivemind_log_handler("in_root_logger")
 logger = get_logger(__name__)
-
-LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
 
 
 def setup_transformers_logging(process_rank: int):

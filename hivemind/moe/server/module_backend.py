@@ -8,8 +8,12 @@ from hivemind.utils.logging import get_logger
 from hivemind.utils.nested import nested_compare, nested_flatten, nested_map, nested_pack
 from hivemind.utils.tensor_descr import DUMMY_BATCH_SIZE, BatchTensorDescriptor
 
-LRSchedulerBase = getattr(torch.optim.lr_scheduler, "_LRScheduler", None)
 logger = get_logger(__name__)
+
+try:
+    LRSchedulerBase = torch.optim.lr_scheduler.LRScheduler
+except AttributeError:  # torch < 2.0.0
+    LRSchedulerBase = torch.optim.lr_scheduler._LRScheduler
 
 
 class ModuleBackend:
