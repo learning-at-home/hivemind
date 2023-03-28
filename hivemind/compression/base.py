@@ -105,7 +105,8 @@ class NoCompression(CompressionBase):
     def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         shape = torch.Size(serialized_tensor.size)
         if serialized_tensor.dtype == "bfloat16":
-            if len(serialized_tensor.buffer) // shape.numel() == 4:  # legacy mode: convert to fp32
+            numel = shape.numel()
+            if numel > 0 and len(serialized_tensor.buffer) // numel == 4:  # legacy mode: convert to fp32
                 array = np.frombuffer(serialized_tensor.buffer, dtype=np.float32)
                 tensor = torch.as_tensor(array, dtype=torch.bfloat16)
             else:  # efficient mode: send bfloat16 data directly
