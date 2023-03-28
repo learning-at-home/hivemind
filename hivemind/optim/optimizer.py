@@ -638,7 +638,9 @@ class Optimizer(torch.optim.Optimizer):
         # - if not offload_optimizer, we must un-scale gradients (divide them by the number of accumulation steps)
         self._load_averaged_gradients_into_optimizer_()
 
-    def zero_grad(self, set_to_none: bool = False):
+    _SET_TO_NONE_DEFAULT = Version(torch.__version__).major >= 2
+
+    def zero_grad(self, set_to_none: bool = _SET_TO_NONE_DEFAULT):
         """Reset gradients from model. If reuse_grad_buffers=True, this will raise an error."""
         if self.use_gradient_averaging and self.grad_averager.reuse_grad_buffers:
             raise ValueError(
