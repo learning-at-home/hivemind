@@ -7,6 +7,7 @@ from functools import partial
 from typing import Callable, Optional, Sequence, Union
 
 import torch
+from packaging.version import Version
 
 from hivemind.averaging.control import AveragingStage, StepControl
 from hivemind.compression import CompressionBase, NoCompression
@@ -621,7 +622,10 @@ class Optimizer(torch.optim.Optimizer):
             with torch.no_grad(), self.grad_averager.get_tensors() as averaged_gradients:
                 assert len(averaged_gradients) == len(optimized_parameters)
                 for opt_param, averaged_grad in zip(optimized_parameters, averaged_gradients):
-                    opt_param.grad.copy_(averaged_grad, non_blocking=True)
+                    if opt_param.grad is None:
+                        opt_param.grad = averaged_grad.clone()
+                    else:
+                        opt_param.grad.copy_(averaged_grad, non_blocking=True)
 
         self.grad_averager.notify_used_averaged_gradients()
 

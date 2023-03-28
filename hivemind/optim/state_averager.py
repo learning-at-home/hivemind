@@ -569,7 +569,10 @@ class TrainingStateAverager(DecentralizedAverager):
         opt_parameters = [param for group in self.optimizer.param_groups for param in group["params"]]
         for main_param, opt_param in zip(self.main_parameters, opt_parameters):
             if main_param.grad is not None:
-                opt_param.grad.copy_(main_param.grad, non_blocking=True)
+                if opt_param.grad is None:
+                    opt_param.grad = main_param.grad.clone()
+                else:
+                    opt_param.grad.copy_(main_param.grad, non_blocking=True)
 
     @torch.no_grad()
     def _apply_optimizer_parameters_(self):

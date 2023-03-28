@@ -78,9 +78,9 @@ def test_grad_averager(grad_averager_factory: GradientAveragerFactory):
     with averager2.use_averaged_gradients():
         assert torch.allclose(model2.w.grad, ref_average)
 
-    # after no longer use_averaged_gradients
-    assert not torch.allclose(model1.w.grad, ref_average)
-    assert not torch.allclose(model2.w.grad, ref_average)
+    # After no longer use_averaged_gradients. torch>=2.0.0 gives None, torch<2.0.0 gives zero tensor
+    assert model1.w.grad is None or not torch.allclose(model1.w.grad, ref_average)
+    assert model2.w.grad is None or not torch.allclose(model2.w.grad, ref_average)
 
 
 @pytest.mark.forked
@@ -151,7 +151,9 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
         F.mse_loss(model2(x), -torch.ones(3)).backward()
         avgr2.step(optimizer_step=True, zero_grad=True, averaging_round=(step == 10), delay_averaging=False)
 
-    assert torch.all(model1.weight.grad == 0) and torch.all(model2.weight.grad == 0), "zero grad did not trigger"
+    assert (model1.weight.grad is None or torch.all(model1.weight.grad == 0)) and (
+        model2.weight.grad is None or torch.all(model2.weight.grad == 0)
+    ), "zero grad did not trigger"
     assert model1(x).mean() > 0.5 and model2(x).mean() < -0.5, "models did not train properly"
     assert torch.allclose(extras1[0], extras2[0]), "first extra tensors were not averaged"
     assert torch.allclose(extras1[1], extras2[1]), "second extra tensors were not averaged"
