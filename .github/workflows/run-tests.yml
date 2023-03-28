@@ -11,16 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ 3.7, 3.8, 3.9 ]
+        python-version: [ '3.7', '3.8', '3.9', '3.10' ]
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
       - name: Cache dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: Key-v1-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
@@ -44,17 +44,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '1.18.8'
           check-latest: true
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: '3.8'
       - name: Cache dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: Key-v1-3.8-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
@@ -76,13 +76,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: '3.8'
       - name: Cache dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: Key-v1-3.8-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
@@ -102,4 +102,4 @@ jobs:
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
           pytest --cov hivemind -v tests
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3

@@ -20,7 +20,7 @@ class NodeKiller:
     """Auxiliary class that kills dht nodes over a pre-defined schedule"""
 
     def __init__(self, shutdown_peers: list, shutdown_timestamps: list):
-        self.shutdown_peers = set(shutdown_peers)
+        self.shutdown_peers = shutdown_peers
         self.shutdown_timestamps = shutdown_timestamps
         self.current_iter = 0
         self.timestamp_iter = 0
