@@ -15,7 +15,7 @@ from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFacto
 from hivemind.optim.optimizer import Optimizer
 from hivemind.optim.power_sgd_averager import PowerSGDGradientAverager
 from hivemind.optim.progress_tracker import ProgressTracker
-from hivemind.optim.state_averager import TrainingStateAverager
+from hivemind.optim.state_averager import ZERO_GRAD_SET_TO_NONE_DEFAULT, TrainingStateAverager
 from hivemind.utils.crypto import RSAPrivateKey
 
 
@@ -79,8 +79,11 @@ def test_grad_averager(grad_averager_factory: GradientAveragerFactory):
         assert torch.allclose(model2.w.grad, ref_average)
 
     # after no longer use_averaged_gradients
-    assert not torch.allclose(model1.w.grad, ref_average)
-    assert not torch.allclose(model2.w.grad, ref_average)
+    if ZERO_GRAD_SET_TO_NONE_DEFAULT:  # averager1 has reuse_grad_buffers=False
+        assert model1.w.grad is None
+    else:
+        assert not torch.allclose(model1.w.grad, ref_average)
+    assert not torch.allclose(model2.w.grad, ref_average)  # averager2 has reuse_grad_buffers=True
 
 
 @pytest.mark.forked
@@ -151,7 +154,10 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
         F.mse_loss(model2(x), -torch.ones(3)).backward()
         avgr2.step(optimizer_step=True, zero_grad=True, averaging_round=(step == 10), delay_averaging=False)
 
-    assert torch.all(model1.weight.grad == 0) and torch.all(model2.weight.grad == 0), "zero grad did not trigger"
+    if ZERO_GRAD_SET_TO_NONE_DEFAULT:
+        assert model1.weight.grad is None and model2.weight.grad is None, ".zero_grad() wasn't called"
+    else:
+        assert torch.all(model1.weight.grad == 0) and torch.all(model2.weight.grad == 0), ".zero_grad() wasn't called"
     assert model1(x).mean() > 0.5 and model2(x).mean() < -0.5, "models did not train properly"
     assert torch.allclose(extras1[0], extras2[0]), "first extra tensors were not averaged"
     assert torch.allclose(extras1[1], extras2[1]), "second extra tensors were not averaged"

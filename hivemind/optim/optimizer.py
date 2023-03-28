@@ -15,6 +15,7 @@ from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFacto
 from hivemind.optim.grad_scaler import GradScaler
 from hivemind.optim.progress_tracker import LocalTrainingProgress, ProgressTracker
 from hivemind.optim.state_averager import (
+    ZERO_GRAD_SET_TO_NONE_DEFAULT,
     LRSchedulerBase,
     OptimizerFactory,
     Parameters,
@@ -621,7 +622,10 @@ class Optimizer(torch.optim.Optimizer):
             with torch.no_grad(), self.grad_averager.get_tensors() as averaged_gradients:
                 assert len(averaged_gradients) == len(optimized_parameters)
                 for opt_param, averaged_grad in zip(optimized_parameters, averaged_gradients):
-                    opt_param.grad.copy_(averaged_grad, non_blocking=True)
+                    if opt_param.grad is None:
+                        opt_param.grad = averaged_grad.clone()
+                    else:
+                        opt_param.grad.copy_(averaged_grad, non_blocking=True)
 
         self.grad_averager.notify_used_averaged_gradients()
 
@@ -634,7 +638,7 @@ class Optimizer(torch.optim.Optimizer):
         # - if not offload_optimizer, we must un-scale gradients (divide them by the number of accumulation steps)
         self._load_averaged_gradients_into_optimizer_()
 
-    def zero_grad(self, set_to_none: bool = False):
+    def zero_grad(self, set_to_none: bool = ZERO_GRAD_SET_TO_NONE_DEFAULT):
         """Reset gradients from model. If reuse_grad_buffers=True, this will raise an error."""
         if self.use_gradient_averaging and self.grad_averager.reuse_grad_buffers:
             raise ValueError(
@@ -643,11 +647,9 @@ class Optimizer(torch.optim.Optimizer):
             )
         for param_group in self.param_groups:
             for param in param_group["params"]:
-                if param.grad is None:
-                    pass
-                elif set_to_none:
+                if set_to_none:
                     param.grad = None
-                else:
+                elif param.grad is not None:
                     param.grad.zero_()
 
     def _should_load_state_from_peers(self) -> bool:
