@@ -18,7 +18,7 @@ class RPCHandler:
 
 class StubBase:
     """
-    Base class for P2P RPC stubs. The interface mimicks gRPC stubs.
+    Base class for P2P RPC stubs. The interface mimics gRPC stubs.
 
     Servicer derives stub classes for particular services (e.g. DHT, averager, etc.) from StubBase,
     adding the necessary rpc_* methods. Calls to these methods are translated to calls to the remote peer.
@@ -32,7 +32,7 @@ class StubBase:
 
 class ServicerBase:
     """
-    Base class for P2P RPC servicers (e.g. DHT, averager, MoE server). The interface mimicks gRPC servicers.
+    Base class for P2P RPC servicers (e.g. DHT, averager, MoE server). The interface mimics gRPC servicers.
 
     - ``add_p2p_handlers(self, p2p)`` registers all rpc_* methods of the derived class as P2P handlers, allowing
       other peers to call them. It uses type annotations for the ``request`` parameter and the return value
