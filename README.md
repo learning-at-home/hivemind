@@ -36,12 +36,12 @@ feel free to submit a pull request that adds your project to this list.
 * **Training Transformers Together** ([webpage](https://training-transformers-together.github.io/), [code](https://github.com/learning-at-home/dalle-hivemind)) — a NeurIPS 2021 demonstration that trained a collaborative text-to-image Transformer model.
 * **CALM** ([webpage](https://huggingface.co/CALM), [code](https://github.com/NCAI-Research/CALM)) — a masked language model trained on a combination of Arabic datasets.
 * **sahajBERT** ([blog post](https://huggingface.co/blog/collaborative-training), [code](https://github.com/tanmoyio/sahajbert)) — a collaboratively pretrained ALBERT-xlarge for the Bengali language.
-* **HivemindStrategy** ([docs](https://pytorch-lightning.readthedocs.io/en/latest/api/pytorch_lightning.strategies.HivemindStrategy.html)) in PyTorch Lightning allows adapting your existing pipelines to training over slow network with unreliable peers.
+* **HivemindStrategy** ([docs](https://lightning.ai/docs/pytorch/stable/advanced/third_party/hivemind.html?highlight=hivemindstrategy)) for PyTorch Lightning allows adapting your existing pipelines to training over slow network with unreliable peers.
 
 ## Installation
 
 Before installing, make sure that your environment has Python 3.7+
-and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.6.0 or newer. They can be installed either
+and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.9.0 or newer. They can be installed either
 natively or with [Anaconda](https://www.anaconda.com/products/individual).
 
 You can get [the latest release](https://pypi.org/project/hivemind) with pip or build hivemind from source.
