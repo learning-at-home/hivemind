@@ -1,6 +1,7 @@
 import asyncio
 import ctypes
 import multiprocessing as mp
+import threading
 import time
 
 import numpy as np
@@ -335,12 +336,14 @@ def _measure_coro_running_time(n_coros, elapsed_fut, counter):
 
 
 @pytest.mark.forked
-def test_remote_expert_worker_runs_coros_concurrently(n_processes=3, n_coros=10):
+def test_remote_expert_worker_runs_coros_concurrently(n_processes=4, n_coros=10):
     processes = []
     counter = mp.Value(ctypes.c_int64)
-    for _ in range(n_processes):
+    for i in range(n_processes):
         elapsed_fut = MPFuture()
-        proc = mp.Process(target=_measure_coro_running_time, args=(n_coros, elapsed_fut, counter))
+        factory = threading.Thread if i % 2 == 0 else mp.Process  # Test both threads and processes
+
+        proc = factory(target=_measure_coro_running_time, args=(n_coros, elapsed_fut, counter))
         proc.start()
         processes.append((proc, elapsed_fut))
 
@@ -349,4 +352,4 @@ def test_remote_expert_worker_runs_coros_concurrently(n_processes=3, n_coros=10)
         assert elapsed_fut.result() < 0.2
         proc.join()
 
-    assert counter.value == n_processes * n_coros
+    assert counter.value == n_processes * n_coros  # Ensure all couroutines have finished
