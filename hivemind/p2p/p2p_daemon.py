@@ -654,8 +654,9 @@ class P2P:
 
         self._alive = False
         if self._child is not None and self._child.returncode is None:
-            self._child.terminate()
-            logger.debug(f"Terminated p2pd with id = {self.peer_id}")
+            with suppress(ProcessLookupError):
+                self._child.terminate()
+                logger.debug(f"Terminated p2pd with id = {self.peer_id}")
 
             with suppress(FileNotFoundError):
                 os.remove(self._daemon_listen_maddr["unix"])
