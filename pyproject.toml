@@ -8,3 +8,8 @@ line_length = 119
 combine_as_imports = true
 combine_star = true
 known_local_folder = ["arguments", "test_utils", "tests", "utils"]
+
+[tool.coverage.run]
+concurrency = ["thread", "multiprocessing"]
+omit = ["hivemind/proto/*"]
+source = ["hivemind"]
