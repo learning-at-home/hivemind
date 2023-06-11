@@ -84,9 +84,14 @@ def main():
     )
     log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=args.use_ipfs)
 
-    while True:
-        dht.run_coroutine(report_status, return_future=False)
-        time.sleep(args.refresh_period)
+    try:
+        while True:
+            dht.run_coroutine(report_status, return_future=False)
+            time.sleep(args.refresh_period)
+    except KeyboardInterrupt:
+        logger.info("Caught KeyboardInterrupt, shutting down")
+    finally:
+        dht.shutdown()
 
 
 if __name__ == "__main__":

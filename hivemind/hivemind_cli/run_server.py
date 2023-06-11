@@ -108,8 +108,6 @@ def main():
         server.join()
     except KeyboardInterrupt:
         logger.info("Caught KeyboardInterrupt, shutting down")
-    finally:
-        server.shutdown()
 
 
 if __name__ == "__main__":
