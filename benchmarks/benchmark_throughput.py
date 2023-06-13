@@ -73,7 +73,7 @@ def benchmark_throughput(
     num_batches_per_client=16,
     expert_cls="ffn",
     hid_dim=1024,
-    batch_size=2048,
+    batch_size=1024,
     max_batch_size=None,
     backprop=True,
     device=None,
