@@ -24,7 +24,6 @@ class FeedforwardBlock(nn.Module):
         self.layer_norm = nn.LayerNorm(hid_dim, eps=1e-12)
 
     def forward(self, x):
-        print("ffn input: ", x)
         ffn_output = self.ffn(x)
         ffn_output = gelu_fast(ffn_output)
         ffn_output = self.ffn_output(ffn_output)

@@ -106,10 +106,8 @@ class BuildPy(build_py):
         self.buildgo = False
 
     def run(self):
-        if self.buildgo:
-            build_p2p_daemon()
-        else:
-            download_p2p_daemon()
+        print("Building protobufs")
+        build_p2p_daemon()
 
         super().run()
 
