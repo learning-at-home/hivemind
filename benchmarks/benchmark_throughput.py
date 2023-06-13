@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 def print_device_info(device=None):
     """Prints device stats. Code from https://stackoverflow.com/a/53374933/12891528"""
-    device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    device = torch.device(device or ("cuda" if torch.cuda.is_available() else "mps"))
     logger.info(f"Using device: {device}")
 
     # Additional Info when using cuda
@@ -117,7 +117,7 @@ def benchmark_throughput(
 
         timestamps["launched_clients"] = timestamps["began_launching_server"] = time.perf_counter()
 
-        device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        device = device or ("cuda" if torch.cuda.is_available() else "mps")
         module_backends = {}
         for i in range(num_experts):
             expert = torch.jit.script(name_to_block[expert_cls](hid_dim))
