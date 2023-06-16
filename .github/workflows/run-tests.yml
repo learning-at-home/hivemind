@@ -100,6 +100,6 @@ jobs:
       - name: Test
         run: |
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
-          pytest --cov hivemind -v tests
+          pytest --cov hivemind --cov-config=pyproject.toml -v tests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
