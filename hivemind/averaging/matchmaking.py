@@ -481,7 +481,7 @@ class PotentialLeaders:
             ):
                 await asyncio.wait(
                     set(map(asyncio.create_task, (self.update_finished.wait(), self.declared_expiration.wait()))),
-                    return_when=asyncio.FIRST_COMPLETED
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
                 self.declared_expiration.clear()
                 if self.update_finished.is_set():
