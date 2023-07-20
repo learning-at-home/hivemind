@@ -512,7 +512,7 @@ class PotentialLeaders:
             self.update_finished.set()
 
             await asyncio.wait(
-                set(map(asyncio.create_task, (self.running.wait(), self.update_triggered.wait()))),
+                {asyncio.create_task(self.running.wait()), asyncio.create_task(self.update_triggered.wait())},
                 return_when=asyncio.ALL_COMPLETED,
                 timeout=self.search_end_time - get_dht_time() if isfinite(self.search_end_time) else None,
             )
