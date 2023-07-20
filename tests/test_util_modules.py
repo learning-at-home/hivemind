@@ -530,7 +530,7 @@ async def test_async_context_flooding():
 
     num_coros = max(100, mp.cpu_count() * 5 + 1)
     # note: if we deprecate py3.7, this can be reduced to max(33, cpu + 5); see https://bugs.python.org/issue35279
-    await asyncio.wait({coro() for _ in range(num_coros)})
+    await asyncio.wait({asyncio.create_task(coro()) for _ in range(num_coros)})
 
 
 def test_batch_tensor_descriptor_msgpack():
