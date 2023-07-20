@@ -480,7 +480,7 @@ class PotentialLeaders:
                 self.peer_id.to_bytes(),
             ):
                 await asyncio.wait(
-                    set(map(asyncio.create_task, (self.update_finished.wait(), self.declared_expiration.wait()))),
+                    {asyncio.create_task(self.update_finished.wait()), asyncio.create_task(self.declared_expiration.wait())},
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 self.declared_expiration.clear()
