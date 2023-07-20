@@ -284,7 +284,7 @@ class Matchmaking:
             # wait for the group to be assembled or disbanded
             timeout = max(0.0, self.potential_leaders.declared_expiration_time - get_dht_time())
             await asyncio.wait(
-                {self.assembled_group, self.was_accepted_to_group.wait()},
+                {self.assembled_group, asyncio.create_task(self.was_accepted_to_group.wait())},
                 return_when=asyncio.FIRST_COMPLETED,
                 timeout=timeout,
             )
@@ -480,7 +480,8 @@ class PotentialLeaders:
                 self.peer_id.to_bytes(),
             ):
                 await asyncio.wait(
-                    {self.update_finished.wait(), self.declared_expiration.wait()}, return_when=asyncio.FIRST_COMPLETED
+                    set(map(asyncio.create_task, (self.update_finished.wait(), self.declared_expiration.wait()))),
+                    return_when=asyncio.FIRST_COMPLETED
                 )
                 self.declared_expiration.clear()
                 if self.update_finished.is_set():
@@ -511,7 +512,7 @@ class PotentialLeaders:
             self.update_finished.set()
 
             await asyncio.wait(
-                {self.running.wait(), self.update_triggered.wait()},
+                set(map(asyncio.create_task, (self.running.wait(), self.update_triggered.wait()))),
                 return_when=asyncio.ALL_COMPLETED,
                 timeout=self.search_end_time - get_dht_time() if isfinite(self.search_end_time) else None,
             )
