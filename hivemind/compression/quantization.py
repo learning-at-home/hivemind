@@ -140,7 +140,7 @@ class BlockwiseQuantization(Quantization):
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
         tensor = tensor.detach()
-        dtype_name = str(tensor.dtype).lstrip("torch.")
+        dtype_name = str(tensor.dtype).replace("torch.", "")
         if tensor.dtype == torch.bfloat16:
             tensor = tensor.to(torch.float32)
 
