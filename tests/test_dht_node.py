@@ -301,4 +301,4 @@ async def test_dhtnode_edge_cases():
         assert subkey in stored.value
         assert stored.value[subkey].value == value
 
-    await asyncio.wait([node.shutdown() for node in peers])
+    await asyncio.wait([asyncio.create_task(node.shutdown()) for node in peers])

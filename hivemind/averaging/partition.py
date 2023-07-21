@@ -224,7 +224,10 @@ class TensorPartReducer:
 
         while part_index > self.current_part_index:
             # wait for previous parts to finish processing ...
-            await asyncio.wait({self.current_part_future, self.finished.wait()}, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(
+                {self.current_part_future, asyncio.create_task(self.finished.wait())},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
             if self.finished.is_set():
                 raise AllreduceException(f"attempted to aggregate part in a finalized {self.__class__.__name__}")
 
