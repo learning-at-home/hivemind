@@ -84,7 +84,7 @@ class NoCompression(CompressionBase):
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
         tensor = tensor.detach()
         shape = tensor.shape
-        dtype_name = str(tensor.dtype).lstrip("torch.")
+        dtype_name = str(tensor.dtype).replace("torch.", "")
         raw_data = tensor
         if tensor.dtype == torch.bfloat16:
             if USE_LEGACY_BFLOAT16:  # legacy mode: convert to fp32
