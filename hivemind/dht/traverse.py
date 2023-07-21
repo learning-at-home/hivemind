@@ -209,7 +209,9 @@ async def traverse_dht(
             # get nearest neighbors (over network) and update search heaps. Abort if search finishes early
             get_neighbors_task = asyncio.create_task(get_neighbors(chosen_peer, queries_to_call))
             pending_tasks.add(get_neighbors_task)
-            await asyncio.wait([get_neighbors_task, search_finished_event.wait()], return_when=asyncio.FIRST_COMPLETED)
+            await_finished_task = asyncio.create_task(search_finished_event.wait())
+            await asyncio.wait([get_neighbors_task, await_finished_task], return_when=asyncio.FIRST_COMPLETED)
+            del await_finished_task
             if search_finished_event.is_set():
                 break  # other worker triggered finish_search, we exit immediately
             pending_tasks.remove(get_neighbors_task)
