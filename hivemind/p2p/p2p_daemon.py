@@ -658,9 +658,9 @@ class P2P:
                 self._child.terminate()
                 logger.debug(f"Terminated p2pd with id = {self.peer_id}")
 
-            with suppress(FileNotFoundError):
+            with suppress(FileNotFoundError, TypeError):
                 os.remove(self._daemon_listen_maddr["unix"])
-        with suppress(FileNotFoundError):
+        with suppress(FileNotFoundError, TypeError):
             os.remove(self._client_listen_maddr["unix"])
 
     @staticmethod
