@@ -17,6 +17,7 @@ jobs:
           - { os: 'ubuntu', python-version: '3.11' }
           - { os: 'macos', python-version: '3.8' }
           - { os: 'macos', python-version: '3.11' }
+      fail-fast: false
     runs-on: ${{ matrix.os }}-latest
     timeout-minutes: 15
     steps:
