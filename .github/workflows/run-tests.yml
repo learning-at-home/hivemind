@@ -46,7 +46,10 @@ jobs:
         run: |
           cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=${{ matrix.os == 'ubuntu' && 'file_descriptor' || 'file_system' }}
+
           export no_proxy=*  # See https://github.com/kevlened/pytest-parallel/issues/93#issuecomment-839913651
+          export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+
           pytest test_dht* --durations=0 --durations-min=1.0 -v
 
   build_and_test_p2pd:
