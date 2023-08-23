@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  run_tests:
 
+  run_tests:
     strategy:
       matrix:
         include:
@@ -46,7 +46,9 @@ jobs:
         run: |
           cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=${{ matrix.os == 'ubuntu' && 'file_descriptor' || 'file_system' }}
+          export no_proxy=*  # See https://github.com/kevlened/pytest-parallel/issues/93#issuecomment-839913651
           pytest test_dht* --durations=0 --durations-min=1.0 -v
+
   build_and_test_p2pd:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -78,8 +80,8 @@ jobs:
           cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
           pytest -k "p2p" -v
-  codecov_in_develop_mode:
 
+  codecov_in_develop_mode:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
