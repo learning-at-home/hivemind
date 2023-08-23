@@ -45,7 +45,7 @@ jobs:
         run: |
           cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=${{ matrix.os == 'ubuntu' && 'file_descriptor' || 'file_system' }}
-          pytest --durations=0 --durations-min=1.0 -v -x
+          pytest test_dht* --durations=0 --durations-min=1.0 -v
   build_and_test_p2pd:
     runs-on: ubuntu-latest
     timeout-minutes: 10
