@@ -2,6 +2,7 @@ import codecs
 import glob
 import hashlib
 import os
+import platform
 import re
 import subprocess
 import tarfile
@@ -13,14 +14,15 @@ from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
-P2PD_VERSION = "v0.3.16"
+P2PD_VERSION = "v0.3.17"
 
 P2PD_SOURCE_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz"
 P2PD_BINARY_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/"
 
 # The value is sha256 of the binary from the release page
-EXECUTABLES = {
-    "p2pd": "057ec61edbe926cf049e9532d43ea9540da55db7b2d8c816d2bbdddce23f3cdf",
+P2P_BINARY_HASH = {
+    "linux": "b0dd69e80f03a6fe5546f7079242b0228e93cd88d6e58442a227ed9521a95328",
+    "darwin": "f5cf7a86335e0264a65a6cf0fbd1033409e6f9bee65f9c4ee6c330b3cb53c3b5",
 }
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -71,31 +73,31 @@ def build_p2p_daemon():
         with tarfile.open(dest, "r:gz") as tar:
             tar.extractall(tempdir)
 
-        for executable in EXECUTABLES:
-            result = subprocess.run(
-                ["go", "build", "-o", os.path.join(here, "hivemind", "hivemind_cli", executable)],
-                cwd=os.path.join(tempdir, f"go-libp2p-daemon-{P2PD_VERSION.lstrip('v')}", executable),
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"Failed to build {executable}: exited with status code: {result.returncode}")
+        result = subprocess.run(
+            ["go", "build", "-o", os.path.join(here, "hivemind", "hivemind_cli", "p2pd")],
+            cwd=os.path.join(tempdir, f"go-libp2p-daemon-{P2PD_VERSION.lstrip('v')}", "p2pd"),
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to build p2pd: exited with status code: {result.returncode}")
 
 
 def download_p2p_daemon():
-    for executable, expected_hash in EXECUTABLES.items():
-        binary_path = os.path.join(here, "hivemind", "hivemind_cli", executable)
+    binary_path = os.path.join(here, "hivemind", "hivemind_cli", "p2pd")
+    os_name = platform.system().lower()
+    expected_hash = P2P_BINARY_HASH[os_name]
 
-        if sha256(binary_path) != expected_hash:
-            binary_url = os.path.join(P2PD_BINARY_URL, executable)
-            print(f"Downloading {binary_url}")
+    if sha256(binary_path) != expected_hash:
+        binary_url = os.path.join(P2PD_BINARY_URL, f"p2pd-{os_name}")
+        print(f"Downloading {binary_url}")
 
-            urllib.request.urlretrieve(binary_url, binary_path)
-            os.chmod(binary_path, 0o777)
+        urllib.request.urlretrieve(binary_url, binary_path)
+        os.chmod(binary_path, 0o777)
 
-            actual_hash = sha256(binary_path)
-            if actual_hash != expected_hash:
-                raise RuntimeError(
-                    f"The sha256 checksum for {executable} does not match (expected: {expected_hash}, actual: {actual_hash})"
-                )
+        actual_hash = sha256(binary_path)
+        if actual_hash != expected_hash:
+            raise RuntimeError(
+                f"The sha256 checksum for p2pd does not match (expected: {expected_hash}, actual: {actual_hash})"
+            )
 
 
 class BuildPy(build_py):
