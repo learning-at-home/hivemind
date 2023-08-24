@@ -50,6 +50,7 @@ jobs:
           ulimit -n 8192
           export no_proxy=*  # See https://github.com/kevlened/pytest-parallel/issues/93#issuecomment-839913651
           export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+          export OMP_NUM_THREADS=1
 
           pytest test_dht* --durations=0 --durations-min=1.0 -v
 
