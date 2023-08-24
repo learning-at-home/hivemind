@@ -37,6 +37,7 @@ from hivemind.utils.asyncio import (
     enter_asynchronously,
     switch_to_uvloop,
 )
+from hivemind.utils.compat import safe_recv
 from hivemind.utils.serializer import MSGPackSerializer, SerializerBase
 from hivemind.utils.streaming import combine_from_streaming, split_for_streaming
 from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration, get_dht_time
@@ -313,7 +314,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 if not self._inner_pipe.poll():
                     continue
                 try:
-                    method, args, kwargs = self._inner_pipe.recv()
+                    method, args, kwargs = safe_recv(self._inner_pipe)
                 except (OSError, ConnectionError, RuntimeError) as e:
                     logger.exception(e)
                     await asyncio.sleep(self.request_timeout)
@@ -774,7 +775,7 @@ def _background_thread_fetch_current_state(
     """
     while True:
         try:
-            trigger, future = pipe.recv()
+            trigger, future = safe_recv(pipe)
         except BaseException as e:
             logger.debug(f"Averager background thread finished: {repr(e)}")
             break

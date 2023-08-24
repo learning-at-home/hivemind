@@ -14,6 +14,7 @@ from hivemind.dht.routing import DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.p2p import P2P, PeerID
 from hivemind.utils import MPFuture, get_logger, switch_to_uvloop
+from hivemind.utils.compat import safe_recv
 from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration
 
 logger = get_logger(__name__)
@@ -126,7 +127,7 @@ class DHT(mp.Process):
                 if not self._inner_pipe.poll():
                     continue
                 try:
-                    method, args, kwargs = self._inner_pipe.recv()
+                    method, args, kwargs = safe_recv(self._inner_pipe)
                 except (OSError, ConnectionError, RuntimeError) as e:
                     logger.exception(e)
                     await asyncio.sleep(self._node.protocol.wait_timeout)

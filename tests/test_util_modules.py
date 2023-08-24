@@ -13,6 +13,7 @@ import hivemind
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils import BatchTensorDescriptor, DHTExpiration, HeapEntry, MSGPackSerializer, ValueWithExpiration
+from hivemind.utils.compat import safe_recv
 from hivemind.utils.asyncio import (
     achain,
     aenumerate,
@@ -260,7 +261,7 @@ def test_mpfuture_done_callback():
     p = mp.Process(target=_future_creator)
     p.start()
 
-    future1, future2 = receiver.recv()
+    future1, future2 = safe_recv(receiver)
     future1.set_result(123)
 
     with pytest.raises(RuntimeError):
@@ -309,7 +310,7 @@ def test_many_futures():
     p = mp.Process(target=_run_peer)
     p.start()
 
-    some_fork_futures = receiver.recv()
+    some_fork_futures = safe_recv(recv)
 
     time.sleep(0.1)  # giving enough time for the futures to be destroyed
     assert len(hivemind.MPFuture._active_futures) == 700

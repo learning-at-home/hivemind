@@ -14,6 +14,7 @@ from weakref import ref
 
 import torch  # used for py3.7-compatible shared memory
 
+from hivemind.utils.compat import safe_recv
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -182,7 +183,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                 if cls._pipe_waiter_thread is not threading.current_thread():
                     break  # backend was reset, a new background thread has started
 
-                uid, update_type, payload = receiver_pipe.recv()
+                uid, update_type, payload = safe_recv(receiver_pipe)
                 future = None
                 future_ref = cls._active_futures.pop(uid, None)
                 if future_ref is not None:
