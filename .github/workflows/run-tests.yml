@@ -47,6 +47,7 @@ jobs:
           cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=${{ matrix.os == 'ubuntu' && 'file_descriptor' || 'file_system' }}
 
+          ulimit -n 8192
           export no_proxy=*  # See https://github.com/kevlened/pytest-parallel/issues/93#issuecomment-839913651
           export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
