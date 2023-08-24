@@ -13,7 +13,6 @@ import hivemind
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils import BatchTensorDescriptor, DHTExpiration, HeapEntry, MSGPackSerializer, ValueWithExpiration
-from hivemind.utils.compat import safe_recv
 from hivemind.utils.asyncio import (
     achain,
     aenumerate,
@@ -27,6 +26,7 @@ from hivemind.utils.asyncio import (
     cancel_and_wait,
     enter_asynchronously,
 )
+from hivemind.utils.compat import safe_recv
 from hivemind.utils.mpfuture import InvalidStateError
 from hivemind.utils.performance_ema import PerformanceEMA
 

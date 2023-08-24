@@ -14,9 +14,8 @@ def safe_recv(pipe: mp.connection.Connection) -> Any:
         try:
             return pipe.recv()
         except Exception as e:
-            if (
-                (isinstance(e, BlockingIOError) and str(e) == "[Errno 35] Resource temporarily unavailable") or
-                (isinstance(e, EOFError) and str(e) == "Ran out of input")
+            if (isinstance(e, BlockingIOError) and str(e) == "[Errno 35] Resource temporarily unavailable") or (
+                isinstance(e, EOFError) and str(e) == "Ran out of input"
             ):
                 logger.warning(repr(e))
                 time.sleep(0)
