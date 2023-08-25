@@ -90,10 +90,11 @@ class Runtime(threading.Thread):
                     try:
                         outputs, batch_size = self.process_batch(pool, batch_index, *batch)
                         batch_processing_time = perf_counter() - start
-                        output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
                         logger.debug(f"Pool {pool.name}: batch {batch_index} processed, size {batch_size}")
                         if self.stats_report_interval is not None:
                             self.stats_reporter.report_stats(pool.name, batch_size, batch_processing_time)
+
+                        output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
                     except KeyboardInterrupt:
                         raise
                     except BaseException as exception:
