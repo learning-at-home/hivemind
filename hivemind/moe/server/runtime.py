@@ -6,13 +6,14 @@ from itertools import chain
 from queue import SimpleQueue
 from selectors import EVENT_READ, DefaultSelector
 from statistics import mean
-from time import time
-from typing import Dict, NamedTuple, Optional
+from time import perf_counter
+from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 import torch
 from prefetch_generator import BackgroundGenerator
 
 from hivemind.moe.server.module_backend import ModuleBackend
+from hivemind.moe.server.task_pool import TaskPoolBase
 from hivemind.utils import get_logger
 
 logger = get_logger(__name__)
@@ -85,15 +86,11 @@ class Runtime(threading.Thread):
 
                 for pool, batch_index, batch in batch_iterator:
                     logger.debug(f"Processing batch {batch_index} from pool {pool.name}")
-
-                    start = time()
+                    start = perf_counter()
                     try:
-                        outputs = pool.process_func(*batch)
-                        batch_processing_time = time() - start
-
-                        batch_size = outputs[0].size(0)
+                        outputs, batch_size = self.process_batch(pool, batch_index, *batch)
+                        batch_processing_time = perf_counter() - start
                         logger.debug(f"Pool {pool.name}: batch {batch_index} processed, size {batch_size}")
-
                         if self.stats_report_interval is not None:
                             self.stats_reporter.report_stats(pool.name, batch_size, batch_processing_time)
 
@@ -107,6 +104,11 @@ class Runtime(threading.Thread):
             finally:
                 if not self.shutdown_trigger.is_set():
                     self.shutdown()
+
+    def process_batch(self, pool: TaskPoolBase, batch_index: int, *batch: torch.Tensor) -> Tuple[Any, int]:
+        """process one batch of tasks from a given pool, return a batch of results and total batch size"""
+        outputs = pool.process_func(*batch)
+        return outputs, outputs[0].size(0)
 
     def shutdown(self):
         """Gracefully terminate a running runtime."""
