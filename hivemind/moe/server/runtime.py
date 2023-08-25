@@ -13,6 +13,7 @@ import torch
 from prefetch_generator import BackgroundGenerator
 
 from hivemind.moe.server.module_backend import ModuleBackend
+from hivemind.moe.server.task_pool import TaskPoolBase
 from hivemind.utils import get_logger
 
 logger = get_logger(__name__)
@@ -85,18 +86,8 @@ class Runtime(threading.Thread):
 
                 for pool, batch_index, batch in batch_iterator:
                     logger.debug(f"Processing batch {batch_index} from pool {pool.name}")
-
-                    start = time()
                     try:
-                        outputs = pool.process_func(*batch)
-                        batch_processing_time = time() - start
-
-                        batch_size = outputs[0].size(0)
-                        logger.debug(f"Pool {pool.name}: batch {batch_index} processed, size {batch_size}")
-
-                        if self.stats_report_interval is not None:
-                            self.stats_reporter.report_stats(pool.name, batch_size, batch_processing_time)
-
+                        outputs = self.process_batch(pool, batch_index, *batch)
                         output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
                     except KeyboardInterrupt:
                         raise
@@ -107,6 +98,17 @@ class Runtime(threading.Thread):
             finally:
                 if not self.shutdown_trigger.is_set():
                     self.shutdown()
+
+    def process_batch(self, pool: TaskPoolBase, batch_index: int, *batch: torch.Tensor):
+        """process one batch of tasks from a given pool, return a batch of results"""
+        start = time()
+        outputs = pool.process_func(*batch)
+        batch_processing_time = time() - start
+        batch_size = outputs[0].size(0)
+        logger.debug(f"Pool {pool.name}: batch {batch_index} processed, size {batch_size}")
+        if self.stats_report_interval is not None:
+            self.stats_reporter.report_stats(pool.name, batch_size, batch_processing_time)
+        return outputs
 
     def shutdown(self):
         """Gracefully terminate a running runtime."""
