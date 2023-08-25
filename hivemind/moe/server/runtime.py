@@ -6,7 +6,7 @@ from itertools import chain
 from queue import SimpleQueue
 from selectors import EVENT_READ, DefaultSelector
 from statistics import mean
-from time import time
+from time import perf_counter
 from typing import Dict, NamedTuple, Optional
 
 import torch
@@ -86,9 +86,14 @@ class Runtime(threading.Thread):
 
                 for pool, batch_index, batch in batch_iterator:
                     logger.debug(f"Processing batch {batch_index} from pool {pool.name}")
+                    start = perf_counter()
                     try:
-                        outputs = self.process_batch(pool, batch_index, *batch)
+                        outputs, batch_size = self.process_batch(pool, batch_index, *batch)
+                        batch_processing_time = perf_counter() - start
                         output_sender_pool.apply_async(pool.send_outputs_from_runtime, args=[batch_index, outputs])
+                        logger.debug(f"Pool {pool.name}: batch {batch_index} processed, size {batch_size}")
+                        if self.stats_report_interval is not None:
+                            self.stats_reporter.report_stats(pool.name, batch_size, batch_processing_time)
                     except KeyboardInterrupt:
                         raise
                     except BaseException as exception:
@@ -99,16 +104,10 @@ class Runtime(threading.Thread):
                 if not self.shutdown_trigger.is_set():
                     self.shutdown()
 
-    def process_batch(self, pool: TaskPoolBase, batch_index: int, *batch: torch.Tensor):
-        """process one batch of tasks from a given pool, return a batch of results"""
-        start = time()
+    def process_batch(self, pool: TaskPoolBase, batch_index: int, *batch: torch.Tensor) -> Tuple[Any, int]:
+        """process one batch of tasks from a given pool, return a batch of results and task size (complexity)"""
         outputs = pool.process_func(*batch)
-        batch_processing_time = time() - start
-        batch_size = outputs[0].size(0)
-        logger.debug(f"Pool {pool.name}: batch {batch_index} processed, size {batch_size}")
-        if self.stats_report_interval is not None:
-            self.stats_reporter.report_stats(pool.name, batch_size, batch_processing_time)
-        return outputs
+        return outputs, outputs[0].size(0)
 
     def shutdown(self):
         """Gracefully terminate a running runtime."""
