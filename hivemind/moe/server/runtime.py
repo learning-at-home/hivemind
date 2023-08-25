@@ -7,7 +7,7 @@ from queue import SimpleQueue
 from selectors import EVENT_READ, DefaultSelector
 from statistics import mean
 from time import perf_counter
-from typing import Dict, NamedTuple, Optional
+from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 import torch
 from prefetch_generator import BackgroundGenerator
@@ -105,7 +105,7 @@ class Runtime(threading.Thread):
                     self.shutdown()
 
     def process_batch(self, pool: TaskPoolBase, batch_index: int, *batch: torch.Tensor) -> Tuple[Any, int]:
-        """process one batch of tasks from a given pool, return a batch of results and task size (complexity)"""
+        """process one batch of tasks from a given pool, return a batch of results and total batch size"""
         outputs = pool.process_func(*batch)
         return outputs, outputs[0].size(0)
 
