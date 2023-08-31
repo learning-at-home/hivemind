@@ -86,8 +86,12 @@ def build_p2p_daemon():
 def download_p2p_daemon():
     binary_path = os.path.join(here, "hivemind", "hivemind_cli", "p2pd")
     arch = platform.machine()
-    if arch == "x86_64":
+    # An architecture name may vary depending on the OS (e.g., the same CPU is arm64 on macOS and aarch64 on Linux).
+    # We consider multiple aliases here, see https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
+    if arch in ("x86_64", "x64"):
         arch = "amd64"
+    if arch in ("aarch64", "aarch64_be", "armv8b", "armv8l"):
+        arch = "arm64"
     binary_name = f"p2pd-{platform.system().lower()}-{arch}"
 
     if binary_name not in P2P_BINARY_HASH:
