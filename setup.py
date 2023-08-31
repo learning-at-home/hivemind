@@ -89,6 +89,12 @@ def download_p2p_daemon():
     if arch == "x86_64":
         arch = "amd64"
     binary_name = f"p2pd-{platform.system().lower()}-{arch}"
+
+    if binary_name not in P2P_BINARY_HASH:
+        raise RuntimeError(
+            f"hivemind does not provide a precompiled p2pd binary for {platform.system()} ({arch}). "
+            f"Please install Go and build it from source: https://github.com/learning-at-home/hivemind#from-source"
+        )
     expected_hash = P2P_BINARY_HASH[binary_name]
 
     if sha256(binary_path) != expected_hash:
