@@ -14,15 +14,17 @@ from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
-P2PD_VERSION = "v0.3.17"
+P2PD_VERSION = "v0.3.18"
 
 P2PD_SOURCE_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/archive/refs/tags/{P2PD_VERSION}.tar.gz"
 P2PD_BINARY_URL = f"https://github.com/learning-at-home/go-libp2p-daemon/releases/download/{P2PD_VERSION}/"
 
 # The value is sha256 of the binary from the release page
 P2P_BINARY_HASH = {
-    "linux": "b0dd69e80f03a6fe5546f7079242b0228e93cd88d6e58442a227ed9521a95328",
-    "darwin": "f5cf7a86335e0264a65a6cf0fbd1033409e6f9bee65f9c4ee6c330b3cb53c3b5",
+    "p2pd-darwin-amd64": "a9e5fee6bdcbfb5cc7f1a9b19e3fa4c91ceb18108b20472bf7affa62c590a964",
+    "p2pd-darwin-arm64": "5868f2000f4d0746c5349f3480cb5450f66d4391570b420a8f888afc9e9152af",
+    "p2pd-linux-amd64": "a9d456006e915d3cbbc8e5e9902d5b1a3120235f317e113137d6b631e2c810ac",
+    "p2pd-linux-arm64": "b03c02e6afa47f158183f6267eecf4adb0e17120d534402c99dc33f3a2915cb1",
 }
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -83,11 +85,20 @@ def build_p2p_daemon():
 
 def download_p2p_daemon():
     binary_path = os.path.join(here, "hivemind", "hivemind_cli", "p2pd")
-    os_name = platform.system().lower()
-    expected_hash = P2P_BINARY_HASH[os_name]
+    arch = platform.machine()
+    if arch == "x86_64":
+        arch = "amd64"
+    binary_name = f"p2pd-{platform.system().lower()}-{arch}"
+
+    if binary_name not in P2P_BINARY_HASH:
+        raise RuntimeError(
+            f"hivemind does not provide a precompiled p2pd binary for {platform.system()} ({arch}). "
+            f"Please install Go and build it from source: https://github.com/learning-at-home/hivemind#from-source"
+        )
+    expected_hash = P2P_BINARY_HASH[binary_name]
 
     if sha256(binary_path) != expected_hash:
-        binary_url = os.path.join(P2PD_BINARY_URL, f"p2pd-{os_name}")
+        binary_url = os.path.join(P2PD_BINARY_URL, binary_name)
         print(f"Downloading {binary_url}")
 
         urllib.request.urlretrieve(binary_url, binary_path)
