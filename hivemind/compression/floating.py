@@ -12,7 +12,8 @@ class Float16Compression(CompressionBase):
     FP16_MIN, FP16_MAX = torch.finfo(torch.float16).min, torch.finfo(torch.float16).max
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        assert torch.is_floating_point(tensor) and tensor.dtype != torch.bfloat16
+        if not torch.is_floating_point(tensor) or tensor.dtype == torch.bfloat16:
+            raise ValueError(f"{self.__class__.__name__} does not support {tensor.dtype} tensors")
         requires_grad = tensor.requires_grad
         tensor = tensor.detach().cpu()
         dtype_name = tensor.numpy().dtype.name
@@ -47,7 +48,8 @@ class ScaledFloat16Compression(Float16Compression):
     FP32_EPS = torch.finfo(torch.float32).eps
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        assert torch.is_floating_point(tensor) and tensor.dtype != torch.bfloat16
+        if not torch.is_floating_point(tensor) or tensor.dtype == torch.bfloat16:
+            raise ValueError(f"{self.__class__.__name__} does not support {tensor.dtype} tensors")
         requires_grad = tensor.requires_grad
         tensor = tensor.detach().cpu()
         dtype_name = tensor.numpy().dtype.name

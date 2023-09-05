@@ -25,7 +25,8 @@ class Quantization(CompressionBase, ABC):
         ...
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
-        assert torch.is_floating_point(tensor)
+        if not torch.is_floating_point(tensor):
+            raise ValueError(f"{self.__class__.__name__} does not support {tensor.dtype} tensors")
         quantized, codebook = self.quantize(tensor.detach(), allow_inplace=allow_inplace)
         return runtime_pb2.Tensor(
             compression=self.compression_type,
@@ -128,6 +129,7 @@ or using the instruction from https://github.com/TimDettmers/bitsandbytes."""
 class BlockwiseQuantization(Quantization):
     compression_type = runtime_pb2.BLOCKWISE_8BIT
     codebook_dtype, indices_dtype = np.float32, np.uint8
+    EXTRA_PARAMS = (4096, False, torch.float32, None, None)
 
     def quantize(
         self, tensor: torch.Tensor, allow_inplace: bool = False
@@ -139,7 +141,7 @@ class BlockwiseQuantization(Quantization):
             raise ImportError(BNB_MISSING_MESSAGE)
 
         quantized, (absmax, codebook, *extra_params) = quantize_blockwise(tensor, blocksize=4096, nested=False)
-        assert tuple(extra_params) == (4096, False, tensor.dtype, None, None)  # blocksize, nested, dtype, offset, s2
+        assert tuple(extra_params) == self.EXTRA_PARAMS  # blocksize, nested, dtype, offset, state2
         return quantized.numpy(), (absmax.numpy(), codebook.numpy())
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
@@ -185,5 +187,5 @@ class BlockwiseQuantization(Quantization):
         absmax = torch.as_tensor(absmax)
         codebook = torch.as_tensor(codebook)
         quantized = torch.as_tensor(quantized).reshape(tuple(serialized_tensor.size))
-        result = dequantize_blockwise(quantized, (absmax, codebook, 4096, False, torch.float32, None, None))
+        result = dequantize_blockwise(quantized, (absmax, codebook, *self.EXTRA_PARAMS))
         return result.to(getattr(torch, serialized_tensor.dtype)).requires_grad_(serialized_tensor.requires_grad)
