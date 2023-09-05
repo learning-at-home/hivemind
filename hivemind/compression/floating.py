@@ -12,10 +12,11 @@ class Float16Compression(CompressionBase):
     FP16_MIN, FP16_MAX = torch.finfo(torch.float16).min, torch.finfo(torch.float16).max
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
+        assert torch.is_floating_point(tensor) and tensor.dtype != torch.bfloat16
         requires_grad = tensor.requires_grad
+        tensor = tensor.detach().cpu()
         dtype_name = tensor.numpy().dtype.name
-        tensor = tensor.detach().cpu().float()
-        tensor = tensor if allow_inplace else tensor.clone()
+        tensor = tensor.to(torch.float32, copy=not allow_inplace)
         tensor = tensor.clamp_(self.FP16_MIN, self.FP16_MAX).to(torch.float16)
         return runtime_pb2.Tensor(
             compression=self.compression_type,
@@ -28,8 +29,10 @@ class Float16Compression(CompressionBase):
     def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
         original_dtype = np.dtype(serialized_tensor.dtype)
         array = np.frombuffer(serialized_tensor.buffer, dtype=np.float16)
-        return torch.as_tensor(np.asarray(array, dtype=original_dtype)).reshape(tuple(serialized_tensor.size)).requires_grad_(
-            serialized_tensor.requires_grad
+        return (
+            torch.as_tensor(np.asarray(array, dtype=original_dtype))
+            .reshape(tuple(serialized_tensor.size))
+            .requires_grad_(serialized_tensor.requires_grad)
         )
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
@@ -44,10 +47,11 @@ class ScaledFloat16Compression(Float16Compression):
     FP32_EPS = torch.finfo(torch.float32).eps
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
+        assert torch.is_floating_point(tensor) and tensor.dtype != torch.bfloat16
         requires_grad = tensor.requires_grad
+        tensor = tensor.detach().cpu()
         dtype_name = tensor.numpy().dtype.name
-        tensor = tensor.detach().cpu().float()
-        tensor = tensor if allow_inplace else tensor.clone()
+        tensor = tensor.to(dtype=torch.float32, copy=not allow_inplace)
         means = torch.mean(tensor, dim=-1, keepdim=True)
         tensor.sub_(means)
         stds = tensor.norm(dim=-1, keepdim=True) / math.sqrt(tensor.shape[-1])
@@ -81,7 +85,8 @@ class ScaledFloat16Compression(Float16Compression):
         tensor = torch.as_tensor(np.asarray(array, dtype=serialized_tensor.dtype)).reshape(
             list(serialized_tensor.size)
         )
-        return tensor.mul_(stds).add_(means).requires_grad_(serialized_tensor.requires_grad)
+        dtype = getattr(torch, serialized_tensor.dtype)
+        return tensor.mul_(stds).add_(means).to(dtype).requires_grad_(serialized_tensor.requires_grad)
 
 
 def get_num_bits(dtype: torch.dtype) -> int:
