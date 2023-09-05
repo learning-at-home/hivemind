@@ -82,6 +82,7 @@ class NoCompression(CompressionBase):
     compression_type = runtime_pb2.CompressionType.NONE
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
+        requires_grad = tensor.requires_grad
         tensor = tensor.detach()
         shape = tensor.shape
         dtype_name = str(tensor.dtype).replace("torch.", "")
@@ -98,7 +99,7 @@ class NoCompression(CompressionBase):
             buffer=raw_data.numpy().tobytes(),
             size=shape,
             dtype=dtype_name,
-            requires_grad=tensor.requires_grad,
+            requires_grad=requires_grad,
         )
 
     def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
