@@ -156,7 +156,7 @@ with open("requirements-dev.txt") as dev_requirements_file:
 with open("requirements-docs.txt") as docs_requirements_file:
     extras["docs"] = list(map(str, parse_requirements(docs_requirements_file)))
 
-extras["bitsandbytes"] = ["bitsandbytes~=0.37.0"]
+extras["bitsandbytes"] = ["bitsandbytes~=0.41.1"]
 
 extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
 
