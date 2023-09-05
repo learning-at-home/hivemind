@@ -25,12 +25,14 @@ class Quantization(CompressionBase, ABC):
         ...
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
+        if not torch.is_floating_point(tensor):
+            raise ValueError(f"{self.__class__.__name__} does not support {tensor.dtype} tensors")
         quantized, codebook = self.quantize(tensor.detach(), allow_inplace=allow_inplace)
         return runtime_pb2.Tensor(
             compression=self.compression_type,
             buffer=b"".join((np.int64(len(codebook)).tobytes(), codebook.tobytes(), quantized.tobytes())),
             size=tensor.shape,
-            dtype=tensor.numpy().dtype.name,
+            dtype=tensor.data.numpy().dtype.name if tensor.dtype != torch.bfloat16 else "bfloat16",
             requires_grad=tensor.requires_grad,
         )
 
@@ -39,8 +41,8 @@ class Quantization(CompressionBase, ABC):
         codebook = np.frombuffer(serialized_tensor.buffer, offset=8, count=codebook_size, dtype=self.codebook_dtype)
         quantized = np.frombuffer(serialized_tensor.buffer, offset=8 + codebook.nbytes, dtype=self.indices_dtype)
         quantized = torch.as_tensor(quantized, dtype=torch.int64).reshape(tuple(serialized_tensor.size))
-        codebook = torch.as_tensor(np.asarray(codebook, dtype=serialized_tensor.dtype))
-        return codebook[quantized]
+        codebook = torch.as_tensor(codebook).to(dtype=getattr(torch, serialized_tensor.dtype))
+        return codebook[quantized].requires_grad_(serialized_tensor.requires_grad)
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
         return self.n_bits / torch.finfo(info.descriptor.dtype).bits
@@ -59,8 +61,10 @@ class Uniform8BitQuantization(Quantization):
     compression_type = runtime_pb2.UNIFORM_8BIT
 
     def quantize(self, tensor: torch.Tensor, allow_inplace: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+        assert torch.is_floating_point(tensor)
         offset = self.n_bins // 2
         shift = tensor.mean()
+        tensor = tensor.to(dtype=torch.float32, copy=not allow_inplace)
         centered_tensor = tensor.sub_(shift) if allow_inplace else tensor - shift
         std_unbiased = centered_tensor.norm() / math.sqrt(centered_tensor.numel() - 1)
         scale = self.RANGE_IN_SIGMAS * std_unbiased / self.n_bins
@@ -125,6 +129,7 @@ or using the instruction from https://github.com/TimDettmers/bitsandbytes."""
 class BlockwiseQuantization(Quantization):
     compression_type = runtime_pb2.BLOCKWISE_8BIT
     codebook_dtype, indices_dtype = np.float32, np.uint8
+    EXTRA_PARAMS = (4096, False, torch.float32, None, None)
 
     def quantize(
         self, tensor: torch.Tensor, allow_inplace: bool = False
@@ -135,14 +140,15 @@ class BlockwiseQuantization(Quantization):
         except ImportError:
             raise ImportError(BNB_MISSING_MESSAGE)
 
-        quantized, (absmax, codebook) = quantize_blockwise(tensor)
+        quantized, (absmax, codebook, *extra_params) = quantize_blockwise(tensor, blocksize=4096, nested=False)
+        assert tuple(extra_params) == self.EXTRA_PARAMS  # blocksize, nested, dtype, offset, state2
         return quantized.numpy(), (absmax.numpy(), codebook.numpy())
 
     def compress(self, tensor: torch.Tensor, info: CompressionInfo, allow_inplace: bool = False) -> runtime_pb2.Tensor:
+        requires_grad = tensor.requires_grad
         tensor = tensor.detach()
         dtype_name = str(tensor.dtype).replace("torch.", "")
-        if tensor.dtype == torch.bfloat16:
-            tensor = tensor.to(torch.float32)
+        tensor = tensor.to(torch.float32)
 
         quantized, (absmax, codebook) = self.quantize(tensor, allow_inplace=allow_inplace)
 
@@ -157,7 +163,7 @@ class BlockwiseQuantization(Quantization):
         return runtime_pb2.Tensor(
             buffer=b"".join(serialized_data),
             size=tensor.shape,
-            requires_grad=tensor.requires_grad,
+            requires_grad=requires_grad,
             dtype=dtype_name,
             compression=self.compression_type,
         )
@@ -181,6 +187,5 @@ class BlockwiseQuantization(Quantization):
         absmax = torch.as_tensor(absmax)
         codebook = torch.as_tensor(codebook)
         quantized = torch.as_tensor(quantized).reshape(tuple(serialized_tensor.size))
-        result = dequantize_blockwise(quantized, (absmax, codebook))  # Always returns a float32 tensor
-        result = result.to(dtype=getattr(torch, serialized_tensor.dtype))
-        return result
+        result = dequantize_blockwise(quantized, (absmax, codebook, *self.EXTRA_PARAMS))
+        return result.to(getattr(torch, serialized_tensor.dtype)).requires_grad_(serialized_tensor.requires_grad)
