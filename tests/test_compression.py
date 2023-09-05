@@ -54,18 +54,24 @@ def _check(tensor, compression, rtol=1e-5, atol=1e-8, chunk_size=30 * 1024):
     result = deserialize_torch_tensor(restored)
     assert torch.allclose(result, tensor, rtol=rtol, atol=atol)
     assert result.dtype == tensor.dtype
+    assert result.requires_grad == tensor.requires_grad
 
 
+@pytest.mark.parametrize("requires_grad", [False, True])
 @pytest.mark.forked
-def test_serialize_tensor():
-    tensor = torch.randn(512, 12288)
+def test_serialize_tensor(requires_grad: bool):
+    tensor = torch.randn(512, 12288, requires_grad=requires_grad)
+    for compression_type in CompressionType.values():
+        _check(tensor, compression_type, atol=0.1)
+
     for chunk_size in [1024, 64 * 1024, 64 * 1024 + 1, 10**9]:
         _check(tensor, CompressionType.NONE, chunk_size=chunk_size)
 
     _check(tensor, CompressionType.FLOAT16, rtol=0.0, atol=1e-2)
     _check(torch.randint(0, 100, (512, 1, 1)), CompressionType.NONE)
-    _check(torch.tensor(1.0), CompressionType.NONE)
-    _check(torch.tensor(1.0), CompressionType.FLOAT16)
+    _check(torch.tensor(1.0, requires_grad=requires_grad), CompressionType.NONE)
+    _check(torch.tensor(1.0, requires_grad=requires_grad), CompressionType.FLOAT16)
+    _check(torch.tensor(1.0,requires_grad=requires_grad), CompressionType.MEANSTD_FLOAT16)
 
 
 @pytest.mark.parametrize("use_legacy_bfloat16", [True, False])
