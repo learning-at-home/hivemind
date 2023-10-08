@@ -46,7 +46,7 @@ class TrainingMonitorArguments(BaseTrainingArguments):
         default=5, metadata={"help": "Frequency (in steps) of fetching and saving state from peers"}
     )
     model_config_path: str = field(
-        default="https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-config.json",
+        default="albert-large-v2",
         metadata={"help": "Path to the model config"},
     )
     repo_path: Optional[str] = field(
