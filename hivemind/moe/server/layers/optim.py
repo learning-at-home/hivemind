@@ -1,11 +1,10 @@
 import torch
 
 
-class OptimizerWrapper(torch.optim.Optimizer):
+class OptimizerWrapper:
     """A wrapper for pytorch.optim.Optimizer that forwards all methods to the wrapped optimizer"""
 
     def __init__(self, optim: torch.optim.Optimizer):
-        super().__init__(optim.param_groups, optim.defaults)
         self.optim = optim
 
     @property

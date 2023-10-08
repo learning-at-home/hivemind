@@ -20,7 +20,12 @@ def test_training(max_steps: int = 100, threshold: float = 0.9):
     SGD = partial(torch.optim.SGD, lr=0.05)
 
     with background_server(
-        num_experts=2, device="cpu", optim_cls=SGD, hidden_dim=64, num_handlers=1
+        num_experts=2,
+        device="cpu",
+        optim_cls=SGD,
+        hidden_dim=64,
+        num_handlers=1,
+        clip_grad_norm=1.0,
     ) as server_peer_info:
         dht = DHT(initial_peers=server_peer_info.addrs, start=True)
         expert1, expert2 = create_remote_experts(
