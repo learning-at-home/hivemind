@@ -9,9 +9,8 @@ uvloop>=0.14.0
 grpcio-tools>=1.33.2
 protobuf>=3.12.2
 configargparse>=1.2.3
+multiaddr @ git+https://github.com/multiformats/py-multiaddr.git
+# pymultihash>=0.8.2
 cryptography>=3.4.6
 pydantic>=1.8.1,<2.0
 packaging>=20.9
-multiaddr @ git+https://github.com/multiformats/py-multiaddr.git
-pymultihash>=0.8.2
-# multiaddr>=0.0.9
