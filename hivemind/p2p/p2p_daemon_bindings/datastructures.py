@@ -5,7 +5,7 @@ Author: Kevin Mai-Husan Chia
 """
 
 import hashlib
-from typing import Any, Sequence, Union
+from typing import Any, List, Sequence, Union
 
 import base58
 import multihash
@@ -142,9 +142,11 @@ class StreamInfo:
 
 
 class PeerInfo:
-    def __init__(self, peer_id: PeerID, addrs: Sequence[Multiaddr]) -> None:
+    def __init__(self, peer_id: PeerID, addrs: Sequence[Multiaddr], rate_in = 0, rate_out = 0) -> None:
         self.peer_id = peer_id
         self.addrs = list(addrs)
+        self.rate_in = rate_in
+        self.rate_out = rate_out
 
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, PeerInfo) and self.peer_id == other.peer_id and self.addrs == other.addrs
@@ -153,13 +155,15 @@ class PeerInfo:
     def from_protobuf(cls, peer_info_pb: p2pd_pb2.PeerInfo) -> "PeerInfo":
         peer_id = PeerID(peer_info_pb.id)
         addrs = [Multiaddr(addr) for addr in peer_info_pb.addrs]
-        return PeerInfo(peer_id, addrs)
+        rate_in = peer_info_pb.ratein
+        rate_out = peer_info_pb.rateout
+        return PeerInfo(peer_id, addrs, rate_in, rate_out)
 
     def __str__(self):
-        return f"{self.peer_id.pretty()} {','.join(str(a) for a in self.addrs)}"
+        return f"{self.peer_id.pretty()} {','.join(str(a) for a in self.addrs)}, rate_in = {repr(self.rate_in)}, rate_out = {repr(self.rate_out)})"
 
     def __repr__(self):
-        return f"PeerInfo(peer_id={repr(self.peer_id)}, addrs={repr(self.addrs)})"
+        return f"PeerInfo(peer_id={repr(self.peer_id)}, addrs={repr(self.addrs)}, rate_in = {repr(self.rate_in)}, rate_out = {repr(self.rate_out)})"
 
 
 class InvalidAddrError(ValueError):
@@ -188,3 +192,17 @@ def info_from_p2p_addr(addr: Multiaddr) -> PeerInfo:
         addr = Multiaddr.join(*parts[:-1])
 
     return PeerInfo(peer_id, [addr])
+
+
+class BandwidthMetrics:
+    def __init__(self, rateIn: int = 0, rateOut: int = 0, peers: List[Any] = []) -> None:
+        self.selfRateIn = rateIn
+        self.selfRateOut = rateOut
+        self.peers = peers
+    
+    @classmethod
+    def from_protobuf(cls, bmr: p2pd_pb2.BandwidthMetricsResponse) -> "BandwidthMetrics":
+        rate_in = bmr.selfRateIn
+        rate_out = bmr.selfRateOut
+        peers = [PeerInfo.from_protobuf(peer_info) for peer_info in bmr.peers]
+        return BandwidthMetrics(rate_in, rate_out, peers)

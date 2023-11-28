@@ -5,7 +5,7 @@ import multiprocessing as mp
 import os
 import signal
 from functools import partial
-from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, TypeVar, Union
+from typing import Awaitable, Callable, Iterable, Optional, Sequence, TypeVar, Union
 
 from multiaddr import Multiaddr
 
@@ -15,6 +15,7 @@ from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.p2p import P2P, PeerID
 from hivemind.utils import MPFuture, get_logger, switch_to_uvloop
 from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration
+from hivemind.p2p.p2p_daemon_bindings import BandwidthMetrics
 
 logger = get_logger(__name__)
 ReturnType = TypeVar("ReturnType")
@@ -86,6 +87,38 @@ class DHT(mp.context.ForkProcess):
 
         if start:
             self.run_in_background(await_ready=await_ready)
+
+    def list_peers(self) -> str:
+        assert os.getpid() != self.pid, "calling *external* DHT interface from inside DHT will result in a deadlock"
+        future = MPFuture()
+        self._outer_pipe.send(("_list_peers", [future], dict()))
+        return future.result()
+
+    def get_bandwidth_metrics(self, for_self: bool = False, for_all_peers: bool = False, peers: Sequence[Union[str, PeerID]] = []) -> BandwidthMetrics:
+        assert os.getpid() != self.pid, "calling *external* DHT interface from inside DHT will result in a deadlock"
+        future = MPFuture()
+        self._outer_pipe.send(("_get_bandwidth_metrics", [future, for_self, for_all_peers, peers], dict()))
+        return future.result()
+
+    async def _get_bandwidth_metrics(self, future: MPFuture, for_self: bool, for_all_peers: bool, peers: Sequence[Union[str, PeerID]]):
+        try:
+            result = await self._node.p2p.get_bandwidth_metrics(for_self, for_all_peers, peers)
+            if not future.done():
+                future.set_result(result)
+        except BaseException as e:
+            if not future.done():
+                future.set_exception(e)
+            raise
+
+    async def _list_peers(self, future: MPFuture):
+        try:
+            result = await self._node.p2p.list_peers()
+            if not future.done():
+                future.set_result(result)
+        except BaseException as e:
+            if not future.done():
+                future.set_exception(e)
+            raise
 
     def run(self) -> None:
         """Serve DHT forever. This function will not return until DHT node is shut down"""
