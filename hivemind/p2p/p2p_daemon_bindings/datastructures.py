@@ -5,7 +5,7 @@ Author: Kevin Mai-Husan Chia
 """
 
 import hashlib
-from typing import Any, List, Sequence, Union
+from typing import List, Sequence, Union
 
 import base58
 import multihash
@@ -195,7 +195,7 @@ def info_from_p2p_addr(addr: Multiaddr) -> PeerInfo:
 
 
 class BandwidthMetrics:
-    def __init__(self, rateIn: int = 0, rateOut: int = 0, peers: List[Any] = []) -> None:
+    def __init__(self, rateIn: int = 0, rateOut: int = 0, peers: Sequence[PeerId] = []) -> None:
         self.selfRateIn = rateIn
         self.selfRateOut = rateOut
         self.peers = peers

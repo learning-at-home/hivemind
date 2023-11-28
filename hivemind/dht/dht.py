@@ -95,6 +95,12 @@ class DHT(mp.context.ForkProcess):
         return future.result()
 
     def get_bandwidth_metrics(self, for_self: bool = False, for_all_peers: bool = False, peers: Sequence[Union[str, PeerID]] = []) -> BandwidthMetrics:
+        """
+        Get bandwidth rate metrics(bytes / sec, in and out): 
+        for_self - for self(this host totals)
+        for_all_peers - for all active peers(MAY BE SLOW)
+        peers[..]: - for the list of peer ids
+        """
         assert os.getpid() != self.pid, "calling *external* DHT interface from inside DHT will result in a deadlock"
         future = MPFuture()
         self._outer_pipe.send(("_get_bandwidth_metrics", [future, for_self, for_all_peers, peers], dict()))

@@ -336,6 +336,12 @@ class P2P:
         return list(await self._client.list_peers())
 
     async def get_bandwidth_metrics(self, for_self: bool = False, for_all_peers: bool = False, peers: Sequence[Union[str, PeerID]] = []) -> BandwidthMetrics:
+        """
+        Get bandwidth rate metrics(bytes / sec, in and out): 
+        for_self - for self(this host totals)
+        for_all_peers - for all active peers(MAY BE SLOW)
+        peers[..]: - for the list of peer ids
+        """
         peer_ids = [PeerID.from_base58(peer) if isinstance(peer, str) else peer for peer in peers]
         return await self._client.get_bandwidth_metrics(for_self, for_all_peers, peer_ids)
 
