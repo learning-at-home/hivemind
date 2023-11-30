@@ -17,7 +17,7 @@ from hivemind.proto import crypto_pb2, p2pd_pb2
 # NOTE: On inlining...
 # See: https://github.com/libp2p/specs/issues/138
 # NOTE: enabling to be interoperable w/ the Go implementation
-ENABLE_INLINING = True
+ENABLE_INLINING = False
 MAX_INLINE_KEY_LENGTH = 42
 
 IDENTITY_MULTIHASH_CODE = 0x00
@@ -96,6 +96,7 @@ class PeerID:
 
         [1] https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md#peer-ids
         """
+        assert False
 
         key_data = crypto_pb2.PrivateKey.FromString(data).data
         private_key = serialization.load_der_private_key(key_data, password=None)
