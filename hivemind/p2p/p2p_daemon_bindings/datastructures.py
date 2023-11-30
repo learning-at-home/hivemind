@@ -22,20 +22,6 @@ MAX_INLINE_KEY_LENGTH = 42
 
 IDENTITY_MULTIHASH_CODE = 0x00
 
-if ENABLE_INLINING:
-
-    class IdentityHash:
-        def __init__(self) -> None:
-            self._digest = bytearray()
-
-        def update(self, input: bytes) -> None:
-            self._digest += input
-
-        def digest(self) -> bytes:
-            return self._digest
-
-    multihash.FuncReg.register(IDENTITY_MULTIHASH_CODE, "identity", hash_new=IdentityHash)
-
 
 class PeerID:
     def __init__(self, peer_id_bytes: bytes) -> None:
@@ -96,7 +82,6 @@ class PeerID:
 
         [1] https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md#peer-ids
         """
-        assert False
 
         key_data = crypto_pb2.PrivateKey.FromString(data).data
         private_key = serialization.load_der_private_key(key_data, password=None)
@@ -111,8 +96,6 @@ class PeerID:
         ).SerializeToString()
 
         algo = multihash.Func.sha2_256
-        if ENABLE_INLINING and len(encoded_public_key) <= MAX_INLINE_KEY_LENGTH:
-            algo = IDENTITY_MULTIHASH_CODE
         encoded_digest = multihash.digest(encoded_public_key, algo).encode()
         return cls(encoded_digest)
 
