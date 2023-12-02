@@ -14,12 +14,6 @@ from multiaddr import Multiaddr, protocols
 
 from hivemind.proto import crypto_pb2, p2pd_pb2
 
-# NOTE: On inlining...
-# See: https://github.com/libp2p/specs/issues/138
-# NOTE: enabling to be interoperable w/ the Go implementation
-# ENABLE_INLINING = False
-MAX_INLINE_KEY_LENGTH = 42
-
 
 class PeerID:
     def __init__(self, peer_id_bytes: bytes) -> None:
