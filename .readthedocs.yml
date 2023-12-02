@@ -4,7 +4,6 @@ sphinx:
   fail_on_warning: true
 
 python:
-  version: 3.7
   install:
     - requirements: requirements.txt
     - requirements: requirements-docs.txt
