@@ -103,7 +103,7 @@ async def test_check_if_identity_free():
     "host_maddrs",
     [
         [Multiaddr("/ip4/127.0.0.1/tcp/0")],
-        [Multiaddr("/ip4/127.0.0.1/udp/0/quic")],
+        [Multiaddr("/ip4/127.0.0.1/udp/0/quic-v1")],
         [Multiaddr("/ip4/127.0.0.1/tcp/0"), Multiaddr("/ip4/127.0.0.1/udp/0/quic")],
     ],
 )
