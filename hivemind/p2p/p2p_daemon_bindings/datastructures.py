@@ -172,7 +172,7 @@ def info_from_p2p_addr(addr: Multiaddr) -> PeerInfo:
 
 
 class BandwidthMetrics:
-    def __init__(self, rateIn: int = 0, rateOut: int = 0, peers: Sequence[PeerId] = []) -> None:
+    def __init__(self, rateIn: int = 0, rateOut: int = 0, peers: Sequence[PeerID] = []) -> None:
         self.selfRateIn = rateIn
         self.selfRateOut = rateOut
         self.peers = peers
