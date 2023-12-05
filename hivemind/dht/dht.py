@@ -13,9 +13,9 @@ from hivemind.dht.node import DEFAULT_NUM_WORKERS, DHTNode
 from hivemind.dht.routing import DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.p2p import P2P, PeerID
+from hivemind.p2p.p2p_daemon_bindings import BandwidthMetrics
 from hivemind.utils import MPFuture, get_logger, switch_to_uvloop
 from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration
-from hivemind.p2p.p2p_daemon_bindings import BandwidthMetrics
 
 logger = get_logger(__name__)
 ReturnType = TypeVar("ReturnType")
