@@ -119,7 +119,7 @@ class StreamInfo:
 
 
 class PeerInfo:
-    def __init__(self, peer_id: PeerID, addrs: Sequence[Multiaddr], rate_in = 0, rate_out = 0) -> None:
+    def __init__(self, peer_id: PeerID, addrs: Sequence[Multiaddr], rate_in=0, rate_out=0) -> None:
         self.peer_id = peer_id
         self.addrs = list(addrs)
         self.rate_in = rate_in

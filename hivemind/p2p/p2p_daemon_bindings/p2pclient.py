@@ -91,10 +91,12 @@ class Client:
         """
         return await self.control.list_peers()
 
-    async def get_bandwidth_metrics(self, for_self: bool = False, for_all_peers: bool = False, peers: Sequence[PeerID]=[]) -> BandwidthMetrics:
-         """
+    async def get_bandwidth_metrics(
+        self, for_self: bool = False, for_all_peers: bool = False, peers: Sequence[PeerID] = []
+    ) -> BandwidthMetrics:
+        """
         Get list of peers that node connect to
-        Get bandwidth rate metrics(bytes / sec, in and out): 
+        Get bandwidth rate metrics(bytes / sec, in and out):
         for_self - for self(this host totals)
         for_all_peers - for all active peers(MAY BE SLOW)
         peers[..]: - for the list of peer ids

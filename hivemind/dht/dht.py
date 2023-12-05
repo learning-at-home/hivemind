@@ -94,9 +94,11 @@ class DHT(mp.context.ForkProcess):
         self._outer_pipe.send(("_list_peers", [future], dict()))
         return future.result()
 
-    def get_bandwidth_metrics(self, for_self: bool = False, for_all_peers: bool = False, peers: Sequence[Union[str, PeerID]] = []) -> BandwidthMetrics:
+    def get_bandwidth_metrics(
+        self, for_self: bool = False, for_all_peers: bool = False, peers: Sequence[Union[str, PeerID]] = []
+    ) -> BandwidthMetrics:
         """
-        Get bandwidth rate metrics(bytes / sec, in and out): 
+        Get bandwidth rate metrics(bytes / sec, in and out):
         for_self - for self(this host totals)
         for_all_peers - for all active peers(MAY BE SLOW)
         peers[..]: - for the list of peer ids
@@ -106,7 +108,9 @@ class DHT(mp.context.ForkProcess):
         self._outer_pipe.send(("_get_bandwidth_metrics", [future, for_self, for_all_peers, peers], dict()))
         return future.result()
 
-    async def _get_bandwidth_metrics(self, future: MPFuture, for_self: bool, for_all_peers: bool, peers: Sequence[Union[str, PeerID]]):
+    async def _get_bandwidth_metrics(
+        self, future: MPFuture, for_self: bool, for_all_peers: bool, peers: Sequence[Union[str, PeerID]]
+    ):
         try:
             result = await self._node.p2p.get_bandwidth_metrics(for_self, for_all_peers, peers)
             if not future.done():

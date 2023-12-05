@@ -357,9 +357,12 @@ class ControlClient:
         peers = tuple(PeerInfo.from_protobuf(pinfo) for pinfo in resp.peers)
         return peers
 
-    async def get_bandwidth_metrics(self, for_self: bool, for_all_peers: bool, peer_ids: Sequence[PeerID]) -> BandwidthMetrics:
+    async def get_bandwidth_metrics(
+        self, for_self: bool, for_all_peers: bool, peer_ids: Sequence[PeerID]
+    ) -> BandwidthMetrics:
         bandwidth_req = p2pd_pb.BandwidthMetricsRequest(
-            forSelf=for_self, forAllPeers=for_all_peers, ids=[id.to_bytes() for id in peer_ids])
+            forSelf=for_self, forAllPeers=for_all_peers, ids=[id.to_bytes() for id in peer_ids]
+        )
         req = p2pd_pb.Request(type=p2pd_pb.Request.BANDWIDTH_METRICS, bwr=bandwidth_req)
 
         reader, writer = await self.daemon_connector.open_connection()
