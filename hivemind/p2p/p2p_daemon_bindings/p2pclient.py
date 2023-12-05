@@ -17,7 +17,7 @@ from hivemind.p2p.p2p_daemon_bindings.control import (
     StreamHandler,
     TUnaryHandler,
 )
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
+from hivemind.p2p.p2p_daemon_bindings.datastructures import BandwidthMetrics, PeerID, PeerInfo, StreamInfo
 
 
 class Client:
@@ -90,6 +90,18 @@ class Client:
         Get list of peers that node connect to
         """
         return await self.control.list_peers()
+
+    async def get_bandwidth_metrics(
+        self, for_self: bool = False, for_all_peers: bool = False, peers: Sequence[PeerID] = []
+    ) -> BandwidthMetrics:
+        """
+        Get list of peers that node connect to
+        Get bandwidth rate metrics(bytes / sec, in and out):
+        for_self - for self(this host totals)
+        for_all_peers - for all active peers(MAY BE SLOW)
+        peers[..]: - for the list of peer ids
+        """
+        return await self.control.get_bandwidth_metrics(for_self, for_all_peers, peers)
 
     async def disconnect(self, peer_id: PeerID) -> None:
         """
