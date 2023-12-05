@@ -345,8 +345,8 @@ class P2P:
         peers[..]: - for the list of peer ids
         """
 
-    peer_ids = [PeerID.from_base58(peer) if isinstance(peer, str) else peer for peer in peers]
-    return await self._client.get_bandwidth_metrics(for_self, for_all_peers, peer_ids)
+        peer_ids = [PeerID.from_base58(peer) if isinstance(peer, str) else peer for peer in peers]
+        return await self._client.get_bandwidth_metrics(for_self, for_all_peers, peer_ids)
 
     async def wait_for_at_least_n_peers(self, n_peers: int, attempts: int = 3, delay: float = 1) -> None:
         for _ in range(attempts):
