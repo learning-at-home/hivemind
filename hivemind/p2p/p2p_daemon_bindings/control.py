@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 from multiaddr import Multiaddr, protocols
 
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
+from hivemind.p2p.p2p_daemon_bindings.datastructures import BandwidthMetrics, PeerID, PeerInfo, StreamInfo
 from hivemind.p2p.p2p_daemon_bindings.utils import (
     DispatchFailure,
     P2PDaemonError,
@@ -356,6 +356,22 @@ class ControlClient:
 
         peers = tuple(PeerInfo.from_protobuf(pinfo) for pinfo in resp.peers)
         return peers
+
+    async def get_bandwidth_metrics(self, for_self: bool, for_all_peers: bool, peer_ids: Sequence[PeerID]) -> BandwidthMetrics:
+        bandwidth_req = p2pd_pb.BandwidthMetricsRequest(
+            forSelf=for_self, forAllPeers=for_all_peers, ids=[id.to_bytes() for id in peer_ids])
+        req = p2pd_pb.Request(type=p2pd_pb.Request.BANDWIDTH_METRICS, bwr=bandwidth_req)
+
+        reader, writer = await self.daemon_connector.open_connection()
+        await write_pbmsg(writer, req)
+        resp = p2pd_pb.Response()  # type: ignore
+        await read_pbmsg_safe(reader, resp)
+        writer.close()
+        raise_if_failed(resp)
+
+        pb_bwr = resp.bwr
+        bwm = BandwidthMetrics.from_protobuf(pb_bwr)
+        return bwm
 
     async def disconnect(self, peer_id: PeerID) -> None:
         disconnect_req = p2pd_pb.DisconnectRequest(peer=peer_id.to_bytes())
