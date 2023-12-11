@@ -15,6 +15,7 @@ from typing import Any, Dict, Generator, List, Tuple
 import torch
 
 from hivemind.utils import get_logger
+from hivemind.utils.compat import safe_recv
 from hivemind.utils.mpfuture import InvalidStateError, MPFuture
 
 logger = get_logger(__name__)
@@ -195,7 +196,7 @@ class TaskPool(TaskPoolBase):
 
         while True:
             logger.debug(f"{self.name} waiting for results from runtime")
-            batch_index, batch_outputs_or_exception = self.outputs_receiver.recv()
+            batch_index, batch_outputs_or_exception = safe_recv(self.outputs_receiver)
             batch_tasks = pending_batches.pop(batch_index)
 
             if isinstance(batch_outputs_or_exception, BaseException):
@@ -234,7 +235,7 @@ class TaskPool(TaskPoolBase):
         if not self.batch_receiver.poll(timeout):
             raise TimeoutError()
 
-        batch_index, batch_inputs = self.batch_receiver.recv()
+        batch_index, batch_inputs = safe_recv(self.batch_receiver)
         batch_inputs = [tensor.to(device, non_blocking=True) for tensor in batch_inputs]
         return batch_index, batch_inputs
 

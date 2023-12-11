@@ -8,6 +8,7 @@ import hivemind
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.node import DHTNode
 from hivemind.dht.validation import DHTRecord
+from hivemind.utils.compat import safe_recv
 from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.timed_storage import get_dht_time
 
@@ -79,8 +80,8 @@ def test_validator_instance_is_picklable():
 
 
 def get_signed_record(conn: mp.connection.Connection) -> DHTRecord:
-    validator = conn.recv()
-    record = conn.recv()
+    validator = safe_recv(conn)
+    record = safe_recv(conn)
 
     record = dataclasses.replace(record, value=validator.sign_value(record))
 
@@ -101,7 +102,7 @@ def test_signing_in_different_process():
     )
     parent_conn.send(record)
 
-    signed_record = parent_conn.recv()
+    signed_record = safe_recv(parent_conn)
     assert b"[signature:" in signed_record.value
     assert validator.validate(signed_record)
 

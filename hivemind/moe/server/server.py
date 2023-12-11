@@ -26,6 +26,7 @@ from hivemind.moe.server.module_backend import ModuleBackend
 from hivemind.moe.server.runtime import Runtime
 from hivemind.p2p import PeerInfo
 from hivemind.proto.runtime_pb2 import CompressionType
+from hivemind.utils.compat import safe_recv
 from hivemind.utils.logging import get_logger
 from hivemind.utils.tensor_descr import DUMMY_BATCH_SIZE, BatchTensorDescriptor
 
@@ -314,7 +315,7 @@ def background_server(*args, shutdown_timeout=5, **kwargs) -> PeerInfo:
         runner.start()
         # once the server is ready, runner will send us
         # either (False, exception) or (True, PeerInfo(dht_peer_id, dht_maddrs))
-        start_ok, data = pipe.recv()
+        start_ok, data = safe_recv(pipe)
         if start_ok:
             yield data
             pipe.send("SHUTDOWN")  # on exit from context, send shutdown signal
@@ -339,7 +340,7 @@ def _server_runner(pipe, *args, **kwargs):
     try:
         dht_maddrs = server.dht.get_visible_maddrs()
         pipe.send((True, PeerInfo(server.dht.peer_id, dht_maddrs)))
-        pipe.recv()  # wait for shutdown signal
+        safe_recv(pipe)  # wait for shutdown signal
 
     finally:
         logger.info("Shutting down server...")

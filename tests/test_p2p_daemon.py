@@ -13,6 +13,7 @@ from multiaddr import Multiaddr
 
 from hivemind.p2p import P2P, P2PDaemonError, P2PHandlerError
 from hivemind.proto import dht_pb2, test_pb2
+from hivemind.utils.compat import safe_recv
 from hivemind.utils.serializer import MSGPackSerializer
 
 from test_utils.networking import get_free_port
@@ -328,8 +329,8 @@ async def test_call_peer_different_processes():
     proc = mp.Process(target=server_target, args=(handler_name, server_side, response_received))
     proc.start()
 
-    peer_id = client_side.recv()
-    peer_maddrs = client_side.recv()
+    peer_id = safe_recv(client_side)
+    peer_maddrs = safe_recv(client_side)
 
     client = await P2P.create(initial_peers=peer_maddrs)
     client_pid = client._child.pid
