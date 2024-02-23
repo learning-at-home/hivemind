@@ -36,7 +36,7 @@ feel free to submit a pull request that adds your project to this list.
 * **Training Transformers Together** ([webpage](https://training-transformers-together.github.io/), [code](https://github.com/learning-at-home/dalle-hivemind)) — a NeurIPS 2021 demonstration that trained a collaborative text-to-image Transformer model.
 * **CALM** ([webpage](https://huggingface.co/CALM), [code](https://github.com/NCAI-Research/CALM)) — a masked language model trained on a combination of Arabic datasets.
 * **sahajBERT** ([blog post](https://huggingface.co/blog/collaborative-training), [code](https://github.com/tanmoyio/sahajbert)) — a collaboratively pretrained ALBERT-xlarge for the Bengali language.
-* **HivemindStrategy** ([docs](https://lightning.ai/docs/pytorch/stable/advanced/third_party/hivemind.html?highlight=hivemindstrategy)) for PyTorch Lightning allows adapting your existing pipelines to training over slow network with unreliable peers.
+* **PyTorch Lightning Integration** ([docs](https://lightning.ai/docs/pytorch/stable/integrations/strategies/Hivemind.html)). Integration into PyTorch Lightning allows adapting your existing pipelines to training over slow network with unreliable peers.
 
 ## Installation
 
