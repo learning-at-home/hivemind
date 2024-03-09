@@ -1,8 +1,13 @@
 from __future__ import annotations
+import sys
 
 import asyncio
 import concurrent.futures._base as base
-import multiprocessing as mp
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 import os
 import threading
 import uuid
@@ -11,6 +16,7 @@ from enum import Enum, auto
 from multiprocessing.reduction import ForkingPickler
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 from weakref import ref
+
 
 import torch  # used for py3.7-compatible shared memory
 
@@ -23,6 +29,7 @@ torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARI
 # flavour types
 ResultType = TypeVar("ResultType")
 PID, UID, State, PipeEnd = int, int, str, mp.connection.Connection
+
 ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED
 TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
 
@@ -154,8 +161,6 @@ class MPFuture(base.Future, Generic[ResultType]):
             with MPFuture._initialization_lock:
                 if pid != MPFuture._active_pid:
                     # note: the second if is intentional, see https://en.wikipedia.org/wiki/Double-checked_locking
-                    logger.debug(f"Initializing MPFuture backend for pid {pid}")
-
                     receiver_pipe, cls._global_sender_pipe = mp.Pipe(duplex=False)
                     cls._active_pid, cls._active_futures = pid, {}
                     cls._pipe_waiter_thread = threading.Thread(
@@ -183,6 +188,7 @@ class MPFuture(base.Future, Generic[ResultType]):
                     break  # backend was reset, a new background thread has started
 
                 uid, update_type, payload = receiver_pipe.recv()
+                
                 future = None
                 future_ref = cls._active_futures.pop(uid, None)
                 if future_ref is not None:

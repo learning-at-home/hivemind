@@ -1,4 +1,9 @@
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 from ctypes import c_int32
 
 import pytest

@@ -1,8 +1,10 @@
 import asyncio
 import functools
 import os
+import sys
 import subprocess
 import time
+import tempfile
 import uuid
 from contextlib import asynccontextmanager, suppress
 from typing import NamedTuple
@@ -15,7 +17,7 @@ from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
 from test_utils.networking import get_free_port
 
 TIMEOUT_DURATION = 30  # seconds
-P2PD_PATH = resource_filename("hivemind", "hivemind_cli/p2pd")
+P2PD_PATH = resource_filename("hivemind", os.path.join("hivemind_cli", "p2pd.exe")) if sys.platform == 'win32' else resource_filename("hivemind", os.path.join("hivemind_cli", "p2pd"))
 
 
 async def try_until_success(coro_func, timeout=TIMEOUT_DURATION):
@@ -53,7 +55,7 @@ class Daemon:
 
     def _start_logging(self):
         name_control_maddr = str(self.control_maddr).replace("/", "_").replace(".", "_")
-        self.log_filename = f"/tmp/log_p2pd{name_control_maddr}.txt"
+        self.log_filename = os.path.join(tempfile.gettempdir(), f"log_p2pd{name_control_maddr}.txt")
         self.f_log = open(self.log_filename, "wb")
 
     def _run(self):
@@ -104,7 +106,19 @@ class ConnectionFailure(Exception):
 
 
 @asynccontextmanager
+async def make_p2pd_pair(enable_control, enable_connmgr, enable_dht, enable_pubsub):
+    if sys.platform == 'win32':
+        async with make_p2pd_pair_ip4(enable_control, enable_connmgr, enable_dht, enable_pubsub) as pair:
+            yield pair
+    else:
+        async with make_p2pd_pair_unix(enable_control, enable_connmgr, enable_dht, enable_pubsub) as pair:
+            yield pair
+
+@asynccontextmanager
 async def make_p2pd_pair_unix(enable_control, enable_connmgr, enable_dht, enable_pubsub):
+    print("Trying to call make_p2pd_pair_unix")
+    if sys.platform == 'win32':
+        raise NotImplementedError()
     name = str(uuid.uuid4())[:8]
     control_maddr = Multiaddr(f"/unix/tmp/test_p2pd_control_{name}.sock")
     listen_maddr = Multiaddr(f"/unix/tmp/test_p2pd_listen_{name}.sock")
@@ -127,8 +141,10 @@ async def make_p2pd_pair_unix(enable_control, enable_connmgr, enable_dht, enable
 
 @asynccontextmanager
 async def make_p2pd_pair_ip4(enable_control, enable_connmgr, enable_dht, enable_pubsub):
-    control_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{get_free_port()}")
-    listen_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{get_free_port()}")
+    port = get_free_port()
+    control_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{port}")
+    port = get_free_port()
+    listen_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{port}")
     async with _make_p2pd_pair(
         control_maddr=control_maddr,
         listen_maddr=listen_maddr,

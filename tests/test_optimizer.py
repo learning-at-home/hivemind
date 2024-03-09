@@ -1,5 +1,10 @@
 import ctypes
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 import time
 from functools import partial
 

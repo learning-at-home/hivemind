@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 import os
 import signal
 from functools import partial
@@ -16,11 +21,15 @@ from hivemind.p2p import P2P, PeerID
 from hivemind.utils import MPFuture, get_logger, switch_to_uvloop
 from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration
 
+if sys.platform == 'win32':
+    import pywintypes
+    from multiprocess.connection import Client, Listener, PipeConnection
+
 logger = get_logger(__name__)
 ReturnType = TypeVar("ReturnType")
 
 
-class DHT(mp.context.ForkProcess):
+class DHT(mp.Process):
     """
     A high-level interface to a hivemind DHT that runs a single DHT node in a background process.
     * hivemind servers periodically announce their experts via declare_experts (dht_handler.py)
@@ -92,12 +101,13 @@ class DHT(mp.context.ForkProcess):
 
         loop = switch_to_uvloop()
         pipe_semaphore = asyncio.Semaphore(value=0)
-        loop.add_reader(self._inner_pipe.fileno(), pipe_semaphore.release)
-
-        async def _run():
+        if sys.platform != 'win32':
+            pipe_semaphore = asyncio.Semaphore(value=0)
+            loop.add_reader(self._inner_pipe.fileno(), pipe_semaphore.release)
+        
+        async def _run():   
             # Set SIG_IGN handler to SIGINT
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
-
+            # signal.signal(signal.SIGINT, signal.SIG_IGN)
             try:
                 if self._daemon_listen_maddr is not None:
                     replicated_p2p = await P2P.replicate(self._daemon_listen_maddr)
@@ -116,13 +126,25 @@ class DHT(mp.context.ForkProcess):
                 logger.debug(e, exc_info=True)
                 self._ready.set_exception(e)
                 return
+            
             self._ready.set_result(None)
 
+            if sys.platform == 'win32':
+                async def non_blocking_poll(pipe, callback):
+                    import concurrent
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        await loop.run_in_executor(pool, pipe.poll)
+                    callback()
+
             while True:
+                if sys.platform == 'win32':
+                    await non_blocking_poll(self._inner_pipe, pipe_semaphore.release)
+
                 try:
                     await asyncio.wait_for(pipe_semaphore.acquire(), timeout=self._node.protocol.wait_timeout)
-                except asyncio.TimeoutError:
+                except asyncio.TimeoutError as e:
                     pass
+
                 if not self._inner_pipe.poll():
                     continue
                 try:

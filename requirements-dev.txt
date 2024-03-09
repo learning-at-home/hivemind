@@ -1,5 +1,6 @@
-pytest==6.2.5  # see https://github.com/pytest-dev/pytest/issues/9621
-pytest-forked
+pytest==6.2.5;  sys_platform != 'win32' # see https://github.com/pytest-dev/pytest/issues/9621
+pytest; sys_platform == 'win32'
+pytest-forked; sys_platform == 'linux' or sys_platform == 'darwin'
 pytest-asyncio==0.16.0
 pytest-cov
 coverage==6.0.2  # see https://github.com/pytest-dev/pytest-cov/issues/520

@@ -19,7 +19,6 @@ logger = get_logger(__name__)
 # this helps us avoid undesirable gRPC side-effects (e.g. segfaults) when running multiple tests in sequence
 
 
-@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dht_node(
     n_peers: int = 20, n_sequential_peers: int = 5, parallel_rpc: int = 10, bucket_size: int = 5, num_replicas: int = 3
@@ -152,14 +151,12 @@ async def test_dht_node(
         assert value[subkey2] == (567, now + 30)
         assert value[subkey3] == (890, now + 50)
         assert len(value) == 3
-
+        
     for proc in processes:
         proc.terminate()
     # The nodes don't own their hivemind.p2p.P2P instances, so we shutdown them separately
     await asyncio.gather(me.shutdown(), that_guy.shutdown(), detached_node.shutdown())
 
-
-@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_replicas():
     num_replicas = random.randint(1, 20)
@@ -180,7 +177,6 @@ async def test_dhtnode_replicas():
     assert sum(len(peer.protocol.storage) for peer in peers) == total_size, "total size should not have changed"
 
 
-@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_caching(T=0.05):
     node2 = await DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
@@ -230,7 +226,6 @@ async def test_dhtnode_caching(T=0.05):
     await asyncio.gather(node1.shutdown(), node2.shutdown())
 
 
-@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_reuse_get():
     peers = await launch_star_shaped_swarm(n_peers=10, parallel_rpc=256)
@@ -260,7 +255,6 @@ async def test_dhtnode_reuse_get():
     assert await futures2["k3"] == await futures3["k3"] and (await futures3["k3"]) is None
 
 
-@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_blacklist():
     node1, node2, node3, node4 = await launch_star_shaped_swarm(n_peers=4, blacklist_time=999)
@@ -283,7 +277,6 @@ async def test_dhtnode_blacklist():
     await asyncio.gather(node1.shutdown(), node2.shutdown())
 
 
-@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_edge_cases():
     peers = await launch_star_shaped_swarm(n_peers=4, parallel_rpc=4)

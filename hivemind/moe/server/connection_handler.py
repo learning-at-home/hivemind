@@ -1,5 +1,10 @@
 import asyncio
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 from typing import AsyncIterator, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
@@ -19,7 +24,7 @@ from hivemind.utils.tensor_descr import BatchTensorDescriptor
 logger = get_logger(__name__)
 
 
-class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
+class ConnectionHandler(mp.Process, ServicerBase):
     """
     A process that accepts incoming requests to experts and submits them into the corresponding TaskPool.
 
@@ -52,10 +57,21 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
         torch.set_num_threads(1)
         loop = switch_to_uvloop()
         stop = asyncio.Event()
-        loop.add_reader(self._inner_pipe.fileno(), stop.set)
+        if sys.platform != "win32":
+            loop.add_reader(self._inner_pipe.fileno(), stop.set)
+        else:
+            async def non_blocking_poll(pipe, callback):
+                import concurrent
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    await loop.run_in_executor(pool, pipe.poll)
+                print("non_blocking_poll--about to callback")
+                callback()
 
         async def _run():
             try:
+                if sys.platform == 'win32':
+                    await non_blocking_poll(self._inner_pipe, stop.set)
+                    
                 self._p2p = await self.dht.replicate_p2p()
                 await self.add_p2p_handlers(self._p2p, balanced=self.balanced)
                 self.ready.set_result(None)

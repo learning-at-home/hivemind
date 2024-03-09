@@ -1,5 +1,10 @@
 import asyncio
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 import random
 import signal
 import threading
@@ -23,11 +28,12 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue, **kwargs):
 
     info_queue.put((node.node_id, node.peer_id, maddrs))
 
-    async def shutdown():
-        await node.shutdown()
-        loop.stop()
-
-    loop.add_signal_handler(signal.SIGTERM, lambda: loop.create_task(shutdown()))
+    if sys.platform != "win32":
+        async def shutdown():
+            await node.shutdown()
+            loop.stop()
+            
+        loop.add_signal_handler(signal.SIGTERM, lambda: loop.create_task(shutdown()))
     loop.run_forever()
 
 

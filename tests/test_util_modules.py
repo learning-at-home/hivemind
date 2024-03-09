@@ -1,6 +1,11 @@
 import asyncio
 import concurrent.futures
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -30,7 +35,7 @@ from hivemind.utils.mpfuture import InvalidStateError
 from hivemind.utils.performance_ema import PerformanceEMA
 
 
-@pytest.mark.forked
+
 def test_mpfuture_result():
     future = hivemind.MPFuture()
 
@@ -57,7 +62,7 @@ def test_mpfuture_result():
     assert future.result() == ["abacaba", 123]
 
 
-@pytest.mark.forked
+
 def test_mpfuture_exception():
     future = hivemind.MPFuture()
     with pytest.raises(concurrent.futures.TimeoutError):
@@ -77,7 +82,7 @@ def test_mpfuture_exception():
     assert future.done() and not future.running() and not future.cancelled()
 
 
-@pytest.mark.forked
+
 def test_mpfuture_cancel():
     future = hivemind.MPFuture()
     assert not future.cancelled()
@@ -102,7 +107,7 @@ def test_mpfuture_cancel():
     assert evt.is_set()
 
 
-@pytest.mark.forked
+
 def test_mpfuture_status():
     evt = mp.Event()
     future = hivemind.MPFuture()
@@ -145,10 +150,13 @@ async def test_await_mpfuture():
     f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
 
     async def wait_and_assign_async():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         assert f2.set_running_or_notify_cancel() is True
         await asyncio.sleep(0.1)
         f1.set_result((123, "ololo"))
         f2.set_result((456, "pyshpysh"))
+        loop.close()
 
     asyncio.create_task(wait_and_assign_async())
 
@@ -207,7 +215,7 @@ async def test_await_mpfuture():
     p.join()
 
 
-@pytest.mark.forked
+
 def test_mpfuture_bidirectional():
     evt = mp.Event()
     future_from_main = hivemind.MPFuture()
@@ -230,7 +238,7 @@ def test_mpfuture_bidirectional():
     assert evt.is_set()
 
 
-@pytest.mark.forked
+
 def test_mpfuture_done_callback():
     receiver, sender = mp.Pipe(duplex=False)
     events = [mp.Event() for _ in range(6)]
@@ -277,7 +285,7 @@ def test_mpfuture_done_callback():
     p.join()
 
 
-@pytest.mark.forked
+
 def test_many_futures():
     evt = mp.Event()
     receiver, sender = mp.Pipe()

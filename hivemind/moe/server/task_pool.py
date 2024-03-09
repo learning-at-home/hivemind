@@ -2,7 +2,12 @@
 Task pool is responsible for receiving tasks and grouping them together for processing (but not processing itself)
 """
 import ctypes
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 import os
 import threading
 import time
@@ -21,7 +26,7 @@ logger = get_logger(__name__)
 Task = namedtuple("Task", ("future", "args"))
 
 
-class TaskPoolBase(mp.context.ForkProcess, metaclass=ABCMeta):
+class TaskPoolBase(mp.Process, metaclass=ABCMeta):
     """A pool that accepts tasks and forms batches for parallel processing, interacts with Runtime"""
 
     def __init__(self, process_func: callable, daemon=True, **kwargs):

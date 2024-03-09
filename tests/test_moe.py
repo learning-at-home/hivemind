@@ -1,6 +1,11 @@
 import asyncio
 import ctypes
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 import threading
 import time
 
@@ -20,7 +25,6 @@ from hivemind.p2p.p2p_daemon_bindings.control import P2PHandlerError
 from hivemind.utils import BatchTensorDescriptor, MPFuture, get_dht_time
 
 
-@pytest.mark.forked
 def test_moe():
     all_expert_uids = [
         f"ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}" for _ in range(10)
@@ -37,7 +41,6 @@ def test_moe():
             out.sum().backward()
 
 
-@pytest.mark.forked
 def test_no_experts():
     all_expert_uids = [
         f"expert.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}" for _ in range(10)
@@ -61,7 +64,6 @@ def test_no_experts():
             out.sum().backward()
 
 
-@pytest.mark.forked
 def test_call_many(hidden_dim=16):
     k_min = 1
     timeout_after_k_min = None
@@ -132,7 +134,6 @@ def test_call_many(hidden_dim=16):
         assert torch.allclose(our_grad, reference_grad, atol=atol, rtol=0)
 
 
-@pytest.mark.forked
 def test_remote_module_call(hidden_dim=16):
     with background_server(
         num_experts=1,
@@ -172,7 +173,6 @@ def test_remote_module_call(hidden_dim=16):
         assert torch.allclose(out3_yet_again, out3[1:], atol=1e-5, rtol=0)
 
 
-@pytest.mark.forked
 def test_beam_search_correctness():
     all_expert_uids = [f"ffn.{5 + i}.{10 + j}.{15 + k}" for i in range(10) for j in range(10) for k in range(10)]
     dht = DHT(start=True)
@@ -202,7 +202,6 @@ def test_beam_search_correctness():
         assert np.allclose(true_best_scores, our_best_scores)
 
 
-@pytest.mark.forked
 def test_determinism(hidden_dim=16):
     atol = 1e-5
 
@@ -233,7 +232,6 @@ def test_determinism(hidden_dim=16):
     assert torch.allclose(grad, grad_rerun, atol=atol, rtol=0), "Gradients are non-deterministic."
 
 
-@pytest.mark.forked
 def test_compute_expert_scores():
     try:
         dht = DHT(start=True)
@@ -263,7 +261,6 @@ def test_compute_expert_scores():
         dht.shutdown()
 
 
-@pytest.mark.forked
 def test_client_anomaly_detection():
     HID_DIM = 16
 
@@ -335,7 +332,6 @@ def _measure_coro_running_time(n_coros, elapsed_fut, counter):
         elapsed_fut.set_exception(e)
 
 
-@pytest.mark.forked
 def test_remote_expert_worker_runs_coros_concurrently(n_processes=4, n_coros=10):
     processes = []
     counter = mp.Value(ctypes.c_int64)

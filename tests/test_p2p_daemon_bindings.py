@@ -1,5 +1,6 @@
 import asyncio
 import io
+import sys
 from contextlib import AsyncExitStack
 
 import pytest
@@ -18,7 +19,10 @@ from hivemind.p2p.p2p_daemon_bindings.utils import (
 )
 from hivemind.proto import p2pd_pb2 as p2pd_pb
 
-from test_utils.p2p_daemon import connect_safe, make_p2pd_pair_unix
+if sys.platform == 'win32':
+    from hivemind.utils.networking import get_free_port
+
+from test_utils.p2p_daemon import connect_safe, make_p2pd_pair
 
 
 def test_raise_if_failed_raises():
@@ -54,14 +58,18 @@ PAIRS_INT_SERIALIZED_OVERFLOW = (
 PEER_ID_STRING = "QmS5QmciTXXnCUCyxud5eWFenUMAmvAWSDa1c7dvdXRMZ7"
 PEER_ID_BYTES = b'\x12 7\x87F.[\xb5\xb1o\xe5*\xc7\xb9\xbb\x11:"Z|j2\x8ad\x1b\xa6\xe5<Ip\xfe\xb4\xf5v'
 PEER_ID = PeerID(PEER_ID_BYTES)
-MADDR = Multiaddr("/unix/123")
+if sys.platform == 'win32':
+    port = get_free_port()
+    MADDR = Multiaddr(f"/ip4/127.0.0.1/tcp/{port}")
+else:
+    MADDR = Multiaddr("/unix/123")
 NUM_P2PDS = 4
 PEER_ID_RANDOM = PeerID.from_base58("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNK1")
 ENABLE_CONTROL = True
 ENABLE_CONNMGR = False
 ENABLE_DHT = False
 ENABLE_PUBSUB = False
-FUNC_MAKE_P2PD_PAIR = make_p2pd_pair_unix
+FUNC_MAKE_P2PD_PAIR = make_p2pd_pair
 
 
 class MockReader(io.BytesIO):
@@ -177,12 +185,20 @@ def test_peer_info():
     assert pi.addrs == pi_1.addrs
 
 
-@pytest.mark.parametrize(
+if sys.platform == 'win32':
+    @pytest.mark.parametrize(
     "maddr_str, expected_proto",
-    (("/unix/123", protocols.P_UNIX), ("/ip4/127.0.0.1/tcp/7777", protocols.P_IP4)),
-)
-def test_parse_conn_protocol_valid(maddr_str, expected_proto):
-    assert parse_conn_protocol(Multiaddr(maddr_str)) == expected_proto
+    (("/ip4/127.0.0.1/tcp/7777", protocols.P_IP4), ),
+    )
+    def test_parse_conn_protocol_valid(maddr_str, expected_proto):
+        assert parse_conn_protocol(Multiaddr(maddr_str)) == expected_proto
+else:
+    @pytest.mark.parametrize(
+        "maddr_str, expected_proto",
+        (("/unix/123", protocols.P_UNIX), ("/ip4/127.0.0.1/tcp/7777", protocols.P_IP4)),
+    )
+    def test_parse_conn_protocol_valid(maddr_str, expected_proto):
+        assert parse_conn_protocol(Multiaddr(maddr_str)) == expected_proto
 
 
 @pytest.mark.parametrize(
@@ -197,28 +213,45 @@ def test_parse_conn_protocol_invalid(maddr_str):
     with pytest.raises(ValueError):
         parse_conn_protocol(maddr)
 
+if sys.platform == 'win32':
+    @pytest.mark.parametrize("control_maddr_str", ("/ip4/127.0.0.1/tcp/6666", ))
+    @pytest.mark.asyncio
+    async def test_client_create_control_maddr(control_maddr_str):
+        c = DaemonConnector(Multiaddr(control_maddr_str))
+        assert c.control_maddr == Multiaddr(control_maddr_str)
 
-@pytest.mark.parametrize("control_maddr_str", ("/unix/123", "/ip4/127.0.0.1/tcp/6666"))
-@pytest.mark.asyncio
-async def test_client_create_control_maddr(control_maddr_str):
-    c = DaemonConnector(Multiaddr(control_maddr_str))
-    assert c.control_maddr == Multiaddr(control_maddr_str)
+else:
+    @pytest.mark.parametrize("control_maddr_str", ("/unix/123", "/ip4/127.0.0.1/tcp/6666"))
+    @pytest.mark.asyncio
+    async def test_client_create_control_maddr(control_maddr_str):
+        c = DaemonConnector(Multiaddr(control_maddr_str))
+        assert c.control_maddr == Multiaddr(control_maddr_str)
 
 
 def test_client_create_default_control_maddr():
     c = DaemonConnector()
     assert c.control_maddr == Multiaddr(DaemonConnector.DEFAULT_CONTROL_MADDR)
 
-
-@pytest.mark.parametrize("listen_maddr_str", ("/unix/123", "/ip4/127.0.0.1/tcp/6666"))
-@pytest.mark.asyncio
-async def test_control_client_create_listen_maddr(listen_maddr_str):
-    c = await ControlClient.create(
-        daemon_connector=DaemonConnector(),
-        listen_maddr=Multiaddr(listen_maddr_str),
-        use_persistent_conn=False,
-    )
-    assert c.listen_maddr == Multiaddr(listen_maddr_str)
+if sys.platform == 'win32':
+    @pytest.mark.parametrize("listen_maddr_str", ("/ip4/127.0.0.1/tcp/6666", ))
+    @pytest.mark.asyncio
+    async def test_control_client_create_listen_maddr(listen_maddr_str):
+        c = await ControlClient.create(
+            daemon_connector=DaemonConnector(),
+            listen_maddr=Multiaddr(listen_maddr_str),
+            use_persistent_conn=False,
+        )
+        assert c.listen_maddr == Multiaddr(listen_maddr_str)
+else:
+    @pytest.mark.parametrize("listen_maddr_str", ("/unix/123", "/ip4/127.0.0.1/tcp/6666"))
+    @pytest.mark.asyncio
+    async def test_control_client_create_listen_maddr(listen_maddr_str):
+        c = await ControlClient.create(
+            daemon_connector=DaemonConnector(),
+            listen_maddr=Multiaddr(listen_maddr_str),
+            use_persistent_conn=False,
+        )
+        assert c.listen_maddr == Multiaddr(listen_maddr_str)
 
 
 @pytest.mark.asyncio
@@ -464,7 +497,10 @@ async def test_client_stream_open_success(p2pcs):
     proto = "123"
 
     async def handle_proto(stream_info, reader, writer):
+        #try:
         await reader.readexactly(1)
+        #except Exception as e:
+        #    raise e
 
     await p2pcs[1].stream_handler(proto, handle_proto)
 
@@ -518,10 +554,10 @@ async def test_client_stream_handler_success(p2pcs):
         bytes_received = await reader.readexactly(len(bytes_to_send))
         assert bytes_received == bytes_to_send
         event_handler_finished.set()
-
     await p2pcs[1].stream_handler(proto, handle_proto)
     assert proto in p2pcs[1].control.handlers
     assert handle_proto == p2pcs[1].control.handlers[proto]
+
 
     # test case: test the stream handler `handle_proto`
 
@@ -536,7 +572,6 @@ async def test_client_stream_handler_success(p2pcs):
     writer.close()
 
     await event_handler_finished.wait()
-
     # test case: two streams to different handlers respectively
     another_proto = "another_protocol123"
     another_bytes_to_send = b"456"

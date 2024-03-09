@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import secrets
+import sys
 import warnings
 from collections.abc import AsyncIterable as AsyncIterableABC
 from contextlib import closing, suppress
@@ -24,11 +25,12 @@ from hivemind.proto.p2pd_pb2 import RPCError
 from hivemind.utils.asyncio import as_aiter, asingle
 from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.logging import get_logger, golog_level_to_python, loglevel, python_level_to_golog
+from hivemind.utils.networking import get_free_port
 
 logger = get_logger(__name__)
 
 
-P2PD_FILENAME = "p2pd"
+P2PD_FILENAME = "p2pd.exe" if sys.platform == 'win32' else "p2pd"
 
 
 @dataclass(frozen=True)
@@ -69,7 +71,8 @@ class P2P:
         "public": {"forceReachabilityPublic": 1},
         "private": {"forceReachabilityPrivate": 1},
     }
-    _UNIX_SOCKET_PREFIX = "/unix/tmp/hivemind-"
+    if sys.platform != 'win32':
+        _UNIX_SOCKET_PREFIX = "/unix/tmp/hivemind-"
 
     def __init__(self):
         self.peer_id = None
@@ -162,8 +165,15 @@ class P2P:
             p2pd_path = p
 
         socket_uid = secrets.token_urlsafe(8)
-        self._daemon_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pd-{socket_uid}.sock")
-        self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pclient-{socket_uid}.sock")
+        if sys.platform == 'win32':
+            port = get_free_port()
+            self._daemon_listen_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{port}")
+
+            port = get_free_port()
+            self._client_listen_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{port}")
+        else:
+            self._daemon_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pd-{socket_uid}.sock")
+            self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pclient-{socket_uid}.sock")
         if announce_maddrs is not None:
             for addr in announce_maddrs:
                 addr = Multiaddr(addr)
@@ -222,9 +232,8 @@ class P2P:
         env.setdefault("GOLOG_LOG_LEVEL", python_level_to_golog(loglevel))
         env["GOLOG_LOG_FMT"] = "json"
 
-        logger.debug(f"Launching {proc_args}")
         self._child = await asyncio.subprocess.create_subprocess_exec(
-            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env
+            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, #env=env
         )
         self._alive = True
 
@@ -305,7 +314,11 @@ class P2P:
 
         socket_uid = secrets.token_urlsafe(8)
         self._daemon_listen_maddr = daemon_listen_maddr
-        self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pclient-{socket_uid}.sock")
+        if sys.platform == 'win32':
+            sock = get_free_port()
+            self._client_listen_maddr = Multiaddr(f"/ip4/127.0.0.1/tcp/{sock}")
+        else:
+            self._client_listen_maddr = Multiaddr(cls._UNIX_SOCKET_PREFIX + f"p2pclient-{socket_uid}.sock")
 
         self._client = await p2pclient.Client.create(self._daemon_listen_maddr, self._client_listen_maddr)
 
@@ -358,9 +371,12 @@ class P2P:
 
     @staticmethod
     async def receive_raw_data(reader: asyncio.StreamReader) -> bytes:
-        header = await reader.readexactly(P2P.HEADER_LEN)
-        content_length = int.from_bytes(header, P2P.BYTEORDER)
-        data = await reader.readexactly(content_length)
+        try:
+            header = await reader.readexactly(P2P.HEADER_LEN)
+            content_length = int.from_bytes(header, P2P.BYTEORDER)
+            data = await reader.readexactly(content_length)
+        except ConnectionResetError as e:
+            raise e
         return data
 
     TInputProtobuf = TypeVar("TInputProtobuf")
@@ -657,11 +673,17 @@ class P2P:
             with suppress(ProcessLookupError):
                 self._child.terminate()
                 logger.debug(f"Terminated p2pd with id = {self.peer_id}")
-
+            if sys.platform == 'win32':
+                #self._daemon_listen_maddr[0]
+                pass
+            else:
+                with suppress(FileNotFoundError, TypeError):
+                    os.remove(self._daemon_listen_maddr["unix"])
+        if sys.platform == 'win32':
+            pass
+        else:
             with suppress(FileNotFoundError, TypeError):
-                os.remove(self._daemon_listen_maddr["unix"])
-        with suppress(FileNotFoundError, TypeError):
-            os.remove(self._client_listen_maddr["unix"])
+                os.remove(self._client_listen_maddr["unix"])
 
     @staticmethod
     def _make_process_args(*args, **kwargs) -> List[str]:

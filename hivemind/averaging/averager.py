@@ -5,7 +5,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import ctypes
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 import os
 import random
 import signal
@@ -330,7 +335,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         Starts averager in a background process. if await_ready, this method will wait until background dht
         is ready to process incoming requests or for :timeout: seconds max.
         """
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        # signal.signal(signal.SIGINT, signal.SIG_IGN)
         self.start()
         if await_ready:
             self.wait_until_ready(timeout)

@@ -26,7 +26,7 @@ async def test_startup_error():
     dht.shutdown()
 
 
-@pytest.mark.forked
+# @pytest.mark.forked
 def test_get_store(n_peers=10):
     peers = launch_dht_instances(n_peers)
 
@@ -81,7 +81,7 @@ async def dummy_dht_coro_for_cancel(self, node):
     self._x_dummy = 999
 
 
-@pytest.mark.forked
+# @pytest.mark.forked
 def test_run_coroutine():
     dht = hivemind.DHT(start=True)
     assert dht.run_coroutine(dummy_dht_coro) == "pew"
@@ -104,7 +104,7 @@ def test_run_coroutine():
     dht.shutdown()
 
 
-@pytest.mark.forked
+#@pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dht_get_visible_maddrs():
     # test 1: IPv4 localhost multiaddr is visible by default

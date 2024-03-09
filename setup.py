@@ -5,12 +5,13 @@ import os
 import platform
 import re
 import subprocess
+import sys
 import tarfile
 import tempfile
 import urllib.request
 
 from pkg_resources import parse_requirements, parse_version
-from setuptools import find_packages, setup
+from setuptools import find_packages, setup, Command
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
@@ -29,6 +30,40 @@ P2P_BINARY_HASH = {
 
 here = os.path.abspath(os.path.dirname(__file__))
 
+class GrpcTool(Command):
+    def initialize_options(self) -> None:
+        pass
+    
+    def finalize_options(self) -> None:
+        pass
+    
+    def run(self) -> None:
+        import grpc_tools.protoc
+        from pathlib import Path
+
+        cwd = Path(os.getcwd())
+
+        path = cwd.joinpath("hivemind", "proto")
+
+        args = [
+             "grpc_tools.protoc",
+             #'-I{}'.format(proto_include),
+             f"--proto_path={path}",
+             f"--python_out={path}",
+        ] + glob.glob("*.proto", root_dir=path)
+
+        code = grpc_tools.protoc.main(args)
+        if code:  # hint: if you get this error in jupyter, run in console for richer error message
+            raise ValueError(f"{' '.join(args)} finished with exit code {code}")
+        
+        # Make pb2 imports in generated scripts relative
+        for script in glob.iglob(f"{path}/*.py"):
+            with open(script, "r+") as file:
+                code = file.read()
+                file.seek(0)
+                file.write(re.sub(r"\n(import .+_pb2.*)", "from . \\1", code))
+                file.truncate()
+
 
 def sha256(path):
     if not os.path.exists(path):
@@ -37,7 +72,7 @@ def sha256(path):
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def proto_compile(output_path):
+def __proto_compile(output_path):
     import grpc_tools.protoc
 
     cli_args = [
@@ -114,7 +149,6 @@ def download_p2p_daemon():
                 f"The sha256 checksum for p2pd does not match (expected: {expected_hash}, actual: {actual_hash})"
             )
 
-
 class BuildPy(build_py):
     user_options = build_py.user_options + [("buildgo", None, "Builds p2pd from source")]
 
@@ -123,15 +157,20 @@ class BuildPy(build_py):
         self.buildgo = False
 
     def run(self):
-        if self.buildgo:
-            build_p2p_daemon()
-        else:
-            download_p2p_daemon()
+        if sys.platform != 'win32':
+            if self.buildgo:
+                build_p2p_daemon()
+            else:
+                download_p2p_daemon()
 
         super().run()
+        self.run_command('grpc')
+        #super(BuildPy, self).run()
 
-        proto_compile(os.path.join(self.build_lib, "hivemind", "proto"))
 
+        #super().run()
+
+        #proto_compile(os.path.join(self.build_lib, "hivemind", "proto"))
 
 class Develop(develop):
     def run(self):
@@ -163,7 +202,7 @@ extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
 setup(
     name="hivemind",
     version=version_string,
-    cmdclass={"build_py": BuildPy, "develop": Develop},
+    cmdclass={"build_py": BuildPy, "develop": Develop, 'grpc' : GrpcTool},
     description="Decentralized deep learning in PyTorch",
     long_description="Decentralized deep learning in PyTorch. Built to train models on thousands of volunteers "
     "across the world.",

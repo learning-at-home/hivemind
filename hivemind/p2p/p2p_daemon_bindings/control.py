@@ -157,6 +157,7 @@ class ControlClient:
             raise DispatchFailure(e)
         await handler(stream_info, reader, writer)
 
+
     @asynccontextmanager
     async def listen(self) -> AsyncIterator["ControlClient"]:
         proto_code = parse_conn_protocol(self.listen_maddr)

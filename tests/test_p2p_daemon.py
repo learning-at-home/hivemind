@@ -1,5 +1,10 @@
 import asyncio
-import multiprocessing as mp
+import sys
+if sys.platform == 'win32':
+    import pathos
+    import multiprocess as mp
+else:
+    import multiprocessing as mp
 import os
 import subprocess
 import tempfile
@@ -10,6 +15,7 @@ from typing import List
 import numpy as np
 import pytest
 from multiaddr import Multiaddr
+import psutil
 
 from hivemind.p2p import P2P, P2PDaemonError, P2PHandlerError
 from hivemind.proto import dht_pb2, test_pb2
@@ -19,7 +25,8 @@ from test_utils.networking import get_free_port
 
 
 def is_process_running(pid: int) -> bool:
-    return subprocess.run(["ps", "-p", str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    #return subprocess.run(["ps", "-p", str(pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    return psutil.pid_exists(pid)
 
 
 async def replicate_if_needed(p2p: P2P, replicate: bool) -> P2P:
@@ -161,6 +168,12 @@ async def test_unary_handler_edge_cases():
             p2p.peer_id, "square", test_pb2.TestRequest(number=41), test_pb2.TestResponse
         )
 
+    # clean up the tasks
+    tasks = asyncio.tasks.all_tasks()
+    for task in tasks:
+        if not task.done() and asyncio.current_task() != task:
+            task.cancel()
+
 
 @pytest.mark.parametrize(
     "should_cancel,replicate",
@@ -254,6 +267,8 @@ async def handle_square_stream(_, reader: asyncio.StreamReader, writer: asyncio.
             try:
                 x = MSGPackSerializer.loads(await P2P.receive_raw_data(reader))
             except asyncio.IncompleteReadError:
+                break
+            except ConnectionResetError as e:
                 break
 
             result = x**2
