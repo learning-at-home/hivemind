@@ -1,7 +1,7 @@
 transformers~=4.6
-datasets~=1.5
+datasets==2.18.0
 torch_optimizer==0.1.0
-wandb==0.10.26
+wandb==0.16.4
 sentencepiece
 requests
 nltk==3.6.7
