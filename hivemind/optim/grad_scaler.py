@@ -1,15 +1,31 @@
 import contextlib
 import threading
 from copy import deepcopy
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import torch
 from torch.cuda.amp import GradScaler as TorchGradScaler
-from torch.cuda.amp.grad_scaler import OptState, _refresh_per_optimizer_state
 from torch.optim import Optimizer as TorchOptimizer
 
 import hivemind
 from hivemind.utils.logging import get_logger
+
+if torch.cuda.is_available():
+    from torch.cuda.amp.grad_scaler import OptState, _refresh_per_optimizer_state
+else:
+    # on cpu the import is not working, so just copy pasting the code here as it is simple
+    # code taken from here : https://github.com/pytorch/pytorch/blob/afda6685ae87cce7ac2fe4bac3926572da2960f7/torch/amp/grad_scaler.py#L44
+
+    from enum import Enum
+
+    class OptState(Enum):
+        READY = 0
+        UNSCALED = 1
+        STEPPED = 2
+
+    def _refresh_per_optimizer_state() -> Dict[str, Any]:
+        return {"stage": OptState.READY, "found_inf_per_device": {}}
+
 
 logger = get_logger(__name__)
 
