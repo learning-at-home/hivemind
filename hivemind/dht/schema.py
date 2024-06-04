@@ -2,6 +2,7 @@ import re
 from typing import Any, Dict, Optional, Type
 
 import pydantic
+from pydantic_core import CoreSchema, core_schema
 
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.protocol import DHTProtocol
@@ -12,13 +13,18 @@ from hivemind.utils import get_logger
 logger = get_logger(__name__)
 
 
+class ExtendedBaseModel(pydantic.BaseModel):
+    class Config:
+        arbitrary_types_allowed = True
+
+
 class SchemaValidator(RecordValidatorBase):
     """
     Restricts specified DHT keys to match a Pydantic schema.
     This allows to enforce types, min/max values, require a subkey to contain a public key, etc.
     """
 
-    def __init__(self, schema: Type[pydantic.BaseModel], allow_extra_keys: bool = True, prefix: Optional[str] = None):
+    def __init__(self, schema: Type[ExtendedBaseModel], allow_extra_keys: bool = True, prefix: Optional[str] = None):
         """
         :param schema: The Pydantic model (a subclass of pydantic.BaseModel).
 
@@ -37,22 +43,23 @@ class SchemaValidator(RecordValidatorBase):
         :param prefix: (optional) Add ``prefix + '_'`` to the names of all schema fields.
         """
 
-        self._patch_schema(schema)
+        # self._patch_schema(schema)
         self._schemas = [schema]
 
         self._key_id_to_field_name = {}
-        for field in schema.__fields__.values():
-            raw_key = f"{prefix}_{field.name}" if prefix is not None else field.name
-            self._key_id_to_field_name[DHTID.generate(source=raw_key).to_bytes()] = field.name
+        for field_name in schema.__fields__.keys():
+            raw_key = f"{prefix}_{field_name}" if prefix is not None else field_name
+            self._key_id_to_field_name[DHTID.generate(source=raw_key).to_bytes()] = field_name
         self._allow_extra_keys = allow_extra_keys
 
-    @staticmethod
-    def _patch_schema(schema: pydantic.BaseModel):
-        # We set required=False because the validate() interface provides only one key at a time
-        for field in schema.__fields__.values():
-            field.required = False
+    # // required was changed to is_required in 2.0, and made read-only 
+    # @staticmethod
+    # def _patch_schema(schema: ExtendedBaseModel):
+    #     # We set required=False because the validate() interface provides only one key at a time
+    #     for field in schema.__fields__.values():
+    #         field.required = False
 
-        schema.Config.extra = pydantic.Extra.forbid
+    #     schema.Config.extra = pydantic.Extra.forbid
 
     def validate(self, record: DHTRecord) -> bool:
         """
@@ -151,11 +158,11 @@ class SchemaValidator(RecordValidatorBase):
         self.__dict__.update(state)
 
         # If unpickling happens in another process, the previous model modifications may be lost
-        for schema in self._schemas:
-            self._patch_schema(schema)
+        # for schema in self._schemas:
+        #     self._patch_schema(schema)
 
 
-def conbytes(*, regex: bytes = None, **kwargs) -> Type[pydantic.BaseModel]:
+def conbytes(*, regex: bytes = None, **kwargs) -> Type[ExtendedBaseModel]:
     """
     Extend pydantic.conbytes() to support ``regex`` constraints (like pydantic.constr() does).
     """
@@ -164,11 +171,7 @@ def conbytes(*, regex: bytes = None, **kwargs) -> Type[pydantic.BaseModel]:
 
     class ConstrainedBytesWithRegex(pydantic.conbytes(**kwargs)):
         @classmethod
-        def __get_validators__(cls):
-            yield from super().__get_validators__()
-            yield cls.match_regex
-
-        @classmethod
+        @pydantic.validator("*")
         def match_regex(cls, value: bytes) -> bytes:
             if compiled_regex is not None and compiled_regex.match(value) is None:
                 raise ValueError(f"Value `{value}` doesn't match regex `{regex}`")

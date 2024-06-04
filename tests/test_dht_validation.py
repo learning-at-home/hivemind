@@ -2,21 +2,21 @@ import dataclasses
 from typing import Dict
 
 import pytest
-from pydantic import BaseModel, StrictInt
+from pydantic import StrictInt
 
 import hivemind
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID
-from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
+from hivemind.dht.schema import BytesWithPublicKey, ExtendedBaseModel, SchemaValidator
 from hivemind.dht.validation import CompositeValidator, DHTRecord
 
 
-class SchemaA(BaseModel):
+class SchemaA(ExtendedBaseModel):
     field_a: bytes
 
 
-class SchemaB(BaseModel):
+class SchemaB(ExtendedBaseModel):
     field_b: Dict[BytesWithPublicKey, StrictInt]
 
 

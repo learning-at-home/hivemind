@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from typing import Dict, Optional
 
 import numpy as np
-from pydantic import BaseModel, StrictBool, StrictFloat, confloat, conint
+from pydantic import StrictBool, StrictFloat, confloat, conint
 
 from hivemind.dht import DHT
-from hivemind.dht.schema import BytesWithPublicKey, RSASignatureValidator, SchemaValidator
+from hivemind.dht.schema import BytesWithPublicKey, ExtendedBaseModel, RSASignatureValidator, SchemaValidator
 from hivemind.utils import DHTExpiration, ValueWithExpiration, enter_asynchronously, get_dht_time, get_logger
 from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.performance_ema import PerformanceEMA
@@ -28,7 +28,7 @@ class GlobalTrainingProgress:
     next_fetch_time: float
 
 
-class LocalTrainingProgress(BaseModel):
+class LocalTrainingProgress(ExtendedBaseModel):
     peer_id: bytes
     epoch: conint(ge=0, strict=True)
     samples_accumulated: conint(ge=0, strict=True)
@@ -37,7 +37,7 @@ class LocalTrainingProgress(BaseModel):
     client_mode: StrictBool
 
 
-class TrainingProgressSchema(BaseModel):
+class TrainingProgressSchema(ExtendedBaseModel):
     progress: Dict[BytesWithPublicKey, Optional[LocalTrainingProgress]]
 
 

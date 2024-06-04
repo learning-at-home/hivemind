@@ -2,16 +2,16 @@ import asyncio
 from typing import Dict
 
 import pytest
-from pydantic import BaseModel, StrictInt, conint
+from pydantic import StrictInt, conint
 
 import hivemind
 from hivemind.dht.node import DHTNode
-from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
+from hivemind.dht.schema import BytesWithPublicKey, ExtendedBaseModel, SchemaValidator
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
 from hivemind.utils.timed_storage import get_dht_time
 
 
-class SampleSchema(BaseModel):
+class SampleSchema(ExtendedBaseModel):
     experiment_name: bytes
     n_batches: Dict[bytes, conint(ge=0, strict=True)]
     signed_data: Dict[BytesWithPublicKey, bytes]
@@ -94,10 +94,10 @@ async def test_expecting_public_keys(dht_nodes_with_schema):
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_keys_outside_schema(dht_nodes_with_schema):
-    class Schema(BaseModel):
+    class Schema(ExtendedBaseModel):
         some_field: StrictInt
 
-    class MergedSchema(BaseModel):
+    class MergedSchema(ExtendedBaseModel):
         another_field: StrictInt
 
     for allow_extra_keys in [False, True]:
@@ -121,7 +121,7 @@ async def test_keys_outside_schema(dht_nodes_with_schema):
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_prefix():
-    class Schema(BaseModel):
+    class Schema(ExtendedBaseModel):
         field: StrictInt
 
     validator = SchemaValidator(Schema, allow_extra_keys=False, prefix="prefix")
@@ -153,11 +153,11 @@ async def test_merging_schema_validators(dht_nodes_with_schema):
     # Can't merge with the validator of the different type
     assert not alice.protocol.record_validator.merge_with(second_validator)
 
-    class SecondSchema(BaseModel):
+    class SecondSchema(ExtendedBaseModel):
         some_field: StrictInt
         another_field: str
 
-    class ThirdSchema(BaseModel):
+    class ThirdSchema(ExtendedBaseModel):
         another_field: StrictInt  # Allow it to be a StrictInt as well
 
     for schema in [SecondSchema, ThirdSchema]:
