@@ -12,5 +12,5 @@ configargparse>=1.2.3
 py-multihash>=0.2.3
 multiaddr @ git+https://github.com/multiformats/py-multiaddr.git@e01dbd38f2c0464c0f78b556691d655265018cce
 cryptography>=3.4.6
-pydantic>=2.7.3
+pydantic>=2.5.3
 packaging>=20.9

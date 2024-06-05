@@ -52,7 +52,7 @@ class SchemaValidator(RecordValidatorBase):
             self._key_id_to_field_name[DHTID.generate(source=raw_key).to_bytes()] = field_name
         self._allow_extra_keys = allow_extra_keys
 
-    # // required was changed to is_required in 2.0, and made read-only 
+    # the 'required' property was changed to 'is_required' in 2.0, and also made read-only
     # @staticmethod
     # def _patch_schema(schema: ExtendedBaseModel):
     #     # We set required=False because the validate() interface provides only one key at a time
