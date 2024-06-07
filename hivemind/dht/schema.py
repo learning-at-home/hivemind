@@ -39,7 +39,7 @@ class SchemaValidator(RecordValidatorBase):
         :param prefix: (optional) Add ``prefix + '_'`` to the names of all schema fields.
         """
 
-        # self._patch_schema(schema)
+        self._patch_schema(schema)
         self._schemas = [schema]
 
         self._key_id_to_field_name = {}
@@ -48,14 +48,13 @@ class SchemaValidator(RecordValidatorBase):
             self._key_id_to_field_name[DHTID.generate(source=raw_key).to_bytes()] = field_name
         self._allow_extra_keys = allow_extra_keys
 
-    # the 'required' property was changed to 'is_required' in 2.0, and also made read-only
-    # @staticmethod
-    # def _patch_schema(schema: pydantic.BaseModel):
-    #     # We set required=False because the validate() interface provides only one key at a time
-    #     for field in schema.__fields__.values():
-    #         field.required = False
+    @staticmethod
+    def _patch_schema(schema: pydantic.BaseModel):
+        # We set required=False because the validate() interface provides only one key at a time
+        for field_name, field_info in schema.__fields__.items():
+            field_info = pydantic.Field(default=None)
 
-    #     schema.Config.extra = pydantic.Extra.forbid
+        schema.model_config.update({"extra": pydantic.Extra.forbid})
 
     def validate(self, record: DHTRecord) -> bool:
         """
@@ -154,8 +153,8 @@ class SchemaValidator(RecordValidatorBase):
         self.__dict__.update(state)
 
         # If unpickling happens in another process, the previous model modifications may be lost
-        # for schema in self._schemas:
-        #     self._patch_schema(schema)
+        for schema in self._schemas:
+            self._patch_schema(schema)
 
 
 def conbytes(*, regex: bytes = None, **kwargs) -> Type[pydantic.BaseModel]:
@@ -170,7 +169,7 @@ def conbytes(*, regex: bytes = None, **kwargs) -> Type[pydantic.BaseModel]:
 
         @classmethod
         def __get_pydantic_core_schema__(cls, source_type: Any, handler: pydantic.GetCoreSchemaHandler) -> CoreSchema:
-            schema = handler(bytes)
+            schema = handler.generate_schema(bytes)
             return core_schema.no_info_after_validator_function(cls.match_regex, schema)
 
         @classmethod
