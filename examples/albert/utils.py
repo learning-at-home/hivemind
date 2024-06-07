@@ -1,16 +1,16 @@
 from typing import Dict, List, Tuple
 
-from pydantic import StrictFloat, confloat, conint
+from pydantic import BaseModel, StrictFloat, confloat, conint
 
 from hivemind.dht.crypto import RSASignatureValidator
-from hivemind.dht.schema import BytesWithPublicKey, ExtendedBaseModel, SchemaValidator
+from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import RecordValidatorBase
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class LocalMetrics(ExtendedBaseModel):
+class LocalMetrics(BaseModel):
     step: conint(ge=0, strict=True)
     samples_per_second: confloat(ge=0.0, strict=True)
     samples_accumulated: conint(ge=0, strict=True)
@@ -18,7 +18,7 @@ class LocalMetrics(ExtendedBaseModel):
     mini_steps: conint(ge=0, strict=True)
 
 
-class MetricSchema(ExtendedBaseModel):
+class MetricSchema(BaseModel):
     metrics: Dict[BytesWithPublicKey, LocalMetrics]
 
 

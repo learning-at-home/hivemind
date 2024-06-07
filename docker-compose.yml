@@ -1,0 +1,10 @@
+services:
+  lab:
+    command: pytest -s -vv /home/hivemind/tests/test_optimizer.py
+    tty: true
+    stdin_open: true
+    build: .
+    volumes:
+      - ./:/home/hivemind
+    environment:
+      HIVEMIND_LOGLEVEL: DEBUG

@@ -2,6 +2,7 @@ import re
 from typing import Any, Dict, Optional, Type
 
 import pydantic
+from pydantic.fields import FieldInfo
 from pydantic_core import CoreSchema, core_schema
 
 from hivemind.dht.crypto import RSASignatureValidator
@@ -13,18 +14,13 @@ from hivemind.utils import get_logger
 logger = get_logger(__name__)
 
 
-class ExtendedBaseModel(pydantic.BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
-
-
 class SchemaValidator(RecordValidatorBase):
     """
     Restricts specified DHT keys to match a Pydantic schema.
     This allows to enforce types, min/max values, require a subkey to contain a public key, etc.
     """
 
-    def __init__(self, schema: Type[ExtendedBaseModel], allow_extra_keys: bool = True, prefix: Optional[str] = None):
+    def __init__(self, schema: Type[pydantic.BaseModel], allow_extra_keys: bool = True, prefix: Optional[str] = None):
         """
         :param schema: The Pydantic model (a subclass of pydantic.BaseModel).
 
@@ -54,7 +50,7 @@ class SchemaValidator(RecordValidatorBase):
 
     # the 'required' property was changed to 'is_required' in 2.0, and also made read-only
     # @staticmethod
-    # def _patch_schema(schema: ExtendedBaseModel):
+    # def _patch_schema(schema: pydantic.BaseModel):
     #     # We set required=False because the validate() interface provides only one key at a time
     #     for field in schema.__fields__.values():
     #         field.required = False
@@ -162,7 +158,7 @@ class SchemaValidator(RecordValidatorBase):
         #     self._patch_schema(schema)
 
 
-def conbytes(*, regex: bytes = None, **kwargs) -> Type[ExtendedBaseModel]:
+def conbytes(*, regex: bytes = None, **kwargs) -> Type[pydantic.BaseModel]:
     """
     Extend pydantic.conbytes() to support ``regex`` constraints (like pydantic.constr() does).
     """
@@ -170,12 +166,22 @@ def conbytes(*, regex: bytes = None, **kwargs) -> Type[ExtendedBaseModel]:
     compiled_regex = re.compile(regex) if regex is not None else None
 
     class ConstrainedBytesWithRegex(pydantic.conbytes(**kwargs)):
+        value: bytes = pydantic.Field(**kwargs)
+
         @classmethod
-        @pydantic.validator("*")
+        def __get_pydantic_core_schema__(cls, source_type: Any, handler: pydantic.GetCoreSchemaHandler) -> CoreSchema:
+            schema = handler(bytes)
+            return core_schema.no_info_after_validator_function(cls.match_regex, schema)
+
+        @classmethod
         def match_regex(cls, value: bytes) -> bytes:
             if compiled_regex is not None and compiled_regex.match(value) is None:
                 raise ValueError(f"Value `{value}` doesn't match regex `{regex}`")
             return value
+
+        @classmethod
+        def __get_pydantic_config__(cls) -> pydantic.config.ConfigDict:
+            return pydantic.config.ConfigDict(arbitrary_types_allowed=True)
 
     return ConstrainedBytesWithRegex
 
