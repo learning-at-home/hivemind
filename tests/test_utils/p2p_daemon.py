@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import importlib.resources as pkg_resources
 import os
 import subprocess
 import time
@@ -8,7 +9,6 @@ from contextlib import asynccontextmanager, suppress
 from typing import NamedTuple
 
 from multiaddr import Multiaddr, protocols
-from pkg_resources import resource_filename
 
 from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
 

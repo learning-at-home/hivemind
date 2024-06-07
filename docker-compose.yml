@@ -1,6 +1,6 @@
 services:
   lab:
-    command: pytest -s -vv /home/hivemind/tests/test_optimizer.py
+    command: pytest -s -vv /home/hivemind/tests/test_dht_schema.py
     tty: true
     stdin_open: true
     build: .
