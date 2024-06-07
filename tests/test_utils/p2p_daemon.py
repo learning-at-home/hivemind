@@ -16,9 +16,9 @@ from test_utils.networking import get_free_port
 
 TIMEOUT_DURATION = 30  # seconds
 
-with pkg_resources.path("hivemind", "hivemind_cli/p2pd") as p2pd_path:
-    P2PD_PATH = str(p2pd_path)
-    
+with pkg_resources.path("hivemind", "hivemind_cli") as p2pd_path:
+    P2PD_PATH = os.path.join(str(p2pd_path), "p2pd")
+
 
 async def try_until_success(coro_func, timeout=TIMEOUT_DURATION):
     """
