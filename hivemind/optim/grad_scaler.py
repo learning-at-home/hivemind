@@ -6,7 +6,7 @@ from typing import Dict, Optional
 import torch
 from packaging import version
 
-torch_version = torch.__version__.split('+')[0]
+torch_version = torch.__version__.split("+")[0]
 
 if version.parse(torch_version) >= version.parse("2.3.0"):
     from torch.amp import GradScaler as TorchGradScaler
