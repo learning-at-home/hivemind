@@ -4,8 +4,17 @@ from copy import deepcopy
 from typing import Dict, Optional
 
 import torch
-from torch.cuda.amp import GradScaler as TorchGradScaler
-from torch.cuda.amp.grad_scaler import OptState, _refresh_per_optimizer_state
+from packaging import version
+
+torch_version = torch.__version__.split("+")[0]
+
+if version.parse(torch_version) >= version.parse("2.3.0"):
+    from torch.amp import GradScaler as TorchGradScaler
+    from torch.amp.grad_scaler import OptState, _refresh_per_optimizer_state
+else:
+    from torch.cuda.amp import GradScaler as TorchGradScaler
+    from torch.cuda.amp.grad_scaler import OptState, _refresh_per_optimizer_state
+
 from torch.optim import Optimizer as TorchOptimizer
 
 import hivemind
