@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/cuda:10.2-cudnn8-devel-ubuntu18.04
+FROM nvcr.io/nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 LABEL maintainer="Learning@home"
 LABEL repository="hivemind"
 
@@ -21,7 +21,7 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
   bash install_miniconda.sh -b -p /opt/conda && rm install_miniconda.sh
 ENV PATH="/opt/conda/bin:${PATH}"
 
-RUN conda install python~=3.8 pip && \
+RUN conda install python~=3.11.0 pip && \
     pip install --no-cache-dir torch torchvision torchaudio && \
     conda clean --all
 
