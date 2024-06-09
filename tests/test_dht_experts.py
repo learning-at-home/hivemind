@@ -82,6 +82,10 @@ def test_beam_search(
         assert all(isinstance(e, hivemind.RemoteExpert) for experts in batch_experts for e in experts)
         assert all(len(experts) == beam_size for experts in batch_experts)
 
+    you.shutdown()
+    for dht_instance in dht_instances:
+        dht_instance.shutdown()
+
 
 @pytest.mark.forked
 def test_dht_single_node():
@@ -118,6 +122,8 @@ def test_dht_single_node():
 
     with pytest.raises(AssertionError):
         beam_search.get_active_successors(["e.1.2.", "e.2", "e.4.5."])
+
+    node.shutdown()
 
 
 def test_uid_patterns():
