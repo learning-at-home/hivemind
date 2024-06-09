@@ -1,3 +1,4 @@
+import os
 import re
 from subprocess import PIPE, Popen
 from time import sleep
@@ -8,11 +9,16 @@ DHT_START_PATTERN = re.compile(r"Running a DHT instance. To connect other peers 
 def test_dht_connection_successful():
     dht_refresh_period = 1
 
+    cloned_env = os.environ.copy()
+    # overriding the loglevel to prevent debug print statements
+    cloned_env["HIVEMIND_LOGLEVEL"] = "INFO"
+
     dht_proc = Popen(
         ["hivemind-dht", "--host_maddrs", "/ip4/127.0.0.1/tcp/0", "--refresh_period", str(dht_refresh_period)],
         stderr=PIPE,
         text=True,
         encoding="utf-8",
+        env=cloned_env,
     )
 
     first_line = dht_proc.stderr.readline()
@@ -28,6 +34,7 @@ def test_dht_connection_successful():
         stderr=PIPE,
         text=True,
         encoding="utf-8",
+        env=cloned_env,
     )
 
     # skip first two lines with connectivity info
