@@ -1,10 +1,11 @@
 services:
   lab:
-    command: pytest -s -vv /home/hivemind/tests/test_p2p_daemon_bindings.py
+    command: pytest -s -vv /home/hivemind/tests/test_dht_schema.py
+    # command: pytest -s -vv /home/hivemind/tests
     tty: true
     stdin_open: true
     build: .
     volumes:
       - ./:/home/hivemind
-    environment:
-      HIVEMIND_LOGLEVEL: DEBUG
+    # environment:
+    #   HIVEMIND_LOGLEVEL: DEBUG

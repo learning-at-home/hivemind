@@ -53,6 +53,7 @@ class SchemaValidator(RecordValidatorBase):
         # We set required=False because the validate() interface provides only one key at a time
         for field_name, field_info in schema.__fields__.items():
             field_info = pydantic.Field(default=None)
+            field_info = pydantic.Field(is_required=False)
 
         schema.model_config.update({"extra": pydantic.Extra.forbid})
 
@@ -97,7 +98,7 @@ class SchemaValidator(RecordValidatorBase):
         validation_errors = []
         for schema in self._schemas:
             try:
-                parsed_record = schema.parse_obj(record)
+                parsed_record = schema.model_validate(record)
             except pydantic.ValidationError as e:
                 if not self._is_failed_due_to_extra_field(e):
                     validation_errors.append(e)
@@ -178,9 +179,9 @@ def conbytes(*, regex: bytes = None, **kwargs) -> Type[pydantic.BaseModel]:
                 raise ValueError(f"Value `{value}` doesn't match regex `{regex}`")
             return value
 
-        @classmethod
-        def __get_pydantic_config__(cls) -> pydantic.config.ConfigDict:
-            return pydantic.config.ConfigDict(arbitrary_types_allowed=True)
+        # @classmethod
+        # def __get_pydantic_config__(cls) -> pydantic.config.ConfigDict:
+        #     return pydantic.config.ConfigDict(arbitrary_types_allowed=True)
 
     return ConstrainedBytesWithRegex
 
