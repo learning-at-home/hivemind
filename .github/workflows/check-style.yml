@@ -13,7 +13,7 @@ jobs:
       - uses: psf/black@stable
         with:
           options: "--check --diff"
-          version: "24.4.2"
+          version: "22.3.0"
   isort:
     runs-on: ubuntu-latest
     steps:
