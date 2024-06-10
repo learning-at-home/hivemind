@@ -1,6 +1,5 @@
 import asyncio
 import gc
-from contextlib import suppress
 
 import psutil
 import pytest
@@ -40,13 +39,12 @@ def cleanup_children():
 
     children = psutil.Process().children(recursive=True)
     if children:
-        logger.info(f"Cleaning up {len(children)} leftover child processes")
-        for child in children:
-            with suppress(psutil.NoSuchProcess):
-                child.terminate()
-        psutil.wait_procs(children, timeout=1)
-        for child in children:
-            with suppress(psutil.NoSuchProcess):
-                child.kill()
+        gone, alive = psutil.wait_procs(children, timeout=0.1)
+        logger.debug(f"Cleaning up {len(alive)} leftover child processes")
+        for child in alive:
+            child.terminate()
+        gone, alive = psutil.wait_procs(alive, timeout=1)
+        for child in alive:
+            child.kill()
 
     MPFuture.reset_backend()

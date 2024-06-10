@@ -209,3 +209,4 @@ def test_fault_tolerance(fault0: Fault, fault1: Fault):
 
     for averager in averagers:
         averager.shutdown()
+    dht.shutdown()
