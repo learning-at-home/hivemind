@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional
 
 import numpy as np
-from pydantic import BaseModel, StrictBool, StrictFloat, confloat, conint
+from pydantic.v1 import BaseModel, StrictBool, StrictFloat, confloat, conint
 
 from hivemind.dht import DHT
 from hivemind.dht.schema import BytesWithPublicKey, RSASignatureValidator, SchemaValidator
