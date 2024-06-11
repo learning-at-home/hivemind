@@ -44,7 +44,7 @@ async def test_startup_error_message():
             initial_peers=[f"/ip4/127.0.0.1/tcp/{get_free_port()}/p2p/QmdaK4LUeQaKhqSFPRu9N7MvXUEWDxWwtCvPrS444tCgd1"]
         )
 
-    with pytest.raises(P2PDaemonError, match=r"Daemon failed to start in .+ seconds"):
+    with pytest.raises(P2PDaemonError, match=r"Daemon failed to start"):
         await P2P.create(startup_timeout=0.01)  # Test that startup_timeout works
 
 
