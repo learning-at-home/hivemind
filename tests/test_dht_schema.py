@@ -12,9 +12,9 @@ from hivemind.utils.timed_storage import get_dht_time
 
 
 class SampleSchema(BaseModel):
-    experiment_name: bytes = None
-    n_batches: Dict[bytes, conint(ge=0, strict=True)] = None
-    signed_data: Dict[BytesWithPublicKey, bytes] = None
+    experiment_name: bytes
+    n_batches: Dict[bytes, conint(ge=0, strict=True)]
+    signed_data: Dict[BytesWithPublicKey, bytes]
 
 
 @pytest.fixture
@@ -95,10 +95,10 @@ async def test_expecting_public_keys(dht_nodes_with_schema):
 @pytest.mark.asyncio
 async def test_keys_outside_schema(dht_nodes_with_schema):
     class Schema(BaseModel):
-        some_field: StrictInt = None
+        some_field: StrictInt
 
     class MergedSchema(BaseModel):
-        another_field: StrictInt = None
+        another_field: StrictInt
 
     for allow_extra_keys in [False, True]:
         validator = SchemaValidator(Schema, allow_extra_keys=allow_extra_keys)
@@ -122,7 +122,7 @@ async def test_keys_outside_schema(dht_nodes_with_schema):
 @pytest.mark.asyncio
 async def test_prefix():
     class Schema(BaseModel):
-        field: StrictInt = None
+        field: StrictInt
 
     validator = SchemaValidator(Schema, allow_extra_keys=False, prefix="prefix")
 
@@ -154,11 +154,11 @@ async def test_merging_schema_validators(dht_nodes_with_schema):
     assert not alice.protocol.record_validator.merge_with(second_validator)
 
     class SecondSchema(BaseModel):
-        some_field: StrictInt = 0
-        another_field: str = None
+        some_field: StrictInt
+        another_field: str
 
     class ThirdSchema(BaseModel):
-        another_field: StrictInt = 0  # Allow it to be a StrictInt as well
+        another_field: StrictInt  # Allow it to be a StrictInt as well
 
     for schema in [SecondSchema, ThirdSchema]:
         new_validator = SchemaValidator(schema, allow_extra_keys=False)

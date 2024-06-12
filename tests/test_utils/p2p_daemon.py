@@ -5,8 +5,6 @@ import subprocess
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
-
-# from pathlib import Path
 from typing import NamedTuple
 
 from multiaddr import Multiaddr, protocols
@@ -16,10 +14,6 @@ from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
 from test_utils.networking import get_free_port
 
 TIMEOUT_DURATION = 30  # seconds
-
-# hivemind_dir = Path(__file__).parent / "hivemind" / "hivemind_cli"
-
-# P2PD_PATH = str(hivemind_dir / "p2pd")
 
 from pkg_resources import resource_filename
 
