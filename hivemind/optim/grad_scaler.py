@@ -4,10 +4,6 @@ from copy import deepcopy
 from typing import Dict, Optional
 
 import torch
-from packaging import version
-
-torch_version = torch.__version__.split("+")[0]
-
 from torch.cuda.amp import GradScaler as TorchGradScaler
 from torch.cuda.amp.grad_scaler import OptState, _refresh_per_optimizer_state
 from torch.optim import Optimizer as TorchOptimizer

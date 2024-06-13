@@ -107,7 +107,7 @@ def benchmark_optimizer(args: TrainingArguments):
 
             batch = torch.randint(0, len(X_train), (batch_size,))
 
-            with torch.amp.autocast() if args.use_amp else nullcontext():
+            with torch.cuda.amp.autocast() if args.use_amp else nullcontext():
                 loss = F.cross_entropy(model(X_train[batch].to(args.device)), y_train[batch].to(args.device))
                 grad_scaler.scale(loss).backward()
 
