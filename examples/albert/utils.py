@@ -1,6 +1,6 @@
 from typing import Dict, List, Tuple
 
-from pydantic import BaseModel, StrictFloat, confloat, conint
+from pydantic.v1 import BaseModel, StrictFloat, confloat, conint
 
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator

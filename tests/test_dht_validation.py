@@ -2,7 +2,7 @@ import dataclasses
 from typing import Dict
 
 import pytest
-from pydantic import BaseModel, StrictInt
+from pydantic.v1 import BaseModel, StrictInt
 
 import hivemind
 from hivemind.dht.crypto import RSASignatureValidator

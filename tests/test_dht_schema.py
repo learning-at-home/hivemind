@@ -2,7 +2,7 @@ import asyncio
 from typing import Dict
 
 import pytest
-from pydantic import BaseModel, StrictInt, conint
+from pydantic.v1 import BaseModel, StrictInt, conint
 
 import hivemind
 from hivemind.dht.node import DHTNode
