@@ -12,6 +12,7 @@ from hivemind import P2P, PeerID, get_dht_time, get_logger
 from hivemind.dht import DHTID
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.storage import DictionaryDHTValue
+from hivemind.utils.compat import safe_recv
 
 logger = get_logger(__name__)
 
@@ -56,7 +57,7 @@ def launch_protocol_listener(
     dht_id = DHTID.generate()
     process = mp.Process(target=run_protocol_listener, args=(dht_id, remote_conn, initial_peers), daemon=True)
     process.start()
-    peer_id, visible_maddrs = local_conn.recv()
+    peer_id, visible_maddrs = safe_recv(local_conn)
 
     return dht_id, process, peer_id, visible_maddrs
 
