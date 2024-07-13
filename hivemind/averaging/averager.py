@@ -10,6 +10,7 @@ import os
 import random
 import signal
 import threading
+import time
 import weakref
 from dataclasses import asdict
 from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Union
@@ -700,6 +701,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             metadata = None
             for peer in sorted(peer_priority.keys(), key=peer_priority.get, reverse=True):
                 if peer != self.peer_id:
+                    t0 = time.monotonic()
                     logger.info(f"Downloading parameters from peer {peer}")
                     try:
                         stub = self.get_stub(self._p2p, peer, namespace=self.prefix)
@@ -722,7 +724,8 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                             logger.debug(f"Peer {peer} did not send its state")
                             continue
 
-                        logger.info(f"Finished downloading state from {peer}")
+                        t1 = time.monotonic()
+                        logger.info(f"Finished downloading state in {t1 - t0:.3f}s from {peer}")
                         future.set_result((metadata, tensors))
                         return
                     except Exception as e:
