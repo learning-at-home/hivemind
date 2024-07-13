@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import contextlib
 import random
 from math import isfinite
@@ -168,8 +167,8 @@ class Matchmaking:
                         elif len(self.current_followers) > 0:
                             await self.leader_disband_group()
                         continue
-                except (concurrent.futures.CancelledError, asyncio.CancelledError):
-                    break  # note: this is a compatibility layer for python3.7
+                except asyncio.CancelledError:
+                    break
                 except Exception as e:
                     if not self.assembled_group.done():
                         self.assembled_group.set_exception(e)
@@ -321,8 +320,8 @@ class Matchmaking:
                 ordered_peer_ids=[item.to_bytes() for item in group_info.peer_ids],
                 gathered=group_info.gathered,
             )
-        except (concurrent.futures.CancelledError, asyncio.CancelledError):
-            return  # note: this is a compatibility layer for python3.7
+        except asyncio.CancelledError:
+            return
         except Exception as e:
             logger.exception(e)
             yield averaging_pb2.MessageFromLeader(code=averaging_pb2.INTERNAL_ERROR)
