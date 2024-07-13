@@ -16,6 +16,15 @@ import hivemind
 from hivemind.optim.optimizer import Optimizer
 from hivemind.utils.crypto import RSAPrivateKey
 
+from packaging import version
+
+torch_version = torch.__version__.split("+")[0]
+
+if version.parse(torch_version) >= version.parse("2.3.0"):
+    from torch.amp import GradScaler
+else:
+    from torch.cuda.amp import GradScaler
+
 
 @dataclass(frozen=True)
 class TrainingArguments:
@@ -98,7 +107,7 @@ def benchmark_optimizer(args: TrainingArguments):
             grad_scaler = hivemind.GradScaler()
         else:
             # check that hivemind.Optimizer supports regular PyTorch grad scaler as well
-            grad_scaler = torch.amp.GradScaler(enabled=args.use_amp)
+            grad_scaler = GradScaler(enabled=args.use_amp)
 
         prev_time = time.perf_counter()
 
