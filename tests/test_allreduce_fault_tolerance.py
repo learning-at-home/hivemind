@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from enum import Enum, auto
+from typing import AsyncIterator
 
 import pytest
+import torch
 
 import hivemind
-from hivemind.averaging.averager import *
+from hivemind.averaging.averager import AllReduceRunner, AveragingMode, GatheredData
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.matchmaking import MatchmakingException
