@@ -1,7 +1,7 @@
 import re
 from typing import Any, Dict, Optional, Type
 
-import pydantic
+import pydantic.v1 as pydantic
 
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.protocol import DHTProtocol
