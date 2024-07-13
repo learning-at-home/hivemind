@@ -514,7 +514,7 @@ class TrainingStateAverager(DecentralizedAverager):
             with self.lock_optimizer:
                 if optimizer_step:
                     with self.lock_averaged_tensors if self.reuse_tensors else nullcontext():
-                        logger.debug(f"Running optimizer step")
+                        logger.debug("Running optimizer step")
                         if grad_scaler is None:
                             self.optimizer.step()
                         else:
@@ -522,7 +522,7 @@ class TrainingStateAverager(DecentralizedAverager):
                                 assert grad_scaler.step(self.optimizer)
 
                 if zero_grad:
-                    logger.debug(f"Running zero grad")
+                    logger.debug("Running zero grad")
                     self.optimizer.zero_grad()
                     if self.offload_optimizer:
                         for parameter in self.main_parameters:
@@ -567,7 +567,7 @@ class TrainingStateAverager(DecentralizedAverager):
                 logger.error(f"Aborted {self.__class__.__name__}.step because wait_for_trigger raised exception")
             logger.exception(e)
             if averaging_control is not None and not averaging_control.done():
-                logger.error(f"Cancelled scheduled state averaging round")
+                logger.error("Cancelled scheduled state averaging round")
                 averaging_control.cancel()
             self.finished_optimizer_step.set()
             self.finished_averaging_round.set()

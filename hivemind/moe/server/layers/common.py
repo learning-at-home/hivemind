@@ -12,7 +12,8 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + torch.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x)))
 
 
-ffn_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
+def ffn_sample_input(batch_size, hid_dim):
+    return torch.empty((batch_size, hid_dim))
 
 
 @register_expert_class("ffn", ffn_sample_input)
@@ -66,10 +67,11 @@ class TransformerEncoderLayer(nn.Module):
         return src
 
 
-transformer_sample_input = lambda batch_size, hid_dim: (
-    torch.empty((batch_size, 128, hid_dim)),
-    torch.empty((batch_size, 128), dtype=torch.bool),
-)
+def transformer_sample_input(batch_size, hid_dim):
+    return (
+        torch.empty((batch_size, 128, hid_dim)),
+        torch.empty((batch_size, 128), dtype=torch.bool),
+    )
 
 
 @register_expert_class("transformer", transformer_sample_input)
@@ -78,7 +80,8 @@ class TunedTransformer(TransformerEncoderLayer):
         super().__init__(hid_dim, dim_feedforward=4 * hid_dim, nhead=16)
 
 
-nop_sample_input = lambda batch_size, hid_dim: torch.empty((batch_size, hid_dim))
+def nop_sample_input(batch_size, hid_dim):
+    return torch.empty((batch_size, hid_dim))
 
 
 @register_expert_class("nop", nop_sample_input)
