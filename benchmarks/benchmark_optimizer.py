@@ -8,6 +8,7 @@ from typing import Callable
 
 import torch
 import torchvision
+from packaging import version
 from torch import nn as nn
 from torch.nn import functional as F
 from torch.utils.data import Dataset
@@ -15,8 +16,6 @@ from torch.utils.data import Dataset
 import hivemind
 from hivemind.optim.optimizer import Optimizer
 from hivemind.utils.crypto import RSAPrivateKey
-
-from packaging import version
 
 torch_version = torch.__version__.split("+")[0]
 
