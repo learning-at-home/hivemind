@@ -15,3 +15,20 @@ omit = ["hivemind/proto/*"]
 source = ["hivemind"]
 parallel = true
 sigterm = true
+
+[tool.ruff]
+exclude = [
+    "__init__.py",
+    "*_pb2.py"
+]
+line-length = 119
+required-version = "==0.5.1"
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501", "E702"]
+dummy-variable-rgx = "^_$"
+
+[tool.ruff.lint.isort]
+known-first-party = ["arguments", "test_utils", "tests", "utils"]

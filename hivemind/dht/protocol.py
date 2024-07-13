@@ -22,12 +22,12 @@ logger = get_logger(__name__)
 
 
 class DHTProtocol(ServicerBase):
-    # fmt:off
+    # fmt: off
     p2p: P2P
     node_id: DHTID; bucket_size: int; num_replicas: int; wait_timeout: float; node_info: dht_pb2.NodeInfo
     storage: DHTLocalStorage; cache: DHTLocalStorage; routing_table: RoutingTable; rpc_semaphore: asyncio.Semaphore
     record_validator: Optional[RecordValidatorBase]
-    # fmt:on
+    # fmt: on
 
     serializer = MSGPackSerializer  # used to pack/unpack DHT Values for transfer over network
     RESERVED_SUBKEYS = IS_REGULAR_VALUE, IS_DICTIONARY = serializer.dumps(None), b""
@@ -109,7 +109,7 @@ class DHTProtocol(ServicerBase):
                 time_requested = get_dht_time()
                 response = await self.get_stub(peer).rpc_ping(ping_request, timeout=self.wait_timeout)
                 time_responded = get_dht_time()
-        except Exception as e:
+        except Exception:
             logger.debug(f"DHTProtocol failed to ping {peer}", exc_info=True)
             response = None
         responded = bool(response and response.peer and response.peer.node_id)
@@ -224,7 +224,7 @@ class DHTProtocol(ServicerBase):
                 peer_id = DHTID.from_bytes(response.peer.node_id)
                 asyncio.create_task(self.update_routing_table(peer_id, peer, responded=True))
             return response.store_ok
-        except Exception as e:
+        except Exception:
             logger.debug(f"DHTProtocol failed to store at {peer}", exc_info=True)
             asyncio.create_task(self.update_routing_table(self.routing_table.get(peer_id=peer), peer, responded=False))
             return None
@@ -325,7 +325,7 @@ class DHTProtocol(ServicerBase):
                     logger.error(f"Unknown result type: {result.type}")
 
             return output
-        except Exception as e:
+        except Exception:
             logger.debug(f"DHTProtocol failed to find at {peer}", exc_info=True)
             asyncio.create_task(self.update_routing_table(self.routing_table.get(peer_id=peer), peer, responded=False))
 
