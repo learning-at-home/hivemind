@@ -11,3 +11,4 @@ isort==5.10.1
 codespell==2.2.2
 psutil
 pytest-xdist
+ruff==0.5.1
