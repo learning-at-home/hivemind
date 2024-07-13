@@ -117,7 +117,7 @@ async def test_dht_node(
     for node in [me, that_guy]:
         val, expiration_time = await node.get("mykey")
         assert val == ["Value", 10], "Wrong value"
-        assert expiration_time == true_time, f"Wrong time"
+        assert expiration_time == true_time, "Wrong time"
 
     assert not await detached_node.get("mykey")
 

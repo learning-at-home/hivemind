@@ -52,7 +52,7 @@ def get_model(training_args, config, tokenizer):
         logger.info(f"Loading model from {latest_checkpoint_dir}")
         model = AlbertForPreTraining.from_pretrained(latest_checkpoint_dir)
     else:
-        logger.info(f"Training from scratch")
+        logger.info("Training from scratch")
         model = AlbertForPreTraining(config)
         model.resize_token_embeddings(len(tokenizer))
 
@@ -235,17 +235,18 @@ def main():
 
     adjusted_target_batch_size = collaboration_args.target_batch_size - collaboration_args.batch_size_lead
 
-    # We need to make such a lambda function instead of just an optimizer instance
+    # We need to make such a function instead of just an optimizer instance
     # to make hivemind.Optimizer(..., offload_optimizer=True) work
-    opt = lambda params: Lamb(
-        params,
-        lr=training_args.learning_rate,
-        betas=(training_args.adam_beta1, training_args.adam_beta2),
-        eps=training_args.adam_epsilon,
-        weight_decay=training_args.weight_decay,
-        clamp_value=training_args.clamp_value,
-        debias=True,
-    )
+    def opt(params):
+        return Lamb(
+            params,
+            lr=training_args.learning_rate,
+            betas=(training_args.adam_beta1, training_args.adam_beta2),
+            eps=training_args.adam_epsilon,
+            weight_decay=training_args.weight_decay,
+            clamp_value=training_args.clamp_value,
+            debias=True,
+        )
 
     no_decay = ["bias", "LayerNorm.weight"]
     params = [
@@ -259,9 +260,10 @@ def main():
         },
     ]
 
-    scheduler = lambda opt: get_linear_schedule_with_warmup(
-        opt, num_warmup_steps=training_args.warmup_steps, num_training_steps=training_args.total_steps
-    )
+    def scheduler(opt):
+        return get_linear_schedule_with_warmup(
+            opt, num_warmup_steps=training_args.warmup_steps, num_training_steps=training_args.total_steps
+        )
 
     optimizer = Optimizer(
         dht=dht,

@@ -29,7 +29,7 @@ def print_device_info(device=None):
     # Additional Info when using cuda
     if device.type == "cuda":
         logger.info(torch.cuda.get_device_name(0))
-        logger.info(f"Memory Usage:")
+        logger.info("Memory Usage:")
         logger.info(f"Allocated: {round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1)} GB")
         logger.info(f"Cached:   {round(torch.cuda.memory_cached(0) / 1024 ** 3, 1)} GB")
 
@@ -161,11 +161,13 @@ def benchmark_throughput(
 
     sys.stdout.flush()
     sys.stderr.flush()
-    time_between = (
-        lambda key1, key2: abs(timestamps[key2] - timestamps[key1])
-        if (key1 in timestamps and key2 in timestamps)
-        else float("nan")
-    )
+
+    def time_between(key1, key2):
+        if key1 in timestamps and key2 in timestamps:
+            return abs(timestamps[key2] - timestamps[key1])
+        else:
+            return float("nan")
+
     total_examples = batch_size * num_clients * num_batches_per_client
 
     logger.info("Benchmark finished, status:" + ["Success", "Failure"][benchmarking_failed.is_set()])

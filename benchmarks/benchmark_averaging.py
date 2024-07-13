@@ -77,7 +77,7 @@ def benchmark_averaging(
         for step in range(num_rounds):
             try:
                 success = averager.step(timeout=round_timeout) is not None
-            except:
+            except hivemind.averaging.allreduce.AllreduceException:
                 success = False
             with lock_stats:
                 successful_steps += int(success)
