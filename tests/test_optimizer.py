@@ -272,7 +272,7 @@ def test_progress_tracker():
         dht.shutdown()
 
     worker_batch_sizes = [12, 16, 24, 64]
-    worker_step_times = [0.6, 0.5, 0.2, 0.2]
+    worker_step_times = [0.6, 0.5, 0.4, 0.4]
 
     workers = []
     for i, (peer_batch_size, peer_step_time) in enumerate(zip(worker_batch_sizes, worker_step_times), start=1):
