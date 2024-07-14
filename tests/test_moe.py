@@ -316,9 +316,9 @@ def test_client_anomaly_detection():
         server.shutdown()
 
 
-def _measure_coro_running_time(n_coros, elapsed_fut, counter):
+def _measure_coro_running_time(n_coros, elapsed_fut, counter, coroutine_time):
     async def coro():
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(coroutine_time)
         counter.value += 1
 
     try:
@@ -337,20 +337,21 @@ def _measure_coro_running_time(n_coros, elapsed_fut, counter):
 
 
 @pytest.mark.forked
-def test_remote_expert_worker_runs_coros_concurrently(n_processes=4, n_coros=10):
+def test_remote_expert_worker_runs_coros_concurrently(n_processes=4, n_coros=10, coroutine_time=0.1):
     processes = []
     counter = mp.Value(ctypes.c_int64)
     for i in range(n_processes):
         elapsed_fut = MPFuture()
         factory = threading.Thread if i % 2 == 0 else mp.Process  # Test both threads and processes
 
-        proc = factory(target=_measure_coro_running_time, args=(n_coros, elapsed_fut, counter))
+        proc = factory(target=_measure_coro_running_time, args=(n_coros, elapsed_fut, counter, coroutine_time))
         proc.start()
         processes.append((proc, elapsed_fut))
 
     for proc, elapsed_fut in processes:
         # Ensure that the coroutines were run concurrently, not sequentially
-        assert elapsed_fut.result() < 0.2
+        expected_time = coroutine_time * 3  # from non-blocking calls + blocking call + some overhead
+        assert elapsed_fut.result() < expected_time
         proc.join()
 
     assert counter.value == n_processes * n_coros  # Ensure all couroutines have finished
