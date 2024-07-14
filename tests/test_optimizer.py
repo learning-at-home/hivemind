@@ -238,16 +238,17 @@ def test_progress_tracker():
             prefix,
             target_batch_size,
             start=True,
-            min_refresh_period=0.1,
-            default_refresh_period=0.2,
-            max_refresh_period=0.5,
+            min_refresh_period=0.01,
+            default_refresh_period=0.02,
+            max_refresh_period=0.05,
         )
-        barrier.wait()
-        if index == 4:
-            delayed_start_evt.wait()
+        with tracker.pause_updates():
+            barrier.wait()
+            if index == 4:
+                delayed_start_evt.wait()
 
-        local_epoch = 2 if index == 4 else 0
-        samples_accumulated = 0
+            local_epoch = 2 if index == 4 else 0
+            samples_accumulated = 0
 
         while True:
             time.sleep(step_time)
@@ -270,23 +271,29 @@ def test_progress_tracker():
         tracker.shutdown()
         dht.shutdown()
 
-    workers = [
-        mp.Process(target=run_worker, kwargs=dict(index=1, batch_size=12, step_time=0.6, initial_peers=root_maddrs)),
-        mp.Process(target=run_worker, kwargs=dict(index=2, batch_size=16, step_time=0.5, initial_peers=root_maddrs)),
-        mp.Process(target=run_worker, kwargs=dict(index=3, batch_size=24, step_time=0.2, initial_peers=root_maddrs)),
-        mp.Process(target=run_worker, kwargs=dict(index=4, batch_size=64, step_time=0.2, initial_peers=root_maddrs)),
-    ]
-    for worker in workers:
+    worker_batch_sizes = [12, 16, 24, 64]
+    worker_step_times = [0.6, 0.5, 0.2, 0.2]
+
+    workers = []
+    for i, (peer_batch_size, peer_step_time) in enumerate(zip(worker_batch_sizes, worker_step_times), start=1):
+        peer_kwargs = {
+            "index": i,
+            "batch_size": peer_batch_size,
+            "step_time": peer_step_time,
+            "initial_peers": root_maddrs,
+        }
+        worker = mp.Process(target=run_worker, kwargs=peer_kwargs)
         worker.start()
+        workers.append(worker)
 
     tracker = ProgressTracker(
         dht_root,
         prefix,
         target_batch_size,
         start=True,
-        min_refresh_period=0.1,
-        default_refresh_period=0.2,
-        max_refresh_period=0.5,
+        min_refresh_period=0.01,
+        default_refresh_period=0.02,
+        max_refresh_period=0.05,
     )
     barrier.wait()
 
@@ -295,7 +302,7 @@ def test_progress_tracker():
     step_time_deltas = []
 
     while local_epoch < 6:
-        time.sleep(0.1)
+        time.sleep(0.01)
 
         if tracker.ready_to_update_epoch:
             with tracker.pause_updates():
