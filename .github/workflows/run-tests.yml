@@ -39,7 +39,7 @@ jobs:
         run: |
           cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
-          pytest --durations=0 --durations-min=1.0 -v -n auto
+          pytest --durations=0 --durations-min=1.0 -v
   build_and_test_p2pd:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -70,7 +70,7 @@ jobs:
         run: |
           cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
-          pytest -k "p2p" -v -n auto
+          pytest -k "p2p" -v
   codecov_in_develop_mode:
 
     runs-on: ubuntu-latest
@@ -100,6 +100,6 @@ jobs:
       - name: Test
         run: |
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
-          pytest --cov hivemind --cov-config=pyproject.toml -v -n auto tests
+          pytest --cov hivemind --cov-config=pyproject.toml -v tests
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
