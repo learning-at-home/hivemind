@@ -567,7 +567,6 @@ def test_performance_ema_threadsafe(
     with ThreadPoolExecutor(max_workers) as pool:
         ema = PerformanceEMA(alpha=alpha)
         start_event = Event()
-        start_time = time.perf_counter()
 
         futures = []
         for _ in range(num_updates):
@@ -577,6 +576,7 @@ def test_performance_ema_threadsafe(
 
         ema.reset_timer()
         start_event.set()
+        start_time = time.perf_counter()
         total_size = sum(future.result() for future in as_completed(futures))
         end_time = time.perf_counter()
         target = total_size / (end_time - start_time)
