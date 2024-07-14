@@ -21,48 +21,49 @@ from hivemind.utils import BatchTensorDescriptor, MPFuture, get_dht_time
 
 
 @pytest.mark.forked
-def test_moe():
+def test_moe(batch_size=2, hid_dim=4):
     all_expert_uids = [
         f"ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}" for _ in range(10)
     ]
     with background_server(
-        expert_uids=all_expert_uids, device="cpu", expert_cls="ffn", num_handlers=1, hidden_dim=16
+        expert_uids=all_expert_uids, device="cpu", expert_cls="ffn", num_handlers=1, hidden_dim=hid_dim
     ) as server_peer_info:
         dht = DHT(start=True, initial_peers=server_peer_info.addrs)
 
-        dmoe = RemoteMixtureOfExperts(in_features=16, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix="ffn.")
+        dmoe = RemoteMixtureOfExperts(in_features=hid_dim, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix="ffn.")
 
         for i in range(3):
-            out = dmoe(torch.randn(10, 16))
+            out = dmoe(torch.randn(batch_size, hid_dim))
             out.sum().backward()
 
 
 @pytest.mark.forked
-def test_no_experts():
+def test_no_experts(batch_size=2, hid_dim=4):
     all_expert_uids = [
         f"expert.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}" for _ in range(10)
     ]
     with background_server(
-        expert_uids=all_expert_uids, device="cpu", expert_cls="nop_delay", num_handlers=1, hidden_dim=16
+        expert_uids=all_expert_uids, device="cpu", expert_cls="nop_delay", num_handlers=1, hidden_dim=hid_dim
     ) as server_peer_info:
         dht = DHT(start=True, initial_peers=server_peer_info.addrs)
         dmoe = RemoteSwitchMixtureOfExperts(
-            in_features=16,
+            in_features=hid_dim,
             grid_size=(4, 4, 4),
             dht=dht,
             uid_prefix="expert.",
-            forward_timeout=0.1,
-            backward_timeout=0.1,
+            forward_timeout=0.01,
+            backward_timeout=0.01,
             allow_zero_outputs=True,
         )
 
         for i in range(3):
-            out, balancing_loss = dmoe(torch.randn(10, 16))
+            out, balancing_loss = dmoe(torch.randn(batch_size, hid_dim))
             out.sum().backward()
+        dht.shutdown()
 
 
 @pytest.mark.forked
-def test_call_many(hidden_dim=16):
+def test_call_many(hidden_dim=4):
     k_min = 1
     timeout_after_k_min = None
     backward_k_min = 1
@@ -88,7 +89,7 @@ def test_call_many(hidden_dim=16):
             [ExpertInfo(uid=f"expert.{i}", peer_id=server_peer_info.peer_id) for i in range(5)],
             dht,
         )
-        e5 = RemoteExpert(ExpertInfo(f"thisshouldnotexist", server_peer_info), None)
+        e5 = RemoteExpert(ExpertInfo("thisshouldnotexist", server_peer_info), None)
 
         mask, expert_outputs = _RemoteCallMany.apply(
             DUMMY,
@@ -133,7 +134,7 @@ def test_call_many(hidden_dim=16):
 
 
 @pytest.mark.forked
-def test_remote_module_call(hidden_dim=16):
+def test_remote_module_call(hidden_dim=4):
     with background_server(
         num_experts=1,
         device="cpu",

@@ -3,7 +3,7 @@ import concurrent.futures
 import multiprocessing as mp
 import random
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import pytest
@@ -524,9 +524,9 @@ async def test_async_context_flooding():
 
     async def coro():
         async with enter_asynchronously(lock1):
-            await asyncio.sleep(1e-2)
+            await asyncio.sleep(1e-6)
             async with enter_asynchronously(lock2):
-                await asyncio.sleep(1e-2)
+                await asyncio.sleep(1e-6)
 
     num_coros = max(33, mp.cpu_count() * 5 + 1)
     await asyncio.wait({asyncio.create_task(coro()) for _ in range(num_coros)})
@@ -565,8 +565,8 @@ def test_performance_ema_threadsafe(
     with ThreadPoolExecutor(max_workers) as pool:
         ema = PerformanceEMA(alpha=alpha)
         start_time = time.perf_counter()
-        futures = [pool.submit(run_task, ema) for i in range(num_updates)]
-        total_size = sum(future.result() for future in futures)
+        futures = [pool.submit(run_task, ema) for _ in range(num_updates)]
+        total_size = sum(future.result() for future in as_completed(futures))
         end_time = time.perf_counter()
         target = total_size / (end_time - start_time)
         assert ema.samples_per_second >= (1 - tolerance) * target * max_workers ** (bias_power - 1)
