@@ -241,15 +241,13 @@ def test_progress_tracker():
             min_refresh_period=0.1,
             default_refresh_period=0.2,
             max_refresh_period=0.5,
-            private_key=RSAPrivateKey(),
         )
-        with tracker.pause_updates():
-            barrier.wait()
-            if index == 4:
-                delayed_start_evt.wait()
+        barrier.wait()
+        if index == 4:
+            delayed_start_evt.wait()
 
-            local_epoch = 2 if index == 4 else 0
-            samples_accumulated = 0
+        local_epoch = 2 if index == 4 else 0
+        samples_accumulated = 0
 
         while True:
             time.sleep(step_time)
