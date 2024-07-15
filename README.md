@@ -40,7 +40,7 @@ feel free to submit a pull request that adds your project to this list.
 
 ## Installation
 
-Before installing, make sure that your environment has Python 3.7+
+Before installing, make sure that your environment has Python 3.8+
 and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.9.0 or newer. They can be installed either
 natively or with [Anaconda](https://www.anaconda.com/products/individual).
 

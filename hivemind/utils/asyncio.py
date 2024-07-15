@@ -84,9 +84,7 @@ async def await_cancelled(awaitable: Awaitable) -> bool:
     try:
         await awaitable
         return False
-    except (asyncio.CancelledError, concurrent.futures.CancelledError):
-        # In Python 3.7, awaiting a cancelled asyncio.Future raises concurrent.futures.CancelledError
-        # instead of asyncio.CancelledError
+    except asyncio.CancelledError:
         return True
     except BaseException:
         logger.exception(f"Exception in {awaitable}:")
