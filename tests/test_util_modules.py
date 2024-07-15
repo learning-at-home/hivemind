@@ -528,8 +528,7 @@ async def test_async_context_flooding():
             async with enter_asynchronously(lock2):
                 await asyncio.sleep(1e-2)
 
-    num_coros = max(100, mp.cpu_count() * 5 + 1)
-    # note: if we deprecate py3.7, this can be reduced to max(33, cpu + 5); see https://bugs.python.org/issue35279
+    num_coros = max(33, mp.cpu_count() * 5 + 1)
     await asyncio.wait({asyncio.create_task(coro()) for _ in range(num_coros)})
 
 
