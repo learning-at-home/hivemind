@@ -7,7 +7,7 @@ DHT_START_PATTERN = re.compile(r"Running a DHT instance. To connect other peers 
 
 
 def test_dht_connection_successful():
-    dht_refresh_period = 1
+    dht_refresh_period = 3
 
     cloned_env = os.environ.copy()
     # overriding the loglevel to prevent debug print statements

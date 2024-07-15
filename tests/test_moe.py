@@ -21,48 +21,49 @@ from hivemind.utils import BatchTensorDescriptor, MPFuture, get_dht_time
 
 
 @pytest.mark.forked
-def test_moe():
+def test_moe(batch_size=2, hid_dim=4):
     all_expert_uids = [
         f"ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}" for _ in range(10)
     ]
     with background_server(
-        expert_uids=all_expert_uids, device="cpu", expert_cls="ffn", num_handlers=1, hidden_dim=16
+        expert_uids=all_expert_uids, device="cpu", expert_cls="ffn", num_handlers=1, hidden_dim=hid_dim
     ) as server_peer_info:
         dht = DHT(start=True, initial_peers=server_peer_info.addrs)
 
-        dmoe = RemoteMixtureOfExperts(in_features=16, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix="ffn.")
+        dmoe = RemoteMixtureOfExperts(in_features=hid_dim, grid_size=(4, 4, 4), dht=dht, k_best=3, uid_prefix="ffn.")
 
         for i in range(3):
-            out = dmoe(torch.randn(10, 16))
+            out = dmoe(torch.randn(batch_size, hid_dim))
             out.sum().backward()
 
 
 @pytest.mark.forked
-def test_no_experts():
+def test_no_experts(batch_size=2, hid_dim=4):
     all_expert_uids = [
         f"expert.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}" for _ in range(10)
     ]
     with background_server(
-        expert_uids=all_expert_uids, device="cpu", expert_cls="nop_delay", num_handlers=1, hidden_dim=16
+        expert_uids=all_expert_uids, device="cpu", expert_cls="nop_delay", num_handlers=1, hidden_dim=hid_dim
     ) as server_peer_info:
         dht = DHT(start=True, initial_peers=server_peer_info.addrs)
         dmoe = RemoteSwitchMixtureOfExperts(
-            in_features=16,
+            in_features=hid_dim,
             grid_size=(4, 4, 4),
             dht=dht,
             uid_prefix="expert.",
-            forward_timeout=0.1,
-            backward_timeout=0.1,
+            forward_timeout=0.01,
+            backward_timeout=0.01,
             allow_zero_outputs=True,
         )
 
         for i in range(3):
-            out, balancing_loss = dmoe(torch.randn(10, 16))
+            out, balancing_loss = dmoe(torch.randn(batch_size, hid_dim))
             out.sum().backward()
+        dht.shutdown()
 
 
 @pytest.mark.forked
-def test_call_many(hidden_dim=16):
+def test_call_many(hidden_dim=4):
     k_min = 1
     timeout_after_k_min = None
     backward_k_min = 1
@@ -88,7 +89,7 @@ def test_call_many(hidden_dim=16):
             [ExpertInfo(uid=f"expert.{i}", peer_id=server_peer_info.peer_id) for i in range(5)],
             dht,
         )
-        e5 = RemoteExpert(ExpertInfo(f"thisshouldnotexist", server_peer_info), None)
+        e5 = RemoteExpert(ExpertInfo("thisshouldnotexist", server_peer_info), None)
 
         mask, expert_outputs = _RemoteCallMany.apply(
             DUMMY,
@@ -133,7 +134,7 @@ def test_call_many(hidden_dim=16):
 
 
 @pytest.mark.forked
-def test_remote_module_call(hidden_dim=16):
+def test_remote_module_call(hidden_dim=4):
     with background_server(
         num_experts=1,
         device="cpu",
@@ -315,9 +316,9 @@ def test_client_anomaly_detection():
         server.shutdown()
 
 
-def _measure_coro_running_time(n_coros, elapsed_fut, counter):
+def _measure_coro_running_time(n_coros, elapsed_fut, counter, coroutine_time):
     async def coro():
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(coroutine_time)
         counter.value += 1
 
     try:
@@ -336,20 +337,21 @@ def _measure_coro_running_time(n_coros, elapsed_fut, counter):
 
 
 @pytest.mark.forked
-def test_remote_expert_worker_runs_coros_concurrently(n_processes=4, n_coros=10):
+def test_remote_expert_worker_runs_coros_concurrently(n_processes=4, n_coros=10, coroutine_time=0.1):
     processes = []
     counter = mp.Value(ctypes.c_int64)
     for i in range(n_processes):
         elapsed_fut = MPFuture()
         factory = threading.Thread if i % 2 == 0 else mp.Process  # Test both threads and processes
 
-        proc = factory(target=_measure_coro_running_time, args=(n_coros, elapsed_fut, counter))
+        proc = factory(target=_measure_coro_running_time, args=(n_coros, elapsed_fut, counter, coroutine_time))
         proc.start()
         processes.append((proc, elapsed_fut))
 
     for proc, elapsed_fut in processes:
         # Ensure that the coroutines were run concurrently, not sequentially
-        assert elapsed_fut.result() < 0.2
+        expected_time = coroutine_time * 3  # from non-blocking calls + blocking call + some overhead
+        assert elapsed_fut.result() < expected_time
         proc.join()
 
     assert counter.value == n_processes * n_coros  # Ensure all couroutines have finished
