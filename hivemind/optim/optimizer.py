@@ -238,6 +238,7 @@ class Optimizer(torch.optim.Optimizer):
         self.delay_state_averaging, self.average_state_every = delay_state_averaging, average_state_every
         self.matchmaking_time, self.offload_optimizer = matchmaking_time, offload_optimizer
         self.delay_grad_averaging, self.delay_optimizer_step = delay_grad_averaging, delay_optimizer_step
+        self.reuse_grad_buffers, self.use_local_updates = reuse_grad_buffers, use_local_updates
 
         self.averaging_timeout, self.allreduce_timeout = averaging_timeout, allreduce_timeout
         self.load_state_timeout, self.shutdown_timeout = load_state_timeout, shutdown_timeout
@@ -359,12 +360,8 @@ class Optimizer(torch.optim.Optimizer):
         return self.tracker.local_progress
 
     @property
-    def use_local_updates(self) -> bool:
-        return self.grad_averager is None
-
-    @property
     def use_gradient_averaging(self) -> bool:
-        return self.grad_averager is not None
+        return not self.use_local_updates
 
     def step(
         self,
@@ -640,7 +637,7 @@ class Optimizer(torch.optim.Optimizer):
 
     def zero_grad(self, set_to_none: bool = ZERO_GRAD_SET_TO_NONE_DEFAULT):
         """Reset gradients from model. If reuse_grad_buffers=True, this will raise an error."""
-        if self.use_gradient_averaging and self.grad_averager.reuse_grad_buffers:
+        if self.use_gradient_averaging and self.reuse_grad_buffers:
             raise ValueError(
                 f"When running {self.__class__.__name__} with reuse_grad_buffers=True, user should never "
                 f"call zero_grad manually. Gradients will be refreshed internally"
