@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 
 class Matchmaking:
-    f"""
+    """
     An internal class that is used to form groups of averages for running allreduce
     See DecentralizedAverager docstring for the detailed description of all parameters
 
@@ -237,7 +237,7 @@ class Matchmaking:
         except asyncio.TimeoutError:
             logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             return None
-        except (P2PDaemonError, P2PHandlerError, StopAsyncIteration) as e:
+        except (P2PDaemonError, P2PHandlerError, StopAsyncIteration):
             logger.debug(f"{self} - failed to request potential leader {leader}:", exc_info=True)
             return None
 
