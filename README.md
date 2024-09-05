@@ -74,7 +74,7 @@ instead. Then, you can run the tests with `pytest tests/`.
 ```
 pytest test_auth.py
 or 
-pytest test_dht.crypto.py
+pytest test_dht_crypto.py
 ```
 
 By default, hivemind uses the precompiled binary of
