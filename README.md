@@ -71,6 +71,12 @@ pip install .
 If you would like to verify that your installation is working properly, you can install with `pip install .[dev]`
 instead. Then, you can run the tests with `pytest tests/`.
 
+```
+pytest test_auth.py
+or 
+pytest test_dht.crypto.py
+```
+
 By default, hivemind uses the precompiled binary of
 the [go-libp2p-daemon](https://github.com/learning-at-home/go-libp2p-daemon) library. If you face compatibility issues
 or want to build the binary yourself, you can recompile it by running `pip install . --global-option="--buildgo"`.
