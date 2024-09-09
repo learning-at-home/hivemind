@@ -51,9 +51,8 @@ class RSAPrivateKey(PrivateKey):
         signature = self._private_key.sign(data)
         return base64.b64encode(signature)
 
-    def get_public_key(self) -> RSAPrivateKey:
-        return RSAPrivateKey(self._private_key.public_key())
-
+    def get_public_key(self) -> RSAPublicKey:  # Fix: return RSAPublicKey, not RSAPrivateKey
+        return RSAPublicKey(self._private_key.public_key())  # Return RSAPublicKey
 
     def to_bytes(self) -> bytes:
         return self._private_key.private_bytes(
@@ -70,6 +69,7 @@ class RSAPrivateKey(PrivateKey):
     def __setstate__(self, state):
         self.__dict__.update(state)
         self._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(self._private_key)
+
 
 
 class RSAPublicKey(PublicKey):
