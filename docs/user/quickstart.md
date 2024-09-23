@@ -81,8 +81,8 @@ with tqdm() as progressbar:
 
 
 As you can see, this code is regular PyTorch with one notable exception: it wraps your regular optimizer with a
-`hivemind.Optimizer`. This optimizer uses `DHT` to find other peers and tries to exchange parameters them. When you run
-the code (please do so), you will see the following output:
+`hivemind.Optimizer`. This optimizer uses `DHT` to find other peers and tries to exchange parameters with them. When
+you run the code (please do so), you will see the following output:
 
 ```shell
 To join the training, use initial_peers = ['/ip4/127.0.0.1/tcp/XXX/p2p/YYY']
