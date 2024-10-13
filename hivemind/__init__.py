@@ -13,4 +13,4 @@ from hivemind.optim import GradScaler, Optimizer, TrainingAverager
 from hivemind.p2p import P2P, P2PContext, P2PHandlerError, PeerID, PeerInfo
 from hivemind.utils import *
 
-__version__ = "1.1.10.post2"
+__version__ = "1.1.11"
