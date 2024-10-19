@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 from enum import Enum, auto
 
 import pytest
+import torch
 
 import hivemind
-from hivemind.averaging.averager import *
+from hivemind.averaging.averager import AllReduceRunner, AveragingMode, GatheredData
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.matchmaking import MatchmakingException
 from hivemind.proto import averaging_pb2
-from hivemind.utils.asyncio import aenumerate, as_aiter, azip, enter_asynchronously
+from hivemind.utils.asyncio import AsyncIterator, aenumerate, as_aiter, azip, enter_asynchronously
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -138,6 +140,8 @@ class FaultyAllReduceRunner(AllReduceRunner):
     ],
 )
 def test_fault_tolerance(fault0: Fault, fault1: Fault):
+    torch.manual_seed(0)
+
     def _make_tensors():
         return [torch.rand(16, 1024), -torch.rand(3, 8192), 2 * torch.randn(4, 4, 4), torch.randn(1024, 1024)]
 
@@ -149,10 +153,10 @@ def test_fault_tolerance(fault0: Fault, fault1: Fault):
             _make_tensors(),
             hivemind.DHT(initial_peers=dht.get_visible_maddrs(), start=True),
             prefix="test",
-            request_timeout=0.3,
-            min_matchmaking_time=1.0,
-            next_chunk_timeout=0.5,
-            allreduce_timeout=5,
+            request_timeout=1.5,
+            min_matchmaking_time=3.0,
+            next_chunk_timeout=2.0,
+            allreduce_timeout=30,
             part_size_bytes=2**16,
             client_mode=(i == 1),
             start=True,

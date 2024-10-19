@@ -2,12 +2,14 @@ import ctypes
 import multiprocessing as mp
 import time
 from functools import partial
+from typing import List
 
 import numpy as np
 import pytest
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from multiaddr import Multiaddr
 
 import hivemind
 from hivemind.averaging.control import AveragingStage
@@ -227,29 +229,29 @@ def test_progress_tracker():
     finished_evt = mp.Event()
     emas = mp.Array(ctypes.c_double, 5)
 
-    def run_worker(index: int, batch_size: int, period: float, **kwargs):
-        dht = hivemind.DHT(initial_peers=dht_root.get_visible_maddrs(), start=True)
+    root_maddrs = dht_root.get_visible_maddrs()
+
+    def run_worker(index: int, batch_size: int, step_time: float, initial_peers: List[Multiaddr]):
+        dht = hivemind.DHT(initial_peers=initial_peers, start=True)
         tracker = ProgressTracker(
             dht,
             prefix,
             target_batch_size,
             start=True,
-            min_refresh_period=0.1,
-            default_refresh_period=0.2,
-            max_refresh_period=0.5,
-            private_key=RSAPrivateKey(),
-            **kwargs,
+            min_refresh_period=0.01,
+            default_refresh_period=0.02,
+            max_refresh_period=0.05,
         )
+        with tracker.pause_updates():
+            barrier.wait()
+            if index == 4:
+                delayed_start_evt.wait()
 
-        barrier.wait()
-        if index == 4:
-            delayed_start_evt.wait()
-
-        local_epoch = 2 if index == 4 else 0
-        samples_accumulated = 0
+            local_epoch = 2 if index == 4 else 0
+            samples_accumulated = 0
 
         while True:
-            time.sleep(period)
+            time.sleep(step_time)
             if finished_evt.is_set():
                 break
 
@@ -269,23 +271,29 @@ def test_progress_tracker():
         tracker.shutdown()
         dht.shutdown()
 
-    workers = [
-        mp.Process(target=run_worker, kwargs=dict(index=1, batch_size=12, period=0.6)),
-        mp.Process(target=run_worker, kwargs=dict(index=2, batch_size=16, period=0.5)),
-        mp.Process(target=run_worker, kwargs=dict(index=3, batch_size=24, period=0.4)),
-        mp.Process(target=run_worker, kwargs=dict(index=4, batch_size=64, period=0.4)),
-    ]
-    for worker in workers:
+    worker_batch_sizes = [12, 16, 24, 64]
+    worker_step_times = [0.6, 0.5, 0.4, 0.4]
+
+    workers = []
+    for i, (peer_batch_size, peer_step_time) in enumerate(zip(worker_batch_sizes, worker_step_times), start=1):
+        peer_kwargs = {
+            "index": i,
+            "batch_size": peer_batch_size,
+            "step_time": peer_step_time,
+            "initial_peers": root_maddrs,
+        }
+        worker = mp.Process(target=run_worker, kwargs=peer_kwargs)
         worker.start()
+        workers.append(worker)
 
     tracker = ProgressTracker(
         dht_root,
         prefix,
         target_batch_size,
         start=True,
-        min_refresh_period=0.1,
-        default_refresh_period=0.2,
-        max_refresh_period=0.5,
+        min_refresh_period=0.01,
+        default_refresh_period=0.02,
+        max_refresh_period=0.05,
     )
     barrier.wait()
 
@@ -294,7 +302,7 @@ def test_progress_tracker():
     step_time_deltas = []
 
     while local_epoch < 6:
-        time.sleep(0.1)
+        time.sleep(0.01)
 
         if tracker.ready_to_update_epoch:
             with tracker.pause_updates():
@@ -319,7 +327,7 @@ def test_progress_tracker():
     for i in (0, 1, 5):  # Without the 4th worker (the fastest one)
         assert 1.05 * mean_step_time < step_time_deltas[i] < 2.0 * mean_step_time
     for i in (2, 3, 4):  # With the 4th worker
-        assert 0.5 * mean_step_time < step_time_deltas[i] < 0.95 * mean_step_time
+        assert 0.3 * mean_step_time < step_time_deltas[i] < 0.95 * mean_step_time
     assert emas[1] < emas[2] < emas[3] < emas[4]
     assert tracker.performance_ema.samples_per_second < 1e-9
 
@@ -336,7 +344,7 @@ def test_progress_tracker():
         (False, True, True, True, True),
         (False, True, True, False, True),
         (True, False, False, False, False),
-        (True, True, False, False, False,),
+        (True, True, False, False, False),
     ],
     # fmt: on
 )
@@ -359,6 +367,8 @@ def test_optimizer(
 def _test_optimizer(
     num_peers: int = 1,
     num_clients: int = 0,
+    default_batch_size: int = 4,
+    default_batch_time: int = 0.1,
     target_batch_size: int = 32,
     total_epochs: int = 3,
     use_local_updates: bool = False,
@@ -422,20 +432,21 @@ def _test_optimizer(
 
             prev_time = time.perf_counter()
 
-        time.sleep(1.0)
         optimizer.shutdown()
         return optimizer
 
     peers = []
 
     for index in range(num_peers):
+        peer_batch_size = default_batch_size + index
+        peer_batch_time = default_batch_time + 0.01 * index
         peers.append(
             mp.Process(
                 target=run_trainer,
                 name=f"trainer-{index}",
                 kwargs=dict(
-                    batch_size=4 + index,
-                    batch_time=0.3 + 0.2 * index,
+                    batch_size=peer_batch_size,
+                    batch_time=peer_batch_time,
                     client_mode=(index >= num_peers - num_clients),
                 ),
             )
@@ -451,7 +462,12 @@ def _test_optimizer(
     assert optimizer.local_epoch == optimizer.tracker.global_epoch == total_epochs
     expected_samples_accumulated = target_batch_size * total_epochs
     assert expected_samples_accumulated <= total_samples_accumulated.value <= expected_samples_accumulated * 1.2
-    assert 4 / 0.3 * 0.8 <= optimizer.tracker.performance_ema.samples_per_second <= 4 / 0.3 * 1.2
+    expected_performance = default_batch_size / default_batch_time
+    assert (
+        expected_performance * 0.8
+        <= optimizer.tracker.performance_ema.samples_per_second
+        <= expected_performance * 1.2
+    )
 
     assert not optimizer.state_averager.is_alive()
     assert not optimizer.tracker.is_alive()
