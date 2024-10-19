@@ -1,0 +1,26 @@
+cff-version: "1.2.0"
+date-released: 2020-04
+message: "If you use this software, please cite it as below."
+title: "Hivemind: A Library For Decentralized Deep Learning"
+url: "https://github.com/learning-at-home/hivemind"
+authors:
+  - family-names: Ryabinin
+    given-names: Max
+  - family-names: Borzunov
+    given-names: Alexander
+  - family-names: Diskin
+    given-names: Michael
+  - family-names: Gusev
+    given-names: Anton
+  - family-names: Mazur
+    given-names: Denis
+  - family-names: Plokhotnyuk
+    given-names: Vsevolod
+  - family-names: Bukhtiyarov
+    given-names: Alexey
+  - family-names: Samygin
+    given-names: Pavel
+  - family-names: Sinitsin
+    given-names: Anton
+  - family-names: Chumachenko
+    given-names: Artem
