@@ -13,7 +13,7 @@ from hivemind.p2p import PeerID
 from hivemind.utils import MSGPackSerializer, get_dht_time
 
 DHTKey = Subkey = DHTValue = Any
-BinaryDHTID = BinaryDHTValue = bytes
+BinaryDHTValue = bytes
 
 
 class RoutingTable:
@@ -251,7 +251,8 @@ class KBucket:
 class DHTID(int):
     HASH_FUNC = hashlib.sha1
     HASH_NBYTES = 20  # SHA1 produces a 20-byte (aka 160bit) number
-    RANGE = MIN, MAX = 0, 2 ** (HASH_NBYTES * 8)  # inclusive min, exclusive max
+    MIN = 0
+    MAX = 2 ** (HASH_NBYTES * 8)
 
     def __new__(cls, value: int):
         assert cls.MIN <= value < cls.MAX, f"DHTID must be in [{cls.MIN}, {cls.MAX}) but got {value}"

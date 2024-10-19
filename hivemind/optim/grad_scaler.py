@@ -126,9 +126,3 @@ class GradScaler(TorchGradScaler):
     def are_grads_finite(self, optimizer: TorchOptimizer, use_cached: bool = False) -> bool:
         opt_dict = self._found_inf_per_device(optimizer) if use_cached else self._check_inf_per_device(optimizer)
         return not sum(v.item() for v in opt_dict.values())
-
-
-class HivemindGradScaler(GradScaler):
-    def __init__(self, *args, **kwargs):
-        logger.warning("HivemindGradScaler was renamed to hivemind.GradScaler, this reference will be removed in v1.1")
-        super().__init__(*args, **kwargs)
