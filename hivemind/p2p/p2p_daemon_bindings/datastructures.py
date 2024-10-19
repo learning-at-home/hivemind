@@ -10,7 +10,7 @@ from typing import Any, Sequence, Union
 import base58
 import multihash
 from cryptography.hazmat.primitives import serialization
-from multiaddr import Multiaddr, protocols
+from multiaddr import Multiaddr
 
 from hivemind.proto import crypto_pb2, p2pd_pb2
 
@@ -18,12 +18,7 @@ from hivemind.proto import crypto_pb2, p2pd_pb2
 class PeerID:
     def __init__(self, peer_id_bytes: bytes) -> None:
         self._bytes = peer_id_bytes
-        self._xor_id = int(sha256_digest(self._bytes).hex(), 16)
         self._b58_str = base58.b58encode(self._bytes).decode()
-
-    @property
-    def xor_id(self) -> int:
-        return self._xor_id
 
     def to_bytes(self) -> bytes:
         return self._bytes
@@ -137,31 +132,3 @@ class PeerInfo:
 
     def __repr__(self):
         return f"PeerInfo(peer_id={repr(self.peer_id)}, addrs={repr(self.addrs)})"
-
-
-class InvalidAddrError(ValueError):
-    pass
-
-
-def info_from_p2p_addr(addr: Multiaddr) -> PeerInfo:
-    if addr is None:
-        raise InvalidAddrError("`addr` should not be `None`")
-
-    parts = addr.split()
-    if not parts:
-        raise InvalidAddrError(f"`parts`={parts} should at least have a protocol `P_P2P`")
-
-    p2p_part = parts[-1]
-    last_protocol_code = p2p_part.protocols()[0].code
-    if last_protocol_code != protocols.P_P2P:
-        raise InvalidAddrError(f"The last protocol should be `P_P2P` instead of `{last_protocol_code}`")
-
-    # make sure the /p2p value parses as a peer.ID
-    peer_id_str: str = p2p_part.value_for_protocol(protocols.P_P2P)
-    peer_id = PeerID.from_base58(peer_id_str)
-
-    # we might have received just an / p2p part, which means there's no addr.
-    if len(parts) > 1:
-        addr = Multiaddr.join(*parts[:-1])
-
-    return PeerInfo(peer_id, [addr])

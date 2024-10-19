@@ -11,7 +11,6 @@ from hivemind.utils import DHTExpiration, get_logger
 
 GroupKey = str
 GROUP_PATTERN = re.compile("^(([^.])+)[.]0b[01]*$")  # e.g. bert_exp4_averaging.0b01001101
-DEFAULT_NUM_BUCKETS = 256
 logger = get_logger(__name__)
 
 
@@ -92,7 +91,7 @@ class GroupKeyManager:
                 logger.warning(f"Could not parse group key {key} ({looking_for_group}, exc={e})")
         return averagers
 
-    async def update_key_on_group_assembled(self, group_info: GroupInfo, is_leader: bool = True):
+    async def update_key_on_group_assembled(self, group_info: GroupInfo):
         """this function is triggered every time an averager finds an allreduce group"""
         rng = random.Random(group_info.group_id)
         index = group_info.peer_ids.index(self.peer_id)
