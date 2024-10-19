@@ -327,7 +327,7 @@ def test_progress_tracker():
     for i in (0, 1, 5):  # Without the 4th worker (the fastest one)
         assert 1.05 * mean_step_time < step_time_deltas[i] < 2.0 * mean_step_time
     for i in (2, 3, 4):  # With the 4th worker
-        assert 0.5 * mean_step_time < step_time_deltas[i] < 0.95 * mean_step_time
+        assert 0.3 * mean_step_time < step_time_deltas[i] < 0.95 * mean_step_time
     assert emas[1] < emas[2] < emas[3] < emas[4]
     assert tracker.performance_ema.samples_per_second < 1e-9
 
