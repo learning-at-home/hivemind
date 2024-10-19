@@ -39,7 +39,7 @@ jobs:
         run: |
           cd tests
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
-          pytest --durations=0 --durations-min=1.0 -n auto -v
+          pytest --durations=0 --durations-min=1.0 -n 4 -v
   build_and_test_p2pd:
     runs-on: ubuntu-latest
     timeout-minutes: 10
