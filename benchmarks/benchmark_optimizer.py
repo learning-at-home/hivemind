@@ -20,9 +20,9 @@ from hivemind.utils.crypto import RSAPrivateKey
 torch_version = torch.__version__.split("+")[0]
 
 if version.parse(torch_version) >= version.parse("2.3.0"):
-    from torch.amp import GradScaler
+    from torch.amp import GradScaler, autocast
 else:
-    from torch.cuda.amp import GradScaler
+    from torch.cuda.amp import GradScaler, autocast
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,7 @@ def benchmark_optimizer(args: TrainingArguments):
 
             batch = torch.randint(0, len(X_train), (batch_size,))
 
-            with torch.amp.autocast() if args.use_amp else nullcontext():
+            with autocast() if args.use_amp else nullcontext():
                 loss = F.cross_entropy(model(X_train[batch].to(args.device)), y_train[batch].to(args.device))
                 grad_scaler.scale(loss).backward()
 
