@@ -103,7 +103,7 @@ def download_p2p_daemon():
 
     if sha256(binary_path) != expected_hash:
         binary_url = os.path.join(P2PD_BINARY_URL, binary_name)
-        print(f"Downloading {binary_url}")
+        print(f"Downloading {binary_url} to {binary_path}")
 
         urllib.request.urlretrieve(binary_url, binary_path)
         os.chmod(binary_path, 0o777)
