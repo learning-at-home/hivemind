@@ -7,7 +7,7 @@ msgpack>=0.5.6
 sortedcontainers
 uvloop>=0.14.0
 grpcio-tools>=1.33.2
-protobuf>=3.12.2
+protobuf>=3.12.2,<5.28.0
 configargparse>=1.2.3
 py-multihash>=0.2.3
 multiaddr @ git+https://github.com/multiformats/py-multiaddr.git@e01dbd38f2c0464c0f78b556691d655265018cce
