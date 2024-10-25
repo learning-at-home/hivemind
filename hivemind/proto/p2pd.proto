@@ -19,6 +19,7 @@ message Request {
     DISCONNECT               = 7;
     PUBSUB                   = 8;
     PERSISTENT_CONN_UPGRADE  = 9;
+    BANDWIDTH_METRICS        = 11;
   }
 
   required Type type = 1;
@@ -31,6 +32,7 @@ message Request {
   optional ConnManagerRequest connManager = 6;
   optional DisconnectRequest disconnect = 7;
   optional PSRequest pubsub = 8;
+  optional BandwidthMetricsRequest bwr = 10;
 }
 
 message Response {
@@ -46,6 +48,7 @@ message Response {
   optional DHTResponse dht = 5;
   repeated PeerInfo peers = 6;
   optional PSResponse pubsub = 7;
+  optional BandwidthMetricsResponse bwr = 8;
 }
 
 message PersistentConnectionRequest {
@@ -147,6 +150,8 @@ message DHTResponse {
 message PeerInfo {
   required bytes id = 1;
   repeated bytes addrs = 2;
+  optional double ratein = 3;
+  optional double rateout = 4;
 }
 
 message ConnManagerRequest {
@@ -225,4 +230,16 @@ message Cancel {
 
 message RPCError {
   optional string message = 1;
+}
+
+message BandwidthMetricsRequest {
+  optional bool forSelf = 1 [default = false];
+  optional bool forAllPeers = 2 [default = false];
+  repeated bytes ids = 3;
+}
+
+message BandwidthMetricsResponse {
+  optional double selfRateIn = 1;
+  optional double selfRateOut = 2;
+  repeated PeerInfo peers = 3;
 }

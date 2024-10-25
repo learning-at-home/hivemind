@@ -17,7 +17,7 @@ from multiaddr import Multiaddr
 import hivemind.hivemind_cli as cli
 import hivemind.p2p.p2p_daemon_bindings.p2pclient as p2pclient
 from hivemind.p2p.p2p_daemon_bindings.control import DEFAULT_MAX_MSG_SIZE, P2PDaemonError, P2PHandlerError
-from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
+from hivemind.p2p.p2p_daemon_bindings.datastructures import BandwidthMetrics, PeerID, PeerInfo, StreamInfo
 from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure
 from hivemind.proto import crypto_pb2
 from hivemind.proto.p2pd_pb2 import RPCError
@@ -334,6 +334,19 @@ class P2P:
 
     async def list_peers(self) -> List[PeerInfo]:
         return list(await self._client.list_peers())
+
+    async def get_bandwidth_metrics(
+        self, for_self: bool = False, for_all_peers: bool = False, peers: Sequence[Union[str, PeerID]] = []
+    ) -> BandwidthMetrics:
+        """
+        Get bandwidth rate metrics(bytes / sec, in and out):
+        for_self - for self(this host totals)
+        for_all_peers - for all active peers(MAY BE SLOW)
+        peers[..]: - for the list of peer ids
+        """
+
+        peer_ids = [PeerID.from_base58(peer) if isinstance(peer, str) else peer for peer in peers]
+        return await self._client.get_bandwidth_metrics(for_self, for_all_peers, peer_ids)
 
     async def wait_for_at_least_n_peers(self, n_peers: int, attempts: int = 3, delay: float = 1) -> None:
         for _ in range(attempts):
