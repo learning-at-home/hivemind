@@ -27,11 +27,16 @@ def test_cli_run_server_identity_path():
     with TemporaryDirectory() as tempdir:
         id_path = os.path.join(tempdir, "id")
 
+        cloned_env = os.environ.copy()
+        # overriding the loglevel to prevent debug print statements
+        cloned_env["HIVEMIND_LOGLEVEL"] = "INFO"
+
         server_1_proc = Popen(
             ["hivemind-server", "--num_experts", "1", "--identity_path", id_path],
             stderr=PIPE,
             text=True,
             encoding="utf-8",
+            env=cloned_env,
         )
 
         line = server_1_proc.stderr.readline()
@@ -50,6 +55,7 @@ def test_cli_run_server_identity_path():
             stderr=PIPE,
             text=True,
             encoding="utf-8",
+            env=cloned_env,
         )
 
         line = server_2_proc.stderr.readline()
@@ -65,6 +71,7 @@ def test_cli_run_server_identity_path():
             stderr=PIPE,
             text=True,
             encoding="utf-8",
+            env=cloned_env,
         )
 
         line = server_3_proc.stderr.readline()
