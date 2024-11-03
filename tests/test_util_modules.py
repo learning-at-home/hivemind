@@ -523,14 +523,14 @@ async def test_async_context_flooding():
     """
     total_sleep_time = 1
     lock1, lock2 = mp.Lock(), mp.Lock()
-    
+
     num_coros = max(33, mp.cpu_count() * 5 + 1)
 
     async def coro():
         async with enter_asynchronously(lock1):
-            await asyncio.sleep(total_sleep_time/(num_coros*2))
+            await asyncio.sleep(total_sleep_time / (num_coros * 2))
             async with enter_asynchronously(lock2):
-                await asyncio.sleep(total_sleep_time/(num_coros*2))
+                await asyncio.sleep(total_sleep_time / (num_coros * 2))
 
     await asyncio.wait({asyncio.create_task(coro()) for _ in range(num_coros)})
 
