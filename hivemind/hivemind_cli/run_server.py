@@ -1,5 +1,7 @@
 from functools import partial
 from pathlib import Path
+from signal import SIGINT, SIGTERM, signal, strsignal
+from threading import Event
 
 import configargparse
 import torch
@@ -102,12 +104,22 @@ def main():
     compression_type = args.pop("compression")
     compression = getattr(CompressionType, compression_type)
 
+    exit_event = Event()
+
     server = Server.create(**args, optim_cls=optim_cls, start=True, compression=compression)
 
+    def signal_handler(signum: int, _) -> None:
+        logger.info(f"Caught signal {signum} ({strsignal(signum)}), shutting down")
+        exit_event.set()
+
+    signal(SIGTERM, signal_handler)
+    signal(SIGINT, signal_handler)
+
     try:
+        exit_event.wait()
+    finally:
+        server.shutdown()
         server.join()
-    except KeyboardInterrupt:
-        logger.info("Caught KeyboardInterrupt, shutting down")
 
 
 if __name__ == "__main__":

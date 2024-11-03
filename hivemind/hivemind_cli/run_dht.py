@@ -98,8 +98,6 @@ def main():
         while not exit_event.is_set():
             dht.run_coroutine(report_status, return_future=False)
             exit_event.wait(args.refresh_period)
-    except KeyboardInterrupt:
-        logger.info("Caught KeyboardInterrupt, shutting down")
     finally:
         dht.shutdown()
 
