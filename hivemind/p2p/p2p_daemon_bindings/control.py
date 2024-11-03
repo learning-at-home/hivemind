@@ -322,6 +322,7 @@ class ControlClient:
         resp = p2pd_pb.Response()  # type: ignore
         await read_pbmsg_safe(reader, resp)
         writer.close()
+        await writer.wait_closed()
 
         raise_if_failed(resp)
         peer_id_bytes = resp.identify.id
@@ -343,6 +344,7 @@ class ControlClient:
         resp = p2pd_pb.Response()  # type: ignore
         await read_pbmsg_safe(reader, resp)
         writer.close()
+        await writer.wait_closed()
         raise_if_failed(resp)
 
     async def list_peers(self) -> Tuple[PeerInfo, ...]:
@@ -352,6 +354,7 @@ class ControlClient:
         resp = p2pd_pb.Response()  # type: ignore
         await read_pbmsg_safe(reader, resp)
         writer.close()
+        await writer.wait_closed()
         raise_if_failed(resp)
 
         peers = tuple(PeerInfo.from_protobuf(pinfo) for pinfo in resp.peers)
@@ -365,6 +368,7 @@ class ControlClient:
         resp = p2pd_pb.Response()  # type: ignore
         await read_pbmsg_safe(reader, resp)
         writer.close()
+        await writer.wait_closed()
         raise_if_failed(resp)
 
     async def stream_open(
@@ -403,6 +407,7 @@ class ControlClient:
         resp = p2pd_pb.Response()  # type: ignore
         await read_pbmsg_safe(reader, resp)
         writer.close()
+        await writer.wait_closed()
         raise_if_failed(resp)
 
     async def remove_stream_handler(self, proto: str) -> None:
@@ -420,6 +425,7 @@ class ControlClient:
         resp = p2pd_pb.Response()  # type: ignore
         await read_pbmsg_safe(reader, resp)
         writer.close()
+        await writer.wait_closed()
         raise_if_failed(resp)
 
         del self.handlers[proto]
