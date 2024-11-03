@@ -47,6 +47,10 @@ def test_store_get_experts(n_peers=10):
     assert all(declare_experts(remaining_peer1, ["new_expert.1"], expiration_time=get_dht_time() + 30))
     assert get_experts(remaining_peer2, ["new_expert.1"])[0].peer_id == remaining_peer1.peer_id
 
+    for peer in peers:
+        if peer.is_alive():
+            peer.shutdown()
+
 
 @pytest.mark.forked
 def test_beam_search(
