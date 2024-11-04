@@ -46,6 +46,7 @@ async def write_unsigned_varint(stream: asyncio.StreamWriter, integer: int, max_
             value |= 0x80
         byte = value.to_bytes(1, "big")
         stream.write(byte)
+        await stream.drain()
         if integer == 0:
             break
 
@@ -77,6 +78,7 @@ async def write_pbmsg(stream: asyncio.StreamWriter, pbmsg: PBMessage) -> None:
     await write_unsigned_varint(stream, size)
     msg_bytes: bytes = pbmsg.SerializeToString()
     stream.write(msg_bytes)
+    await stream.drain()
 
 
 async def read_pbmsg_safe(stream: asyncio.StreamReader, pbmsg: PBMessage) -> None:

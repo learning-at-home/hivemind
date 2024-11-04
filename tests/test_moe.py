@@ -282,6 +282,7 @@ def test_client_anomaly_detection():
     experts["expert.3"].module.ffn.weight.data[0, 0] = float("nan")
 
     dht = DHT(start=True)
+    dht.get_visible_maddrs(latest=True)
     server = Server(dht, experts, num_connection_handlers=1)
     server.start()
     try:
@@ -318,7 +319,8 @@ def test_client_anomaly_detection():
 def _measure_coro_running_time(n_coros, elapsed_fut, counter):
     async def coro():
         await asyncio.sleep(0.1)
-        counter.value += 1
+        with counter.get_lock():
+            counter.value += 1
 
     try:
         start_time = time.perf_counter()
