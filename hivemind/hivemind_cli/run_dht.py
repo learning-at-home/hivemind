@@ -1,6 +1,7 @@
-import time
 from argparse import ArgumentParser
 from secrets import token_hex
+from signal import SIGINT, SIGTERM, signal, strsignal
+from threading import Event
 
 from hivemind.dht import DHT, DHTNode
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
@@ -84,12 +85,19 @@ def main():
     )
     log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=args.use_ipfs)
 
+    exit_event = Event()
+
+    def signal_handler(signal_number: int, _) -> None:
+        logger.info(f"Caught signal {signal_number} ({strsignal(signal_number)}), shutting down")
+        exit_event.set()
+
+    signal(SIGTERM, signal_handler)
+    signal(SIGINT, signal_handler)
+
     try:
-        while True:
+        while not exit_event.is_set():
             dht.run_coroutine(report_status, return_future=False)
-            time.sleep(args.refresh_period)
-    except KeyboardInterrupt:
-        logger.info("Caught KeyboardInterrupt, shutting down")
+            exit_event.wait(args.refresh_period)
     finally:
         dht.shutdown()
 

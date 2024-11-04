@@ -72,7 +72,7 @@ class DHT(mp.context.ForkProcess):
         self.num_workers = num_workers
 
         self._record_validator = CompositeValidator(record_validators)
-        self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=True)
+        self._inner_pipe, self._outer_pipe = mp.Pipe(duplex=False)
         self.shutdown_timeout = shutdown_timeout
         self._ready = MPFuture()
         self.daemon = daemon
@@ -137,6 +137,7 @@ class DHT(mp.context.ForkProcess):
                     break
 
         loop.run_until_complete(_run())
+        loop.close()
 
     def run_in_background(self, await_ready: bool = True, timeout: Optional[float] = None) -> None:
         """
@@ -154,6 +155,7 @@ class DHT(mp.context.ForkProcess):
         """Shut down a running dht process"""
         if self.is_alive():
             self._outer_pipe.send(("_shutdown", [], {}))
+            self._outer_pipe.close()
             self.join(self.shutdown_timeout)
             if self.is_alive():
                 logger.warning("DHT did not shut down within the grace period; terminating it the hard way")

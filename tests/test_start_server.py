@@ -27,11 +27,18 @@ def test_cli_run_server_identity_path():
     with TemporaryDirectory() as tempdir:
         id_path = os.path.join(tempdir, "id")
 
+        cloned_env = os.environ.copy()
+        # overriding the loglevel to prevent debug print statements
+        cloned_env["HIVEMIND_LOGLEVEL"] = "INFO"
+
+        common_server_args = ["--hidden_dim", "4", "--num_handlers", "1"]
+
         server_1_proc = Popen(
-            ["hivemind-server", "--num_experts", "1", "--identity_path", id_path],
+            ["hivemind-server", "--num_experts", "1", "--identity_path", id_path] + common_server_args,
             stderr=PIPE,
             text=True,
             encoding="utf-8",
+            env=cloned_env,
         )
 
         line = server_1_proc.stderr.readline()
@@ -46,10 +53,11 @@ def test_cli_run_server_identity_path():
         assert len(ids_1) == 1
 
         server_2_proc = Popen(
-            ["hivemind-server", "--num_experts", "1", "--identity_path", id_path],
+            ["hivemind-server", "--num_experts", "1", "--identity_path", id_path] + common_server_args,
             stderr=PIPE,
             text=True,
             encoding="utf-8",
+            env=cloned_env,
         )
 
         line = server_2_proc.stderr.readline()
@@ -61,10 +69,11 @@ def test_cli_run_server_identity_path():
         assert len(ids_2) == 1
 
         server_3_proc = Popen(
-            ["hivemind-server", "--num_experts", "1"],
+            ["hivemind-server", "--num_experts", "1"] + common_server_args,
             stderr=PIPE,
             text=True,
             encoding="utf-8",
+            env=cloned_env,
         )
 
         line = server_3_proc.stderr.readline()

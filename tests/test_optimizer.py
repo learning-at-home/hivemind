@@ -414,8 +414,8 @@ def _test_optimizer(
             loss.backward()
 
             optimizer.step()
-
-            total_samples_accumulated.value += batch_size
+            with total_samples_accumulated.get_lock():
+                total_samples_accumulated.value += batch_size
 
             if not reuse_grad_buffers:
                 optimizer.zero_grad()
