@@ -8,8 +8,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Iterable, Sequence, Tuple
 
-from multiaddr import Multiaddr
 
+from hivemind.p2p.multiaddr import Multiaddr
 from hivemind.p2p.p2p_daemon_bindings.control import (
     DEFAULT_MAX_MSG_SIZE,
     ControlClient,
