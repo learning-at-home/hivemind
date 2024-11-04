@@ -5,11 +5,11 @@ import signal
 import threading
 from typing import Dict, List, Tuple
 
-from multiaddr import Multiaddr
 
 from hivemind.dht import DHT
 from hivemind.dht.node import DHTID, DHTNode
 from hivemind.p2p import PeerID
+from hivemind.p2p.multiaddr import Multiaddr
 
 
 def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue, **kwargs):

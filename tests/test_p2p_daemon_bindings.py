@@ -4,8 +4,8 @@ from contextlib import AsyncExitStack
 
 import pytest
 from google.protobuf.message import EncodeError
-from multiaddr import Multiaddr, protocols
 
+from hivemind.p2p.multiaddr import Multiaddr, protocols
 from hivemind.p2p.p2p_daemon_bindings.control import ControlClient, DaemonConnector, parse_conn_protocol
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.p2p.p2p_daemon_bindings.utils import (

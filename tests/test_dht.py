@@ -4,12 +4,13 @@ import random
 import time
 
 import pytest
-from multiaddr import Multiaddr
 
 import hivemind
 
 from test_utils.dht_swarms import launch_dht_instances
 from test_utils.networking import get_free_port
+
+from hivemind.p2p.multiaddr import Multiaddr
 
 
 @pytest.mark.asyncio
