@@ -84,7 +84,7 @@ def main():
         use_auto_relay=args.use_auto_relay,
     )
     log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=args.use_ipfs)
-    
+
     exit_event = Event()
 
     def signal_handler(signal_number: int, _) -> None:

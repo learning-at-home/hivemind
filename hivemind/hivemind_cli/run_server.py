@@ -105,7 +105,7 @@ def main():
     compression = getattr(CompressionType, compression_type)
 
     server = Server.create(**args, optim_cls=optim_cls, start=True, compression=compression)
-    
+
     exit_event = Event()
 
     def signal_handler(signal_number: int, _) -> None:
