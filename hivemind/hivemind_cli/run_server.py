@@ -104,12 +104,12 @@ def main():
     compression_type = args.pop("compression")
     compression = getattr(CompressionType, compression_type)
 
+    server = Server.create(**args, optim_cls=optim_cls, start=True, compression=compression)
+    
     exit_event = Event()
 
-    server = Server.create(**args, optim_cls=optim_cls, start=True, compression=compression)
-
-    def signal_handler(signum: int, _) -> None:
-        logger.info(f"Caught signal {signum} ({strsignal(signum)}), shutting down")
+    def signal_handler(signal_number: int, _) -> None:
+        logger.info(f"Caught signal {signal_number} ({strsignal(signal_number)}), shutting down")
         exit_event.set()
 
     signal(SIGTERM, signal_handler)

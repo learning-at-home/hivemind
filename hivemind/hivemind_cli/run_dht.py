@@ -73,8 +73,6 @@ def main():
 
     args = parser.parse_args()
 
-    exit_event = Event()
-
     dht = DHT(
         start=True,
         initial_peers=args.initial_peers,
@@ -86,9 +84,11 @@ def main():
         use_auto_relay=args.use_auto_relay,
     )
     log_visible_maddrs(dht.get_visible_maddrs(), only_p2p=args.use_ipfs)
+    
+    exit_event = Event()
 
-    def signal_handler(signum: int, _) -> None:
-        logger.info(f"Caught signal {signum} ({strsignal(signum)}), shutting down")
+    def signal_handler(signal_number: int, _) -> None:
+        logger.info(f"Caught signal {signal_number} ({strsignal(signal_number)}), shutting down")
         exit_event.set()
 
     signal(SIGTERM, signal_handler)
