@@ -71,7 +71,8 @@ class MockReader(io.BytesIO):
 
 
 class MockWriter(io.BytesIO):
-    pass
+    async def drain(self):
+        pass
 
 
 class MockReaderWriter(MockReader, MockWriter):
