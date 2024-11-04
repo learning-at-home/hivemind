@@ -7,9 +7,8 @@ import signal
 from functools import partial
 from typing import Awaitable, Callable, Iterable, List, Optional, Sequence, TypeVar, Union
 
-from multiaddr import Multiaddr
-
 from hivemind.dht.node import DEFAULT_NUM_WORKERS, DHTNode
+from hivemind.p2p.multiaddr import Multiaddr
 from hivemind.dht.routing import DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.p2p import P2P, PeerID
