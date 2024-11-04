@@ -1,6 +1,5 @@
 import importlib
 
-
 # These are special sizes
 LENGTH_PREFIXED_VAR_SIZE = -1
 

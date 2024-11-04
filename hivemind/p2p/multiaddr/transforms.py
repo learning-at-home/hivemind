@@ -1,13 +1,10 @@
 import io
+
 import varint
 
 from . import exceptions
-
-from .codecs import LENGTH_PREFIXED_VAR_SIZE
-from .codecs import codec_by_name
-
-from .protocols import protocol_with_code
-from .protocols import protocol_with_name
+from .codecs import LENGTH_PREFIXED_VAR_SIZE, codec_by_name
+from .protocols import protocol_with_code, protocol_with_name
 
 
 def string_to_bytes(string):

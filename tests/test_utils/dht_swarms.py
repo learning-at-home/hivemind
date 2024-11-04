@@ -5,7 +5,6 @@ import signal
 import threading
 from typing import Dict, List, Tuple
 
-
 from hivemind.dht import DHT
 from hivemind.dht.node import DHTID, DHTNode
 from hivemind.p2p import PeerID
