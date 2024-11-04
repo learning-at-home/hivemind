@@ -1,5 +1,5 @@
 import base58
-# import cid
+import cid
 
 from . import LENGTH_PREFIXED_VAR_SIZE
 
