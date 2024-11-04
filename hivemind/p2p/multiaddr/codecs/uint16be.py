@@ -1,6 +1,5 @@
 import struct
 
-
 SIZE = 16
 IS_PATH = False
 

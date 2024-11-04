@@ -1,6 +1,5 @@
 import netaddr
 
-
 SIZE = 32
 IS_PATH = False
 

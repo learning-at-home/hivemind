@@ -1,7 +1,6 @@
 import base64
 import struct
 
-
 SIZE = 296
 IS_PATH = False
 
