@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives import serialization
 from multiaddr import Multiaddr
 
 from hivemind.proto import crypto_pb2, p2pd_pb2
-from hivemind.p2p.multiaddr import Multiaddr
+from hivemind.p2p.multiaddr import Multiaddr, protocols
 
 
 class PeerID:
