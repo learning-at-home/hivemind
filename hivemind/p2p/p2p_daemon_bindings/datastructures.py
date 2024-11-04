@@ -12,6 +12,7 @@ import multihash
 from cryptography.hazmat.primitives import serialization
 
 from hivemind.proto import crypto_pb2, p2pd_pb2
+from hivemind.p2p.multiaddr import Multiaddr
 
 
 class PeerID:
