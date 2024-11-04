@@ -3,7 +3,11 @@ import collections.abc
 import varint
 
 from . import exceptions, protocols
-from .transforms import bytes_iter, bytes_to_string, string_to_bytes
+
+from .transforms import bytes_iter
+from .transforms import string_to_bytes
+from .transforms import bytes_to_string
+
 
 __all__ = ("Multiaddr",)
 
