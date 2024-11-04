@@ -282,6 +282,7 @@ def test_client_anomaly_detection():
     experts["expert.3"].module.ffn.weight.data[0, 0] = float("nan")
 
     dht = DHT(start=True)
+    dht.get_visible_maddrs(latest=True)
     server = Server(dht, experts, num_connection_handlers=1)
     server.start()
     try:
