@@ -124,10 +124,12 @@ If you found hivemind or its underlying algorithms useful for your research, ple
 
 ```bibtex
 @misc{hivemind,
-  title = {{H}ivemind: a {L}ibrary for {D}ecentralized {D}eep {L}earning},
-  author = {Learning{@}home team},
+  title = {{H}ivemind: {D}ecentralized {D}eep {L}earning in {P}y{T}orch},
+  author = {Max Ryabinin and Alexander Borzunov and Michael Diskin and Anton Gusev and Denis Mazur and Vsevolod Plokhotnyuk and Alexey Bukhtiyarov and Pavel Samygin and Anton Sinitsin and Artem Chumachenko},
+  month = apr,
   year = 2020,
-  howpublished = {\url{https://github.com/learning-at-home/hivemind}}
+  address = {Online},
+  url = {https://github.com/learning-at-home/hivemind}
 }
 ```
 
@@ -199,6 +201,55 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
   eprint = {2207.03481},
   archiveprefix = {arXiv},
   primaryclass = {cs.LG}
+}
+```
+
+["Petals: Collaborative Inference and Fine-tuning of Large Models"](https://arxiv.org/abs/2209.01188)
+
+```bibtex
+@inproceedings{borzunov-etal-2023-petals,
+  title = {Petals: Collaborative Inference and Fine-tuning of Large Models},
+  author = {Borzunov, Alexander  and Baranchuk, Dmitry  and Dettmers, Tim  and Ryabinin, Max  and Belkada, Younes  and Chumachenko, Artem  and Samygin, Pavel  and Raffel, Colin},
+  year = 2023,
+  month = jul,
+  booktitle = {Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations)},
+  publisher = {Association for Computational Linguistics},
+  address = {Toronto, Canada},
+  pages = {558--568},
+  doi = {10.18653/v1/2023.acl-demo.54},
+  url = {https://aclanthology.org/2023.acl-demo.54},
+  editor = {Bollegala, Danushka  and Huang, Ruihong  and Ritter, Alan},
+}
+```
+
+["SWARM Parallelism: Training Large Models Can Be Surprisingly Communication-Efficient"](https://arxiv.org/abs/2301.11913)
+
+```bibtex
+@inproceedings{ryabinin2023swarm,
+  title = {{SWARM} Parallelism: Training Large Models Can Be Surprisingly Communication-Efficient},
+  author = {Ryabinin, Max and Dettmers, Tim and Diskin, Michael and Borzunov, Alexander},
+  year = 2023,
+  month = {23--29 Jul},
+  booktitle = {Proceedings of the 40th International Conference on Machine Learning},
+  publisher = {PMLR},
+  series = {Proceedings of Machine Learning Research},
+  volume = 202,
+  pages = {29416--29440},
+  url = {https://proceedings.mlr.press/v202/ryabinin23a.html},
+  editor = {Krause, Andreas and Brunskill, Emma and Cho, Kyunghyun and Engelhardt, Barbara and Sabato, Sivan and Scarlett, Jonathan},
+  pdf = {https://proceedings.mlr.press/v202/ryabinin23a/ryabinin23a.pdf}
+}
+```
+
+["Distributed Inference and Fine-tuning of Large Language Models Over The Internet"](https://arxiv.org/abs/2312.08361)
+
+```bibtex
+@inproceedings{borzunov2023distributed,
+  title = {Distributed Inference and Fine-tuning of Large Language Models Over The Internet},
+  author = {Alexander Borzunov and Max Ryabinin and Artem Chumachenko and Dmitry Baranchuk and Tim Dettmers and Younes Belkada and Pavel Samygin and Colin Raffel},
+  year = 2023,
+  booktitle = {Thirty-seventh Conference on Neural Information Processing Systems},
+  url = {https://openreview.net/forum?id=XmN7ZNbUAe}
 }
 ```
 
