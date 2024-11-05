@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 
 class Matchmaking:
-    f"""
+    """
     An internal class that is used to form groups of averages for running allreduce
     See DecentralizedAverager docstring for the detailed description of all parameters
 
@@ -383,7 +383,7 @@ class Matchmaking:
 
         logger.debug(f"{self.peer_id} - assembled group of {len(ordered_peer_ids)} peers")
         group_info = GroupInfo(group_id, tuple(ordered_peer_ids), gathered)
-        await self.group_key_manager.update_key_on_group_assembled(group_info, is_leader=True)
+        await self.group_key_manager.update_key_on_group_assembled(group_info)
         self.assembled_group.set_result(group_info)
         return group_info
 
