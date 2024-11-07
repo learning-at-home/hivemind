@@ -37,7 +37,7 @@ class RoutingTable:
         self.peer_id_to_uid: Dict[PeerID, DHTID] = dict()  # all nodes currently in buckets, including replacements
         self.uid_to_peer_id: Dict[DHTID, PeerID] = dict()  # all nodes currently in buckets, including replacements
         self.peer_id_to_last_updated: Dict[PeerID, int] = dict()  # all nodes currently in buckets, including replacements
-        rt = RepeatedTimer(15, self.run_pos_in_background()) # auto start PoS mechanism
+        rt = RepeatedTimer(15, self.run_pos_in_background) # auto start PoS mechanism
 
     def run_pos_in_background(self):
         logger.info("Running POS mechanism")
