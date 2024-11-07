@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from hivemind.p2p import PeerID
 from hivemind.utils import MSGPackSerializer, get_dht_time
-from hivemind.utils.repeate_timer import RepeatedTimer
+from hivemind.utils.repeated_timer import RepeatedTimer
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
