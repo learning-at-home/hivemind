@@ -5,7 +5,7 @@ import asyncio
 from typing import Collection, Dict, List, Optional, Sequence, Tuple, Union
 
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
-from hivemind.dht.routing import DHTID, BinaryDHTValue, RoutingTable, Subkey
+from hivemind.dht.routing_pos import DHTID, BinaryDHTValue, RoutingTable, Subkey
 from hivemind.dht.storage import DHTLocalStorage, DictionaryDHTValue
 from hivemind.p2p import P2P, P2PContext, PeerID, ServicerBase
 from hivemind.proto import dht_pb2
