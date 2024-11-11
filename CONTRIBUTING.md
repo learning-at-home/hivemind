@@ -36,8 +36,8 @@ with the following rules:
 
 * The code must follow [PEP8](https://www.python.org/dev/peps/pep-0008/) unless absolutely necessary. Also, each line
   cannot be longer than 119 characters.
-* We use [black](https://github.com/psf/black) for code formatting, [isort](https://github.com/PyCQA/isort) for import sorting, and [ruff](https://github.com/astral-sh/ruff) as a linter. 
-  Before submitting a PR, make sure to install and run `black .` and `isort .` in the root of the
+* We use [ruff](https://github.com/astral-sh/ruff) as a linter. 
+  Before submitting a PR, make sure to install and run `ruff check` and `ruff format` in the root of the
   repository. Also, you may want to check your code for typos by running `codespell --skip=".git"`, though there
   might be false positives.
 * We highly encourage the use of [typing](https://docs.python.org/3/library/typing.html) where applicable.
