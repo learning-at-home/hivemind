@@ -32,20 +32,18 @@ class AuthorizedResponseBase:
 
 class AuthorizerBase(ABC):
     @abstractmethod
-    async def sign_request(self, request: AuthorizedRequestBase, service_public_key: Optional[RSAPublicKey]) -> None:
-        ...
+    async def sign_request(
+        self, request: AuthorizedRequestBase, service_public_key: Optional[RSAPublicKey]
+    ) -> None: ...
 
     @abstractmethod
-    async def validate_request(self, request: AuthorizedRequestBase) -> bool:
-        ...
+    async def validate_request(self, request: AuthorizedRequestBase) -> bool: ...
 
     @abstractmethod
-    async def sign_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> None:
-        ...
+    async def sign_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> None: ...
 
     @abstractmethod
-    async def validate_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> bool:
-        ...
+    async def validate_response(self, response: AuthorizedResponseBase, request: AuthorizedRequestBase) -> bool: ...
 
 
 class TokenAuthorizerBase(AuthorizerBase):
@@ -66,16 +64,13 @@ class TokenAuthorizerBase(AuthorizerBase):
         self._recent_nonces = TimedStorage()
 
     @abstractmethod
-    async def get_token(self) -> AccessToken:
-        ...
+    async def get_token(self) -> AccessToken: ...
 
     @abstractmethod
-    def is_token_valid(self, access_token: AccessToken) -> bool:
-        ...
+    def is_token_valid(self, access_token: AccessToken) -> bool: ...
 
     @abstractmethod
-    def does_token_need_refreshing(self, access_token: AccessToken) -> bool:
-        ...
+    def does_token_need_refreshing(self, access_token: AccessToken) -> bool: ...
 
     async def refresh_token_if_needed(self) -> None:
         if self._local_access_token is None or self.does_token_need_refreshing(self._local_access_token):

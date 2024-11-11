@@ -385,7 +385,6 @@ def _generate_uids(
         return UID_DELIMITER.join(uid)
 
     while remaining_attempts > 0 and len(found_uids) < num_experts:
-
         # 1. sample new expert uids at random
         new_uids = []
         while len(new_uids) + len(found_uids) < num_experts and remaining_attempts > 0:

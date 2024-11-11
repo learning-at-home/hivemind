@@ -299,7 +299,7 @@ async def test_dhtnode_edge_cases():
     for key, subkey, value in product(keys, subkeys, values):
         await random.choice(peers).store(
             key=key, subkey=subkey, value=value, expiration_time=hivemind.get_dht_time() + 999
-        ),
+        )
 
         stored = await random.choice(peers).get(key=key, latest=True)
         assert stored is not None

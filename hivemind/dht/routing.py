@@ -1,4 +1,5 @@
-""" Utility data structures to represent DHT nodes (peers), data keys, and routing tables. """
+"""Utility data structures to represent DHT nodes (peers), data keys, and routing tables."""
+
 from __future__ import annotations
 
 import hashlib

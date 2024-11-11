@@ -1,4 +1,4 @@
-""" A background process that averages your tensors with peers """
+"""A background process that averages your tensors with peers"""
 
 from __future__ import annotations
 

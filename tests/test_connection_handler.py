@@ -71,9 +71,7 @@ async def test_connection_handler_forward(client_stub):
     assert torch.allclose(outputs, inputs * 2)
 
     # forward streaming
-    split = (
-        p for t in [serialize_torch_tensor(inputs_long)] for p in split_for_streaming(t, chunk_size_bytes=2**16)
-    )
+    split = (p for t in [serialize_torch_tensor(inputs_long)] for p in split_for_streaming(t, chunk_size_bytes=2**16))
     output_generator = await client_stub.rpc_forward_stream(
         amap_in_executor(
             lambda tensor_part: runtime_pb2.ExpertRequest(uid="expert2", tensors=[tensor_part]),

@@ -336,7 +336,7 @@ def test_progress_tracker():
         (False, True, True, True, True),
         (False, True, True, False, True),
         (True, False, False, False, False),
-        (True, True, False, False, False,),
+        (True, True, False, False, False),
     ],
     # fmt: on
 )

@@ -62,7 +62,7 @@ def test_routing_table_basic():
 
 
 def test_routing_table_parameters():
-    for (bucket_size, modulo, min_nbuckets, max_nbuckets) in [
+    for bucket_size, modulo, min_nbuckets, max_nbuckets in [
         (20, 5, 45, 65),
         (50, 5, 35, 45),
         (20, 10, 650, 800),

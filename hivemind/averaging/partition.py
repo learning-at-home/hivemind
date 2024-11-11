@@ -1,6 +1,7 @@
 """
 Auxiliary data structures for AllReduceRunner
 """
+
 import asyncio
 from collections import deque
 from typing import AsyncIterable, AsyncIterator, Optional, Sequence, Tuple, TypeVar

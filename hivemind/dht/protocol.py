@@ -1,4 +1,5 @@
-""" RPC protocol that provides nodes a way to communicate with each other """
+"""RPC protocol that provides nodes a way to communicate with each other"""
+
 from __future__ import annotations
 
 import asyncio

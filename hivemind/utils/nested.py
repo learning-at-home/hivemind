@@ -1,4 +1,4 @@
-""" utility functions that help you process nested dicts, tuples, lists and namedtuples """
+"""utility functions that help you process nested dicts, tuples, lists and namedtuples"""
 
 
 def nested_compare(t, u):
