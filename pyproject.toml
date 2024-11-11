@@ -22,7 +22,7 @@ exclude = [
     "*_pb2.py"
 ]
 line-length = 119
-required-version = "==0.5.1"
+required-version = "==0.7.2"
 target-version = "py38"
 
 [tool.ruff.lint]
