@@ -534,10 +534,10 @@ class Optimizer(torch.optim.Optimizer):
 
         if not began_averaging_gradients and self.scheduled_grads is not None and not self.scheduled_grads.done():
             if self.tracker.global_progress.num_peers > 1:
-                logger.log(self.status_loglevel, f"Tagging along for a pre-scheduled gradient averaging round")
+                logger.log(self.status_loglevel, "Tagging along for a pre-scheduled gradient averaging round")
                 self._tag_along_with_zero_weight(self.scheduled_grads)
             else:
-                logger.log(self.status_loglevel, f"Skipping pre-scheduled averaging round: there are no other peers")
+                logger.log(self.status_loglevel, "Skipping pre-scheduled averaging round: there are no other peers")
                 self._load_local_gradients_into_optimizer()
                 self.scheduled_grads.cancel()
             self.scheduled_grads = None
@@ -602,7 +602,7 @@ class Optimizer(torch.optim.Optimizer):
                 self._load_averaged_gradients_into_optimizer_()
                 averaged_gradients = True
             else:
-                logger.log(self.status_loglevel, f"Skipped averaging: there are no other peers")
+                logger.log(self.status_loglevel, "Skipped averaging: there are no other peers")
         except BaseException as e:
             logger.log(self.status_loglevel, f"Averaging gradients failed with {repr(e)}")
 
@@ -631,7 +631,7 @@ class Optimizer(torch.optim.Optimizer):
 
     def _load_local_gradients_into_optimizer(self):
         """Fallback to using local gradients in the optimizer (instead of averaged gradients)"""
-        logger.log(self.status_loglevel, f"Proceeding with local gradients")
+        logger.log(self.status_loglevel, "Proceeding with local gradients")
         self.grad_averager.load_accumulators_into_averager_()
         # note: we load gradients into grad_averager even though there is only one peer because of two reasons:
         # - if offload_optimizer, then we must load gradients onto the CPU gradient buffers used by the optimizer
