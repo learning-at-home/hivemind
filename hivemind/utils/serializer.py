@@ -1,4 +1,5 @@
-""" A unified interface for several common serialization methods """
+"""A unified interface for several common serialization methods"""
+
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 

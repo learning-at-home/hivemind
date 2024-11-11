@@ -173,7 +173,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
         ]
 
         # out of chosen_experts, select those for which expert_mask is True
-        for (sample_idx, expert_idx) in expert_mask.nonzero().cpu().numpy():
+        for sample_idx, expert_idx in expert_mask.nonzero().cpu().numpy():
             expert = batch_experts[sample_idx][expert_idx]
             expert_indices = expert.uid[len(self.beam_search.uid_prefix) :]
             expert_indices = list(map(int, expert_indices.split(UID_DELIMITER)))

@@ -1,14 +1,3 @@
-[tool.black]
-line-length = 119
-required-version = "22.3.0"
-
-[tool.isort]
-profile = "black"
-line_length = 119
-combine_as_imports = true
-combine_star = true
-known_local_folder = ["arguments", "test_utils", "tests", "utils"]
-
 [tool.coverage.run]
 concurrency = ["thread", "multiprocessing"]
 omit = ["hivemind/proto/*"]

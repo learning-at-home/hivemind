@@ -1,4 +1,5 @@
-""" An extension of averager that supports common optimization use cases. """
+"""An extension of averager that supports common optimization use cases."""
+
 import logging
 import threading
 import time
