@@ -43,8 +43,8 @@ P_UNIX = 0x0190
 
 class Protocol:
     __slots__ = [
-        "code",   # int
-        "name",   # string
+        "code",  # int
+        "name",  # string
         "codec",  # string
     ]
 
@@ -76,10 +76,9 @@ class Protocol:
         if not isinstance(other, Protocol):
             return NotImplemented
 
-        return all((self.code == other.code,
-                    self.name == other.name,
-                    self.codec == other.codec,
-                    self.path == other.path))
+        return all(
+            (self.code == other.code, self.name == other.name, self.codec == other.codec, self.path == other.path)
+        )
 
     def __hash__(self):
         return self.code
@@ -94,39 +93,40 @@ class Protocol:
 
 # List of multiaddr protocols supported by this module by default
 PROTOCOLS = [
-    Protocol(P_IP4, 'ip4', 'ip4'),
-    Protocol(P_TCP, 'tcp', 'uint16be'),
-    Protocol(P_UDP, 'udp', 'uint16be'),
-    Protocol(P_DCCP, 'dccp', 'uint16be'),
-    Protocol(P_IP6, 'ip6', 'ip6'),
-    Protocol(P_IP6ZONE, 'ip6zone', 'utf8'),
-    Protocol(P_DNS, 'dns', 'domain'),
-    Protocol(P_DNS4, 'dns4', 'domain'),
-    Protocol(P_DNS6, 'dns6', 'domain'),
-    Protocol(P_DNSADDR, 'dnsaddr', 'domain'),
-    Protocol(P_SCTP, 'sctp', 'uint16be'),
-    Protocol(P_UDT, 'udt', None),
-    Protocol(P_UTP, 'utp', None),
-    Protocol(P_P2P, 'p2p', 'cid'),
-    Protocol(P_ONION, 'onion', 'onion'),
-    Protocol(P_ONION3, 'onion3', 'onion3'),
-    Protocol(P_QUIC, 'quic', None),
-    Protocol(P_QUIC1, 'quic-v1', None),
-    Protocol(P_HTTP, 'http', None),
-    Protocol(P_HTTPS, 'https', None),
-    Protocol(P_TLS, 'tls', None),
-    Protocol(P_WS, 'ws', None),
-    Protocol(P_WSS, 'wss', None),
-    Protocol(P_P2P_WEBSOCKET_STAR, 'p2p-websocket-star', None),
-    Protocol(P_P2P_WEBRTC_STAR, 'p2p-webrtc-star', None),
-    Protocol(P_P2P_WEBRTC_DIRECT, 'p2p-webrtc-direct', None),
-    Protocol(P_P2P_CIRCUIT, 'p2p-circuit', None),
-    Protocol(P_UNIX, 'unix', 'fspath'),
+    Protocol(P_IP4, "ip4", "ip4"),
+    Protocol(P_TCP, "tcp", "uint16be"),
+    Protocol(P_UDP, "udp", "uint16be"),
+    Protocol(P_DCCP, "dccp", "uint16be"),
+    Protocol(P_IP6, "ip6", "ip6"),
+    Protocol(P_IP6ZONE, "ip6zone", "utf8"),
+    Protocol(P_DNS, "dns", "domain"),
+    Protocol(P_DNS4, "dns4", "domain"),
+    Protocol(P_DNS6, "dns6", "domain"),
+    Protocol(P_DNSADDR, "dnsaddr", "domain"),
+    Protocol(P_SCTP, "sctp", "uint16be"),
+    Protocol(P_UDT, "udt", None),
+    Protocol(P_UTP, "utp", None),
+    Protocol(P_P2P, "p2p", "cid"),
+    Protocol(P_ONION, "onion", "onion"),
+    Protocol(P_ONION3, "onion3", "onion3"),
+    Protocol(P_QUIC, "quic", None),
+    Protocol(P_QUIC1, "quic-v1", None),
+    Protocol(P_HTTP, "http", None),
+    Protocol(P_HTTPS, "https", None),
+    Protocol(P_TLS, "tls", None),
+    Protocol(P_WS, "ws", None),
+    Protocol(P_WSS, "wss", None),
+    Protocol(P_P2P_WEBSOCKET_STAR, "p2p-websocket-star", None),
+    Protocol(P_P2P_WEBRTC_STAR, "p2p-webrtc-star", None),
+    Protocol(P_P2P_WEBRTC_DIRECT, "p2p-webrtc-direct", None),
+    Protocol(P_P2P_CIRCUIT, "p2p-circuit", None),
+    Protocol(P_UNIX, "unix", "fspath"),
 ]
 
 
 class ProtocolRegistry:
     """A collection of individual Multiaddr protocols indexed for fast lookup"""
+
     __slots__ = ("_codes_to_protocols", "_locked", "_names_to_protocols")
 
     def __init__(self, protocols=()):
@@ -179,8 +179,9 @@ class ProtocolRegistry:
             raise exceptions.ProtocolRegistryLocked()
 
         proto = self.find(proto)
-        assert self._names_to_protocols.get(proto.name) is proto, \
-               "Protocol to alias must have already been added to the registry"
+        assert (
+            self._names_to_protocols.get(proto.name) is proto
+        ), "Protocol to alias must have already been added to the registry"
 
         if alias_name in self._names_to_protocols:
             raise exceptions.ProtocolExistsError(self._names_to_protocols[alias_name], "name")
@@ -206,8 +207,9 @@ class ProtocolRegistry:
             raise exceptions.ProtocolRegistryLocked()
 
         proto = self.find(proto)
-        assert self._codes_to_protocols.get(proto.code) is proto, \
-               "Protocol to alias must have already been added to the registry"
+        assert (
+            self._codes_to_protocols.get(proto.code) is proto
+        ), "Protocol to alias must have already been added to the registry"
 
         if alias_code in self._codes_to_protocols:
             raise exceptions.ProtocolExistsError(self._codes_to_protocols[alias_code], "name")

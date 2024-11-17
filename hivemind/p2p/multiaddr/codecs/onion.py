@@ -1,7 +1,6 @@
 import base64
 import struct
 
-
 SIZE = 96
 IS_PATH = False
 
@@ -27,11 +26,11 @@ def to_bytes(proto, string):
     if port not in range(1, 65536):
         raise ValueError("Port number is not in range(1, 65536)")
 
-    return b''.join((onion_host_bytes, struct.pack('>H', port)))
+    return b"".join((onion_host_bytes, struct.pack(">H", port)))
 
 
 def to_string(proto, buf):
     addr_bytes, port_bytes = (buf[:-2], buf[-2:])
-    addr = base64.b32encode(addr_bytes).decode('ascii').lower()
-    port = str(struct.unpack('>H', port_bytes)[0])
-    return ':'.join([addr, port])
+    addr = base64.b32encode(addr_bytes).decode("ascii").lower()
+    port = str(struct.unpack(">H", port_bytes)[0])
+    return ":".join([addr, port])
