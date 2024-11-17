@@ -1,6 +1,5 @@
 import netaddr
 
-
 SIZE = 32
 IS_PATH = False
 
@@ -10,4 +9,4 @@ def to_bytes(proto, string):
 
 
 def to_string(proto, buf):
-    return str(netaddr.IPAddress(int.from_bytes(buf, byteorder='big'), version=4))
+    return str(netaddr.IPAddress(int.from_bytes(buf, byteorder="big"), version=4))
