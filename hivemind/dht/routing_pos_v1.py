@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from hivemind.p2p import PeerID
 from hivemind.utils import MSGPackSerializer, get_dht_time
+from hivemind.utils.repeated_timer import RepeatedTimer
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -35,10 +36,37 @@ class RoutingTable:
         self.buckets = [KBucket(node_id.MIN, node_id.MAX, bucket_size)]
         self.peer_id_to_uid: Dict[PeerID, DHTID] = dict()  # all nodes currently in buckets, including replacements
         self.uid_to_peer_id: Dict[DHTID, PeerID] = dict()  # all nodes currently in buckets, including replacements
-
-        # this is used for applications built on top of hivemind if they want to make updates to nodes
-        # automatically updates timestamp on entry but up to applications to update thereon after
         self.peer_id_to_last_updated: Dict[PeerID, int] = dict()  # all nodes currently in buckets, including replacements
+        rt = RepeatedTimer(15, self.run_pos_in_background) # auto start PoS mechanism
+
+    def run_pos_in_background(self):
+        logger.info("Running POS mechanism")
+        # update_time = os.getenv('POS_NODE_UPDATE_TIME_SECS')
+        node_update_time = 30
+        for peer_id in self.peer_id_to_last_updated:
+            if get_dht_time() - self.peer_id_to_last_updated[peer_id] > node_update_time:
+                is_staked = True
+                if is_staked:
+                    self.peer_id_to_last_updated[peer_id] = get_dht_time()
+                else:
+                    node_id = self.uid_to_peer_id.get(node_id, None)
+                    if node_id is not None:
+                        logger.info("Removing peer %s from routing table", peer_id)
+                        self.__delitem__(node_id)
+
+    # def run_pos_in_background(self):
+    #     while True:
+    #         # update_time = os.getenv('POS_NODE_UPDATE_TIME_SECS')
+    #         node_update_time = 30
+    #         for peer_id in self.peer_id_to_last_updated:
+    #             if get_dht_time() - self.peer_id_to_last_updated[peer_id] > node_update_time:
+    #                 is_staked = True
+    #                 if is_staked:
+    #                     self.peer_id_to_last_updated[peer_id] = get_dht_time()
+    #                 else:
+    #                     node_id = self.uid_to_peer_id.get(node_id, None)
+    #                     if node_id is not None:
+    #                         self.__delitem__(node_id)
 
     def get_bucket_index(self, node_id: DHTID) -> int:
         """Get the index of the bucket that the given node would fall into."""
@@ -69,9 +97,7 @@ class RoutingTable:
             # if we added node to bucket or as a replacement, throw it into lookup dicts as well
             self.uid_to_peer_id[node_id] = peer_id
             self.peer_id_to_uid[peer_id] = node_id
-            # only update on the first entry, not updates
-            if self.peer_id_to_last_updated[peer_id] is None:
-                self.peer_id_to_last_updated[peer_id] = get_dht_time()
+            self.peer_id_to_last_updated[peer_id] = get_dht_time()
 
         if not store_success:
             # Per section 4.2 of paper, split if the bucket has node's own id in its range
