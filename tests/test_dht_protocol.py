@@ -5,13 +5,13 @@ import signal
 from typing import List, Sequence, Tuple
 
 import pytest
-from multiaddr import Multiaddr
 
 import hivemind
 from hivemind import P2P, PeerID, get_dht_time, get_logger
 from hivemind.dht import DHTID
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.storage import DictionaryDHTValue
+from hivemind.p2p.multiaddr import Multiaddr
 
 logger = get_logger(__name__)
 
