@@ -1,15 +1,21 @@
-[tool.black]
-line-length = 119
-required-version = "22.3.0"
-
-[tool.isort]
-profile = "black"
-line_length = 119
-combine_as_imports = true
-combine_star = true
-known_local_folder = ["arguments", "test_utils", "tests", "utils"]
-
 [tool.coverage.run]
 concurrency = ["thread", "multiprocessing"]
 omit = ["hivemind/proto/*"]
 source = ["hivemind"]
+
+[tool.ruff]
+exclude = [
+    "__init__.py",
+    "*_pb2.py"
+]
+line-length = 119
+required-version = "==0.7.2"
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "YTT", "ASYNC", "LOG", "PIE", "SIM", "PLC", "PLE", "FURB"]
+ignore = ["E501", "E702", "UP006", "UP007", "SIM102", "SIM103", "SIM108", "SIM300"]
+dummy-variable-rgx = "^_$"
+
+[tool.ruff.lint.isort]
+known-local-folder = ["arguments", "test_utils", "tests", "utils"]

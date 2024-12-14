@@ -1,4 +1,5 @@
-""" An extension of averager that supports common optimization use cases. """
+"""An extension of averager that supports common optimization use cases."""
+
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from itertools import chain
@@ -44,7 +45,7 @@ class TrainingAverager(DecentralizedAverager):
         extra_tensors: Sequence[torch.Tensor] = (),
         parameter_names: Optional[Sequence[str]] = None,
         initialize_optimizer: bool = True,
-        **kwargs
+        **kwargs,
     ):
         if initialize_optimizer:
             initialize_optimizer_state(opt)  # note: this will run one optimizer step!

@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 from enum import Enum, auto
+from typing import AsyncIterator
 
 import pytest
+import torch
 
 import hivemind
-from hivemind.averaging.averager import *
+from hivemind.averaging.averager import AllReduceRunner, AveragingMode, GatheredData
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.matchmaking import MatchmakingException
 from hivemind.proto import averaging_pb2
-from hivemind.utils.asyncio import aenumerate, as_aiter, azip, enter_asynchronously
+from hivemind.utils.asyncio import aenumerate, anext, as_aiter, azip, enter_asynchronously
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)

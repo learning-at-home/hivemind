@@ -1,4 +1,4 @@
-""" A background process that averages your tensors with peers """
+"""A background process that averages your tensors with peers"""
 
 from __future__ import annotations
 
@@ -237,7 +237,7 @@ class Matchmaking:
         except asyncio.TimeoutError:
             logger.debug(f"{self} - potential leader {leader} did not respond within {self.request_timeout}")
             return None
-        except (P2PDaemonError, P2PHandlerError, StopAsyncIteration) as e:
+        except (P2PDaemonError, P2PHandlerError, StopAsyncIteration):
             logger.debug(f"{self} - failed to request potential leader {leader}:", exc_info=True)
             return None
 
