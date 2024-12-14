@@ -104,7 +104,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         if self._expert_info is None:
             try:
-                self._expert_info = next((expert.info for experts_i in chosen_experts for expert in experts_i))
+                self._expert_info = next(expert.info for experts_i in chosen_experts for expert in experts_i)
             except StopIteration:
                 raise RuntimeError(
                     "No responding experts found during beam search. Check that UID prefixes and "
