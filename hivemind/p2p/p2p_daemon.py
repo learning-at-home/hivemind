@@ -32,7 +32,7 @@ P2PD_FILENAME = "p2pd"
 
 
 @dataclass(frozen=True)
-class P2PContext(object):
+class P2PContext:
     handle_name: str
     local_id: PeerID
     remote_id: PeerID = None
