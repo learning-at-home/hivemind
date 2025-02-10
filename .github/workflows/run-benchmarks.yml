@@ -5,6 +5,10 @@ on:
     branches: [ master ]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   run_benchmarks:
 
@@ -28,7 +32,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build bitsandbytes
         run: |
-          pip install bitsandbytes==0.41.1
+          pip install bitsandbytes==0.45.2
       - name: Build hivemind
         run: |
           pip install .
