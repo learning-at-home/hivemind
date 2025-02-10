@@ -37,14 +37,14 @@ def cleanup_children():
 
     gc.collect()  # Call .__del__() for removed objects
 
+    MPFuture.reset_backend()
+
     children = psutil.Process().children(recursive=True)
     if children:
-        gone, alive = psutil.wait_procs(children, timeout=0.1)
+        gone, alive = psutil.wait_procs(children, timeout=1)
         logger.debug(f"Cleaning up {len(alive)} leftover child processes")
         for child in alive:
             child.terminate()
         gone, alive = psutil.wait_procs(alive, timeout=1)
         for child in alive:
             child.kill()
-
-    MPFuture.reset_backend()

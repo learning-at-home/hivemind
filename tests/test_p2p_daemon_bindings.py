@@ -387,7 +387,17 @@ async def p2pcs():
             )
             for _ in range(NUM_P2PDS)
         ]
-        yield tuple(p2pd_tuple.client for p2pd_tuple in p2pd_tuples)
+        clients = tuple(p2pd_tuple.client for p2pd_tuple in p2pd_tuples)
+        try:
+            yield clients
+        finally:
+            for client in clients:
+                try:
+                    await asyncio.wait_for(client.close(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+                except Exception:
+                    pass
 
 
 @pytest.mark.asyncio
@@ -457,31 +467,31 @@ async def test_client_disconnect(p2pcs):
     assert len(await p2pcs[1].list_peers()) == 0
 
 
+@pytest.mark.parametrize("protocols", [("123",), ("123", "another_protocol")])
 @pytest.mark.asyncio
-async def test_client_stream_open_success(p2pcs):
+async def test_client_stream_open_success(protocols, p2pcs):
     peer_id_1, maddrs_1 = await p2pcs[1].identify()
     await connect_safe(p2pcs[0], p2pcs[1])
 
     proto = "123"
 
     async def handle_proto(stream_info, reader, writer):
-        await reader.readexactly(1)
+        try:
+            await reader.readexactly(1)
+        finally:
+            writer.close()
+            await writer.wait_closed()
 
     await p2pcs[1].stream_handler(proto, handle_proto)
 
-    # test case: normal
-    stream_info, reader, writer = await p2pcs[0].stream_open(peer_id_1, (proto,))
-    assert stream_info.peer_id == peer_id_1
-    assert stream_info.addr in maddrs_1
-    assert stream_info.proto == "123"
-    writer.close()
+    stream_info, reader, writer = await p2pcs[0].stream_open(peer_id_1, protocols)
 
-    # test case: open with multiple protocols
-    stream_info, reader, writer = await p2pcs[0].stream_open(peer_id_1, (proto, "another_protocol"))
     assert stream_info.peer_id == peer_id_1
     assert stream_info.addr in maddrs_1
     assert stream_info.proto == "123"
+
     writer.close()
+    await writer.wait_closed()
 
 
 @pytest.mark.asyncio
@@ -497,7 +507,8 @@ async def test_client_stream_open_failure(p2pcs):
 
     # test case: `stream_open` to a peer for a non-registered protocol
     async def handle_proto(stream_info, reader, writer):
-        pass
+        writer.close()
+        await writer.wait_closed()
 
     await p2pcs[1].stream_handler(proto, handle_proto)
     with pytest.raises(ControlFailure):
@@ -514,11 +525,15 @@ async def test_client_stream_handler_success(p2pcs):
     # event for this test function to wait until the handler function receiving the incoming data
     event_handler_finished = asyncio.Event()
 
+    active_streams = set()
+
     async def handle_proto(stream_info, reader, writer):
-        nonlocal event_handler_finished
         bytes_received = await reader.readexactly(len(bytes_to_send))
         assert bytes_received == bytes_to_send
         event_handler_finished.set()
+
+        writer.close()
+        await writer.wait_closed()
 
     await p2pcs[1].stream_handler(proto, handle_proto)
     assert proto in p2pcs[1].control.handlers
@@ -535,6 +550,7 @@ async def test_client_stream_handler_success(p2pcs):
 
     # wait for the handler to finish
     writer.close()
+    await writer.wait_closed()
 
     await event_handler_finished.wait()
 
@@ -548,6 +564,9 @@ async def test_client_stream_handler_success(p2pcs):
         bytes_received = await reader.readexactly(len(another_bytes_to_send))
         assert bytes_received == another_bytes_to_send
 
+        writer.close()
+        await writer.wait_closed()
+
     await p2pcs[1].stream_handler(another_proto, handle_another_proto)
     assert another_proto in p2pcs[1].control.handlers
     assert handle_another_proto == p2pcs[1].control.handlers[another_proto]
@@ -560,12 +579,15 @@ async def test_client_stream_handler_success(p2pcs):
     writer.write(another_bytes_to_send)
 
     writer.close()
+    await writer.wait_closed()
 
     # test case: registering twice can't override the previous registration without balanced flag
     event_third = asyncio.Event()
 
     async def handler_third(stream_info, reader, writer):
         event_third.set()
+        writer.close()
+        await writer.wait_closed()
 
     # p2p raises now for doubled stream handlers
     with pytest.raises(ControlFailure):
@@ -581,6 +603,13 @@ async def test_client_stream_handler_success(p2pcs):
     await p2pcs[0].stream_open(peer_id_1, (another_proto,))
     # ensure the overriding handler is called when the protocol is opened a stream
     await event_third.wait()
+    writer.close()
+    await writer.wait_closed()
+
+    for _, writer in active_streams:
+        if not writer.is_closing():
+            writer.close()
+            await writer.wait_closed()
 
 
 @pytest.mark.asyncio
