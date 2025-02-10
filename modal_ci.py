@@ -45,7 +45,7 @@ def setup_and_test():
 
     # Run tests
     subprocess.run(
-        ["pytest", "--durations=0", "--durations-min=1.0", "-v", "-n", "16", "tests"],
+        ["pytest", "--durations=0", "--durations-min=1.0", "-v", "-n", "16", "--dist", "worksteal", "tests"],
         check=True,
         env=environment,
     )
