@@ -1,6 +1,5 @@
 import modal
 
-
 # Create an image with system dependencies
 image = (
     modal.Image.debian_slim()
