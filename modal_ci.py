@@ -24,7 +24,7 @@ image = (
 app = modal.App("hivemind-ci", image=image)
 
 
-@app.function(image=image, timeout=1800, cpu=16, memory=8192)
+@app.function(image=image, timeout=1800, cpu=4, memory=8192)
 def setup_and_test():
     import os
     import subprocess
@@ -45,7 +45,7 @@ def setup_and_test():
 
     # Run tests
     subprocess.run(
-        ["pytest", "--durations=0", "--durations-min=1.0", "-v", "-n", "16", "--dist", "worksteal", "tests"],
+        ["pytest", "--durations=0", "--durations-min=1.0", "-v", "-n", "4", "--dist", "worksteal", "tests"],
         check=True,
         env=environment,
     )
