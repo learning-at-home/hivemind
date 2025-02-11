@@ -9,7 +9,12 @@ image = (
     .apt_install(["git", "procps", "build-essential", "cmake"])
     .pip_install_from_requirements("requirements-dev.txt")
     .pip_install_from_requirements("requirements.txt")
-    .pip_install("bitsandbytes==0.45.2")
+    .run_commands(
+        [
+            "git clone --branch 0.45.2 --depth 1 https://github.com/bitsandbytes-foundation/bitsandbytes.git",
+            "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
+        ]
+    )
     .add_local_dir("hivemind", remote_path="/root/hivemind/hivemind")
     .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
     .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
@@ -22,6 +27,7 @@ image = (
 app = modal.App("hivemind-ci", image=image)
 
 codecov_secret = modal.Secret.from_dict({"CODECOV_TOKEN": os.getenv("CODECOV_TOKEN")})
+
 
 def setup_environment():
     os.chdir("/root/hivemind")

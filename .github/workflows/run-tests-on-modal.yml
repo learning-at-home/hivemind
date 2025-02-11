@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  run_tests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -45,7 +45,7 @@ jobs:
         run: |
           modal run modal_ci.py::run_tests
 
-  codecov:
+  measure_coverage:
     runs-on: ubuntu-latest
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
