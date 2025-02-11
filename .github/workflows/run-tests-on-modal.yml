@@ -20,7 +20,7 @@ jobs:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       PYTHON_VERSION: ${{ matrix.python-version }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       PYTHON_VERSION: "3.11"
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
