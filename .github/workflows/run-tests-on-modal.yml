@@ -2,9 +2,8 @@ name: Modal tests
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -13,9 +12,14 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+      fail-fast: false
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      PYTHON_VERSION: ${{ matrix.python-version }}
     timeout-minutes: 5
     steps:
       - name: Checkout Repository
@@ -30,13 +34,45 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: Key-v1-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
+          key: Key-v1-3.12-modal
 
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install modal
+          pip install modal==0.73.32
 
       - name: Run tests
         run: |
-          modal run modal_ci
+          modal run modal_ci.py::run_tests
+
+  codecov:
+    runs-on: ubuntu-latest
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      PYTHON_VERSION: "3.11"
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: Key-v1-3.12-modal
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install modal==0.73.32
+
+      - name: Measure and upload coverage
+        run: |
+          modal run modal_ci.py::run_codecov

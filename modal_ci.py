@@ -1,17 +1,15 @@
+import os
+import subprocess
+
 import modal
 
 # Create an image with system dependencies
 image = (
-    modal.Image.debian_slim()
+    modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
     .apt_install(["git", "procps", "build-essential", "cmake"])
     .pip_install_from_requirements("requirements-dev.txt")
     .pip_install_from_requirements("requirements.txt")
-    .run_commands(
-        [
-            "git clone https://github.com/bitsandbytes-foundation/bitsandbytes.git",
-            "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
-        ]
-    )
+    .pip_install("bitsandbytes==0.45.2")
     .add_local_dir("hivemind", remote_path="/root/hivemind/hivemind")
     .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
     .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
@@ -23,13 +21,9 @@ image = (
 
 app = modal.App("hivemind-ci", image=image)
 
+codecov_secret = modal.Secret.from_dict({"CODECOV_TOKEN": os.getenv("CODECOV_TOKEN")})
 
-@app.function(image=image, timeout=1800, cpu=4, memory=8192)
-def setup_and_test():
-    import os
-    import subprocess
-
-    # Clone and install hivemind
+def setup_environment():
     os.chdir("/root/hivemind")
 
     subprocess.run(["pip", "install", "."], check=True)
@@ -42,10 +36,45 @@ def setup_and_test():
         ["prlimit", f"--pid={os.getpid()}", "--nofile=8192"],
         check=True,
     )
+    return environment
 
-    # Run tests
+
+@app.function(image=image, timeout=600, cpu=4, memory=8192)
+def run_tests():
+    environment = setup_environment()
+
     subprocess.run(
         ["pytest", "--durations=0", "--durations-min=1.0", "-v", "-n", "4", "--dist", "worksteal", "tests"],
+        check=True,
+        env=environment,
+    )
+
+
+@app.function(image=image, timeout=600, cpu=4, memory=8192, secrets=[codecov_secret])
+def run_codecov():
+    environment = setup_environment()
+
+    subprocess.run(
+        [
+            "pytest",
+            "--cov",
+            "hivemind",
+            "--cov-config=pyproject.toml",
+            "-v",
+            "-n",
+            "4",
+            "--dist",
+            "worksteal",
+            "tests",
+        ],
+        check=True,
+        env=environment,
+    )
+
+    environment["CODECOV_TOKEN"] = os.environ["CODECOV_TOKEN"]
+
+    subprocess.run(
+        ["bash", "-c", "curl -Os https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov && ./codecov"],
         check=True,
         env=environment,
     )
