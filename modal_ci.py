@@ -50,7 +50,18 @@ def run_tests():
     environment = setup_environment()
 
     subprocess.run(
-        ["pytest", "--durations=0", "--durations-min=1.0", "-v", "-n", "4", "--dist", "worksteal", "tests"],
+        [
+            "pytest",
+            "--durations=0",
+            "--durations-min=1.0",
+            "-v",
+            "-n",
+            "4",
+            "--timeout=60",
+            "--dist",
+            "worksteal",
+            "tests",
+        ],
         check=True,
         env=environment,
     )
@@ -69,8 +80,6 @@ def run_codecov():
             "-v",
             "-n",
             "4",
-            "--dist",
-            "worksteal",
             "tests",
         ],
         check=True,

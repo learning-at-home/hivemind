@@ -2,7 +2,8 @@ pytest==6.2.5  # see https://github.com/pytest-dev/pytest/issues/9621
 pytest-forked
 pytest-asyncio==0.16.0
 pytest-cov
-coverage==6.0.2  # see https://github.com/pytest-dev/pytest-cov/issues/520
+pytest-timeout
+coverage
 tqdm
 scikit-learn
 black==22.3.0
