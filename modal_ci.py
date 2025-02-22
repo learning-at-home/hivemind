@@ -45,7 +45,7 @@ def setup_environment():
     return environment
 
 
-@app.function(image=image, timeout=600, cpu=4, memory=8192)
+@app.function(image=image, timeout=600, cpu=8, memory=8192)
 def run_tests():
     environment = setup_environment()
 
@@ -67,7 +67,7 @@ def run_tests():
     )
 
 
-@app.function(image=image, timeout=600, cpu=4, memory=8192, secrets=[codecov_secret])
+@app.function(image=image, timeout=600, cpu=8, memory=8192, secrets=[codecov_secret])
 def run_codecov():
     environment = setup_environment()
 
