@@ -18,7 +18,7 @@ from hivemind.p2p.p2p_daemon_bindings.utils import (
 )
 from hivemind.proto import p2pd_pb2 as p2pd_pb
 
-from test_utils.p2p_daemon import connect_safe, make_p2pd_pair_unix
+from test_utils.p2p_daemon import connect_safe, make_p2pd_pair_unix, try_until_success
 
 
 def test_raise_if_failed_raises():
@@ -453,14 +453,24 @@ async def test_client_list_peers(p2pcs):
 async def test_client_disconnect(p2pcs):
     # test case: disconnect a peer without connections
     await p2pcs[1].disconnect(PEER_ID_RANDOM)
+    
     # test case: disconnect
     peer_id_0, _ = await p2pcs[0].identify()
     await connect_safe(p2pcs[0], p2pcs[1])
     assert len(await p2pcs[0].list_peers()) == 1
     assert len(await p2pcs[1].list_peers()) == 1
+    
     await p2pcs[1].disconnect(peer_id_0)
-    assert len(await p2pcs[0].list_peers()) == 0
-    assert len(await p2pcs[1].list_peers()) == 0
+    
+    # Wait for disconnection to complete using try_until_success
+    async def check_disconnected():
+        peers_0 = await p2pcs[0].list_peers()
+        peers_1 = await p2pcs[1].list_peers()
+        if len(peers_0) != 0 or len(peers_1) != 0:
+            raise Exception("Peers not disconnected yet")
+    
+    await try_until_success(check_disconnected)
+    
     # test case: disconnect twice
     await p2pcs[1].disconnect(peer_id_0)
     assert len(await p2pcs[0].list_peers()) == 0

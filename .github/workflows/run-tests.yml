@@ -1,9 +1,7 @@
 name: Tests
 
-on:
-  push:
-    branches: [ master ]
-  pull_request:
+# Tests in GHA only run manually, see run-tests-on-modal.yml for the same tests in CI
+on: workflow_dispatch
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
