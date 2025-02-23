@@ -113,8 +113,6 @@ def run_codecov():
             "hivemind",
             "--cov-config=pyproject.toml",
             "-v",
-            "-n",
-            "8",
             "--timeout=60",
             "tests",
         ],
