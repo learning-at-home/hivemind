@@ -6,7 +6,7 @@ import modal
 # Create an image with system dependencies
 image = (
     modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
-    .apt_install(["git", "procps", "build-essential", "cmake"])
+    .apt_install(["git", "procps", "build-essential", "cmake", "wget"])
     .pip_install_from_requirements("requirements-dev.txt")
     .pip_install_from_requirements("requirements.txt")
     .run_commands(
@@ -127,7 +127,7 @@ def run_codecov():
     environment["CODECOV_TOKEN"] = os.environ["CODECOV_TOKEN"]
 
     subprocess.run(
-        ["bash", "-c", "curl -Os https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov && ./codecov"],
+        ["bash", "-c", "wget -q https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov && ./codecov"],
         check=True,
         env=environment,
     )
