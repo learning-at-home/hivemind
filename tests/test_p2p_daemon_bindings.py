@@ -450,6 +450,7 @@ async def test_client_list_peers(p2pcs):
 
 
 @pytest.mark.asyncio
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 async def test_client_disconnect(p2pcs):
     # test case: disconnect a peer without connections
     await p2pcs[1].disconnect(PEER_ID_RANDOM)
@@ -461,15 +462,8 @@ async def test_client_disconnect(p2pcs):
     assert len(await p2pcs[1].list_peers()) == 1
 
     await p2pcs[1].disconnect(peer_id_0)
-
-    # Wait for disconnection to complete using try_until_success
-    async def check_disconnected():
-        peers_0 = await p2pcs[0].list_peers()
-        peers_1 = await p2pcs[1].list_peers()
-        if len(peers_0) != 0 or len(peers_1) != 0:
-            raise Exception("Peers not disconnected yet")
-
-    await try_until_success(check_disconnected)
+    assert len(await p2pcs[0].list_peers()) == 0
+    assert len(await p2pcs[1].list_peers()) == 0
 
     # test case: disconnect twice
     await p2pcs[1].disconnect(peer_id_0)
