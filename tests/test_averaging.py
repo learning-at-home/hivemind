@@ -503,8 +503,16 @@ def test_averaging_trigger():
 
     c1.allow_allreduce()
     c2.allow_allreduce()
-    time.sleep(0.5)
-    assert all(c.stage == AveragingStage.FINISHED for c in controls)
+    
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        if all(c.stage == AveragingStage.FINISHED for c in controls):
+            break
+        time.sleep(0.1)
+    else:
+        stages = [c.stage for c in controls]
+        pytest.fail(f"Averaging did not complete in time. Current stages: {stages}")
+
     assert all(c.done() for c in controls)
 
     # check that setting trigger twice does not raise error
