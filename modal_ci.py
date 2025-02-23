@@ -6,14 +6,13 @@ import modal
 # Create an image with system dependencies
 image = (
     modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
-    .apt_install(["git", "procps", "build-essential", "cmake", "golang-1.20"])
+    .apt_install(["git", "procps", "build-essential", "cmake"])
     .pip_install_from_requirements("requirements-dev.txt")
     .pip_install_from_requirements("requirements.txt")
     .run_commands(
         [
             "git clone --branch 0.45.2 --depth 1 https://github.com/bitsandbytes-foundation/bitsandbytes.git",
             "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
-            "ln -s /usr/lib/go-1.20/bin/go /usr/bin/go",  # Make go available in PATH
         ]
     )
     .add_local_dir("hivemind", remote_path="/root/hivemind/hivemind")
@@ -24,6 +23,33 @@ image = (
     .add_local_file("pyproject.toml", remote_path="/root/hivemind/pyproject.toml")
     .add_local_dir("tests", remote_path="/root/hivemind/tests")
 )
+
+# Create an image with golang and other system dependencies
+image_with_golang = (
+    modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
+    .apt_install(["git", "procps", "build-essential", "cmake", "wget"])
+    .pip_install_from_requirements("requirements-dev.txt")
+    .pip_install_from_requirements("requirements.txt")
+    .run_commands(
+        [
+            # Install Go 1.20.11
+            "wget https://go.dev/dl/go1.20.11.linux-amd64.tar.gz",
+            "rm -rf /usr/local/go && tar -C /usr/local -xzf go1.20.11.linux-amd64.tar.gz",
+            "ln -s /usr/local/go/bin/go /usr/bin/go",
+            # Install bitsandbytes
+            "git clone --branch 0.45.2 --depth 1 https://github.com/bitsandbytes-foundation/bitsandbytes.git",
+            "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
+        ]
+    )
+    .add_local_dir("hivemind", remote_path="/root/hivemind/hivemind")
+    .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
+    .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
+    .add_local_file("requirements-docs.txt", remote_path="/root/hivemind/requirements-docs.txt")
+    .add_local_file("setup.py", remote_path="/root/hivemind/setup.py")
+    .add_local_file("pyproject.toml", remote_path="/root/hivemind/pyproject.toml")
+    .add_local_dir("tests", remote_path="/root/hivemind/tests")
+)
+
 
 app = modal.App("hivemind-ci", image=image)
 
@@ -38,7 +64,7 @@ def setup_environment(*, build_p2pd=False):
         install_cmd.extend([".", "--global-option=build_py", "--global-option=--buildgo", "--no-use-pep517"])
     else:
         install_cmd.append(".")
-    
+
     subprocess.run(install_cmd, check=True)
 
     environment = os.environ.copy()
@@ -100,7 +126,7 @@ def run_codecov():
     )
 
 
-@app.function(image=image, timeout=600, cpu=1, memory=4096)
+@app.function(image=image_with_golang, timeout=600, cpu=1, memory=4096)
 def build_and_test_p2pd():
     environment = setup_environment(build_p2pd=True)
 
