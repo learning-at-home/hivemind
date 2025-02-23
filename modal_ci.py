@@ -59,11 +59,10 @@ codecov_secret = modal.Secret.from_dict({"CODECOV_TOKEN": os.getenv("CODECOV_TOK
 def setup_environment(*, build_p2pd=False):
     os.chdir("/root/hivemind")
 
-    install_cmd = ["uv", "pip", "install", "--no-cache-dir", "--system"]
     if build_p2pd:
-        install_cmd.extend([".", "--global-option=build_py", "--global-option=--buildgo", "--no-use-pep517"])
+        install_cmd = ["pip", "install", "--no-cache-dir", ".", "--global-option=build_py", "--global-option=--buildgo", "--no-use-pep517"]
     else:
-        install_cmd.append(".")
+        install_cmd = ["uv", "pip", "install", "--no-cache-dir", "--system", "."]
 
     subprocess.run(install_cmd, check=True)
 
