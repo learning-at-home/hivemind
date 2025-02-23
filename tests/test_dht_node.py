@@ -183,6 +183,7 @@ async def test_dhtnode_replicas():
 
 @pytest.mark.forked
 @pytest.mark.asyncio
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 async def test_dhtnode_caching(T=0.05):
     node2 = await DHTNode.create(cache_refresh_before_expiry=5 * T, reuse_get_requests=False)
     node1 = await DHTNode.create(

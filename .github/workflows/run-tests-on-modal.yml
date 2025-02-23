@@ -51,6 +51,8 @@ jobs:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      GITHUB_EVENT_NAME: ${{ github.event_name }}
+      GITHUB_EVENT_NUMBER: ${{ github.event.number }}
       GITHUB_EVENT_PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       PYTHON_VERSION: "3.11"
     timeout-minutes: 15
