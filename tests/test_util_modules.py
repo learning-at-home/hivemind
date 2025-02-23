@@ -581,10 +581,10 @@ def test_performance_ema_threadsafe(
         start_time = time.perf_counter()
         total_size = sum(future.result() for future in as_completed(futures))
         end_time = time.perf_counter()
-        
+
         # Add a small constant to account for overhead caused by workers
         elapsed_time = end_time - start_time + 0.001 * max_workers
         target = total_size / elapsed_time
-        
+
         assert ema.samples_per_second >= (1 - tolerance) * target * max_workers ** (bias_power - 1)
         assert ema.samples_per_second <= (1 + tolerance) * target
