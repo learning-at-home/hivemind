@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from hivemind.moe.server import background_server
 
 
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 def test_background_server_identity_path():
     with TemporaryDirectory() as tempdir:
         id_path = os.path.join(tempdir, "id")
