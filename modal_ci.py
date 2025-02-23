@@ -141,7 +141,10 @@ def run_codecov():
         [
             "bash",
             "-c",
-            "wget -q https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov && ./codecov upload-process",
+            "wget -q https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov "
+            "&& ./codecov create-commit -C $CC_SHA -P $CC_PR -r $CC_SLUG --git-service github "
+            "&& ./codecov create-report -C $CC_SHA -r $CC_SLUG --git-service github "
+            "&& ./codecov do-upload -C $CC_SHA -r $CC_SLUG -P $CC_PR --git-service github",
         ],
         check=True,
         env=environment,
