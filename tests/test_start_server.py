@@ -4,6 +4,8 @@ from functools import partial
 from subprocess import PIPE, Popen
 from tempfile import TemporaryDirectory
 
+import pytest
+
 from hivemind.moe.server import background_server
 
 
