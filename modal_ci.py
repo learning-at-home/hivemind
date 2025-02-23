@@ -102,7 +102,7 @@ def run_tests():
     )
 
 
-@app.function(image=image, timeout=600, cpu=8, memory=8192, secrets=[codecov_secret])
+@app.function(image=image, timeout=900, cpu=8, memory=8192, secrets=[codecov_secret])
 def run_codecov():
     environment = setup_environment(build_p2pd=False)
 
