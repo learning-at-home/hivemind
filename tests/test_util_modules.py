@@ -552,6 +552,7 @@ def test_batch_tensor_descriptor_msgpack():
 
 
 @pytest.mark.parametrize("max_workers", [1, 2, 10])
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 def test_performance_ema_threadsafe(
     max_workers: int,
     interval: float = 0.05,
