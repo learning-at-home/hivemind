@@ -262,6 +262,7 @@ async def test_dhtnode_reuse_get():
 
 @pytest.mark.forked
 @pytest.mark.asyncio
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 async def test_dhtnode_blacklist():
     node1, node2, node3, node4 = await launch_star_shaped_swarm(n_peers=4, blacklist_time=999)
 

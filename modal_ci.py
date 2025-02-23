@@ -60,7 +60,15 @@ def setup_environment(*, build_p2pd=False):
     os.chdir("/root/hivemind")
 
     if build_p2pd:
-        install_cmd = ["pip", "install", "--no-cache-dir", ".", "--global-option=build_py", "--global-option=--buildgo", "--no-use-pep517"]
+        install_cmd = [
+            "pip",
+            "install",
+            "--no-cache-dir",
+            ".",
+            "--global-option=build_py",
+            "--global-option=--buildgo",
+            "--no-use-pep517",
+        ]
     else:
         install_cmd = ["uv", "pip", "install", "--no-cache-dir", "--system", "."]
 
