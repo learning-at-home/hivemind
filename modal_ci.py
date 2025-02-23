@@ -6,13 +6,14 @@ import modal
 # Create an image with system dependencies
 image = (
     modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
-    .apt_install(["git", "procps", "build-essential", "cmake"])
+    .apt_install(["git", "procps", "build-essential", "cmake", "golang-1.20"])
     .pip_install_from_requirements("requirements-dev.txt")
     .pip_install_from_requirements("requirements.txt")
     .run_commands(
         [
             "git clone --branch 0.45.2 --depth 1 https://github.com/bitsandbytes-foundation/bitsandbytes.git",
             "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
+            "ln -s /usr/lib/go-1.20/bin/go /usr/bin/go",  # Make go available in PATH
         ]
     )
     .add_local_dir("hivemind", remote_path="/root/hivemind/hivemind")
@@ -29,10 +30,16 @@ app = modal.App("hivemind-ci", image=image)
 codecov_secret = modal.Secret.from_dict({"CODECOV_TOKEN": os.getenv("CODECOV_TOKEN")})
 
 
-def setup_environment():
+def setup_environment(*, build_p2pd=False):
     os.chdir("/root/hivemind")
 
-    subprocess.run(["uv", "pip", "install", "--no-cache-dir", "--system", "."], check=True)
+    install_cmd = ["uv", "pip", "install", "--no-cache-dir", "--system"]
+    if build_p2pd:
+        install_cmd.extend([".", "--global-option=build_py", "--global-option=--buildgo", "--no-use-pep517"])
+    else:
+        install_cmd.append(".")
+    
+    subprocess.run(install_cmd, check=True)
 
     environment = os.environ.copy()
     environment["HIVEMIND_MEMORY_SHARING_STRATEGY"] = "file_descriptor"
@@ -42,7 +49,7 @@ def setup_environment():
 
 @app.function(image=image, timeout=600, cpu=8, memory=8192)
 def run_tests():
-    environment = setup_environment()
+    environment = setup_environment(build_p2pd=False)
 
     subprocess.run(
         [
@@ -64,7 +71,7 @@ def run_tests():
 
 @app.function(image=image, timeout=600, cpu=8, memory=8192, secrets=[codecov_secret])
 def run_codecov():
-    environment = setup_environment()
+    environment = setup_environment(build_p2pd=False)
 
     subprocess.run(
         [
@@ -88,6 +95,23 @@ def run_codecov():
 
     subprocess.run(
         ["bash", "-c", "curl -Os https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov && ./codecov"],
+        check=True,
+        env=environment,
+    )
+
+
+@app.function(image=image, timeout=600, cpu=1, memory=4096)
+def build_and_test_p2pd():
+    environment = setup_environment(build_p2pd=True)
+
+    subprocess.run(
+        [
+            "pytest",
+            "-k",
+            "p2p",
+            "-v",
+            "tests",
+        ],
         check=True,
         env=environment,
     )
