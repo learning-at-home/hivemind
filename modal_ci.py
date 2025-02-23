@@ -124,10 +124,22 @@ def run_codecov():
         env=environment,
     )
 
-    environment["CODECOV_TOKEN"] = os.environ["CODECOV_TOKEN"]
+    # Forward GitHub Actions environment variables to the codecov command
+    environment.update(
+        {
+            "CODECOV_TOKEN": os.environ["CODECOV_TOKEN"],
+            "CC_SHA": os.environ["GITHUB_EVENT_PULL_REQUEST_HEAD_SHA"],
+            "CC_PR": os.environ["GITHUB_EVENT_NUMBER"],
+            "CC_SLUG": os.environ["GITHUB_REPOSITORY"],
+        }
+    )
 
     subprocess.run(
-        ["bash", "-c", "wget -q https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov && ./codecov upload-process"],
+        [
+            "bash",
+            "-c",
+            "wget -q https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov && ./codecov upload-process",
+        ],
         check=True,
         env=environment,
     )
