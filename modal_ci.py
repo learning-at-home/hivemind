@@ -77,7 +77,7 @@ def setup_environment(*, build_p2pd=False):
             "--no-use-pep517",
         ]
     else:
-        install_cmd = ["uv", "pip", "install", "--no-cache-dir", "--system", "."]
+        install_cmd = ["uv", "pip", "install", "-e", ".", "--no-use-pep517"]
 
     subprocess.run(install_cmd, check=True)
 
