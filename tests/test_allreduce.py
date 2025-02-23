@@ -172,7 +172,7 @@ NODE, CLIENT, AUX = AveragingMode.NODE, AveragingMode.CLIENT, AveragingMode.AUX
 )
 @pytest.mark.forked
 @pytest.mark.asyncio
-@pytest.mark.skip
+@pytest.mark.skip("Skipping test due to freezes in CI")
 async def test_allreduce_protocol(peer_modes, averaging_weights, peer_fractions, part_size_bytes):
     """Run group allreduce protocol manually without grpc, see if the internal logic is working as intended"""
 

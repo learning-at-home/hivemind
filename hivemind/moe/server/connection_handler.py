@@ -134,6 +134,7 @@ class ConnectionHandler(mp.context.ForkProcess, ServicerBase):
     async def rpc_forward(self, request: runtime_pb2.ExpertRequest, context: P2PContext) -> runtime_pb2.ExpertResponse:
         inputs = [deserialize_torch_tensor(tensor) for tensor in request.tensors]
         expert = self.module_backends[request.uid]
+        logger.debug(f"Processing inputs for expert {request.uid}")
         return runtime_pb2.ExpertResponse(
             tensors=await self._process_inputs(inputs, expert.forward_pool, expert.outputs_schema)
         )

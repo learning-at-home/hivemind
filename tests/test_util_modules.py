@@ -3,7 +3,8 @@ import concurrent.futures
 import multiprocessing as mp
 import random
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Event
 
 import numpy as np
 import pytest
@@ -559,17 +560,26 @@ def test_performance_ema_threadsafe(
     bias_power: float = 0.7,
     tolerance: float = 0.05,
 ):
-    def run_task(ema):
-        task_size = random.randint(1, 4)
+    def run_task(ema, start_event, task_size):
+        start_event.wait()
         with ema.update_threadsafe(task_size):
             time.sleep(task_size * interval * (0.9 + 0.2 * random.random()))
             return task_size
 
     with ThreadPoolExecutor(max_workers) as pool:
         ema = PerformanceEMA(alpha=alpha)
+        start_event = Event()
+
+        futures = []
+        for _ in range(num_updates):
+            task_size = random.randint(1, 4)
+            future = pool.submit(run_task, ema, start_event, task_size)
+            futures.append(future)
+
+        ema.reset_timer()
+        start_event.set()
         start_time = time.perf_counter()
-        futures = [pool.submit(run_task, ema) for i in range(num_updates)]
-        total_size = sum(future.result() for future in futures)
+        total_size = sum(future.result() for future in as_completed(futures))
         end_time = time.perf_counter()
         target = total_size / (end_time - start_time)
         assert ema.samples_per_second >= (1 - tolerance) * target * max_workers ** (bias_power - 1)

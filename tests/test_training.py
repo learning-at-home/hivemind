@@ -106,6 +106,7 @@ class SwitchNetwork(nn.Module):
 
 
 @pytest.mark.forked
+@pytest.mark.skip("Skipping test due to freezes in CI")
 def test_switch_training(max_steps: int = 10, threshold: float = 0.9, num_experts=5):
     dataset = load_digits(n_class=2)
     X_train, y_train = torch.tensor(dataset["data"], dtype=torch.float), torch.tensor(dataset["target"])

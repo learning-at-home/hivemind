@@ -32,16 +32,11 @@ codecov_secret = modal.Secret.from_dict({"CODECOV_TOKEN": os.getenv("CODECOV_TOK
 def setup_environment():
     os.chdir("/root/hivemind")
 
-    subprocess.run(["pip", "install", "."], check=True)
+    subprocess.run(["uv", "pip", "install", "--no-cache-dir", "--system", "."], check=True)
 
     environment = os.environ.copy()
     environment["HIVEMIND_MEMORY_SHARING_STRATEGY"] = "file_descriptor"
-    environment["HIVEMIND_DHT_NUM_WORKERS"] = "1"
 
-    subprocess.run(
-        ["prlimit", f"--pid={os.getpid()}", "--nofile=8192"],
-        check=True,
-    )
     return environment
 
 
@@ -56,10 +51,10 @@ def run_tests():
             "--durations-min=1.0",
             "-v",
             "-n",
-            "4",
-            "--timeout=60",
+            "8",
             "--dist",
             "worksteal",
+            "--timeout=60",
             "tests",
         ],
         check=True,
@@ -79,7 +74,10 @@ def run_codecov():
             "--cov-config=pyproject.toml",
             "-v",
             "-n",
-            "4",
+            "8",
+            "--dist",
+            "worksteal",
+            "--timeout=60",
             "tests",
         ],
         check=True,
