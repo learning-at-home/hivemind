@@ -127,7 +127,7 @@ def run_codecov():
     environment["CODECOV_TOKEN"] = os.environ["CODECOV_TOKEN"]
 
     subprocess.run(
-        ["bash", "-c", "wget -q https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov && ./codecov"],
+        ["bash", "-c", "wget -q https://uploader.codecov.io/latest/linux/codecov && chmod +x codecov && ./codecov upload-process"],
         check=True,
         env=environment,
     )
