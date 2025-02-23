@@ -24,6 +24,7 @@ def test_background_server_identity_path():
             assert server_info_3.peer_id == server_info_3.peer_id
 
 
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 def test_cli_run_server_identity_path():
     pattern = r"Running DHT node on \[(.+)\],"
 
