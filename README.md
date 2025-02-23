@@ -118,6 +118,10 @@ the [contributing guidelines](https://github.com/learning-at-home/hivemind/blob/
 more about other ways to contribute, read
 our [guide](https://learning-at-home.readthedocs.io/en/latest/user/contributing.html).
 
+## Collaborators and Sponsorship
+
+* [Prime Intellect](https://www.primeintellect.ai/) sponsoring compute resources over [Modal](https://modal.com/) for CI
+
 ## Citation
 
 If you found hivemind or its underlying algorithms useful for your research, please cite the following source:
