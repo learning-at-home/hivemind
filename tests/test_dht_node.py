@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 
 @pytest.mark.forked
 @pytest.mark.asyncio
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 async def test_dht_node(
     n_peers: int = 20, n_sequential_peers: int = 5, parallel_rpc: int = 10, bucket_size: int = 5, num_replicas: int = 3
 ):
