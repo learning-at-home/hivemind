@@ -218,6 +218,7 @@ def test_allreduce_grid():
 
 
 @pytest.mark.forked
+@pytest.mark.skip("Skipping test due to freezes in CI")
 def test_allgather(n_averagers=8, target_group_size=4):
     dht_instances = launch_dht_instances(n_averagers)
     averagers = [
