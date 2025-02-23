@@ -53,7 +53,14 @@ image_with_golang = (
 
 app = modal.App("hivemind-ci", image=image)
 
-codecov_secret = modal.Secret.from_dict({"CODECOV_TOKEN": os.getenv("CODECOV_TOKEN")})
+codecov_secret = modal.Secret.from_dict(
+    {
+        "CODECOV_TOKEN": os.getenv("CODECOV_TOKEN"),
+        "GITHUB_EVENT_PULL_REQUEST_HEAD_SHA": os.getenv("GITHUB_EVENT_PULL_REQUEST_HEAD_SHA"),
+        "GITHUB_EVENT_NUMBER": os.getenv("GITHUB_EVENT_NUMBER"),
+        "GITHUB_REPOSITORY": os.getenv("GITHUB_REPOSITORY"),
+    }
+)
 
 
 def setup_environment(*, build_p2pd=False):
