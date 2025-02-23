@@ -115,8 +115,6 @@ def run_codecov():
             "-v",
             "-n",
             "8",
-            "--dist",
-            "worksteal",
             "--timeout=60",
             "tests",
         ],
