@@ -140,6 +140,7 @@ async def test_unary_stream_cancel(server_client, cancel_reason):
         await asyncio.sleep(0.25)
 
         writer.close()
+        await writer.wait_closed()
     elif cancel_reason == "close_generator":
         stub = ExampleServicer.get_stub(client, server.peer_id)
         iter = await stub.rpc_wait(test_pb2.TestRequest(number=10))

@@ -2,6 +2,7 @@ version: 2
 
 sphinx:
   fail_on_warning: true
+  configuration: docs/conf.py
 
 python:
   install:

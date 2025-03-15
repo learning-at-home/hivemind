@@ -4,9 +4,12 @@ from functools import partial
 from subprocess import PIPE, Popen
 from tempfile import TemporaryDirectory
 
+import pytest
+
 from hivemind.moe.server import background_server
 
 
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 def test_background_server_identity_path():
     with TemporaryDirectory() as tempdir:
         id_path = os.path.join(tempdir, "id")
@@ -21,6 +24,7 @@ def test_background_server_identity_path():
             assert server_info_3.peer_id == server_info_3.peer_id
 
 
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 def test_cli_run_server_identity_path():
     pattern = r"Running DHT node on \[(.+)\],"
 

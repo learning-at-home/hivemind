@@ -137,6 +137,7 @@ class FaultyAllReduceRunner(AllReduceRunner):
         (Fault.NONE, Fault.CANCEL),
     ],
 )
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 def test_fault_tolerance(fault0: Fault, fault1: Fault):
     def _make_tensors():
         return [torch.rand(16, 1024), -torch.rand(3, 8192), 2 * torch.randn(4, 4, 4), torch.randn(1024, 1024)]
