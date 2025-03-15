@@ -9,7 +9,8 @@ from typing import NamedTuple
 
 from pkg_resources import resource_filename
 
-from hivemind.p2p.multiaddr import Multiaddr, protocols
+from hivemind.utils.multiaddr import Multiaddr
+from hivemind.utils.multiaddr import protocols
 from hivemind.p2p.p2p_daemon_bindings.p2pclient import Client
 
 from test_utils.networking import get_free_port

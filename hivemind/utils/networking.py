@@ -1,7 +1,7 @@
 from ipaddress import ip_address
 from typing import List, Sequence
 
-from hivemind.p2p.multiaddr import Multiaddr
+from hivemind.utils.multiaddr import Multiaddr
 from hivemind.utils.logging import TextStyle, get_logger
 
 LOCALHOST = "127.0.0.1"

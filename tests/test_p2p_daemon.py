@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from hivemind.p2p import P2P, P2PDaemonError, P2PHandlerError
-from hivemind.p2p.multiaddr import Multiaddr
+from hivemind.utils.multiaddr import Multiaddr
 from hivemind.proto import dht_pb2, test_pb2
 from hivemind.utils.serializer import MSGPackSerializer
 
