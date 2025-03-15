@@ -107,14 +107,14 @@ class NoCompression(CompressionBase):
         if serialized_tensor.dtype == "bfloat16":
             numel = shape.numel()
             if numel > 0 and len(serialized_tensor.buffer) // numel == 4:
-                array = np.frombuffer(serialized_tensor.buffer, dtype=np.float32)
+                array = np.frombuffer(bytearray(serialized_tensor.buffer), dtype=np.float32)
                 tensor = torch.as_tensor(array, dtype=torch.bfloat16)
             else:
-                array = np.frombuffer(serialized_tensor.buffer, dtype=np.int16)
+                array = np.frombuffer(bytearray(serialized_tensor.buffer), dtype=np.int16)
                 # reinterpret_cast from an arbitrary 2-byte type supported by numpy
                 tensor = torch.as_tensor(array).view(torch.bfloat16)
         else:
-            array = np.frombuffer(serialized_tensor.buffer, dtype=np.dtype(serialized_tensor.dtype))
+            array = np.frombuffer(bytearray(serialized_tensor.buffer), dtype=np.dtype(serialized_tensor.dtype))
             tensor = torch.as_tensor(array)
         return tensor.reshape(shape)
 

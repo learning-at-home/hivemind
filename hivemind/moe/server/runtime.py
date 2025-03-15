@@ -142,6 +142,7 @@ class Runtime(threading.Thread):
                 logger.debug("Waiting for inputs from task pools")
                 ready_fds = selector.select()
                 ready_objects = {key.data for (key, events) in ready_fds}
+                logger.debug(f"Ready objects: {ready_objects}")
                 if self.SHUTDOWN_TRIGGER in ready_objects:
                     break  # someone asked us to shutdown, break from the loop
 

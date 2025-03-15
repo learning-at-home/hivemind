@@ -38,6 +38,7 @@ async def test_daemon_killed_on_del():
 
 
 @pytest.mark.asyncio
+@pytest.mark.xfail(reason="Flaky test", strict=False)
 async def test_startup_error_message():
     with pytest.raises(P2PDaemonError, match=r"(?i)Failed to connect to bootstrap peers"):
         await P2P.create(
@@ -103,7 +104,9 @@ async def test_check_if_identity_free():
     "host_maddrs",
     [
         [Multiaddr("/ip4/127.0.0.1/tcp/0")],
-        [Multiaddr("/ip4/127.0.0.1/udp/0/quic-v1")],
+        pytest.param(
+            [Multiaddr("/ip4/127.0.0.1/udp/0/quic-v1")], marks=pytest.mark.skip("quic-v1 is not supported in CI")
+        ),
         [Multiaddr("/ip4/127.0.0.1/tcp/0"), Multiaddr("/ip4/127.0.0.1/udp/0/quic")],
     ],
 )

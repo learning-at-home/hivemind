@@ -90,9 +90,11 @@ class RemoteMixtureOfExperts(nn.Module):
         else:
             input_for_gating = input
 
+        logger.debug("Computing expert scores")
         # 1. compute scores and find most appropriate experts with beam search
         grid_scores = self.proj(input_for_gating).split_with_sizes(self.beam_search.grid_size, dim=-1)
 
+        logger.debug("Finding best experts")
         chosen_experts: List[List[RemoteExpert]] = self.beam_search.batch_find_best_experts(
             [scores.detach().cpu().numpy() for scores in grid_scores], self.k_best
         )
@@ -108,6 +110,7 @@ class RemoteMixtureOfExperts(nn.Module):
             except P2PDaemonError as e:
                 logger.warning(f"Failed to get RemoteMixtureOfExperts.output_shape: {e}")
 
+        logger.debug(f"Calling experts {chosen_experts}")
         expert_mask, *expert_outputs = _RemoteCallMany.apply(
             DUMMY,
             chosen_experts,
@@ -123,6 +126,7 @@ class RemoteMixtureOfExperts(nn.Module):
         )
         # ^-- multiple tensors of shape [batch_size, max_experts, ...output_shape]
 
+        logger.debug("Computing expert weights")
         expert_logits = self.compute_expert_scores(grid_scores, chosen_experts)
         masked_logits = torch.full((1,), float("-inf"), device=expert_logits.device, dtype=expert_logits.dtype)
         expert_logits = torch.where(expert_mask, expert_logits, masked_logits)
@@ -375,12 +379,17 @@ class _RemoteCallMany(torch.autograd.Function):
         timeout_total = float("inf") if timeout_total is None else timeout_total
         timeout_after_k_min = float("inf") if timeout_after_k_min is None else timeout_after_k_min
         num_successful_tasks = [0 for _ in range(num_samples)]
-        pending_samples = num_samples  # samples for which we have less than k_min results
+
+        samples_with_tasks = {sample_idx for sample_idx, _ in task_to_indices.values()}
+        pending_samples = len(samples_with_tasks)  # samples for which we have less than k_min results
+        assert pending_samples <= num_samples
+
         finished_indices, finished_outputs = [], []
         t_finish = time.perf_counter() + timeout_total
         pending_tasks = set(task_to_indices.keys())
         finished_tasks = Queue()
 
+        logger.debug(f"Pending tasks: {list(pending_tasks)}")
         try:
             # the algorithm below is essentially futures.as_completed, but for grpc.Future
             for task in pending_tasks:
@@ -388,6 +397,8 @@ class _RemoteCallMany(torch.autograd.Function):
 
             for _ in range(len(task_to_indices)):
                 timeout = max(0.0, t_finish - time.perf_counter()) if t_finish != float("inf") else None
+                logger.debug(f"Finished tasks: {list(finished_tasks.queue)}")
+                logger.debug(f"Pending tasks: {list(pending_tasks)}")
                 task = finished_tasks.get(timeout=timeout)
                 pending_tasks.discard(task)
 
@@ -399,6 +410,7 @@ class _RemoteCallMany(torch.autograd.Function):
                     # count how many successes we have for each input sample
                     sample_index = task_to_indices[task][0]
                     num_successful_tasks[sample_index] += 1
+                    logger.debug(f"Num successful tasks: {num_successful_tasks}")
                     if num_successful_tasks[sample_index] == k_min:
                         pending_samples -= 1
                         if (
@@ -416,7 +428,7 @@ class _RemoteCallMany(torch.autograd.Function):
 
 def _process_dispatched_task(task: Future, detect_anomalies: bool) -> Optional[Tuple[torch.Tensor]]:
     if task.exception() or task.cancelled():
-        logger.warning(f"Task {task} failed: {type(task.exception())}")
+        logger.warning(f"Task {task} failed: {task.exception()}")
         return None
 
     outputs = task.result()

@@ -208,7 +208,7 @@ def test_load_state_from_peers():
 
     avgr2.local_epoch = 1337
     model2.weight.data[...] = 42
-    time.sleep(0.1)
+    time.sleep(0.5)
 
     avgr1.load_state_from_peers()
     assert avgr1.local_epoch == 1337

@@ -13,3 +13,5 @@ known_local_folder = ["arguments", "test_utils", "tests", "utils"]
 concurrency = ["thread", "multiprocessing"]
 omit = ["hivemind/proto/*"]
 source = ["hivemind"]
+parallel = true
+sigterm = true

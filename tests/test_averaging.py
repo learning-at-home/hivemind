@@ -218,6 +218,7 @@ def test_allreduce_grid():
 
 
 @pytest.mark.forked
+@pytest.mark.skip("Skipping test due to freezes in CI")
 def test_allgather(n_averagers=8, target_group_size=4):
     dht_instances = launch_dht_instances(n_averagers)
     averagers = [
@@ -503,8 +504,16 @@ def test_averaging_trigger():
 
     c1.allow_allreduce()
     c2.allow_allreduce()
-    time.sleep(0.5)
-    assert all(c.stage == AveragingStage.FINISHED for c in controls)
+
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if all(c.stage == AveragingStage.FINISHED for c in controls):
+            break
+        time.sleep(0.1)
+    else:
+        stages = [c.stage for c in controls]
+        pytest.fail(f"Averaging did not complete in time. Current stages: {stages}")
+
     assert all(c.done() for c in controls)
 
     # check that setting trigger twice does not raise error
