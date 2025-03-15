@@ -91,7 +91,7 @@ class Daemon:
         self.proc_daemon.terminate()
         self.proc_daemon.wait()
         self.f_log.close()
-        os.unlink(self.log_filename)
+        os.remove(self.log_filename)
         self.is_closed = True
 
 
