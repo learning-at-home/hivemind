@@ -10,7 +10,6 @@ from typing import Any, Sequence, Union
 import base58
 import multihash
 from cryptography.hazmat.primitives import serialization
-from multiaddr import Multiaddr
 
 from hivemind.proto import crypto_pb2, p2pd_pb2
 from hivemind.utils.multiaddr import Multiaddr
