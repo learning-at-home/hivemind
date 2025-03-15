@@ -23,7 +23,6 @@ from typing import (
     Union,
 )
 
-from multiaddr import Multiaddr
 from sortedcontainers import SortedSet
 
 from hivemind.dht.crypto import DHTRecord, RecordValidatorBase
@@ -34,6 +33,7 @@ from hivemind.dht.traverse import traverse_dht
 from hivemind.p2p import P2P, PeerID
 from hivemind.utils import MSGPackSerializer, SerializerBase, get_logger
 from hivemind.utils.auth import AuthorizerBase
+from hivemind.utils.multiaddr import Multiaddr
 from hivemind.utils.timed_storage import DHTExpiration, TimedStorage, ValueWithExpiration
 
 logger = get_logger(__name__)

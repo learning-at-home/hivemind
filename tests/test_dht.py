@@ -4,9 +4,9 @@ import random
 import time
 
 import pytest
-from multiaddr import Multiaddr
 
 import hivemind
+from hivemind.utils.multiaddr import Multiaddr
 
 from test_utils.dht_swarms import launch_dht_instances
 from test_utils.networking import get_free_port
