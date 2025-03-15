@@ -14,6 +14,7 @@ from hivemind.proto import runtime_pb2
 warnings.filterwarnings("ignore", module="bitsandbytes", category=UserWarning)
 
 EXECUTOR = ThreadPoolExecutor(max_workers=int(os.environ.get("QUANTIZATION_THREADS", 128)))
+_BLOCKWISE_QUANTIZATION_BLOCKSIZE = 4096
 
 
 class Quantization(CompressionBase, ABC):
@@ -141,9 +142,10 @@ class BlockwiseQuantization(Quantization):
             raise ImportError(BNB_MISSING_MESSAGE)
 
         assert tensor.dtype == torch.float32
-        quantized, quant_state = quantize_blockwise(tensor, blocksize=4096, nested=False)
+
+        quantized, quant_state = quantize_blockwise(tensor, blocksize=_BLOCKWISE_QUANTIZATION_BLOCKSIZE, nested=False)
         absmax, codebook = quant_state.absmax, quant_state.code
-        assert quant_state.blocksize == 4096
+        assert quant_state.blocksize == _BLOCKWISE_QUANTIZATION_BLOCKSIZE
         assert quant_state.nested is False
         assert quant_state.dtype == self.EXTRA_PARAMS[2]
         assert quant_state.offset == self.EXTRA_PARAMS[3]
@@ -193,5 +195,7 @@ class BlockwiseQuantization(Quantization):
         absmax = torch.as_tensor(absmax)
         codebook = torch.as_tensor(codebook)
         quantized = torch.as_tensor(quantized).reshape(tuple(serialized_tensor.size))
-        result = dequantize_blockwise(quantized, absmax=absmax, code=codebook, blocksize=4096, nested=False)
+        result = dequantize_blockwise(
+            quantized, absmax=absmax, code=codebook, blocksize=_BLOCKWISE_QUANTIZATION_BLOCKSIZE, nested=False
+        )
         return result.to(getattr(torch, serialized_tensor.dtype)).requires_grad_(serialized_tensor.requires_grad)
