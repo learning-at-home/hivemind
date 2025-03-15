@@ -31,9 +31,9 @@ from hivemind.dht.routing import DHTID, BinaryDHTValue, DHTKey, DHTValue, Subkey
 from hivemind.dht.storage import DictionaryDHTValue
 from hivemind.dht.traverse import traverse_dht
 from hivemind.p2p import P2P, PeerID
-from hivemind.utils.multiaddr import Multiaddr
 from hivemind.utils import MSGPackSerializer, SerializerBase, get_logger
 from hivemind.utils.auth import AuthorizerBase
+from hivemind.utils.multiaddr import Multiaddr
 from hivemind.utils.timed_storage import DHTExpiration, TimedStorage, ValueWithExpiration
 
 logger = get_logger(__name__)

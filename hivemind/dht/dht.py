@@ -11,8 +11,8 @@ from hivemind.dht.node import DEFAULT_NUM_WORKERS, DHTNode
 from hivemind.dht.routing import DHTKey, DHTValue, Subkey
 from hivemind.dht.validation import CompositeValidator, RecordValidatorBase
 from hivemind.p2p import P2P, PeerID
-from hivemind.utils.multiaddr import Multiaddr
 from hivemind.utils import MPFuture, get_logger, switch_to_uvloop
+from hivemind.utils.multiaddr import Multiaddr
 from hivemind.utils.timed_storage import DHTExpiration, ValueWithExpiration
 
 logger = get_logger(__name__)

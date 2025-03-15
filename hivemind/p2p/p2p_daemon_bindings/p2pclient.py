@@ -8,7 +8,6 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Iterable, Sequence, Tuple
 
-from hivemind.utils.multiaddr import Multiaddr
 from hivemind.p2p.p2p_daemon_bindings.control import (
     DEFAULT_MAX_MSG_SIZE,
     ControlClient,
@@ -17,6 +16,7 @@ from hivemind.p2p.p2p_daemon_bindings.control import (
     TUnaryHandler,
 )
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
+from hivemind.utils.multiaddr import Multiaddr
 
 
 class Client:
