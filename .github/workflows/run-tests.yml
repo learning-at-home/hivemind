@@ -10,7 +10,6 @@ concurrency:
 
 jobs:
   run_tests:
-    if: github.repository != 'learning-at-home/hivemind'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -45,7 +44,6 @@ jobs:
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
           pytest --durations=0 --durations-min=1.0 -v
   build_and_test_p2pd:
-    if: github.repository != 'learning-at-home/hivemind'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -77,7 +75,6 @@ jobs:
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
           pytest -k "p2p" -v
   codecov_in_develop_mode:
-    if: github.repository != 'learning-at-home/hivemind'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
