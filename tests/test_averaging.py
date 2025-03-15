@@ -505,8 +505,8 @@ def test_averaging_trigger():
     c1.allow_allreduce()
     c2.allow_allreduce()
 
-    deadline = time.time() + 5.0
-    while time.time() < deadline:
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
         if all(c.stage == AveragingStage.FINISHED for c in controls):
             break
         time.sleep(0.1)
