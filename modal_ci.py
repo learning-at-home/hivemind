@@ -51,7 +51,7 @@ image_with_golang = (
 )
 
 
-app = modal.App("hivemind-ci", image=image)
+app = modal.App("hivemind-ci")
 
 codecov_secret = modal.Secret.from_dict(
     {
