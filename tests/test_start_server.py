@@ -9,6 +9,15 @@ import pytest
 from hivemind.moe.server import background_server
 
 
+def cleanup_process(process, timeout=5):
+    try:
+        process.terminate()
+        process.wait(timeout=timeout)  # Add timeout to wait
+    except:
+        process.kill()
+        process.wait(timeout=timeout)
+
+
 @pytest.mark.xfail(reason="Flaky test", strict=False)
 def test_background_server_identity_path():
     with TemporaryDirectory() as tempdir:
@@ -96,10 +105,5 @@ def test_cli_run_server_identity_path():
         assert addrs_1 != addrs_3
         assert addrs_2 != addrs_3
 
-        server_1_proc.terminate()
-        server_2_proc.terminate()
-        server_3_proc.terminate()
-
-        server_1_proc.wait()
-        server_2_proc.wait()
-        server_3_proc.wait()
+        for p in [server_1_proc, server_2_proc, server_3_proc]:
+            cleanup_process(p)
