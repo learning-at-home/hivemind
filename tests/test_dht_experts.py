@@ -126,6 +126,37 @@ def test_dht_single_node():
     node.shutdown()
 
 
+@pytest.mark.forked
+@pytest.mark.asyncio
+async def test_negative_caching(n_peers=10):
+    dht_kwargs = {"cache_locally": False}
+
+    peers = [hivemind.DHT(start=True, **dht_kwargs)]
+    initial_peers = peers[0].get_visible_maddrs()
+    peers += [hivemind.DHT(initial_peers=initial_peers, start=True, **dht_kwargs) for _ in range(n_peers - 1)]
+
+    writer_peer = random.choice(peers)
+    assert all(declare_experts(writer_peer, ["ffn.1.2.3", "ffn.3.4.5"], get_dht_time() + 30).values())
+
+    neighbors = sum([peer.get_visible_maddrs() for peer in random.sample(peers, min(3, len(peers)))], [])
+    neg_caching_peer = hivemind.DHT(initial_peers=neighbors, start=True, **dht_kwargs)
+    beam_search = MoEBeamSearcher(neg_caching_peer, uid_prefix="ffn.", grid_size=(10, 10, 10), negative_caching=True)
+    # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
+    assert len(beam_search.get_initial_beam(scores=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6], beam_size=3)) == 2
+
+    node = await DHTNode.create(initial_peers=neighbors)
+    fetched = await asyncio.gather(*(node.get(f"ffn.{i}.") for i in range(10)))
+    for i in range(6):
+        assert fetched[i] is not None, f"node should have cached ffn.{i}."
+    for i in range(6, len(fetched)):
+        assert fetched[i] is None, f"node shouldn't have cached ffn.{i}."
+
+    await node.shutdown()
+    neg_caching_peer.shutdown()
+    for peer in peers:
+        peer.shutdown()
+
+
 def test_uid_patterns():
     valid_experts = [
         "expert.1",
@@ -188,34 +219,3 @@ def test_uid_patterns():
         assert not is_valid_uid(uid), f"UID {uid} is not valid, but was perceived as valid"
     for pfx in invalid_prefixes:
         assert not is_valid_prefix(pfx), f"Prefix {pfx} is not valid, but was perceived as valid"
-
-
-@pytest.mark.forked
-@pytest.mark.asyncio
-async def test_negative_caching(n_peers=10):
-    dht_kwargs = {"cache_locally": False}
-
-    peers = [hivemind.DHT(start=True, **dht_kwargs)]
-    initial_peers = peers[0].get_visible_maddrs()
-    peers += [hivemind.DHT(initial_peers=initial_peers, start=True, **dht_kwargs) for _ in range(n_peers - 1)]
-
-    writer_peer = random.choice(peers)
-    assert all(declare_experts(writer_peer, ["ffn.1.2.3", "ffn.3.4.5"], get_dht_time() + 30).values())
-
-    neighbors = sum([peer.get_visible_maddrs() for peer in random.sample(peers, min(3, len(peers)))], [])
-    neg_caching_peer = hivemind.DHT(initial_peers=neighbors, start=True, **dht_kwargs)
-    beam_search = MoEBeamSearcher(neg_caching_peer, uid_prefix="ffn.", grid_size=(10, 10, 10), negative_caching=True)
-    # get prefixes by the peer with negative caching. Cache "no data" entries for ffn.0.*, ffn.2.*, ffn.4.*, ffn.5.*
-    assert len(beam_search.get_initial_beam(scores=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6], beam_size=3)) == 2
-
-    node = await DHTNode.create(initial_peers=neighbors)
-    fetched = await asyncio.gather(*(node.get(f"ffn.{i}.") for i in range(10)))
-    for i in range(6):
-        assert fetched[i] is not None, f"node should have cached ffn.{i}."
-    for i in range(6, len(fetched)):
-        assert fetched[i] is None, f"node shouldn't have cached ffn.{i}."
-
-    await node.shutdown()
-    neg_caching_peer.shutdown()
-    for peer in peers:
-        peer.shutdown()

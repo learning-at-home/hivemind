@@ -29,6 +29,34 @@ def validators_for_app():
     }
 
 
+@pytest.mark.forked
+def test_dht_add_validators(validators_for_app):
+    # One app may create a DHT with its validators
+    dht = hivemind.DHT(start=False, record_validators=validators_for_app["A"])
+
+    # While the DHT process is not started, you can't send a command to append new validators
+    with pytest.raises(RuntimeError):
+        dht.add_validators(validators_for_app["B"])
+    dht.run_in_background(await_ready=True)
+
+    # After starting the process, other apps may add new validators to the existing DHT
+    dht.add_validators(validators_for_app["B"])
+
+    assert dht.store("field_a", b"bytes_value", hivemind.get_dht_time() + 10)
+    assert dht.get("field_a", latest=True).value == b"bytes_value"
+
+    assert not dht.store("field_a", 666, hivemind.get_dht_time() + 10)
+    assert dht.get("field_a", latest=True).value == b"bytes_value"
+
+    local_public_key = validators_for_app["A"][0].local_public_key
+    assert dht.store("field_b", 777, hivemind.get_dht_time() + 10, subkey=local_public_key)
+    dictionary = dht.get("field_b", latest=True).value
+    assert len(dictionary) == 1 and dictionary[local_public_key].value == 777
+
+    assert not dht.store("unknown_key", 666, hivemind.get_dht_time() + 10)
+    assert dht.get("unknown_key", latest=True) is None
+
+
 def test_composite_validator(validators_for_app):
     validator = CompositeValidator(validators_for_app["A"])
     assert [type(item) for item in validator._validators] == [SchemaValidator, RSASignatureValidator]
@@ -63,31 +91,3 @@ def test_composite_validator(validators_for_app):
     assert signed_record.value.count(b"[signature:") == 0
     # Expect failed validation since `unknown_key` is not a part of any schema
     assert not validator.validate(signed_record)
-
-
-@pytest.mark.forked
-def test_dht_add_validators(validators_for_app):
-    # One app may create a DHT with its validators
-    dht = hivemind.DHT(start=False, record_validators=validators_for_app["A"])
-
-    # While the DHT process is not started, you can't send a command to append new validators
-    with pytest.raises(RuntimeError):
-        dht.add_validators(validators_for_app["B"])
-    dht.run_in_background(await_ready=True)
-
-    # After starting the process, other apps may add new validators to the existing DHT
-    dht.add_validators(validators_for_app["B"])
-
-    assert dht.store("field_a", b"bytes_value", hivemind.get_dht_time() + 10)
-    assert dht.get("field_a", latest=True).value == b"bytes_value"
-
-    assert not dht.store("field_a", 666, hivemind.get_dht_time() + 10)
-    assert dht.get("field_a", latest=True).value == b"bytes_value"
-
-    local_public_key = validators_for_app["A"][0].local_public_key
-    assert dht.store("field_b", 777, hivemind.get_dht_time() + 10, subkey=local_public_key)
-    dictionary = dht.get("field_b", latest=True).value
-    assert len(dictionary) == 1 and dictionary[local_public_key].value == 777
-
-    assert not dht.store("unknown_key", 666, hivemind.get_dht_time() + 10)
-    assert dht.get("unknown_key", latest=True) is None
