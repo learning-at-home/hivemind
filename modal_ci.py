@@ -51,7 +51,7 @@ image_with_golang = (
 )
 
 
-app = modal.App("hivemind-ci", image=image)
+app = modal.App("hivemind-ci")
 
 codecov_secret = modal.Secret.from_dict(
     {
@@ -99,9 +99,6 @@ def run_tests():
             "-v",
             "-n",
             "8",
-            "--dist",
-            "worksteal",
-            "--timeout=60",
             "tests",
         ],
         check=True,
@@ -120,7 +117,6 @@ def run_codecov():
             "hivemind",
             "--cov-config=pyproject.toml",
             "-v",
-            "--timeout=60",
             "tests",
         ],
         check=True,

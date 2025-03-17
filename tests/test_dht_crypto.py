@@ -88,24 +88,6 @@ def get_signed_record(conn: mp.connection.Connection) -> DHTRecord:
     return record
 
 
-def test_signing_in_different_process():
-    parent_conn, child_conn = mp.Pipe()
-    process = mp.Process(target=get_signed_record, args=[child_conn])
-    process.start()
-
-    validator = RSASignatureValidator()
-    parent_conn.send(validator)
-
-    record = DHTRecord(
-        key=b"key", subkey=b"subkey" + validator.local_public_key, value=b"value", expiration_time=get_dht_time() + 10
-    )
-    parent_conn.send(record)
-
-    signed_record = parent_conn.recv()
-    assert b"[signature:" in signed_record.value
-    assert validator.validate(signed_record)
-
-
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_dhtnode_signatures():
@@ -134,3 +116,21 @@ async def test_dhtnode_signatures():
     store_ok = await mallory.store(key, b"updated_fake_value", hivemind.get_dht_time() + 10, subkey=subkey)
     assert not store_ok
     assert (await alice.get(key, latest=True)).value[subkey].value == b"updated_true_value"
+
+
+def test_signing_in_different_process():
+    parent_conn, child_conn = mp.Pipe()
+    process = mp.Process(target=get_signed_record, args=[child_conn])
+    process.start()
+
+    validator = RSASignatureValidator()
+    parent_conn.send(validator)
+
+    record = DHTRecord(
+        key=b"key", subkey=b"subkey" + validator.local_public_key, value=b"value", expiration_time=get_dht_time() + 10
+    )
+    parent_conn.send(record)
+
+    signed_record = parent_conn.recv()
+    assert b"[signature:" in signed_record.value
+    assert validator.validate(signed_record)
