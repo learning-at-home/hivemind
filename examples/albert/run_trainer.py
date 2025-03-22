@@ -45,7 +45,7 @@ def setup_transformers_logging(process_rank: int):
 def get_model(training_args, config, tokenizer):
     # Find latest checkpoint in output_dir
     output_dir = Path(training_args.output_dir)
-    logger.info(f'Checkpoint dir {output_dir}, contents {list(output_dir.glob("checkpoint*"))}')
+    logger.info(f"Checkpoint dir {output_dir}, contents {list(output_dir.glob('checkpoint*'))}")
     latest_checkpoint_dir = max(output_dir.glob("checkpoint*"), default=None, key=os.path.getctime)
 
     if latest_checkpoint_dir is not None:

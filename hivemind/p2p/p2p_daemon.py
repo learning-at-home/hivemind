@@ -145,9 +145,9 @@ class P2P:
         :return: a wrapper for the p2p daemon
         """
 
-        assert not (
-            initial_peers and use_ipfs
-        ), "User-defined initial_peers and use_ipfs=True are incompatible, please choose one option"
+        assert not (initial_peers and use_ipfs), (
+            "User-defined initial_peers and use_ipfs=True are incompatible, please choose one option"
+        )
 
         if not all(arg is None for arg in [quic, use_relay_hop, use_relay_discovery]):
             warnings.warn(

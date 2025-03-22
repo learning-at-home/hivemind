@@ -88,9 +88,9 @@ class TrainingAverager(DecentralizedAverager):
             with data_lock, self.get_tensors() as averaged_tensors:
                 if use_old_local_tensors:
                     old_local_tensors = tuple(x.cpu().float().clone() for x in local_tensors)
-                assert len(local_tensors) == len(
-                    averaged_tensors
-                ), "The number of optimized parameters should not change."
+                assert len(local_tensors) == len(averaged_tensors), (
+                    "The number of optimized parameters should not change."
+                )
                 for averaged_tensor, local_tensor in zip(averaged_tensors, local_tensors):
                     averaged_tensor[...] = local_tensor.cpu().float()
             self.pending_updates_done.set()

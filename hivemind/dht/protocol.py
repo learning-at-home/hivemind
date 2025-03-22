@@ -119,7 +119,7 @@ class DHTProtocol(ServicerBase):
             try:
                 if not self.client_mode and not response.available:
                     raise ValidationError(
-                        f"Peer {peer} can't access this node. " f"Probably, libp2p has failed to bypass the firewall"
+                        f"Peer {peer} can't access this node. Probably, libp2p has failed to bypass the firewall"
                     )
 
                 if response.dht_time != dht_pb2.PingResponse.DESCRIPTOR.fields_by_name["dht_time"].default_value:
@@ -204,9 +204,9 @@ class DHTProtocol(ServicerBase):
             else:
                 subkeys[i] = self.serializer.dumps(subkeys[i])
             if isinstance(values[i], DictionaryDHTValue):
-                assert (
-                    subkeys[i] == self.IS_DICTIONARY
-                ), "Please don't specify subkey when storing an entire dictionary"
+                assert subkeys[i] == self.IS_DICTIONARY, (
+                    "Please don't specify subkey when storing an entire dictionary"
+                )
                 values[i] = self.serializer.dumps(values[i])
 
         assert len(keys) == len(values) == len(expiration_time) == len(in_cache), "Data is not aligned"

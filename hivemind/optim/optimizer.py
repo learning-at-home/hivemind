@@ -229,9 +229,9 @@ class Optimizer(torch.optim.Optimizer):
         if use_local_updates:
             assert not reuse_grad_buffers, "if local_updates is True, gradients will not be accumulated"
             assert not delay_grad_averaging, "if local_updates is True, gradients will not be averaged"
-            assert (
-                grad_averager_factory is None
-            ), "if local_updates is True, provided grad_averager_factory will not be used"
+            assert grad_averager_factory is None, (
+                "if local_updates is True, provided grad_averager_factory will not be used"
+            )
 
         self.dht, self.run_id, self.client_mode, self.auxiliary = dht, run_id, client_mode, auxiliary
         self.batch_size_per_step, self.target_batch_size = batch_size_per_step, target_batch_size

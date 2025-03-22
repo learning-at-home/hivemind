@@ -84,9 +84,9 @@ class GradScaler(TorchGradScaler):
                 inner_optimizer_state = self._inner_optimizer_states.pop(id(inner_optimizer), None)
                 if inner_optimizer_state is not None:
                     self._per_optimizer_states[id(inner_optimizer)] = inner_optimizer_state
-                assert (
-                    self._per_optimizer_states[id(inner_optimizer)]["stage"] == OptState.UNSCALED
-                ), "InternalError: Optimizer should have called .unscale internally before invoking grad_scaler.step"
+                assert self._per_optimizer_states[id(inner_optimizer)]["stage"] == OptState.UNSCALED, (
+                    "InternalError: Optimizer should have called .unscale internally before invoking grad_scaler.step"
+                )
                 if self.are_grads_finite(inner_optimizer, use_cached=True):
                     super().step(inner_optimizer, *args, **kwargs)
                 else:

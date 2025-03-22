@@ -42,9 +42,7 @@ def parse_conn_protocol(maddr: Multiaddr) -> int:
     proto_codes = set(proto.code for proto in maddr.protocols())
     proto_cand = proto_codes.intersection(SUPPORT_CONN_PROTOCOLS)
     if len(proto_cand) != 1:
-        raise ValueError(
-            f"connection protocol should be only one protocol out of {SUPPORTED_PROTOS}" f", maddr={maddr}"
-        )
+        raise ValueError(f"connection protocol should be only one protocol out of {SUPPORTED_PROTOS}, maddr={maddr}")
     return tuple(proto_cand)[0]
 
 

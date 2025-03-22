@@ -9,4 +9,4 @@ scikit-learn
 codespell==2.2.2
 psutil
 pytest-xdist
-ruff==0.7.2
+ruff==0.11.2

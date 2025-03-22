@@ -377,9 +377,9 @@ class DHTNode:
         if subkeys is None:
             subkeys = [None] * len(keys)
 
-        assert (
-            len(keys) == len(subkeys) == len(values) == len(expiration_time)
-        ), "Either of keys, values, subkeys or expiration timestamps have different sequence lengths."
+        assert len(keys) == len(subkeys) == len(values) == len(expiration_time), (
+            "Either of keys, values, subkeys or expiration timestamps have different sequence lengths."
+        )
 
         key_id_to_data: DefaultDict[DHTID, List[Tuple[DHTKey, Subkey, DHTValue, DHTExpiration]]] = defaultdict(list)
         for key, subkey, value, expiration in zip(keys, subkeys, values, expiration_time):

@@ -11,12 +11,12 @@ exclude = [
     "*_pb2.py"
 ]
 line-length = 119
-required-version = "==0.7.2"
-target-version = "py38"
+required-version = "==0.11.2"
+target-version = "py39"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "YTT", "ASYNC", "LOG", "PIE", "SIM", "PLC", "PLE", "FURB"]
-ignore = ["E501", "E702", "UP006", "UP007", "SIM102", "SIM103", "SIM108", "SIM300"]
+select = ["E", "F", "W", "I", "YTT", "LOG"]
+ignore = ["E501", "E702"]
 dummy-variable-rgx = "^_$"
 
 [tool.ruff.lint.isort]

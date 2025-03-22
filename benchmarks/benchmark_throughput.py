@@ -30,8 +30,8 @@ def print_device_info(device=None):
     if device.type == "cuda":
         logger.info(torch.cuda.get_device_name(0))
         logger.info("Memory Usage:")
-        logger.info(f"Allocated: {round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1)} GB")
-        logger.info(f"Cached:   {round(torch.cuda.memory_cached(0) / 1024 ** 3, 1)} GB")
+        logger.info(f"Allocated: {round(torch.cuda.memory_allocated(0) / 1024**3, 1)} GB")
+        logger.info(f"Cached:   {round(torch.cuda.memory_cached(0) / 1024**3, 1)} GB")
 
 
 def client_process(
@@ -182,16 +182,16 @@ def benchmark_throughput(
 
     logger.info("Results: ")
     logger.info(
-        f"\tServer startup took {time_between('began_launching_server', 'server_ready') :.3f} s. "
-        f"({time_between('began_launching_server', 'created_experts') :.3f} s. experts + "
-        f"{time_between('created_experts', 'server_ready') :.3f} s. networking)"
+        f"\tServer startup took {time_between('began_launching_server', 'server_ready'):.3f} s. "
+        f"({time_between('began_launching_server', 'created_experts'):.3f} s. experts + "
+        f"{time_between('created_experts', 'server_ready'):.3f} s. networking)"
     )
-    logger.info(f"\tProcessed {total_examples} examples in {time_between('server_ready', 'clients_finished') :.3f}")
+    logger.info(f"\tProcessed {total_examples} examples in {time_between('server_ready', 'clients_finished'):.3f}")
     logger.info(
         f"\tThroughput for {'forward + backward' if backprop else 'forward'} passes: "
-        f"{total_examples / time_between('server_ready', 'clients_finished') :.3f} samples / s."
+        f"{total_examples / time_between('server_ready', 'clients_finished'):.3f} samples / s."
     )
-    logger.info(f"\tBenchmarking took {time_between('started', 'server_shutdown_finished') :.3f} s.")
+    logger.info(f"\tBenchmarking took {time_between('started', 'server_shutdown_finished'):.3f} s.")
     if benchmarking_failed.is_set():
         logger.info("Note: benchmark code failed, timing/memory results only indicate time till failure!")
     print_device_info(device)
