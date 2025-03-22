@@ -33,11 +33,10 @@ class DeterministicDropout(nn.Module):
             return x
 
 
-def dropout_sample_input(batch_size, hid_dim):
-    return (
-        torch.empty((batch_size, hid_dim)),
-        torch.randint(0, 1, (batch_size, hid_dim)),
-    )
+dropout_sample_input = lambda batch_size, hid_dim: (
+    torch.empty((batch_size, hid_dim)),
+    torch.randint(0, 1, (batch_size, hid_dim)),
+)
 
 
 @register_expert_class("det_dropout", dropout_sample_input)

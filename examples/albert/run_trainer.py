@@ -235,18 +235,17 @@ def main():
 
     adjusted_target_batch_size = collaboration_args.target_batch_size - collaboration_args.batch_size_lead
 
-    # We need to make such a function instead of just an optimizer instance
+    # We need to make such a lambda function instead of just an optimizer instance
     # to make hivemind.Optimizer(..., offload_optimizer=True) work
-    def opt(params):
-        return Lamb(
-            params,
-            lr=training_args.learning_rate,
-            betas=(training_args.adam_beta1, training_args.adam_beta2),
-            eps=training_args.adam_epsilon,
-            weight_decay=training_args.weight_decay,
-            clamp_value=training_args.clamp_value,
-            debias=True,
-        )
+    opt = lambda params: Lamb(
+        params,
+        lr=training_args.learning_rate,
+        betas=(training_args.adam_beta1, training_args.adam_beta2),
+        eps=training_args.adam_epsilon,
+        weight_decay=training_args.weight_decay,
+        clamp_value=training_args.clamp_value,
+        debias=True,
+    )
 
     no_decay = ["bias", "LayerNorm.weight"]
     params = [
@@ -260,10 +259,9 @@ def main():
         },
     ]
 
-    def scheduler(opt):
-        return get_linear_schedule_with_warmup(
-            opt, num_warmup_steps=training_args.warmup_steps, num_training_steps=training_args.total_steps
-        )
+    scheduler = lambda opt: get_linear_schedule_with_warmup(
+        opt, num_warmup_steps=training_args.warmup_steps, num_training_steps=training_args.total_steps
+    )
 
     optimizer = Optimizer(
         dht=dht,

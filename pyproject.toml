@@ -16,7 +16,7 @@ target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "YTT", "LOG"]
-ignore = ["E501", "E702"]
+ignore = ["E501", "E702", "E731"]
 dummy-variable-rgx = "^_$"
 
 [tool.ruff.lint.isort]

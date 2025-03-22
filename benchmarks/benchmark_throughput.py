@@ -162,11 +162,11 @@ def benchmark_throughput(
     sys.stdout.flush()
     sys.stderr.flush()
 
-    def time_between(key1, key2):
-        if key1 in timestamps and key2 in timestamps:
-            return abs(timestamps[key2] - timestamps[key1])
-        else:
-            return float("nan")
+    time_between = (
+        lambda key1, key2: abs(timestamps[key2] - timestamps[key1])
+        if (key1 in timestamps and key2 in timestamps)
+        else float("nan")
+    )
 
     total_examples = batch_size * num_clients * num_batches_per_client
 
