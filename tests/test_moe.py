@@ -93,7 +93,7 @@ def test_call_many(hidden_dim=16):
             [ExpertInfo(uid=f"expert.{i}", peer_id=server_peer_info.peer_id) for i in range(5)],
             dht,
         )
-        e5 = RemoteExpert(ExpertInfo(f"thisshouldnotexist", server_peer_info), None)
+        e5 = RemoteExpert(ExpertInfo("thisshouldnotexist", server_peer_info), None)
 
         mask, expert_outputs = _RemoteCallMany.apply(
             DUMMY,

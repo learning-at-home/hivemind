@@ -2,7 +2,7 @@ import asyncio
 import os
 from concurrent.futures import Future
 from threading import Thread
-from typing import Awaitable, Optional
+from typing import Awaitable
 
 from hivemind.utils import switch_to_uvloop
 

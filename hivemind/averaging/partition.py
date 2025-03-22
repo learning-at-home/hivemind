@@ -1,6 +1,7 @@
 """
 Auxiliary data structures for AllReduceRunner
 """
+
 import asyncio
 from collections import deque
 from typing import AsyncIterable, AsyncIterator, Optional, Sequence, Tuple, TypeVar
@@ -170,7 +171,7 @@ class TensorPartContainer:
                 self._input_parts_by_peer[peer_index].clear()
                 self._output_parts_by_peer[peer_index].clear()
             if self.failed_size != 0:
-                logger.warning(f"Averaging: received {(1. - self.failed_size / self.total_size) * 100:.1f}% results")
+                logger.warning(f"Averaging: received {(1.0 - self.failed_size / self.total_size) * 100:.1f}% results")
             self._outputs_consumed = True
             self.finished.set()
 

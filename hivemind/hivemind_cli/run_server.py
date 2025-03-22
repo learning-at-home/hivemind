@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 
 def main():
-    # fmt:off
+    # fmt: off
     parser = configargparse.ArgParser(default_config_files=["config.yml"])
     parser.add('-c', '--config', required=False, is_config_file=True, help='config file path')
 
@@ -85,7 +85,7 @@ def main():
                         help='Path of a file with custom nn.modules, wrapped into special decorator')
     parser.add_argument('--identity_path', type=str, required=False, help='Path to identity file to be used in P2P')
 
-    # fmt:on
+    # fmt: on
     args = vars(parser.parse_args())
     args.pop("config", None)
     optimizer = args.pop("optimizer")

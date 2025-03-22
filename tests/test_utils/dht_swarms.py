@@ -33,9 +33,9 @@ def run_node(initial_peers: List[Multiaddr], info_queue: mp.Queue, **kwargs):
 def launch_swarm_in_separate_processes(
     n_peers: int, n_sequential_peers: int, **kwargs
 ) -> Tuple[List[mp.Process], Dict[PeerID, DHTID], List[List[Multiaddr]]]:
-    assert (
-        n_sequential_peers < n_peers
-    ), "Parameters imply that first n_sequential_peers of n_peers will be run sequentially"
+    assert n_sequential_peers < n_peers, (
+        "Parameters imply that first n_sequential_peers of n_peers will be run sequentially"
+    )
 
     processes = []
     dht = {}

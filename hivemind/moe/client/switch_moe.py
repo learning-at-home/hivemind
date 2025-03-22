@@ -104,7 +104,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
 
         if self._expert_info is None:
             try:
-                self._expert_info = next((expert.info for experts_i in chosen_experts for expert in experts_i))
+                self._expert_info = next(expert.info for experts_i in chosen_experts for expert in experts_i)
             except StopIteration:
                 raise RuntimeError(
                     "No responding experts found during beam search. Check that UID prefixes and "
@@ -173,7 +173,7 @@ class RemoteSwitchMixtureOfExperts(RemoteMixtureOfExperts):
         ]
 
         # out of chosen_experts, select those for which expert_mask is True
-        for (sample_idx, expert_idx) in expert_mask.nonzero().cpu().numpy():
+        for sample_idx, expert_idx in expert_mask.nonzero().cpu().numpy():
             expert = batch_experts[sample_idx][expert_idx]
             expert_indices = expert.uid[len(self.beam_search.uid_prefix) :]
             expert_indices = list(map(int, expert_indices.split(UID_DELIMITER)))

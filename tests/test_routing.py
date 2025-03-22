@@ -62,7 +62,7 @@ def test_routing_table_basic():
 
 
 def test_routing_table_parameters():
-    for (bucket_size, modulo, min_nbuckets, max_nbuckets) in [
+    for bucket_size, modulo, min_nbuckets, max_nbuckets in [
         (20, 5, 45, 65),
         (50, 5, 35, 45),
         (20, 10, 650, 800),
@@ -74,9 +74,9 @@ def test_routing_table_parameters():
             routing_table.add_or_update_node(DHTID.generate(), f"{LOCALHOST}:{phony_neighbor_port}")
         for bucket in routing_table.buckets:
             assert len(bucket.replacement_nodes) == 0 or len(bucket.nodes_to_peer_id) <= bucket.size
-        assert (
-            min_nbuckets <= len(routing_table.buckets) <= max_nbuckets
-        ), f"Unexpected number of buckets: {min_nbuckets} <= {len(routing_table.buckets)} <= {max_nbuckets}"
+        assert min_nbuckets <= len(routing_table.buckets) <= max_nbuckets, (
+            f"Unexpected number of buckets: {min_nbuckets} <= {len(routing_table.buckets)} <= {max_nbuckets}"
+        )
 
 
 def test_routing_table_search():

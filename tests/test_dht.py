@@ -73,7 +73,7 @@ def test_run_coroutine():
     assert dht.run_coroutine(dummy_dht_coro) == "pew"
 
     with pytest.raises(ValueError):
-        res = dht.run_coroutine(dummy_dht_coro_error)
+        dht.run_coroutine(dummy_dht_coro_error)
 
     bg_task = dht.run_coroutine(dummy_dht_coro_long, return_future=True)
     assert dht.run_coroutine(dummy_dht_coro_stateful) == 124
