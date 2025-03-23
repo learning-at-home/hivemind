@@ -5,8 +5,7 @@ import torch.nn.functional as F
 from hivemind.moe import register_expert_class
 
 
-def sample_input(batch_size, hidden_dim):
-    return torch.empty((batch_size, hidden_dim))
+sample_input = lambda batch_size, hidden_dim: torch.empty((batch_size, hidden_dim))
 
 
 @register_expert_class("perceptron", sample_input)
