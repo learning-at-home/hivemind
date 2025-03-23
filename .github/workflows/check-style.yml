@@ -17,7 +17,7 @@ jobs:
       - uses: codespell-project/actions-codespell@v1
         with:
           only_warn: 1
-          ignore_words_list: ibrary,nd
+          ignore_words_list: ibrary,nd,Buss
 
   ruff:
     runs-on: ubuntu-latest
