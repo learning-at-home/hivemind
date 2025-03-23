@@ -24,7 +24,7 @@ from hivemind.utils.streaming import split_for_streaming
 DUMMY = torch.empty(0, requires_grad=True)  # dummy tensor that triggers autograd in RemoteExpert
 
 
-def get_server_stub(p2p: P2P, server_peer_id: PeerID) -> "ConnectionHandlerStub":
+def get_server_stub(p2p: P2P, server_peer_id: PeerID) -> ConnectionHandlerStub:  # noqa: F821
     """Create an RPC stub that can send requests to any expert on the specified remote server"""
     return moe.server.connection_handler.ConnectionHandler.get_stub(p2p, server_peer_id)
 
@@ -67,7 +67,7 @@ class RemoteExpert(nn.Module):
         forward_inputs = (args, kwargs)
 
         if not nested_compare(forward_inputs, self.info["forward_schema"]):
-            raise TypeError(f"Inputs do not match expert input schema. Did you pass the right number of parameters?")
+            raise TypeError("Inputs do not match expert input schema. Did you pass the right number of parameters?")
 
         flat_outputs = _RemoteModuleCall.apply(DUMMY, self.uid, self.stub, self.info, *nested_flatten(forward_inputs))
 
@@ -199,7 +199,7 @@ class _RemoteModuleCall(torch.autograd.Function):
         ctx,
         dummy: torch.Tensor,
         uid: str,
-        stub: "ConnectionHandlerStub",
+        stub: ConnectionHandlerStub,  # noqa: F821
         info: Dict[str, Any],
         *inputs: torch.Tensor,
     ) -> Tuple[torch.Tensor, ...]:

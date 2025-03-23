@@ -315,7 +315,7 @@ class MoEBeamSearcher:
             )
             beam = [(score, prefix, successors[prefix]) for score, prefix in best_active_pairs if successors[prefix]]
             if not beam:
-                logger.warning(f"Beam search had to terminate prematurely because of empty beam (dim 0)")
+                logger.warning("Beam search had to terminate prematurely because of empty beam (dim 0)")
                 break
 
         # add best experts from the final beam

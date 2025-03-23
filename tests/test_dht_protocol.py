@@ -85,9 +85,9 @@ async def test_dht_protocol():
         (recv_value_bytes, recv_expiration), nodes_found = (await protocol.call_find(peer1_id, [key]))[key]
         recv_value = hivemind.MSGPackSerializer.loads(recv_value_bytes)
         (recv_id, recv_peer_id) = next(iter(nodes_found.items()))
-        assert (
-            recv_id == peer2_node_id and recv_peer_id == peer2_id
-        ), f"expected id={peer2_node_id}, peer={peer2_id} but got {recv_id}, {recv_peer_id}"
+        assert recv_id == peer2_node_id and recv_peer_id == peer2_id, (
+            f"expected id={peer2_node_id}, peer={peer2_id} but got {recv_id}, {recv_peer_id}"
+        )
 
         assert recv_value == value and recv_expiration == expiration, (
             f"call_find_value expected {value} (expires by {expiration}) "
@@ -99,9 +99,9 @@ async def test_dht_protocol():
         empty_item, nodes_found_2 = (await protocol.call_find(peer2_id, [dummy_key]))[dummy_key]
         assert empty_item is None, "Non-existent keys shouldn't have values"
         (recv_id, recv_peer_id) = next(iter(nodes_found_2.items()))
-        assert (
-            recv_id == peer1_node_id and recv_peer_id == peer1_id
-        ), f"expected id={peer1_node_id}, peer={peer1_id} but got {recv_id}, {recv_peer_id}"
+        assert recv_id == peer1_node_id and recv_peer_id == peer1_id, (
+            f"expected id={peer1_node_id}, peer={peer1_id} but got {recv_id}, {recv_peer_id}"
+        )
 
         # cause a non-response by querying a nonexistent peer
         assert not await protocol.call_find(PeerID.from_base58("fakeid"), [key])

@@ -29,7 +29,7 @@ class NodeKiller:
     async def check_and_kill(self):
         async with self.lock:
             if (
-                self.shutdown_timestamps != None
+                self.shutdown_timestamps is not None
                 and self.timestamp_iter < len(self.shutdown_timestamps)
                 and self.current_iter == self.shutdown_timestamps[self.timestamp_iter]
             ):
@@ -96,7 +96,7 @@ async def store_and_get_task(
 
         total_gets += len(get_result)
         for result in get_result:
-            if result != None:
+            if result is not None:
                 attendees, expiration = result
                 if len(attendees.keys()) == successful_stores_per_iter:
                     get_ok = True

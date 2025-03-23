@@ -1,4 +1,4 @@
-""" A background process that averages your tensors with peers """
+"""A background process that averages your tensors with peers"""
 
 from __future__ import annotations
 
@@ -139,9 +139,9 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         shutdown_timeout: float = 5,
     ):
         assert "." not in prefix, "group prefix must be a string without trailing '.'"
-        assert bandwidth is None or (
-            bandwidth >= 0 and np.isfinite(np.float32(bandwidth))
-        ), "bandwidth must be a non-negative float32"
+        assert bandwidth is None or (bandwidth >= 0 and np.isfinite(np.float32(bandwidth))), (
+            "bandwidth must be a non-negative float32"
+        )
         assert all(bit in "01" for bit in initial_group_bits)
         assert not client_mode or not auxiliary, "auxiliary peers must accept incoming connections"
 
