@@ -10,25 +10,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  black:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: psf/black@stable
-        with:
-          options: "--check --diff"
-          version: "22.3.0"
-  isort:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.11
-      - uses: isort/isort-action@master
-        with:
-          isortVersion: "5.10.1"
-
   codespell:
     runs-on: ubuntu-latest
     steps:
@@ -36,4 +17,13 @@ jobs:
       - uses: codespell-project/actions-codespell@v1
         with:
           only_warn: 1
-          ignore_words_list: ibrary,nd
+          ignore_words_list: ibrary,nd,Buss
+
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: "format --check --diff"
+          version-file: "pyproject.toml"

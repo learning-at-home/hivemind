@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Configuration file for the Sphinx documentation builder.
 #
@@ -54,7 +53,7 @@ extensions = [
 # see http://stackoverflow.com/q/12206334/562769
 numpydoc_show_class_members = False
 
-mathjax_path = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?" "config=TeX-AMS-MML_HTMLorMML"
+mathjax_path = "https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
 
 
 # Add any paths that contain templates here, relative to this directory.

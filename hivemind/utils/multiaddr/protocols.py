@@ -203,9 +203,9 @@ class ProtocolRegistry:
             raise exceptions.ProtocolRegistryLocked()
 
         proto = self.find(proto)
-        assert (
-            self._names_to_protocols.get(proto.name) is proto
-        ), "Protocol to alias must have already been added to the registry"
+        assert self._names_to_protocols.get(proto.name) is proto, (
+            "Protocol to alias must have already been added to the registry"
+        )
 
         if alias_name in self._names_to_protocols:
             raise exceptions.ProtocolExistsError(self._names_to_protocols[alias_name], "name")
@@ -231,9 +231,9 @@ class ProtocolRegistry:
             raise exceptions.ProtocolRegistryLocked()
 
         proto = self.find(proto)
-        assert (
-            self._codes_to_protocols.get(proto.code) is proto
-        ), "Protocol to alias must have already been added to the registry"
+        assert self._codes_to_protocols.get(proto.code) is proto, (
+            "Protocol to alias must have already been added to the registry"
+        )
 
         if alias_code in self._codes_to_protocols:
             raise exceptions.ProtocolExistsError(self._codes_to_protocols[alias_code], "name")

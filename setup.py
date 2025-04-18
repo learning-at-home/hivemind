@@ -66,7 +66,7 @@ def build_p2p_daemon():
         raise FileNotFoundError("Could not find golang installation")
     version = parse_version(m.group(1))
     if version < parse_version("1.13"):
-        raise EnvironmentError(f"Newer version of go required: must be >= 1.13, found {version}")
+        raise OSError(f"Newer version of go required: must be >= 1.13, found {version}")
 
     with tempfile.TemporaryDirectory() as tempdir:
         dest = os.path.join(tempdir, "libp2p-daemon.tar.gz")
@@ -145,7 +145,7 @@ with open("requirements.txt") as requirements_file:
 
 # loading version from setup.py
 with codecs.open(os.path.join(here, "hivemind/__init__.py"), encoding="utf-8") as init_file:
-    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.M)
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.MULTILINE)
     version_string = version_match.group(1)
 
 extras = {}

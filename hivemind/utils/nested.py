@@ -1,4 +1,4 @@
-""" utility functions that help you process nested dicts, tuples, lists and namedtuples """
+"""utility functions that help you process nested dicts, tuples, lists and namedtuples"""
 
 
 def nested_compare(t, u):
@@ -68,12 +68,12 @@ def is_namedtuple(x):
     """Checks if x is a namedtuple instance. Taken from https://stackoverflow.com/a/2166841 ."""
     t = type(x)
     b = t.__bases__
-    if len(b) != 1 or b[0] != tuple:
+    if len(b) != 1 or b[0] is not tuple:
         return False
     f = getattr(t, "_fields", None)
     if not isinstance(f, tuple):
         return False
-    return all(type(n) == str for n in f)
+    return all(n is str for n in f)
 
 
 def nested_map(fn, *t):

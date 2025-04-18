@@ -1,4 +1,5 @@
-""" Utility functions for crawling DHT nodes, used to get and store keys in a DHT """
+"""Utility functions for crawling DHT nodes, used to get and store keys in a DHT"""
+
 import asyncio
 import heapq
 from collections import Counter

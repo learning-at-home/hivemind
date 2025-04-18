@@ -5,20 +5,19 @@ from typing import Dict, Optional
 
 import torch
 from packaging import version
-
-torch_version = torch.__version__.split("+")[0]
-
-if version.parse(torch_version) >= version.parse("2.3.0"):
-    from torch.amp import GradScaler as TorchGradScaler
-    from torch.amp.grad_scaler import OptState, _refresh_per_optimizer_state
-else:
-    from torch.cuda.amp import GradScaler as TorchGradScaler
-    from torch.cuda.amp.grad_scaler import OptState, _refresh_per_optimizer_state
-
 from torch.optim import Optimizer as TorchOptimizer
 
 import hivemind
 from hivemind.utils.logging import get_logger
+
+torch_version = torch.__version__.split("+")[0]
+
+if version.parse(torch_version) >= version.parse("2.3.0"):
+    from torch.amp import GradScaler as TorchGradScaler  # noqa: E402
+    from torch.amp.grad_scaler import OptState, _refresh_per_optimizer_state  # noqa: E402
+else:
+    from torch.cuda.amp import GradScaler as TorchGradScaler  # noqa: E402
+    from torch.cuda.amp.grad_scaler import OptState, _refresh_per_optimizer_state  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -85,9 +84,9 @@ class GradScaler(TorchGradScaler):
                 inner_optimizer_state = self._inner_optimizer_states.pop(id(inner_optimizer), None)
                 if inner_optimizer_state is not None:
                     self._per_optimizer_states[id(inner_optimizer)] = inner_optimizer_state
-                assert (
-                    self._per_optimizer_states[id(inner_optimizer)]["stage"] == OptState.UNSCALED
-                ), "InternalError: Optimizer should have called .unscale internally before invoking grad_scaler.step"
+                assert self._per_optimizer_states[id(inner_optimizer)]["stage"] == OptState.UNSCALED, (
+                    "InternalError: Optimizer should have called .unscale internally before invoking grad_scaler.step"
+                )
                 if self.are_grads_finite(inner_optimizer, use_cached=True):
                     super().step(inner_optimizer, *args, **kwargs)
                 else:
