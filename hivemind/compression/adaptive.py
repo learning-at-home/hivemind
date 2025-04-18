@@ -10,8 +10,7 @@ from hivemind.proto import runtime_pb2
 
 class AdaptiveCompressionBase(CompressionBase, ABC):
     @abstractmethod
-    def choose_compression(self, info: CompressionInfo) -> CompressionBase:
-        ...
+    def choose_compression(self, info: CompressionInfo) -> CompressionBase: ...
 
     def estimate_compression_ratio(self, info: CompressionInfo) -> float:
         return self.choose_compression(info).estimate_compression_ratio(info)
@@ -43,7 +42,7 @@ class RoleAdaptiveCompression(AdaptiveCompressionBase):
         parameter: CompressionBase = None,
         gradient: CompressionBase = None,
         optimizer: CompressionBase = None,
-        default: CompressionBase = NoCompression()
+        default: CompressionBase = NoCompression(),
     ):
         self.role_compressions = {
             TensorRole.ACTIVATION: activation or default,

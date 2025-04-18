@@ -117,7 +117,7 @@ async def test_dht_node(
     for node in [me, that_guy]:
         val, expiration_time = await node.get("mykey")
         assert val == ["Value", 10], "Wrong value"
-        assert expiration_time == true_time, f"Wrong time"
+        assert expiration_time == true_time, "Wrong time"
 
     assert not await detached_node.get("mykey")
 
@@ -299,7 +299,7 @@ async def test_dhtnode_edge_cases():
     for key, subkey, value in product(keys, subkeys, values):
         await random.choice(peers).store(
             key=key, subkey=subkey, value=value, expiration_time=hivemind.get_dht_time() + 999
-        ),
+        )
 
         stored = await random.choice(peers).get(key=key, latest=True)
         assert stored is not None

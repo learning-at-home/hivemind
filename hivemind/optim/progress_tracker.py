@@ -203,10 +203,10 @@ class ProgressTracker(threading.Thread):
                 logger.debug(f"Will report progress again in {wait_timeout} seconds or on user command")
                 await asyncio.get_event_loop().run_in_executor(None, self.should_report_progress.wait, wait_timeout)
                 if self.should_report_progress.is_set():
-                    logger.debug(f"Progress update triggered by report_local_progress")
+                    logger.debug("Progress update triggered by report_local_progress")
                     self.should_report_progress.clear()
                 else:
-                    logger.debug(f"Progress update triggered by metadata_expiration")
+                    logger.debug("Progress update triggered by metadata_expiration")
 
                 local_progress = self.local_progress
                 last_report_time = get_dht_time()

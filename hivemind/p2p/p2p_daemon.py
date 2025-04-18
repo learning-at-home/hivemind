@@ -32,7 +32,7 @@ P2PD_FILENAME = "p2pd"
 
 
 @dataclass(frozen=True)
-class P2PContext(object):
+class P2PContext:
     handle_name: str
     local_id: PeerID
     remote_id: PeerID = None
@@ -145,9 +145,9 @@ class P2P:
         :return: a wrapper for the p2p daemon
         """
 
-        assert not (
-            initial_peers and use_ipfs
-        ), "User-defined initial_peers and use_ipfs=True are incompatible, please choose one option"
+        assert not (initial_peers and use_ipfs), (
+            "User-defined initial_peers and use_ipfs=True are incompatible, please choose one option"
+        )
 
         if not all(arg is None for arg in [quic, use_relay_hop, use_relay_discovery]):
             warnings.warn(
@@ -582,7 +582,6 @@ class P2P:
         input: Union[TInputProtobuf, TInputStream],
         output_protobuf_type: Type[Message],
     ) -> Awaitable[TOutputProtobuf]:
-
         if not isinstance(input, AsyncIterableABC):
             return await self._call_unary_protobuf_handler(peer_id, name, input, output_protobuf_type)
 

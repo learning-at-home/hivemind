@@ -1,4 +1,5 @@
-""" A dictionary-like storage that stores items until a specified expiration time or up to a limited size """
+"""A dictionary-like storage that stores items until a specified expiration time or up to a limited size"""
+
 from __future__ import annotations
 
 import heapq

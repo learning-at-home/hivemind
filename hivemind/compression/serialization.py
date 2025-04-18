@@ -22,9 +22,9 @@ _BASE_COMPRESSION_TYPES: Dict[str, CompressionBase] = dict(
 for key in runtime_pb2.CompressionType.keys():
     assert key in _BASE_COMPRESSION_TYPES, f"Compression type {key} does not have a registered deserializer"
     actual_compression_type = _BASE_COMPRESSION_TYPES[key].compression_type
-    assert (
-        runtime_pb2.CompressionType.Name(actual_compression_type) == key
-    ), f"Compression strategy for {key} has inconsistent type"
+    assert runtime_pb2.CompressionType.Name(actual_compression_type) == key, (
+        f"Compression strategy for {key} has inconsistent type"
+    )
 
 
 def serialize_torch_tensor(

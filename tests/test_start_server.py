@@ -13,7 +13,7 @@ def cleanup_process(process, timeout=5):
     try:
         process.terminate()
         process.wait(timeout=timeout)  # Add timeout to wait
-    except:
+    except:  # noqa: E722
         process.kill()
         process.wait(timeout=timeout)
 
@@ -25,9 +25,11 @@ def test_background_server_identity_path():
 
         server_runner = partial(background_server, num_experts=1, device="cpu", hidden_dim=1)
 
-        with server_runner(identity_path=id_path) as server_info_1, server_runner(
-            identity_path=id_path
-        ) as server_info_2, server_runner(identity_path=None) as server_info_3:
+        with (
+            server_runner(identity_path=id_path) as server_info_1,
+            server_runner(identity_path=id_path) as server_info_2,
+            server_runner(identity_path=None) as server_info_3,
+        ):
             assert server_info_1.peer_id == server_info_2.peer_id
             assert server_info_1.peer_id != server_info_3.peer_id
             assert server_info_3.peer_id == server_info_3.peer_id
