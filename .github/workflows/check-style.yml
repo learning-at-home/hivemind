@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
         with:
+          args: "--output-format github"
           version-file: "requirements-dev.txt"
       - uses: astral-sh/ruff-action@v3
         with:
