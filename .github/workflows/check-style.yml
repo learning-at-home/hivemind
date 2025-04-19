@@ -25,5 +25,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
         with:
+          version-file: "requirements-dev.txt"
+      - uses: astral-sh/ruff-action@v3
+        with:
           args: "format --check --diff"
-          version-file: "pyproject.toml"
+          version-file: "requirements-dev.txt"
