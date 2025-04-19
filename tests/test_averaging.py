@@ -530,7 +530,6 @@ def test_averaging_cancel(target_group_size):
             dht=dht,
             min_matchmaking_time=0.5,
             request_timeout=0.3,
-            min_group_size=2,
             client_mode=(i % 2 == 0),
             target_group_size=target_group_size,
             prefix="mygroup",
