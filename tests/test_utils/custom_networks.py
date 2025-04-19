@@ -4,7 +4,6 @@ import torch.nn.functional as F
 
 from hivemind.moe import register_expert_class
 
-
 sample_input = lambda batch_size, hidden_dim: torch.empty((batch_size, hidden_dim))
 
 
