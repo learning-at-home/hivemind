@@ -85,6 +85,19 @@ TUnaryHandler = Callable[[bytes, PeerID], Awaitable[bytes]]
 CallID = UUID
 
 
+def _cancel_task_if_running(task: Optional[asyncio.Task]) -> None:
+    """Safely cancel a task if it's still running and the event loop is available."""
+    if task is not None and not task.done():
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                task.cancel()
+        except RuntimeError as e:
+            # Only ignore event loop closure errors
+            if "Event loop is closed" not in str(e):
+                raise
+
+
 class ControlClient:
     DEFAULT_LISTEN_MADDR = "/unix/tmp/p2pclient.sock"
 
@@ -134,10 +147,8 @@ class ControlClient:
         return control
 
     def close(self) -> None:
-        if self._read_task is not None:
-            self._read_task.cancel()
-        if self._write_task is not None:
-            self._write_task.cancel()
+        _cancel_task_if_running(self._read_task)
+        _cancel_task_if_running(self._write_task)
 
     def __del__(self):
         self.close()
