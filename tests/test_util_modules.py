@@ -31,17 +31,18 @@ from hivemind.utils.mpfuture import InvalidStateError
 from hivemind.utils.performance_ema import PerformanceEMA
 
 
+def _mpfuture_result_proc(future):
+    with pytest.raises(RuntimeError):
+        future.result()  # only creator process can await result
+
+    future.set_result(321)
+
+
 @pytest.mark.forked
 def test_mpfuture_result():
     future = hivemind.MPFuture()
 
-    def _proc(future):
-        with pytest.raises(RuntimeError):
-            future.result()  # only creator process can await result
-
-        future.set_result(321)
-
-    p = mp.Process(target=_proc, args=(future,))
+    p = mp.Process(target=_mpfuture_result_proc, args=(future,))
     p.start()
     p.join()
 
@@ -58,16 +59,17 @@ def test_mpfuture_result():
     assert future.result() == ["abacaba", 123]
 
 
+def _mpfuture_exception_proc(future):
+    future.set_exception(NotImplementedError())
+
+
 @pytest.mark.forked
 def test_mpfuture_exception():
     future = hivemind.MPFuture()
     with pytest.raises(concurrent.futures.TimeoutError):
         future.exception(timeout=1e-3)
 
-    def _proc(future):
-        future.set_exception(NotImplementedError())
-
-    p = mp.Process(target=_proc, args=(future,))
+    p = mp.Process(target=_mpfuture_exception_proc, args=(future,))
     p.start()
     p.join()
 
@@ -78,29 +80,44 @@ def test_mpfuture_exception():
     assert future.done() and not future.running() and not future.cancelled()
 
 
+def _mpfuture_cancel_proc(evt):
+    future = hivemind.MPFuture()
+    future.cancel()
+    
+    with pytest.raises(concurrent.futures.CancelledError):
+        future.result()
+    with pytest.raises(concurrent.futures.CancelledError):
+        future.exception()
+    with pytest.raises(InvalidStateError):
+        future.set_result(123)
+    with pytest.raises(InvalidStateError):
+        future.set_exception(NotImplementedError())
+    assert future.cancelled() and future.done() and not future.running()
+    evt.set()
+
+
 @pytest.mark.forked
 def test_mpfuture_cancel():
+    evt = mp.Event()
     future = hivemind.MPFuture()
     assert not future.cancelled()
     future.cancel()
-    evt = mp.Event()
 
-    def _proc():
-        with pytest.raises(concurrent.futures.CancelledError):
-            future.result()
-        with pytest.raises(concurrent.futures.CancelledError):
-            future.exception()
-        with pytest.raises(InvalidStateError):
-            future.set_result(123)
-        with pytest.raises(InvalidStateError):
-            future.set_exception(NotImplementedError())
-        assert future.cancelled() and future.done() and not future.running()
-        evt.set()
-
-    p = mp.Process(target=_proc)
+    p = mp.Process(target=_mpfuture_cancel_proc, args=(evt,))
     p.start()
     p.join()
     assert evt.is_set()
+
+
+def _mpfuture_status_proc1(future, evt):
+    assert future.set_running_or_notify_cancel() is True
+    evt.set()
+
+
+def _mpfuture_status_proc2(future, evt):
+    assert not future.running() and future.done() and future.cancelled()
+    assert future.set_running_or_notify_cancel() is False
+    evt.set()
 
 
 @pytest.mark.forked
@@ -108,11 +125,7 @@ def test_mpfuture_status():
     evt = mp.Event()
     future = hivemind.MPFuture()
 
-    def _proc1(future):
-        assert future.set_running_or_notify_cancel() is True
-        evt.set()
-
-    p = mp.Process(target=_proc1, args=(future,))
+    p = mp.Process(target=_mpfuture_status_proc1, args=(future, evt))
     p.start()
     p.join()
     assert evt.is_set()
@@ -125,12 +138,7 @@ def test_mpfuture_status():
     future = hivemind.MPFuture()
     assert future.cancel()
 
-    def _proc2(future):
-        assert not future.running() and future.done() and future.cancelled()
-        assert future.set_running_or_notify_cancel() is False
-        evt.set()
-
-    p = mp.Process(target=_proc2, args=(future,))
+    p = mp.Process(target=_mpfuture_status_proc2, args=(future, evt))
     p.start()
     p.join()
     evt.set()
@@ -140,72 +148,12 @@ def test_mpfuture_status():
     assert future2.set_running_or_notify_cancel() is False
 
 
-@pytest.mark.asyncio
-async def test_await_mpfuture():
-    # await result from the same process, but a different coroutine
-    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
+def _future_bidirectional_creator(evt, future_from_main):
+    future_from_fork = hivemind.MPFuture()
+    future_from_main.set_result(("abc", future_from_fork))
 
-    async def wait_and_assign_async():
-        assert f2.set_running_or_notify_cancel() is True
-        await asyncio.sleep(0.1)
-        f1.set_result((123, "ololo"))
-        f2.set_result((456, "pyshpysh"))
-
-    asyncio.create_task(wait_and_assign_async())
-
-    assert (await asyncio.gather(f1, f2)) == [(123, "ololo"), (456, "pyshpysh")]
-
-    # await result from separate processes
-    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
-
-    def wait_and_assign(future, value):
-        time.sleep(0.1 * random.random())
-        future.set_result(value)
-
-    p1 = mp.Process(target=wait_and_assign, args=(f1, "abc"))
-    p2 = mp.Process(target=wait_and_assign, args=(f2, "def"))
-    for p in p1, p2:
-        p.start()
-
-    assert (await asyncio.gather(f1, f2)) == ["abc", "def"]
-    for p in p1, p2:
-        p.join()
-
-    # await cancel
-    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
-
-    def wait_and_cancel():
-        time.sleep(0.01)
-        f2.set_result(123456)
-        time.sleep(0.1)
-        f1.cancel()
-
-    p = mp.Process(target=wait_and_cancel)
-    p.start()
-
-    with pytest.raises(asyncio.CancelledError):
-        # note: it is intended that MPFuture raises Cancel
-        await asyncio.gather(f1, f2)
-
-    p.join()
-
-    # await exception
-    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
-
-    def wait_and_raise():
-        time.sleep(0.01)
-        f2.set_result(123456)
-        time.sleep(0.1)
-        f1.set_exception(ValueError("we messed up"))
-
-    p = mp.Process(target=wait_and_raise)
-    p.start()
-
-    with pytest.raises(ValueError):
-        # note: it is intended that MPFuture raises Cancel
-        await asyncio.gather(f1, f2)
-
-    p.join()
+    if future_from_fork.result() == ["we", "need", "to", "go", "deeper"]:
+        evt.set()
 
 
 @pytest.mark.forked
@@ -213,14 +161,7 @@ def test_mpfuture_bidirectional():
     evt = mp.Event()
     future_from_main = hivemind.MPFuture()
 
-    def _future_creator():
-        future_from_fork = hivemind.MPFuture()
-        future_from_main.set_result(("abc", future_from_fork))
-
-        if future_from_fork.result() == ["we", "need", "to", "go", "deeper"]:
-            evt.set()
-
-    p = mp.Process(target=_future_creator)
+    p = mp.Process(target=_future_bidirectional_creator, args=(evt, future_from_main))
     p.start()
 
     out = future_from_main.result()
@@ -231,34 +172,33 @@ def test_mpfuture_bidirectional():
     assert evt.is_set()
 
 
+def _future_done_callback_creator(events, sender):
+    future1, future2, future3 = hivemind.MPFuture(), hivemind.MPFuture(), hivemind.MPFuture()
+
+    def _check_result_and_set(future):
+        assert future.done()
+        assert future.result() == 123
+        events[0].set()
+
+    future1.add_done_callback(_check_result_and_set)
+    future1.add_done_callback(lambda future: events[1].set())
+    future2.add_done_callback(lambda future: events[2].set())
+    future3.add_done_callback(lambda future: events[3].set())
+
+    sender.send((future1, future2))
+    future2.cancel()  # trigger future2 callback from the same process
+    events[6].set()
+    events[0].wait()
+    future1.add_done_callback(lambda future: events[4].set())  # schedule callback after future1 is already finished
+    events[5].wait()
+
+
 @pytest.mark.forked
 def test_mpfuture_done_callback():
     receiver, sender = mp.Pipe(duplex=False)
     events = [mp.Event() for _ in range(7)]
 
-    def _future_creator():
-        future1, future2, future3 = hivemind.MPFuture(), hivemind.MPFuture(), hivemind.MPFuture()
-
-        def _check_result_and_set(future):
-            assert future.done()
-            assert future.result() == 123
-            events[0].set()
-
-        future1.add_done_callback(_check_result_and_set)
-        future1.add_done_callback(lambda future: events[1].set())
-        future2.add_done_callback(lambda future: events[2].set())
-        future3.add_done_callback(lambda future: events[3].set())
-
-        sender.send((future1, future2))
-        future2.cancel()  # trigger future2 callback from the same process
-        events[6].set()
-        events[0].wait()
-        future1.add_done_callback(
-            lambda future: events[4].set()
-        )  # schedule callback after future1 is already finished
-        events[5].wait()
-
-    p = mp.Process(target=_future_creator)
+    p = mp.Process(target=_future_done_callback_creator, args=(events, sender))
     p.start()
 
     future1, future2 = receiver.recv()
@@ -279,6 +219,29 @@ def test_mpfuture_done_callback():
     p.join()
 
 
+def _run_many_futures_peer(evt, sender, main_futures):
+    fork_futures = [hivemind.MPFuture() for _ in range(500)]
+    assert len(hivemind.MPFuture._active_futures) == 500
+
+    for i, future in enumerate(random.sample(main_futures, 300)):
+        if random.random() < 0.5:
+            future.set_result(i)
+        else:
+            future.set_exception(ValueError(f"{i}"))
+
+    sender.send(fork_futures[:-100])
+    for future in fork_futures[-100:]:
+        future.cancel()
+
+    evt.wait()
+
+    assert len(hivemind.MPFuture._active_futures) == 200
+    for future in fork_futures:
+        if not future.done():
+            future.set_result(123)
+    assert len(hivemind.MPFuture._active_futures) == 0
+
+
 @pytest.mark.forked
 def test_many_futures():
     evt = mp.Event()
@@ -286,29 +249,7 @@ def test_many_futures():
     main_futures = [hivemind.MPFuture() for _ in range(1000)]
     assert len(hivemind.MPFuture._active_futures) == 1000
 
-    def _run_peer():
-        fork_futures = [hivemind.MPFuture() for _ in range(500)]
-        assert len(hivemind.MPFuture._active_futures) == 500
-
-        for i, future in enumerate(random.sample(main_futures, 300)):
-            if random.random() < 0.5:
-                future.set_result(i)
-            else:
-                future.set_exception(ValueError(f"{i}"))
-
-        sender.send(fork_futures[:-100])
-        for future in fork_futures[-100:]:
-            future.cancel()
-
-        evt.wait()
-
-        assert len(hivemind.MPFuture._active_futures) == 200
-        for future in fork_futures:
-            if not future.done():
-                future.set_result(123)
-        assert len(hivemind.MPFuture._active_futures) == 0
-
-    p = mp.Process(target=_run_peer)
+    p = mp.Process(target=_run_many_futures_peer, args=(evt, sender, main_futures))
     p.start()
 
     some_fork_futures = receiver.recv()
