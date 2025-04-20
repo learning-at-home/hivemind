@@ -9,7 +9,6 @@ from contextlib import asynccontextmanager, closing
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterable, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
-from hivemind import cancel_task_if_running
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.p2p.p2p_daemon_bindings.utils import (
     DispatchFailure,
@@ -20,6 +19,7 @@ from hivemind.p2p.p2p_daemon_bindings.utils import (
     write_pbmsg,
 )
 from hivemind.proto import p2pd_pb2 as p2pd_pb
+from hivemind.utils.asyncio import cancel_task_if_running
 from hivemind.utils.logging import get_logger
 from hivemind.utils.multiaddr import Multiaddr, protocols
 
