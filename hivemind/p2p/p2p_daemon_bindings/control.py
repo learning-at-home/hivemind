@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager, closing
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterable, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
+from hivemind import cancel_task_if_running
 from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, StreamInfo
 from hivemind.p2p.p2p_daemon_bindings.utils import (
     DispatchFailure,
@@ -85,19 +86,6 @@ TUnaryHandler = Callable[[bytes, PeerID], Awaitable[bytes]]
 CallID = UUID
 
 
-def _cancel_task_if_running(task: Optional[asyncio.Task]) -> None:
-    """Safely cancel a task if it's still running and the event loop is available."""
-    if task is not None and not task.done():
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                task.cancel()
-        except RuntimeError as e:
-            # Only ignore event loop closure errors
-            if "Event loop is closed" not in str(e):
-                raise
-
-
 class ControlClient:
     DEFAULT_LISTEN_MADDR = "/unix/tmp/p2pclient.sock"
 
@@ -147,8 +135,8 @@ class ControlClient:
         return control
 
     def close(self) -> None:
-        _cancel_task_if_running(self._read_task)
-        _cancel_task_if_running(self._write_task)
+        cancel_task_if_running(self._read_task)
+        cancel_task_if_running(self._write_task)
 
     def __del__(self):
         self.close()
@@ -205,7 +193,7 @@ class ControlClient:
                 self._handler_tasks[call_id] = handler_task
 
             elif call_id in self._handler_tasks and resp.HasField("cancel"):
-                self._handler_tasks[call_id].cancel()
+                cancel_task_if_running(self._handler_tasks[call_id])
 
             elif call_id in self._pending_calls and resp.HasField("daemonError"):
                 daemon_exc = P2PDaemonError(resp.daemonError.message)
