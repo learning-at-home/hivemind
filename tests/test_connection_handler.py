@@ -5,6 +5,7 @@ import math
 from typing import Any, Dict
 
 import pytest
+import pytest_asyncio
 import torch
 
 from hivemind.compression import deserialize_tensor_stream, deserialize_torch_tensor, serialize_torch_tensor
@@ -20,7 +21,7 @@ from hivemind.utils.streaming import split_for_streaming
 from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client_stub():
     handler_dht = DHT(start=True)
     module_backends = {"expert1": DummyModuleBackend("expert1", k=1), "expert2": DummyModuleBackend("expert2", k=2)}
