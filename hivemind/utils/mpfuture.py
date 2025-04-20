@@ -9,17 +9,13 @@ import uuid
 from concurrent.futures import InvalidStateError
 from contextlib import nullcontext
 from enum import Enum, auto
-from multiprocessing.reduction import ForkingPickler
+from multiprocessing.shared_memory import SharedMemory
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 from weakref import ref
-
-import torch  # used for py3.7-compatible shared memory
 
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARING_STRATEGY", "file_system"))
 
 # flavour types
 ResultType = TypeVar("ResultType")
@@ -28,32 +24,53 @@ ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CAN
 TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
 
 
-class SharedBytes:
+class SharedStateCode:
     """
-    A process-wide object that allocates large chunks of shared memory and partitions it into individual bytes.
-
-    Note: this process is only responsible for bulk allocation, it does not manage/free unused bytes.
-    The chunks are deallocated by the garbage collector,
-    when it detects that all processes no longer use any bytes from this chunk.
+    A wrapper around a shared memory byte that is used to represent state.
     """
 
-    _lock = mp.Lock()
-    _pid: Optional[PID] = None
-    _buffer: Optional[torch.Tensor] = None
-    _index: int = 0
+    def __init__(self, name=None):
+        # track parameter was added in Python 3.13, so we don't use it for compatibility
+        self._shm = SharedMemory(name=name, create=name is None, size=1)
+        self.name = self._shm.name
 
-    @classmethod
-    def next(cls) -> torch.Tensor:
-        """Create another shared byte value, represented as a scalar uint8 tensor"""
-        with cls._lock:
-            if cls._pid != os.getpid() or cls._buffer is None or cls._index >= len(cls._buffer):
-                buffer_size = int(os.environ.get("HIVEMIND_SHM_BUFFER_SIZE", 16))
-                cls._pid = os.getpid()
-                cls._buffer = torch.empty([buffer_size], dtype=torch.uint8).share_memory_()
-                cls._index = 0
+    def item(self):
+        return self._shm.buf[0]
 
-            cls._index += 1
-            return cls._buffer[cls._index - 1]
+    def __setitem__(self, _, value):
+        self._shm.buf[0] = value
+
+    def close(self):
+        self._shm.close()
+
+    def unlink(self):
+        try:
+            self._shm.unlink()
+        except Exception as e:
+            logger.debug(f"Failed to unlink shared memory: {e}")
+
+
+class DummyStateCode:
+    """
+    A non-shared version of SharedStateCode that can be used as a fallback
+    when shared memory is not accessible.
+    """
+
+    def __init__(self):
+        self.name = None
+        self._state = ALL_STATES.index(base.PENDING)
+
+    def item(self):
+        return self._state
+
+    def __setitem__(self, _, value):
+        pass
+
+    def close(self):
+        pass
+
+    def unlink(self):
+        pass
 
 
 class UpdateType(Enum):
@@ -81,6 +98,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     _initialization_lock = mp.Lock()  # global lock that prevents simultaneous initialization of two processes
     _update_lock = mp.Lock()  # global lock that prevents simultaneous writing to the same pipe
+    _state_lock = mp.Lock()  # lock for creating shared state objects
     _global_sender_pipe: Optional[PipeEnd] = None  # a pipe that is used to send results/exceptions to this process
     _pipe_waiter_thread: Optional[threading.Thread] = None  # process-specific thread that receives results/exceptions
     _active_futures: Optional[Dict[UID, ref[MPFuture]]] = None  # non-done futures originated from this process
@@ -90,7 +108,10 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._maybe_initialize_mpfuture_backend()
 
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
-        self._shared_state_code = SharedBytes.next()
+
+        with MPFuture._state_lock:
+            self._shared_state_code = SharedStateCode()
+
         self._state_cache: Dict[State, State] = {}
         # mapping from global to cached local future used that makes updates immediately
         # available on setter side; dictionary-based cache works because future can visit any state at most once
@@ -116,8 +137,7 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     @_state.setter
     def _state(self, new_state: State):
-        with torch.inference_mode():
-            self._shared_state_code[...] = ALL_STATES.index(new_state)
+        self._shared_state_code[...] = ALL_STATES.index(new_state)
         if self._state in TERMINAL_STATES and self._loop is not None and not self._aio_event.is_set():
             self._set_event_threadsafe()
 
@@ -164,7 +184,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         MPFuture._active_pid = None
         MPFuture._initialization_lock = mp.Lock()
         MPFuture._update_lock = mp.Lock()
-        SharedBytes._lock = mp.Lock()
+        MPFuture._state_lock = mp.Lock()
 
     @classmethod
     def _process_updates_in_background(cls, receiver_pipe: mp.connection.Connection):
@@ -296,11 +316,18 @@ class MPFuture(base.Future, Generic[ResultType]):
             MPFuture._active_futures.pop(self._uid, None)
         if getattr(self, "_aio_event", None):
             self._aio_event.set()
+        if hasattr(self, "_shared_state_code"):
+            try:
+                self._shared_state_code.close()
+                if getattr(self, "_origin_pid", None) == os.getpid():
+                    self._shared_state_code.unlink()
+            except Exception as e:
+                logger.debug(f"Error closing shared memory: {e}")
 
     def __getstate__(self):
         return dict(
             _sender_pipe=self._sender_pipe,
-            _shared_state_code=ForkingPickler.dumps(self._shared_state_code).tobytes(),
+            _shared_state_code_name=self._shared_state_code.name,
             _origin_pid=self._origin_pid,
             _uid=self._uid,
             _use_lock=self._use_lock,
@@ -311,13 +338,14 @@ class MPFuture(base.Future, Generic[ResultType]):
     def __setstate__(self, state):
         self._sender_pipe = state["_sender_pipe"]
         try:
-            self._shared_state_code = ForkingPickler.loads(state["_shared_state_code"])
-        except RuntimeError:
-            # If the origin process garbage-collects all instances of MPFuture using the same shmem buffer,
-            # the underlying buffer is freed, and we will get RuntimeError ("unable to open shared memory object")
-            # here since it is not possible to connect to this buffer anymore. To address this, we just replace
-            # the buffer with a non-shared tensor since the origin process doesn't care about our state anymore.
-            self._shared_state_code = torch.tensor([ALL_STATES.index(base.PENDING)], dtype=torch.uint8)
+            self._shared_state_code = SharedStateCode(name=state["_shared_state_code_name"])
+        except Exception as e:
+            # If the origin process garbage-collects all instances of MPFuture using the same shmem segment,
+            # the segment is freed, and we'll get an error when trying to attach to it. In this case,
+            # we create a dummy state code that doesn't use shared memory.
+            logger.debug(f"Failed to attach to shared memory: {e}. Creating a dummy state code.")
+            self._shared_state_code = DummyStateCode()
+
         self._origin_pid, self._uid = state["_origin_pid"], state["_uid"]
         self._result, self._exception = state["_result"], state["_exception"]
         self._use_lock = state["_use_lock"]

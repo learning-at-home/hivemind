@@ -83,7 +83,7 @@ def test_mpfuture_exception():
 def _mpfuture_cancel_proc(evt):
     future = hivemind.MPFuture()
     future.cancel()
-    
+
     with pytest.raises(concurrent.futures.CancelledError):
         future.result()
     with pytest.raises(concurrent.futures.CancelledError):
