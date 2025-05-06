@@ -19,6 +19,7 @@ from hivemind.p2p.p2p_daemon_bindings.utils import (
     write_pbmsg,
 )
 from hivemind.proto import p2pd_pb2 as p2pd_pb
+from hivemind.utils.asyncio import cancel_task_if_running
 from hivemind.utils.logging import get_logger
 from hivemind.utils.multiaddr import Multiaddr, protocols
 
@@ -134,10 +135,8 @@ class ControlClient:
         return control
 
     def close(self) -> None:
-        if self._read_task is not None:
-            self._read_task.cancel()
-        if self._write_task is not None:
-            self._write_task.cancel()
+        cancel_task_if_running(self._read_task)
+        cancel_task_if_running(self._write_task)
 
     def __del__(self):
         self.close()
@@ -194,7 +193,7 @@ class ControlClient:
                 self._handler_tasks[call_id] = handler_task
 
             elif call_id in self._handler_tasks and resp.HasField("cancel"):
-                self._handler_tasks[call_id].cancel()
+                cancel_task_if_running(self._handler_tasks[call_id])
 
             elif call_id in self._pending_calls and resp.HasField("daemonError"):
                 daemon_exc = P2PDaemonError(resp.daemonError.message)

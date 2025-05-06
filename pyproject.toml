@@ -21,3 +21,6 @@ dummy-variable-rgx = "^_$"
 
 [tool.ruff.lint.isort]
 known-local-folder = ["arguments", "test_utils", "tests", "utils"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
