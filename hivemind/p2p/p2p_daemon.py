@@ -20,7 +20,7 @@ from hivemind.p2p.p2p_daemon_bindings.datastructures import PeerID, PeerInfo, St
 from hivemind.p2p.p2p_daemon_bindings.utils import ControlFailure
 from hivemind.proto import crypto_pb2
 from hivemind.proto.p2pd_pb2 import RPCError
-from hivemind.utils.asyncio import as_aiter, asingle
+from hivemind.utils.asyncio import as_aiter, asingle, cancel_task_if_running
 from hivemind.utils.crypto import RSAPrivateKey
 from hivemind.utils.logging import get_logger, golog_level_to_python, loglevel, python_level_to_golog
 from hivemind.utils.multiaddr import Multiaddr
@@ -647,9 +647,9 @@ class P2P:
         if self._client is not None:
             self._client.close()
         if self._listen_task is not None:
-            self._listen_task.cancel()
+            cancel_task_if_running(self._listen_task)
         if self._reader_task is not None:
-            self._reader_task.cancel()
+            cancel_task_if_running(self._reader_task)
 
         self._alive = False
         if self._child is not None and self._child.returncode is None:

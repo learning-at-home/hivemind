@@ -3,6 +3,7 @@ import io
 from contextlib import AsyncExitStack
 
 import pytest
+import pytest_asyncio
 from google.protobuf.message import EncodeError
 
 from hivemind.p2p.p2p_daemon_bindings.control import ControlClient, DaemonConnector, parse_conn_protocol
@@ -372,7 +373,7 @@ async def test_write_pbmsg_missing_fields(pb_msg):
         await write_pbmsg(MockReaderWriter(), pb_msg)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def p2pcs():
     # TODO: Change back to gather style
     async with AsyncExitStack() as stack:

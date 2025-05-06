@@ -2,13 +2,14 @@ import asyncio
 from typing import AsyncIterator
 
 import pytest
+import pytest_asyncio
 
 from hivemind.p2p import P2P, P2PContext, P2PDaemonError, ServicerBase
 from hivemind.proto import test_pb2
 from hivemind.utils.asyncio import anext
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def server_client():
     server = await P2P.create()
     client = await P2P.create(initial_peers=await server.get_visible_maddrs())

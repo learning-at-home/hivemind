@@ -2,6 +2,7 @@ import asyncio
 from typing import Dict
 
 import pytest
+import pytest_asyncio
 from pydantic.v1 import BaseModel, StrictInt, conint
 
 import hivemind
@@ -17,7 +18,7 @@ class SampleSchema(BaseModel):
     signed_data: Dict[BytesWithPublicKey, bytes]
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def dht_nodes_with_schema():
     validator = SchemaValidator(SampleSchema)
 
