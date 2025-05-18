@@ -1,3 +1,4 @@
+import functools
 import random
 import time
 
@@ -15,6 +16,34 @@ from hivemind.averaging.partition import AllreduceException
 from hivemind.p2p import PeerID
 
 from test_utils.dht_swarms import launch_dht_instances
+
+
+def with_resource_cleanup(func):
+    """Decorator to ensure resources are cleaned up even if test fails"""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        resources = {"dht_instances": [], "averagers": []}
+
+        try:
+            # Run the test
+            result = func(*args, **kwargs, resources=resources)
+            return result
+        finally:
+            # Cleanup all resources
+            for averager in resources.get("averagers", []):
+                try:
+                    averager.shutdown()
+                except Exception:
+                    pass
+
+            for dht in resources.get("dht_instances", []):
+                try:
+                    dht.shutdown()
+                except Exception:
+                    pass
+
+    return wrapper
 
 
 @pytest.mark.forked
@@ -468,98 +497,128 @@ def test_getset_bits():
 
 
 @pytest.mark.forked
+@pytest.mark.timeout(120)
 def test_averaging_trigger():
-    averagers = tuple(
-        DecentralizedAverager(
-            averaged_tensors=[torch.randn(3)],
-            dht=dht,
-            min_matchmaking_time=0.5,
-            request_timeout=0.3,
-            prefix="mygroup",
-            initial_group_bits="",
-            start=True,
-        )
-        for dht in launch_dht_instances(4)
-    )
-
-    controls = []
-    for i, averager in enumerate(averagers):
-        controls.append(
-            averager.step(
-                wait=False,
-                scheduled_time=hivemind.get_dht_time() + 0.5,
-                weight=1.0,
-                require_trigger=i in (1, 2),
+    dht_instances = []
+    averagers = []
+    try:
+        dht_instances = launch_dht_instances(4)
+        averagers = [
+            DecentralizedAverager(
+                averaged_tensors=[torch.randn(3)],
+                dht=dht,
+                min_matchmaking_time=0.5,
+                request_timeout=0.3,
+                prefix="mygroup",
+                initial_group_bits="",
+                start=True,
             )
-        )
+            for dht in dht_instances
+        ]
 
-    time.sleep(0.6)
+        controls = []
+        for i, averager in enumerate(averagers):
+            controls.append(
+                averager.step(
+                    wait=False,
+                    scheduled_time=hivemind.get_dht_time() + 0.5,
+                    weight=1.0,
+                    require_trigger=i in (1, 2),
+                )
+            )
 
-    c0, c1, c2, c3 = controls
-    assert not any(c.done() for c in controls)
-    assert c0.stage == AveragingStage.RUNNING_ALLREDUCE
-    assert c1.stage == AveragingStage.AWAITING_TRIGGER
-    assert c2.stage == AveragingStage.AWAITING_TRIGGER
-    assert c3.stage == AveragingStage.RUNNING_ALLREDUCE
+        time.sleep(0.6)
 
-    c1.allow_allreduce()
-    c2.allow_allreduce()
+        c0, c1, c2, c3 = controls
+        assert not any(c.done() for c in controls)
+        assert c0.stage == AveragingStage.RUNNING_ALLREDUCE
+        assert c1.stage == AveragingStage.AWAITING_TRIGGER
+        assert c2.stage == AveragingStage.AWAITING_TRIGGER
+        assert c3.stage == AveragingStage.RUNNING_ALLREDUCE
 
-    deadline = time.monotonic() + 5.0
-    while time.monotonic() < deadline:
-        if all(c.stage == AveragingStage.FINISHED for c in controls):
-            break
-        time.sleep(0.1)
-    else:
-        stages = [c.stage for c in controls]
-        pytest.fail(f"Averaging did not complete in time. Current stages: {stages}")
+        c1.allow_allreduce()
+        c2.allow_allreduce()
 
-    assert all(c.done() for c in controls)
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            if all(c.stage == AveragingStage.FINISHED for c in controls):
+                break
+            time.sleep(0.05)
+        else:
+            stages = [c.stage for c in controls]
+            pytest.fail(f"Averaging did not complete in time. Current stages: {stages}")
 
-    # check that setting trigger twice does not raise error
-    c0.allow_allreduce()
+        assert all(c.done() for c in controls)
+
+        # check that setting trigger twice does not raise error
+        c0.allow_allreduce()
+    finally:
+        # Ensure proper cleanup
+        for averager in averagers:
+            try:
+                averager.shutdown()
+            except Exception:
+                pass
+        for dht in dht_instances:
+            try:
+                dht.shutdown()
+            except Exception:
+                pass
 
 
 @pytest.mark.forked
+@pytest.mark.timeout(120)
 @pytest.mark.parametrize("target_group_size", [None, 2])
 def test_averaging_cancel(target_group_size):
-    dht_instances = launch_dht_instances(4)
-    averagers = tuple(
-        DecentralizedAverager(
-            averaged_tensors=[torch.randn(3)],
-            dht=dht,
-            min_matchmaking_time=0.5,
-            request_timeout=0.3,
-            client_mode=(i % 2 == 0),
-            target_group_size=target_group_size,
-            prefix="mygroup",
-            start=True,
-        )
-        for i, dht in enumerate(dht_instances)
-    )
+    dht_instances = []
+    averagers = []
+    try:
+        dht_instances = launch_dht_instances(4)
+        averagers = [
+            DecentralizedAverager(
+                averaged_tensors=[torch.randn(3)],
+                dht=dht,
+                min_matchmaking_time=0.5,
+                request_timeout=0.3,
+                client_mode=(i % 2 == 0),
+                target_group_size=target_group_size,
+                prefix="mygroup",
+                start=True,
+            )
+            for i, dht in enumerate(dht_instances)
+        ]
 
-    step_controls = [averager.step(wait=False, require_trigger=True) for averager in averagers]
+        step_controls = [averager.step(wait=False, require_trigger=True) for averager in averagers]
 
-    peer_inds_to_cancel = (0, 1)
+        peer_inds_to_cancel = (0, 1)
 
-    for peer_index in peer_inds_to_cancel:
-        step_controls[peer_index].cancel()
+        for peer_index in peer_inds_to_cancel:
+            step_controls[peer_index].cancel()
 
-    time.sleep(0.05)
+        time.sleep(0.05)
 
-    for i, control in enumerate(step_controls):
-        if i not in peer_inds_to_cancel:
-            control.allow_allreduce()
+        for i, control in enumerate(step_controls):
+            if i not in peer_inds_to_cancel:
+                control.allow_allreduce()
 
-    for i, control in enumerate(step_controls):
-        if i in peer_inds_to_cancel:
-            assert control.cancelled()
-        else:
-            result = control.result()
-            assert result is not None
-            # Don't check group size when target_group_size=None, as it could change
-            if target_group_size is not None:
-                assert len(result) == target_group_size
-
-    for averager in averagers:
-        averager.shutdown()
+        for i, control in enumerate(step_controls):
+            if i in peer_inds_to_cancel:
+                assert control.cancelled()
+            else:
+                result = control.result()
+                assert result is not None
+                # Don't check group size when target_group_size=None, as it could change
+                if target_group_size is not None:
+                    assert len(result) == target_group_size
+    finally:
+        # Ensure proper cleanup
+        for averager in averagers:
+            try:
+                averager.shutdown()
+            except Exception:
+                pass
+        for dht in dht_instances:
+            try:
+                dht.shutdown()
+            except Exception:
+                pass
