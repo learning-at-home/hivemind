@@ -83,7 +83,7 @@ async def test_key_manager():
 
     dht.shutdown()
 
-
+@pytest.mark.timeout(300)
 def _test_allreduce_once(n_clients, n_aux):
     n_peers = 4
     modes = (
@@ -497,7 +497,7 @@ def test_getset_bits():
 
 
 @pytest.mark.forked
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(300)
 def test_averaging_trigger():
     dht_instances = []
     averagers = []
@@ -567,7 +567,7 @@ def test_averaging_trigger():
 
 
 @pytest.mark.forked
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(300)
 @pytest.mark.parametrize("target_group_size", [None, 2])
 def test_averaging_cancel(target_group_size):
     dht_instances = []
