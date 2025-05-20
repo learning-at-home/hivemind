@@ -452,7 +452,7 @@ def test_load_state_from_peers():
 
 
 @pytest.mark.forked
-@pytest.mark.skip(reason="Test is flaky due to DHT timing and priority selection non-determinism")
+@pytest.mark.timeout(30)
 def test_load_state_priority():
     dht_instances = launch_dht_instances(4)
 
@@ -555,7 +555,7 @@ def test_getset_bits():
 
 
 @pytest.mark.forked
-@pytest.mark.timeout(300)
+@pytest.mark.timeout(30)
 def test_averaging_trigger():
     dht_instances = []
     averagers = []
@@ -641,7 +641,7 @@ def test_averaging_trigger():
 
 
 @pytest.mark.forked
-@pytest.mark.timeout(300)
+@pytest.mark.timeout(30)
 @pytest.mark.parametrize("target_group_size", [None, 2])
 def test_averaging_cancel(target_group_size):
     dht_instances = []
