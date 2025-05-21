@@ -1,5 +1,3 @@
-import asyncio
-import functools
 import random
 import time
 
@@ -19,79 +17,44 @@ from hivemind.p2p import PeerID
 from test_utils.dht_swarms import launch_dht_instances
 
 
-def with_resource_cleanup(func):
-    """Decorator to ensure resources are cleaned up even if test fails"""
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        resources = {"dht_instances": [], "averagers": []}
-
-        try:
-            # Run the test
-            result = func(*args, **kwargs, resources=resources)
-            return result
-        finally:
-            # Cleanup all resources
-            for averager in resources.get("averagers", []):
-                try:
-                    averager.shutdown()
-                except Exception:
-                    pass
-
-            for dht in resources.get("dht_instances", []):
-                try:
-                    dht.shutdown()
-                except Exception:
-                    pass
-
-    return wrapper
-
-
 @pytest.mark.forked
 @pytest.mark.asyncio
-@pytest.mark.timeout(30)
 async def test_key_manager():
-    dht = None
-    try:
-        dht = hivemind.DHT(start=True)
-        key_manager = GroupKeyManager(
-            dht,
-            prefix="test_averaging",
-            initial_group_bits="10110",
-            target_group_size=2,
-        )
-        alice = dht.peer_id
-        bob = PeerID(b"bob")
+    dht = hivemind.DHT(start=True)
+    key_manager = GroupKeyManager(
+        dht,
+        prefix="test_averaging",
+        initial_group_bits="10110",
+        target_group_size=2,
+    )
+    alice = dht.peer_id
+    bob = PeerID(b"bob")
 
-        t = hivemind.get_dht_time()
-        key = key_manager.current_key
-        await key_manager.declare_averager(key, alice, expiration_time=t + 60)
-        await key_manager.declare_averager(key, bob, expiration_time=t + 61)
+    t = hivemind.get_dht_time()
+    key = key_manager.current_key
+    await key_manager.declare_averager(key, alice, expiration_time=t + 60)
+    await key_manager.declare_averager(key, bob, expiration_time=t + 61)
 
-        q1 = await key_manager.get_averagers(key, only_active=True)
+    q1 = await key_manager.get_averagers(key, only_active=True)
 
-        await key_manager.declare_averager(key, alice, expiration_time=t + 66)
-        q2 = await key_manager.get_averagers(key, only_active=True)
+    await key_manager.declare_averager(key, alice, expiration_time=t + 66)
+    q2 = await key_manager.get_averagers(key, only_active=True)
 
-        await key_manager.declare_averager(key, bob, expiration_time=t + 61, looking_for_group=False)
-        q3 = await key_manager.get_averagers(key, only_active=True)
-        q4 = await key_manager.get_averagers(key, only_active=False)
+    await key_manager.declare_averager(key, bob, expiration_time=t + 61, looking_for_group=False)
+    q3 = await key_manager.get_averagers(key, only_active=True)
+    q4 = await key_manager.get_averagers(key, only_active=False)
 
-        q5 = await key_manager.get_averagers("nonexistent_key.0b0101", only_active=False)
+    q5 = await key_manager.get_averagers("nonexistent_key.0b0101", only_active=False)
 
-        assert len(q1) == 2 and (alice, t + 60) in q1 and (bob, t + 61) in q1
-        assert len(q2) == 2 and (alice, t + 66) in q2 and (bob, t + 61) in q2
-        assert len(q3) == 1 and (alice, t + 66) in q3
-        assert len(q4) == 2 and (alice, t + 66) in q4 and (bob, t + 61) in q2
-        assert len(q5) == 0
-    finally:
-        if dht:
-            dht.shutdown()
-            # Give time for async cleanup
-            await asyncio.sleep(0.1)
+    assert len(q1) == 2 and (alice, t + 60) in q1 and (bob, t + 61) in q1
+    assert len(q2) == 2 and (alice, t + 66) in q2 and (bob, t + 61) in q2
+    assert len(q3) == 1 and (alice, t + 66) in q3
+    assert len(q4) == 2 and (alice, t + 66) in q4 and (bob, t + 61) in q2
+    assert len(q5) == 0
+
+    dht.shutdown()
 
 
-@pytest.mark.timeout(30)
 def _test_allreduce_once(n_clients, n_aux):
     n_peers = 4
     modes = (
@@ -440,10 +403,8 @@ def test_load_state_from_peers():
     assert averager2.load_state_from_peers() is None
 
     averager1.allow_state_sharing = True
-    time.sleep(1.0)  # Increased timeout to allow DHT to propagate state sharing announcement
-    got_result = averager2.load_state_from_peers()
-    assert got_result is not None, "Failed to load state after enabling sharing"
-    got_metadata, got_tensors = got_result
+    time.sleep(0.5)
+    got_metadata, got_tensors = averager2.load_state_from_peers()
     assert num_calls == 3
     assert got_metadata == super_metadata
 
@@ -452,7 +413,6 @@ def test_load_state_from_peers():
 
 
 @pytest.mark.forked
-@pytest.mark.timeout(30)
 def test_load_state_priority():
     dht_instances = launch_dht_instances(4)
 
@@ -466,71 +426,24 @@ def test_load_state_priority():
             target_group_size=2,
             allow_state_sharing=i != 1,
         )
-        # Set distinct priorities to avoid randomness from tie-breaking
-        # Priorities: [0]=3, [1]=7 (but sharing disabled), [2]=10, [3]=8
-        priority_values = [3, 7, 10, 8]
-        averager.state_sharing_priority = priority_values[i]
+        averager.state_sharing_priority = 5 - abs(2 - i)
         averagers.append(averager)
 
-    # Debug output
-    for i, avg in enumerate(averagers):
-        print(f"Averager {i}: priority={avg.state_sharing_priority}, sharing={avg.allow_state_sharing}")
-
-    # Wait longer for initial DHT propagation and state announcements
-    # We need to ensure all nodes have announced their priorities to the DHT
-    time.sleep(2.0)  # Increased wait time
-
-    # First assertion: averager 0 should download from averager 2 (highest priority=10)
+    time.sleep(0.5)
     metadata, tensors = averagers[0].load_state_from_peers(timeout=1)
-    loaded_value = tensors[-1].item()
-
-    # Add more aggressive retry logic for flaky DHT propagation
-    if loaded_value != 2:
-        for retry in range(3):  # Try up to 3 times
-            time.sleep(1.0)
-            metadata, tensors = averagers[0].load_state_from_peers(timeout=1)
-            loaded_value = tensors[-1].item()
-            if loaded_value == 2:
-                break
-
-    assert loaded_value == 2
-
-    # Second assertion: averager 2 should download from averager 3 (priority=8, next highest after 2)
-    metadata, tensors = averagers[2].load_state_from_peers(timeout=1)
-    loaded_value = tensors[-1].item()
-
-    # Add retry logic for this assertion too
-    if loaded_value != 3:
-        for retry in range(3):  # Try up to 3 times
-            time.sleep(1.0)
-            metadata, tensors = averagers[2].load_state_from_peers(timeout=1)
-            loaded_value = tensors[-1].item()
-            if loaded_value == 3:
-                break
-
-    assert loaded_value == 3
-
-    averagers[0].state_sharing_priority = 15  # Make it highest priority
-    time.sleep(0.5)  # Increased wait time for priority change propagation
+    assert tensors[-1].item() == 2
 
     metadata, tensors = averagers[2].load_state_from_peers(timeout=1)
-    loaded_value = tensors[-1].item()
+    assert tensors[-1].item() == 3
 
-    # Add retry logic for priority change propagation
-    if loaded_value != 0:
-        for retry in range(3):  # Try up to 3 times
-            time.sleep(1.0)
-            metadata, tensors = averagers[2].load_state_from_peers(timeout=1)
-            loaded_value = tensors[-1].item()
-            if loaded_value == 0:
-                break
+    averagers[0].state_sharing_priority = 10
+    time.sleep(0.2)
 
-    assert loaded_value == 0
+    metadata, tensors = averagers[2].load_state_from_peers(timeout=1)
+    assert tensors[-1].item() == 0
 
     averagers[1].allow_state_sharing = False
     averagers[2].allow_state_sharing = False
-    time.sleep(0.5)  # Wait for state sharing changes to propagate
-
     metadata, tensors = averagers[0].load_state_from_peers(timeout=1)
     assert tensors[-1].item() == 3
 
@@ -555,160 +468,98 @@ def test_getset_bits():
 
 
 @pytest.mark.forked
-@pytest.mark.timeout(30)
 def test_averaging_trigger():
-    dht_instances = []
-    averagers = []
-    try:
-        dht_instances = launch_dht_instances(4)
-        averagers = [
-            DecentralizedAverager(
-                averaged_tensors=[torch.randn(3)],
-                dht=dht,
-                min_matchmaking_time=0.5,
-                request_timeout=0.3,
-                prefix="mygroup",
-                initial_group_bits="",
-                start=True,
+    averagers = tuple(
+        DecentralizedAverager(
+            averaged_tensors=[torch.randn(3)],
+            dht=dht,
+            min_matchmaking_time=0.5,
+            request_timeout=0.3,
+            prefix="mygroup",
+            initial_group_bits="",
+            start=True,
+        )
+        for dht in launch_dht_instances(4)
+    )
+
+    controls = []
+    for i, averager in enumerate(averagers):
+        controls.append(
+            averager.step(
+                wait=False,
+                scheduled_time=hivemind.get_dht_time() + 0.5,
+                weight=1.0,
+                require_trigger=i in (1, 2),
             )
-            for dht in dht_instances
-        ]
+        )
 
-        controls = []
-        for i, averager in enumerate(averagers):
-            controls.append(
-                averager.step(
-                    wait=False,
-                    scheduled_time=hivemind.get_dht_time() + 0.5,
-                    weight=1.0,
-                    require_trigger=i in (1, 2),
-                )
-            )
+    time.sleep(0.6)
 
-        time.sleep(0.6)
+    c0, c1, c2, c3 = controls
+    assert not any(c.done() for c in controls)
+    assert c0.stage == AveragingStage.RUNNING_ALLREDUCE
+    assert c1.stage == AveragingStage.AWAITING_TRIGGER
+    assert c2.stage == AveragingStage.AWAITING_TRIGGER
+    assert c3.stage == AveragingStage.RUNNING_ALLREDUCE
 
-        c0, c1, c2, c3 = controls
-        assert not any(c.done() for c in controls)
-        assert c0.stage == AveragingStage.RUNNING_ALLREDUCE
-        assert c1.stage == AveragingStage.AWAITING_TRIGGER
-        assert c2.stage == AveragingStage.AWAITING_TRIGGER
-        assert c3.stage == AveragingStage.RUNNING_ALLREDUCE
+    c1.allow_allreduce()
+    c2.allow_allreduce()
 
-        c1.allow_allreduce()
-        c2.allow_allreduce()
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        if all(c.stage == AveragingStage.FINISHED for c in controls):
+            break
+        time.sleep(0.1)
+    else:
+        stages = [c.stage for c in controls]
+        pytest.fail(f"Averaging did not complete in time. Current stages: {stages}")
 
-        deadline = time.monotonic() + 10.0
-        while time.monotonic() < deadline:
-            if all(c.stage == AveragingStage.FINISHED for c in controls):
-                break
-            time.sleep(0.05)
-        else:
-            stages = [c.stage for c in controls]
-            pytest.fail(f"Averaging did not complete in time. Current stages: {stages}")
+    assert all(c.done() for c in controls)
 
-        assert all(c.done() for c in controls)
-
-        # check that setting trigger twice does not raise error
-        c0.allow_allreduce()
-    finally:
-        # Ensure proper cleanup
-        # First, try to cancel any pending operations
-        for control in controls:
-            if not control.done():
-                try:
-                    control.cancel()
-                except Exception:
-                    pass
-
-        # Then shutdown averagers
-        for averager in averagers:
-            try:
-                averager.shutdown()
-                # Wait a bit for shutdown to complete
-                time.sleep(0.1)
-            except Exception:
-                pass
-
-        # Finally shutdown DHT instances
-        for dht in dht_instances:
-            try:
-                dht.shutdown()
-            except Exception:
-                pass
-
-        # Give time for all async operations to complete
-        time.sleep(0.5)
+    # check that setting trigger twice does not raise error
+    c0.allow_allreduce()
 
 
 @pytest.mark.forked
-@pytest.mark.timeout(30)
 @pytest.mark.parametrize("target_group_size", [None, 2])
 def test_averaging_cancel(target_group_size):
-    dht_instances = []
-    averagers = []
-    try:
-        dht_instances = launch_dht_instances(4)
-        averagers = [
-            DecentralizedAverager(
-                averaged_tensors=[torch.randn(3)],
-                dht=dht,
-                min_matchmaking_time=0.5,
-                request_timeout=0.3,
-                client_mode=(i % 2 == 0),
-                target_group_size=target_group_size,
-                prefix="mygroup",
-                start=True,
-            )
-            for i, dht in enumerate(dht_instances)
-        ]
+    dht_instances = launch_dht_instances(4)
+    averagers = tuple(
+        DecentralizedAverager(
+            averaged_tensors=[torch.randn(3)],
+            dht=dht,
+            min_matchmaking_time=0.5,
+            request_timeout=0.3,
+            client_mode=(i % 2 == 0),
+            target_group_size=target_group_size,
+            prefix="mygroup",
+            start=True,
+        )
+        for i, dht in enumerate(dht_instances)
+    )
 
-        step_controls = [averager.step(wait=False, require_trigger=True) for averager in averagers]
+    step_controls = [averager.step(wait=False, require_trigger=True) for averager in averagers]
 
-        peer_inds_to_cancel = (0, 1)
+    peer_inds_to_cancel = (0, 1)
 
-        for peer_index in peer_inds_to_cancel:
-            step_controls[peer_index].cancel()
+    for peer_index in peer_inds_to_cancel:
+        step_controls[peer_index].cancel()
 
-        time.sleep(0.05)
+    time.sleep(0.05)
 
-        for i, control in enumerate(step_controls):
-            if i not in peer_inds_to_cancel:
-                control.allow_allreduce()
+    for i, control in enumerate(step_controls):
+        if i not in peer_inds_to_cancel:
+            control.allow_allreduce()
 
-        for i, control in enumerate(step_controls):
-            if i in peer_inds_to_cancel:
-                assert control.cancelled()
-            else:
-                result = control.result()
-                assert result is not None
-                # Don't check group size when target_group_size=None, as it could change
-                if target_group_size is not None:
-                    assert len(result) == target_group_size
-    finally:
-        # Ensure proper cleanup
-        # First, try to cancel any pending operations
-        for control in step_controls:
-            if not control.done():
-                try:
-                    control.cancel()
-                except Exception:
-                    pass
+    for i, control in enumerate(step_controls):
+        if i in peer_inds_to_cancel:
+            assert control.cancelled()
+        else:
+            result = control.result()
+            assert result is not None
+            # Don't check group size when target_group_size=None, as it could change
+            if target_group_size is not None:
+                assert len(result) == target_group_size
 
-        # Then shutdown averagers
-        for averager in averagers:
-            try:
-                averager.shutdown()
-                # Wait a bit for shutdown to complete
-                time.sleep(0.1)
-            except Exception:
-                pass
-
-        # Finally shutdown DHT instances
-        for dht in dht_instances:
-            try:
-                dht.shutdown()
-            except Exception:
-                pass
-
-        # Give time for all async operations to complete
-        time.sleep(0.5)
+    for averager in averagers:
+        averager.shutdown()

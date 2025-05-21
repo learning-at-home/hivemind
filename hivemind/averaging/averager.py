@@ -13,7 +13,7 @@ import threading
 import time
 import weakref
 from dataclasses import asdict
-from typing import Any, AsyncIterator, Dict, Optional, Sequence, Set, Tuple, Union
+from typing import Any, AsyncIterator, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
@@ -201,7 +201,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
 
         self._allow_state_sharing = mp.Value(ctypes.c_bool, 0)
         self._state_sharing_priority = mp.Value(ctypes.c_double, 0)
-        self._background_tasks: Set[asyncio.Task] = set()
 
         if allow_state_sharing is None:
             allow_state_sharing = not client_mode and not auxiliary
@@ -295,9 +294,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                     **self.matchmaking_kwargs,
                 )
                 if not self.client_mode:
-                    task = asyncio.create_task(self._declare_for_download_periodically())
-                    self._background_tasks.add(task)
-                    task.add_done_callback(self._background_tasks.discard)
+                    asyncio.create_task(self._declare_for_download_periodically())
 
                 self._state_updated = asyncio.Event()
                 self._pending_groups_registered = asyncio.Event()
@@ -355,15 +352,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
             logger.exception("Averager shutdown has no effect: the process is already not alive")
 
     async def _shutdown(self, timeout: Optional[float]) -> None:
-        # Cancel background tasks first
-        for task in list(self._background_tasks):
-            if not task.done():
-                task.cancel()
-
-        # Wait for background tasks to finish with a short timeout
-        if self._background_tasks:
-            await asyncio.gather(*self._background_tasks, return_exceptions=True)
-
         if not self.client_mode:
             await self.remove_p2p_handlers(self._p2p, namespace=self.prefix)
 
@@ -371,9 +359,6 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         for group in self._running_groups.values():
             remaining_tasks.update(group.finalize(cancel=True))
         await asyncio.wait_for(asyncio.gather(*remaining_tasks), timeout)
-
-        # Give a small delay for any remaining async cleanup
-        await asyncio.sleep(0.1)
 
     def __del__(self):
         if self._parent_pid == os.getpid() and self.is_alive():
