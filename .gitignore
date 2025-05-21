@@ -82,3 +82,6 @@ hivemind/proto/*_pb2*
 
 # libp2p-daemon binary
 hivemind/hivemind_cli/p2pd
+
+# VSCode's default venv directory
+.venv

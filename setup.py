@@ -9,7 +9,7 @@ import tarfile
 import tempfile
 import urllib.request
 
-from pkg_resources import parse_requirements, parse_version
+from packaging.version import parse as parse_version
 from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
@@ -141,7 +141,7 @@ class Develop(develop):
 
 
 with open("requirements.txt") as requirements_file:
-    install_requires = list(map(str, parse_requirements(requirements_file)))
+    install_requires = [line.strip() for line in requirements_file if line.strip() and not line.startswith("#")]
 
 # loading version from setup.py
 with codecs.open(os.path.join(here, "hivemind/__init__.py"), encoding="utf-8") as init_file:
@@ -151,10 +151,10 @@ with codecs.open(os.path.join(here, "hivemind/__init__.py"), encoding="utf-8") a
 extras = {}
 
 with open("requirements-dev.txt") as dev_requirements_file:
-    extras["dev"] = list(map(str, parse_requirements(dev_requirements_file)))
+    extras["dev"] = [line.strip() for line in dev_requirements_file if line.strip() and not line.startswith("#")]
 
 with open("requirements-docs.txt") as docs_requirements_file:
-    extras["docs"] = list(map(str, parse_requirements(docs_requirements_file)))
+    extras["docs"] = [line.strip() for line in docs_requirements_file if line.strip() and not line.startswith("#")]
 
 extras["bitsandbytes"] = ["bitsandbytes~=0.45.2"]
 
@@ -187,6 +187,7 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Topic :: Scientific/Engineering",
         "Topic :: Scientific/Engineering :: Mathematics",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",

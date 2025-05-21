@@ -69,7 +69,7 @@ pip install .
 ```
 
 If you would like to verify that your installation is working properly, you can install with `pip install .[dev]`
-instead. Then, you can run the tests with `pytest tests/`.
+instead. Then, you can run the tests with `pytest tests/`. Use `pip install -e .[dev]` to make the source code editable.
 
 By default, hivemind uses the precompiled binary of
 the [go-libp2p-daemon](https://github.com/learning-at-home/go-libp2p-daemon) library. If you face compatibility issues
