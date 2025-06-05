@@ -144,6 +144,7 @@ class DHT(mp.context.ForkProcess):
         is ready to process incoming requests or for :timeout: seconds max.
         """
         self.start()
+        self.get_visible_maddrs(True)
         if await_ready:
             self.wait_until_ready(timeout)
 
