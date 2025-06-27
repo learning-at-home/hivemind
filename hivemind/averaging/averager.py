@@ -703,22 +703,35 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                 if peer != self.peer_id:
                     t0 = time.monotonic()
                     logger.info(f"Downloading parameters from peer {peer}")
+
+                    # Initialize cleanup variables
+                    current_tensor_parts, tensors = [], []
+                    stream = None
+                    stream_task = None
+
                     try:
                         stub = self.get_stub(self._p2p, peer, namespace=self.prefix)
                         stream = await stub.rpc_download_state(averaging_pb2.DownloadRequest())
-                        current_tensor_parts, tensors = [], []
 
-                        # TODO merge this with hivemind.compression.deserialize_tensor_stream
-                        async for message in aiter_with_timeout(stream, timeout=timeout):
-                            if message.metadata:
-                                metadata = self.serializer.loads(message.metadata)
-                            if message.tensor_part.dtype and current_tensor_parts:
-                                # tensor_part.dtype indicates the start of the new tensor, so we should wrap up this one
+                        # Create a task for stream processing to enable proper cancellation
+                        async def process_stream():
+                            nonlocal current_tensor_parts, tensors, metadata
+                            # TODO merge this with hivemind.compression.deserialize_tensor_stream
+                            async for message in aiter_with_timeout(stream, timeout=timeout):
+                                if message.metadata:
+                                    metadata = self.serializer.loads(message.metadata)
+                                if message.tensor_part.dtype and current_tensor_parts:
+                                    # tensor_part.dtype indicates the start of the new tensor, so we should wrap up this one
+                                    tensors.append(
+                                        deserialize_torch_tensor(combine_from_streaming(current_tensor_parts))
+                                    )
+                                    current_tensor_parts = []
+                                current_tensor_parts.append(message.tensor_part)
+                            if current_tensor_parts:
                                 tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
-                                current_tensor_parts = []
-                            current_tensor_parts.append(message.tensor_part)
-                        if current_tensor_parts:
-                            tensors.append(deserialize_torch_tensor(combine_from_streaming(current_tensor_parts)))
+
+                        stream_task = asyncio.create_task(process_stream())
+                        await stream_task
 
                         if not metadata:
                             logger.debug(f"Peer {peer} did not send its state")
@@ -728,8 +741,52 @@ class DecentralizedAverager(mp.Process, ServicerBase):
                         logger.info(f"Finished downloading state in {t1 - t0:.3f}s from {peer}")
                         future.set_result((metadata, tensors))
                         return
+
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            f"Timeout occurred while downloading from peer {peer} after {time.monotonic() - t0:.3f}s"
+                        )
+                        # Cancel the stream task if it's still running
+                        if stream_task and not stream_task.done():
+                            stream_task.cancel()
+                            try:
+                                await stream_task
+                            except asyncio.CancelledError:
+                                logger.debug(f"Stream task for peer {peer} was successfully cancelled")
+
+                    except asyncio.CancelledError:
+                        logger.debug(f"Download from peer {peer} was cancelled")
+                        # Re-raise cancellation to maintain proper async behavior
+                        raise
+
                     except Exception as e:
                         logger.exception(f"Failed to download state from {peer} - {repr(e)}")
+
+                    finally:
+                        # Resource cleanup to prevent memory leaks
+                        try:
+                            # Cancel stream task if still running
+                            if stream_task and not stream_task.done():
+                                stream_task.cancel()
+                                try:
+                                    await asyncio.wait_for(stream_task, timeout=0.1)
+                                except (asyncio.CancelledError, asyncio.TimeoutError):
+                                    pass
+
+                            # Clean up stream if possible
+                            if stream is not None:
+                                try:
+                                    if hasattr(stream, "cancel"):
+                                        stream.cancel()
+                                except Exception:
+                                    pass
+
+                            # Clear tensor references to free memory
+                            current_tensor_parts.clear()
+                            tensors.clear()
+
+                        except Exception as cleanup_error:
+                            logger.debug(f"Error during cleanup for peer {peer}: {cleanup_error}")
 
         finally:
             if not future.done():
