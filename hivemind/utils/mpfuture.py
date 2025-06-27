@@ -11,6 +11,7 @@ import uuid
 from concurrent.futures import InvalidStateError
 from contextlib import nullcontext
 from enum import Enum, auto
+from multiprocessing.connection import Connection
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 from weakref import ref
 
@@ -21,7 +22,7 @@ logger = get_logger(__name__)
 
 # flavour types
 ResultType = TypeVar("ResultType")
-PID, UID, State, PipeEnd = int, int, str, mp.connection.Connection
+PID, UID, State, PipeEnd = int, int, str, Connection
 ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED
 TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
 
@@ -98,6 +99,9 @@ class MPFuture(base.Future, Generic[ResultType]):
             self._set_event_threadsafe()
 
     def _set_event_threadsafe(self):
+        if not self._loop or not self._aio_event:
+            return
+
         try:
             running_loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -106,9 +110,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         async def _event_setter():
             self._aio_event.set()
 
-        if self._loop.is_closed():
-            return  # do nothing, the loop is already closed
-        elif self._loop.is_running() and running_loop == self._loop:
+        if self._loop.is_running() and running_loop == self._loop:
             asyncio.create_task(_event_setter())
         elif self._loop.is_running() and running_loop != self._loop:
             asyncio.run_coroutine_threadsafe(_event_setter(), self._loop)
@@ -290,8 +292,6 @@ class MPFuture(base.Future, Generic[ResultType]):
 
         if is_origin_process and MPFuture._active_futures is not None and hasattr(self, "_uid"):
             MPFuture._active_futures.pop(self._uid, None)
-        if getattr(self, "_aio_event", None):
-            self._aio_event.set()
 
         # Clean up mmap and temp file if we're the origin process
         if is_origin_process:
