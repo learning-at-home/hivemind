@@ -9,51 +9,20 @@ import uuid
 from concurrent.futures import InvalidStateError
 from contextlib import nullcontext
 from enum import Enum, auto
-from multiprocessing.reduction import ForkingPickler
+from multiprocessing import shared_memory
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 from weakref import ref
-
-import torch  # used for py3.7-compatible shared memory
 
 from hivemind.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-torch.multiprocessing.set_sharing_strategy(os.environ.get("HIVEMIND_MEMORY_SHARING_STRATEGY", "file_system"))
 
 # flavour types
 ResultType = TypeVar("ResultType")
 PID, UID, State, PipeEnd = int, int, str, mp.connection.Connection
 ALL_STATES = base.PENDING, base.RUNNING, base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED
 TERMINAL_STATES = {base.FINISHED, base.CANCELLED, base.CANCELLED_AND_NOTIFIED}
-
-
-class SharedBytes:
-    """
-    A process-wide object that allocates large chunks of shared memory and partitions it into individual bytes.
-
-    Note: this process is only responsible for bulk allocation, it does not manage/free unused bytes.
-    The chunks are deallocated by the garbage collector,
-    when it detects that all processes no longer use any bytes from this chunk.
-    """
-
-    _lock = mp.Lock()
-    _pid: Optional[PID] = None
-    _buffer: Optional[torch.Tensor] = None
-    _index: int = 0
-
-    @classmethod
-    def next(cls) -> torch.Tensor:
-        """Create another shared byte value, represented as a scalar uint8 tensor"""
-        with cls._lock:
-            if cls._pid != os.getpid() or cls._buffer is None or cls._index >= len(cls._buffer):
-                buffer_size = int(os.environ.get("HIVEMIND_SHM_BUFFER_SIZE", 16))
-                cls._pid = os.getpid()
-                cls._buffer = torch.empty([buffer_size], dtype=torch.uint8).share_memory_()
-                cls._index = 0
-
-            cls._index += 1
-            return cls._buffer[cls._index - 1]
 
 
 class UpdateType(Enum):
@@ -90,7 +59,11 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._maybe_initialize_mpfuture_backend()
 
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
-        self._shared_state_code = SharedBytes.next()
+
+        # Create a dedicated 1-byte shared memory for this future's state
+        self._shared_memory = shared_memory.SharedMemory(create=True, size=1)
+        self._shared_state_code = memoryview(self._shared_memory.buf)
+        self._shared_memory_name = self._shared_memory.name
         self._state_cache: Dict[State, State] = {}
         # mapping from global to cached local future used that makes updates immediately
         # available on setter side; dictionary-based cache works because future can visit any state at most once
@@ -111,14 +84,13 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     @property
     def _state(self) -> State:
-        shared_state = ALL_STATES[self._shared_state_code.item()]
+        shared_state = ALL_STATES[self._shared_state_code[0]]
         return self._state_cache.get(shared_state, shared_state)
 
     @_state.setter
     def _state(self, new_state: State):
-        with torch.inference_mode():
-            self._shared_state_code[...] = ALL_STATES.index(new_state)
-        if self._state in TERMINAL_STATES and self._loop is not None and not self._aio_event.is_set():
+        self._shared_state_code[0] = ALL_STATES.index(new_state)
+        if new_state in TERMINAL_STATES and self._loop is not None and not self._aio_event.is_set():
             self._set_event_threadsafe()
 
     def _set_event_threadsafe(self):
@@ -164,7 +136,6 @@ class MPFuture(base.Future, Generic[ResultType]):
         MPFuture._active_pid = None
         MPFuture._initialization_lock = mp.Lock()
         MPFuture._update_lock = mp.Lock()
-        SharedBytes._lock = mp.Lock()
 
     @classmethod
     def _process_updates_in_background(cls, receiver_pipe: mp.connection.Connection):
@@ -176,24 +147,30 @@ class MPFuture(base.Future, Generic[ResultType]):
 
                 uid, update_type, payload = receiver_pipe.recv()
                 future = None
-                future_ref = cls._active_futures.pop(uid, None)
+                future_ref = cls._active_futures.get(uid)
                 if future_ref is not None:
                     future = future_ref()
 
                 if future is None:
                     # The MPFuture instance is already destroyed in this process
                     # (the caller is not interested in the result)
+                    cls._active_futures.pop(uid, None)  # Clean up the stale reference
                     continue
+
+                # Process the update and set the corresponding state
                 if update_type == UpdateType.RESULT:
                     future.set_result(payload)
+                    future._state = base.FINISHED
                 elif update_type == UpdateType.EXCEPTION:
                     future.set_exception(payload)
+                    future._state = base.FINISHED
                 elif update_type == UpdateType.CANCEL:
                     future.cancel()
+                    future._state = base.CANCELLED
                 else:
                     raise RuntimeError(f"Received unexpected update type {update_type}")
             except (BrokenPipeError, EOFError, ConnectionError):
-                logger.debug(f"Update pipe was was shut down unexpectedly (pid={pid})")
+                logger.debug(f"Update pipe was shut down unexpectedly (pid={pid})")
             except Exception as e:
                 logger.exception(f"Could not retrieve update: caught {repr(e)} (pid={pid})")
 
@@ -212,6 +189,8 @@ class MPFuture(base.Future, Generic[ResultType]):
         elif self._state in TERMINAL_STATES:
             raise InvalidStateError(f"Can't set_result to a future that is {self._state} ({self._uid})")
         else:
+            # Don't update shared state immediately in subprocess - let the origin process do it
+            # This prevents race condition where shared state says "finished" but result isn't ready yet
             self._state_cache[self._state], self._result = base.FINISHED, result
             self._send_update(UpdateType.RESULT, result)
 
@@ -222,6 +201,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         elif self._state in TERMINAL_STATES:
             raise InvalidStateError(f"Can't set_exception to a future that is {self._state} ({self._uid})")
         else:
+            # Don't update shared state immediately in subprocess - let the origin process do it
             self._state_cache[self._state], self._exception = base.FINISHED, exception
             self._send_update(UpdateType.EXCEPTION, exception)
 
@@ -232,6 +212,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         elif self._state in [base.RUNNING, base.FINISHED]:
             return False
         else:
+            # Don't update shared state immediately in subprocess - let the origin process do it
             self._state_cache[self._state] = base.CANCELLED
             self._send_update(UpdateType.CANCEL)
             return True
@@ -248,25 +229,32 @@ class MPFuture(base.Future, Generic[ResultType]):
             )
 
     def result(self, timeout: Optional[float] = None) -> ResultType:
-        if self._state not in TERMINAL_STATES:
-            if os.getpid() != self._origin_pid:
+        if os.getpid() != self._origin_pid:
+            # Non-origin process: check shared state and return cached result
+            if self._state not in TERMINAL_STATES:
                 raise RuntimeError("Only the process that created MPFuture can await result")
-            return super().result(timeout)
-        elif self._state == base.CANCELLED:
-            raise base.CancelledError()
-        elif self._exception:
-            raise self._exception
+            elif self._state == base.CANCELLED:
+                raise base.CancelledError()
+            elif self._exception:
+                raise self._exception
+            else:
+                return self._result
         else:
-            return self._result
+            # Origin process: use parent's result() method which properly waits for completion
+            # The parent class handles the waiting and state management correctly
+            return super().result(timeout)
 
     def exception(self, timeout: Optional[float] = None) -> Optional[BaseException]:
-        if self._state not in TERMINAL_STATES:
-            if os.getpid() != self._origin_pid:
+        if os.getpid() != self._origin_pid:
+            # Non-origin process: check shared state and return cached exception
+            if self._state not in TERMINAL_STATES:
                 raise RuntimeError("Only the process that created MPFuture can await exception")
+            elif self._state == base.CANCELLED:
+                raise base.CancelledError()
+            return self._exception
+        else:
+            # Origin process: always use parent's exception() method which properly waits
             return super().exception(timeout)
-        elif self._state == base.CANCELLED:
-            raise base.CancelledError()
-        return self._exception
 
     def done(self) -> bool:
         return self._state in TERMINAL_STATES
@@ -292,15 +280,33 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise asyncio.CancelledError()
 
     def __del__(self):
-        if getattr(self, "_origin_pid", None) == os.getpid() and MPFuture._active_futures is not None:
+        is_origin_process = getattr(self, "_origin_pid", None) == os.getpid()
+
+        if is_origin_process and MPFuture._active_futures is not None:
             MPFuture._active_futures.pop(self._uid, None)
         if getattr(self, "_aio_event", None):
             self._aio_event.set()
 
+        # Clean up shared memory if we're the origin process
+        if is_origin_process and hasattr(self, "_shared_memory"):
+            try:
+                self._shared_memory.unlink()  # Remove from system
+                self._shared_memory.close()  # Close our handle
+            except (FileNotFoundError, AttributeError, BufferError):
+                pass  # Already cleaned up or not accessible
+
+        # Release the memoryview reference
+        if hasattr(self, "_shared_state_code"):
+            try:
+                self._shared_state_code.release()
+            except (AttributeError, BufferError):
+                pass  # already released or not a releasable view
+
     def __getstate__(self):
         return dict(
             _sender_pipe=self._sender_pipe,
-            _shared_state_code=ForkingPickler.dumps(self._shared_state_code).tobytes(),
+            _shared_state_code=bytes(self._shared_state_code),
+            _shared_memory_name=self._shared_memory_name,
             _origin_pid=self._origin_pid,
             _uid=self._uid,
             _use_lock=self._use_lock,
@@ -310,14 +316,27 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __setstate__(self, state):
         self._sender_pipe = state["_sender_pipe"]
+        self._shared_memory_name = state.get("_shared_memory_name")
+
         try:
-            self._shared_state_code = ForkingPickler.loads(state["_shared_state_code"])
-        except RuntimeError:
-            # If the origin process garbage-collects all instances of MPFuture using the same shmem buffer,
-            # the underlying buffer is freed, and we will get RuntimeError ("unable to open shared memory object")
-            # here since it is not possible to connect to this buffer anymore. To address this, we just replace
-            # the buffer with a non-shared tensor since the origin process doesn't care about our state anymore.
-            self._shared_state_code = torch.tensor([ALL_STATES.index(base.PENDING)], dtype=torch.uint8)
+            # Try to reconnect to the shared memory
+            if self._shared_memory_name:
+                try:
+                    # Reconnect to existing shared memory (don't store reference since we don't own it)
+                    reconnected_mem = shared_memory.SharedMemory(name=self._shared_memory_name)
+                    self._shared_state_code = memoryview(reconnected_mem.buf)
+                except FileNotFoundError:
+                    # Shared memory no longer exists, fall back to local copy
+                    state_bytes = state["_shared_state_code"]
+                    self._shared_state_code = memoryview(bytearray(state_bytes))
+            else:
+                # No shared memory name available, use local copy
+                state_bytes = state["_shared_state_code"]
+                self._shared_state_code = memoryview(bytearray(state_bytes))
+        except (RuntimeError, FileNotFoundError):
+            # If the shared memory is no longer available, fall back to local copy
+            self._shared_state_code = memoryview(bytearray([ALL_STATES.index(base.PENDING)]))
+
         self._origin_pid, self._uid = state["_origin_pid"], state["_uid"]
         self._result, self._exception = state["_result"], state["_exception"]
         self._use_lock = state["_use_lock"]
