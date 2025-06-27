@@ -212,12 +212,11 @@ class ControlClient:
     async def _write_to_persistent_conn(self, writer: asyncio.StreamWriter):
         try:
             while True:
-                try:
-                    msg = await self._pending_messages.get()
-                    await write_pbmsg(writer, msg)
-                except (asyncio.CancelledError, RuntimeError):
-                    # Task was cancelled or event loop closed
-                    break
+                msg = await self._pending_messages.get()
+                await write_pbmsg(writer, msg)
+        except (asyncio.CancelledError, RuntimeError):
+            # Task was cancelled or event loop closed
+            pass
         finally:
             # Close writer safely, avoiding "Event loop is closed" errors
             try:

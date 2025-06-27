@@ -205,6 +205,6 @@ def cancel_task_if_running(task: Optional[asyncio.Task]) -> None:
             if loop.is_running():
                 task.cancel()
         except RuntimeError as e:
-            # Only ignore event loop closure errors
-            if "Event loop is closed" not in str(e):
+            # Ignore event loop closure and missing event loop errors
+            if "Event loop is closed" not in str(e) and "There is no current event loop" not in str(e):
                 raise
