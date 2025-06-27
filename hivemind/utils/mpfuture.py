@@ -9,7 +9,7 @@ import uuid
 from concurrent.futures import InvalidStateError
 from contextlib import nullcontext
 from enum import Enum, auto
-from multiprocessing import shared_memory
+from multiprocessing.shared_memory import SharedMemory
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 from weakref import ref
 
@@ -61,7 +61,7 @@ class MPFuture(base.Future, Generic[ResultType]):
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
 
         # Create a dedicated 1-byte shared memory for this future's state
-        self._shared_memory = shared_memory.SharedMemory(create=True, size=1)
+        self._shared_memory = SharedMemory(create=True, size=1)
         self._shared_state_code = memoryview(self._shared_memory.buf)
         self._shared_memory_name = self._shared_memory.name
         self._state_cache: Dict[State, State] = {}
@@ -323,7 +323,7 @@ class MPFuture(base.Future, Generic[ResultType]):
             if self._shared_memory_name:
                 try:
                     # Reconnect to existing shared memory (don't store reference since we don't own it)
-                    reconnected_mem = shared_memory.SharedMemory(name=self._shared_memory_name)
+                    reconnected_mem = SharedMemory(name=self._shared_memory_name)
                     self._shared_state_code = memoryview(reconnected_mem.buf)
                 except FileNotFoundError:
                     # Shared memory no longer exists, fall back to local copy
