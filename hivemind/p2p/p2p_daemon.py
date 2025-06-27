@@ -698,7 +698,7 @@ class P2P:
                 except (asyncio.CancelledError, RuntimeError):
                     # Task was cancelled or event loop closed
                     break
-                
+
             if not ready.done():
                 ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
         except (asyncio.CancelledError, RuntimeError):
