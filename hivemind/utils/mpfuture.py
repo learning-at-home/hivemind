@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures._base as base
+import mmap
 import multiprocessing as mp
 import os
+import tempfile
 import threading
 import uuid
 from concurrent.futures import InvalidStateError
 from contextlib import nullcontext
 from enum import Enum, auto
-from multiprocessing.shared_memory import SharedMemory
 from typing import Any, Callable, Dict, Generic, Optional, TypeVar
 from weakref import ref
 
@@ -60,10 +61,13 @@ class MPFuture(base.Future, Generic[ResultType]):
 
         self._origin_pid, self._uid = os.getpid(), uuid.uuid4().int
 
-        # Create a dedicated 1-byte shared memory for this future's state
-        self._shared_memory = SharedMemory(create=True, size=1)
-        self._shared_state_code = memoryview(self._shared_memory.buf)
-        self._shared_memory_name = self._shared_memory.name
+        # Create shared state using mmap with temporary file (avoids SharedMemory cleanup issues)
+        self._temp_file = tempfile.NamedTemporaryFile(delete=False)
+        self._temp_file.write(bytes([ALL_STATES.index(base.PENDING)]))
+        self._temp_file.flush()
+        self._mmap = mmap.mmap(self._temp_file.fileno(), 1)
+        self._shared_state_code = memoryview(self._mmap)
+        self._temp_file_name = self._temp_file.name
         self._state_cache: Dict[State, State] = {}
         # mapping from global to cached local future used that makes updates immediately
         # available on setter side; dictionary-based cache works because future can visit any state at most once
@@ -146,10 +150,8 @@ class MPFuture(base.Future, Generic[ResultType]):
                     break  # backend was reset, a new background thread has started
 
                 uid, update_type, payload = receiver_pipe.recv()
-                future = None
                 future_ref = cls._active_futures.get(uid)
-                if future_ref is not None:
-                    future = future_ref()
+                future = future_ref() if future_ref else None
 
                 if future is None:
                     # The MPFuture instance is already destroyed in this process
@@ -280,33 +282,45 @@ class MPFuture(base.Future, Generic[ResultType]):
             raise asyncio.CancelledError()
 
     def __del__(self):
+        # Only clean up if we have the necessary attributes to avoid exceptions during teardown
+        if not hasattr(self, "_origin_pid"):
+            return
+
         is_origin_process = getattr(self, "_origin_pid", None) == os.getpid()
 
-        if is_origin_process and MPFuture._active_futures is not None:
+        if is_origin_process and MPFuture._active_futures is not None and hasattr(self, "_uid"):
             MPFuture._active_futures.pop(self._uid, None)
         if getattr(self, "_aio_event", None):
             self._aio_event.set()
 
-        # Clean up shared memory if we're the origin process
-        if is_origin_process and hasattr(self, "_shared_memory"):
-            try:
-                self._shared_memory.unlink()  # Remove from system
-                self._shared_memory.close()  # Close our handle
-            except (FileNotFoundError, AttributeError, BufferError):
-                pass  # Already cleaned up or not accessible
-
-        # Release the memoryview reference
-        if hasattr(self, "_shared_state_code"):
-            try:
-                self._shared_state_code.release()
-            except (AttributeError, BufferError):
-                pass  # already released or not a releasable view
+        # Clean up mmap and temp file if we're the origin process
+        if is_origin_process:
+            if hasattr(self, "_shared_state_code"):
+                try:
+                    self._shared_state_code.release()
+                except (BufferError, ValueError):
+                    pass
+            if hasattr(self, "_mmap"):
+                try:
+                    self._mmap.close()
+                except (OSError, ValueError):
+                    pass
+            if hasattr(self, "_temp_file"):
+                try:
+                    self._temp_file.close()
+                except (OSError, ValueError):
+                    pass
+            if hasattr(self, "_temp_file_name"):
+                try:
+                    os.unlink(self._temp_file_name)
+                except (OSError, FileNotFoundError):
+                    pass
 
     def __getstate__(self):
         return dict(
             _sender_pipe=self._sender_pipe,
             _shared_state_code=bytes(self._shared_state_code),
-            _shared_memory_name=self._shared_memory_name,
+            _temp_file_name=getattr(self, "_temp_file_name", None),
             _origin_pid=self._origin_pid,
             _uid=self._uid,
             _use_lock=self._use_lock,
@@ -316,26 +330,23 @@ class MPFuture(base.Future, Generic[ResultType]):
 
     def __setstate__(self, state):
         self._sender_pipe = state["_sender_pipe"]
-        self._shared_memory_name = state.get("_shared_memory_name")
+        self._temp_file_name = state.get("_temp_file_name")
 
+        # Try to reconnect to the shared state file
         try:
-            # Try to reconnect to the shared memory
-            if self._shared_memory_name:
-                try:
-                    # Reconnect to existing shared memory (don't store reference since we don't own it)
-                    reconnected_mem = SharedMemory(name=self._shared_memory_name)
-                    self._shared_state_code = memoryview(reconnected_mem.buf)
-                except FileNotFoundError:
-                    # Shared memory no longer exists, fall back to local copy
-                    state_bytes = state["_shared_state_code"]
-                    self._shared_state_code = memoryview(bytearray(state_bytes))
+            if self._temp_file_name and os.path.exists(self._temp_file_name):
+                # Reconnect to existing mmap
+                with open(self._temp_file_name, "r+b") as f:
+                    self._mmap = mmap.mmap(f.fileno(), 1)
+                    self._shared_state_code = memoryview(self._mmap)
             else:
-                # No shared memory name available, use local copy
+                # Fall back to local copy
                 state_bytes = state["_shared_state_code"]
                 self._shared_state_code = memoryview(bytearray(state_bytes))
-        except (RuntimeError, FileNotFoundError):
-            # If the shared memory is no longer available, fall back to local copy
-            self._shared_state_code = memoryview(bytearray([ALL_STATES.index(base.PENDING)]))
+        except (OSError, ValueError):
+            # If mmap fails, fall back to local copy
+            state_bytes = state["_shared_state_code"]
+            self._shared_state_code = memoryview(bytearray(state_bytes))
 
         self._origin_pid, self._uid = state["_origin_pid"], state["_uid"]
         self._result, self._exception = state["_result"], state["_exception"]
