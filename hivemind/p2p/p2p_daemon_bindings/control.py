@@ -5,7 +5,7 @@ Author: Kevin Mai-Husan Chia
 """
 
 import asyncio
-from contextlib import asynccontextmanager, closing
+from contextlib import asynccontextmanager
 from typing import AsyncIterator, Awaitable, Callable, Dict, Iterable, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
@@ -170,46 +170,62 @@ class ControlClient:
             yield self
 
     async def _read_from_persistent_conn(self, reader: asyncio.StreamReader):
-        while True:
-            resp = p2pd_pb.PersistentConnectionResponse()
-            try:
-                await read_pbmsg_safe(reader, resp)
-            except asyncio.IncompleteReadError:
-                break
+        try:
+            while True:
+                resp = p2pd_pb.PersistentConnectionResponse()
+                try:
+                    await read_pbmsg_safe(reader, resp)
+                except asyncio.IncompleteReadError:
+                    break
 
-            call_id = UUID(bytes=resp.callId)
+                call_id = UUID(bytes=resp.callId)
 
-            if resp.HasField("callUnaryResponse"):
-                if call_id in self._pending_calls and resp.callUnaryResponse.HasField("response"):
-                    self._pending_calls[call_id].set_result(resp.callUnaryResponse.response)
-                elif call_id in self._pending_calls and resp.callUnaryResponse.HasField("error"):
-                    remote_exc = P2PHandlerError(resp.callUnaryResponse.error.decode(errors="ignore"))
-                    self._pending_calls[call_id].set_exception(remote_exc)
+                if resp.HasField("callUnaryResponse"):
+                    if call_id in self._pending_calls and resp.callUnaryResponse.HasField("response"):
+                        self._pending_calls[call_id].set_result(resp.callUnaryResponse.response)
+                    elif call_id in self._pending_calls and resp.callUnaryResponse.HasField("error"):
+                        remote_exc = P2PHandlerError(resp.callUnaryResponse.error.decode(errors="ignore"))
+                        self._pending_calls[call_id].set_exception(remote_exc)
+                    else:
+                        logger.debug(f"Received unexpected unary call: {resp}")
+
+                elif resp.HasField("requestHandling"):
+                    handler_task = asyncio.create_task(self._handle_persistent_request(call_id, resp.requestHandling))
+                    self._handler_tasks[call_id] = handler_task
+
+                elif call_id in self._handler_tasks and resp.HasField("cancel"):
+                    cancel_task_if_running(self._handler_tasks[call_id])
+
+                elif call_id in self._pending_calls and resp.HasField("daemonError"):
+                    daemon_exc = P2PDaemonError(resp.daemonError.message)
+                    self._pending_calls[call_id].set_exception(daemon_exc)
+
+                elif call_id in self._pending_calls:
+                    self._pending_calls[call_id].set_result(None)
+
                 else:
-                    logger.debug(f"Received unexpected unary call: {resp}")
-
-            elif resp.HasField("requestHandling"):
-                handler_task = asyncio.create_task(self._handle_persistent_request(call_id, resp.requestHandling))
-                self._handler_tasks[call_id] = handler_task
-
-            elif call_id in self._handler_tasks and resp.HasField("cancel"):
-                cancel_task_if_running(self._handler_tasks[call_id])
-
-            elif call_id in self._pending_calls and resp.HasField("daemonError"):
-                daemon_exc = P2PDaemonError(resp.daemonError.message)
-                self._pending_calls[call_id].set_exception(daemon_exc)
-
-            elif call_id in self._pending_calls:
-                self._pending_calls[call_id].set_result(None)
-
-            else:
-                logger.debug(f"Received unexpected response from daemon: {resp}")
+                    logger.debug(f"Received unexpected response from daemon: {resp}")
+        except asyncio.CancelledError:
+            # Task was cancelled, clean up gracefully
+            pass
 
     async def _write_to_persistent_conn(self, writer: asyncio.StreamWriter):
-        with closing(writer):
+        try:
             while True:
                 msg = await self._pending_messages.get()
                 await write_pbmsg(writer, msg)
+        except (asyncio.CancelledError, RuntimeError):
+            # Task was cancelled or event loop closed
+            pass
+        finally:
+            # Close writer safely, avoiding "Event loop is closed" errors
+            try:
+                if not writer.is_closing():
+                    writer.close()
+                    await writer.wait_closed()
+            except (RuntimeError, ConnectionError):
+                # Event loop might be closed or connection already closed
+                pass
 
     async def _handle_persistent_request(self, call_id: UUID, request: p2pd_pb.CallUnaryRequest):
         if request.proto not in self.unary_handlers:

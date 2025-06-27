@@ -81,15 +81,10 @@ def setup_environment(*, build_p2pd=False):
 
     subprocess.run(install_cmd, check=True)
 
-    environment = os.environ.copy()
-    environment["HIVEMIND_MEMORY_SHARING_STRATEGY"] = "file_descriptor"
-
-    return environment
-
 
 @app.function(image=image, timeout=600, cpu=8, memory=8192)
 def run_tests():
-    environment = setup_environment(build_p2pd=False)
+    setup_environment(build_p2pd=False)
 
     subprocess.run(
         [
@@ -102,13 +97,12 @@ def run_tests():
             "tests",
         ],
         check=True,
-        env=environment,
     )
 
 
 @app.function(image=image, timeout=900, cpu=8, memory=8192, secrets=[codecov_secret])
 def run_codecov():
-    environment = setup_environment(build_p2pd=False)
+    setup_environment(build_p2pd=False)
 
     subprocess.run(
         [
@@ -120,10 +114,10 @@ def run_codecov():
             "tests",
         ],
         check=True,
-        env=environment,
     )
 
     # Forward GitHub Actions environment variables to the codecov command
+    environment = os.environ.copy()
     environment.update(
         {
             "CODECOV_TOKEN": os.environ["CODECOV_TOKEN"],
@@ -149,7 +143,7 @@ def run_codecov():
 
 @app.function(image=image_with_golang, timeout=600, cpu=1, memory=4096)
 def build_and_test_p2pd():
-    environment = setup_environment(build_p2pd=True)
+    setup_environment(build_p2pd=True)
 
     subprocess.run(
         [
@@ -160,5 +154,4 @@ def build_and_test_p2pd():
             "tests",
         ],
         check=True,
-        env=environment,
     )
