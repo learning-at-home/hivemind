@@ -1,4 +1,3 @@
-import codecs
 import glob
 import hashlib
 import os
@@ -9,8 +8,7 @@ import tarfile
 import tempfile
 import urllib.request
 
-from pkg_resources import parse_requirements, parse_version
-from setuptools import find_packages, setup
+from setuptools import setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
@@ -64,9 +62,11 @@ def build_p2p_daemon():
 
     if m is None:
         raise FileNotFoundError("Could not find golang installation")
-    version = parse_version(m.group(1))
-    if version < parse_version("1.13"):
-        raise OSError(f"Newer version of go required: must be >= 1.13, found {version}")
+
+    go_version_str = m.group(1)
+    go_version_parts = [int(x) for x in go_version_str.split(".")]
+    if go_version_parts[0] < 1 or (go_version_parts[0] == 1 and go_version_parts[1] < 13):
+        raise OSError(f"Newer version of go required: must be >= 1.13, found {go_version_str}")
 
     with tempfile.TemporaryDirectory() as tempdir:
         dest = os.path.join(tempdir, "libp2p-daemon.tar.gz")
@@ -140,66 +140,6 @@ class Develop(develop):
         super().run()
 
 
-with open("requirements.txt") as requirements_file:
-    install_requires = list(map(str, parse_requirements(requirements_file)))
-
-# loading version from setup.py
-with codecs.open(os.path.join(here, "hivemind/__init__.py"), encoding="utf-8") as init_file:
-    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.MULTILINE)
-    version_string = version_match.group(1)
-
-extras = {}
-
-with open("requirements-dev.txt") as dev_requirements_file:
-    extras["dev"] = list(map(str, parse_requirements(dev_requirements_file)))
-
-with open("requirements-docs.txt") as docs_requirements_file:
-    extras["docs"] = list(map(str, parse_requirements(docs_requirements_file)))
-
-extras["bitsandbytes"] = ["bitsandbytes~=0.45.2"]
-
-extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
-
 setup(
-    name="hivemind",
-    version=version_string,
     cmdclass={"build_py": BuildPy, "develop": Develop},
-    description="Decentralized deep learning in PyTorch",
-    long_description="Decentralized deep learning in PyTorch. Built to train models on thousands of volunteers "
-    "across the world.",
-    author="Learning@home & contributors",
-    author_email="hivemind-team@hotmail.com",
-    url="https://github.com/learning-at-home/hivemind",
-    packages=find_packages(exclude=["tests"]),
-    package_data={"hivemind": ["proto/*", "hivemind_cli/*"]},
-    include_package_data=True,
-    license="MIT",
-    setup_requires=["grpcio-tools"],
-    install_requires=install_requires,
-    extras_require=extras,
-    classifiers=[
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Developers",
-        "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Topic :: Scientific/Engineering",
-        "Topic :: Scientific/Engineering :: Mathematics",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        "Topic :: Software Development",
-        "Topic :: Software Development :: Libraries",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-    ],
-    entry_points={
-        "console_scripts": [
-            "hivemind-dht = hivemind.hivemind_cli.run_dht:main",
-            "hivemind-server = hivemind.hivemind_cli.run_server:main",
-        ]
-    },
-    # What does your project relate to?
-    keywords="pytorch, deep learning, machine learning, gpu, distributed computing, volunteer computing, dht",
 )

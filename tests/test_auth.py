@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
 import pytest
@@ -31,7 +31,7 @@ class MockAuthorizer(TokenAuthorizerBase):
         token = AccessToken(
             username=self._username,
             public_key=self.local_public_key.to_bytes(),
-            expiration_time=str(datetime.utcnow() + timedelta(minutes=1)),
+            expiration_time=str(datetime.now(UTC) + timedelta(minutes=1)),
         )
         token.signature = MockAuthorizer._authority_private_key.sign(self._token_to_bytes(token))
         return token
@@ -52,7 +52,7 @@ class MockAuthorizer(TokenAuthorizerBase):
         if expiration_time.tzinfo is not None:
             logger.exception(f"Expected to have no timezone for expiration time: {access_token.expiration_time}")
             return False
-        if expiration_time < datetime.utcnow():
+        if expiration_time < datetime.now(UTC):
             logger.exception("Access token has expired")
             return False
 
@@ -62,7 +62,7 @@ class MockAuthorizer(TokenAuthorizerBase):
 
     def does_token_need_refreshing(self, access_token: AccessToken) -> bool:
         expiration_time = datetime.fromisoformat(access_token.expiration_time)
-        return expiration_time < datetime.utcnow() + self._MAX_LATENCY
+        return expiration_time < datetime.now(UTC) + self._MAX_LATENCY
 
     @staticmethod
     def _token_to_bytes(access_token: AccessToken) -> bytes:

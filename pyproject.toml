@@ -1,3 +1,58 @@
+[build-system]
+requires = ["setuptools>=64", "grpcio-tools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hivemind"
+description = "Decentralized deep learning in PyTorch"
+readme = "README.md"
+authors = [{name = "Learning@home & contributors", email = "hivemind-team@hotmail.com"}]
+license = "MIT"
+requires-python = ">=3.9"
+keywords = ["pytorch", "deep learning", "machine learning", "gpu", "distributed computing", "volunteer computing", "dht"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dynamic = ["version", "dependencies"]
+
+[project.optional-dependencies]
+bitsandbytes = ["bitsandbytes~=0.45.2"]
+
+[project.scripts]
+hivemind-dht = "hivemind.hivemind_cli.run_dht:main"
+hivemind-server = "hivemind.hivemind_cli.run_server:main"
+
+[project.urls]
+Homepage = "https://github.com/learning-at-home/hivemind"
+Repository = "https://github.com/learning-at-home/hivemind"
+
+[tool.setuptools]
+packages = {find = {}}
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "hivemind.__version__"}
+dependencies = {file = ["requirements.txt"]}
+optional-dependencies.dev = {file = ["requirements-dev.txt"]}
+optional-dependencies.docs = {file = ["requirements-docs.txt"]}
+optional-dependencies.all = {file = ["requirements-all.txt"]}
+
+[tool.setuptools.package-data]
+hivemind = ["proto/*", "hivemind_cli/*"]
+
 [tool.coverage.run]
 concurrency = ["thread", "multiprocessing"]
 omit = ["hivemind/proto/*"]
