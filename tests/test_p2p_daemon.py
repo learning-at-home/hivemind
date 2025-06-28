@@ -46,7 +46,7 @@ async def test_startup_error_message():
         )
 
     with pytest.raises(P2PDaemonError, match=r"Daemon failed to start in .+ seconds"):
-        await P2P.create(startup_timeout=0.01)  # Test that startup_timeout works
+        await P2P.create(startup_timeout=0.1)
 
 
 @pytest.mark.asyncio
