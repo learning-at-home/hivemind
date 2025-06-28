@@ -21,7 +21,6 @@ from hivemind.utils import BatchTensorDescriptor, MPFuture, get_dht_time
 
 
 @pytest.mark.forked
-@pytest.mark.skip("Skipping test due to freezes in CI")
 def test_moe():
     all_expert_uids = [
         f"ffn.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}.{np.random.randint(0, 3)}" for _ in range(10)
@@ -66,7 +65,6 @@ def test_no_experts():
 
 
 @pytest.mark.forked
-@pytest.mark.skip(reason="Skipping call_many test due to freezes")
 def test_call_many(hidden_dim=16):
     k_min = 1
     timeout_after_k_min = None

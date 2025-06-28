@@ -12,8 +12,8 @@ from hivemind.moe.server import background_server
 def cleanup_process(process, timeout=5):
     try:
         process.terminate()
-        process.wait(timeout=timeout)  # Add timeout to wait
-    except:  # noqa: E722
+        process.wait(timeout=timeout)
+    except (ProcessLookupError, TimeoutError):
         process.kill()
         process.wait(timeout=timeout)
 
