@@ -15,13 +15,13 @@ image = (
             "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
         ]
     )
-    .add_local_dir("hivemind", remote_path="/root/hivemind/hivemind")
-    .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
-    .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
-    .add_local_file("requirements-docs.txt", remote_path="/root/hivemind/requirements-docs.txt")
-    .add_local_file("setup.py", remote_path="/root/hivemind/setup.py")
-    .add_local_file("pyproject.toml", remote_path="/root/hivemind/pyproject.toml")
-    .add_local_dir("tests", remote_path="/root/hivemind/tests")
+    .add_local_dir("hivemind", remote_path="/root/project/hivemind")
+    .add_local_file("requirements.txt", remote_path="/root/project/requirements.txt")
+    .add_local_file("requirements-dev.txt", remote_path="/root/project/requirements-dev.txt")
+    .add_local_file("requirements-docs.txt", remote_path="/root/project/requirements-docs.txt")
+    .add_local_file("setup.py", remote_path="/root/project/setup.py")
+    .add_local_file("pyproject.toml", remote_path="/root/project/pyproject.toml")
+    .add_local_dir("tests", remote_path="/root/project/tests")
 )
 
 # Create an image with golang and other system dependencies
@@ -41,13 +41,13 @@ image_with_golang = (
             "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
         ]
     )
-    .add_local_dir("hivemind", remote_path="/root/hivemind/hivemind")
-    .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
-    .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
-    .add_local_file("requirements-docs.txt", remote_path="/root/hivemind/requirements-docs.txt")
-    .add_local_file("setup.py", remote_path="/root/hivemind/setup.py")
-    .add_local_file("pyproject.toml", remote_path="/root/hivemind/pyproject.toml")
-    .add_local_dir("tests", remote_path="/root/hivemind/tests")
+    .add_local_dir("hivemind", remote_path="/root/project/hivemind")
+    .add_local_file("requirements.txt", remote_path="/root/project/requirements.txt")
+    .add_local_file("requirements-dev.txt", remote_path="/root/project/requirements-dev.txt")
+    .add_local_file("requirements-docs.txt", remote_path="/root/project/requirements-docs.txt")
+    .add_local_file("setup.py", remote_path="/root/project/setup.py")
+    .add_local_file("pyproject.toml", remote_path="/root/project/pyproject.toml")
+    .add_local_dir("tests", remote_path="/root/project/tests")
 )
 
 
@@ -64,7 +64,7 @@ codecov_secret = modal.Secret.from_dict(
 
 
 def setup_environment(*, build_p2pd=False):
-    os.chdir("/root/hivemind")
+    os.chdir("/root/project")
 
     if build_p2pd:
         install_cmd = [
@@ -77,7 +77,7 @@ def setup_environment(*, build_p2pd=False):
             "--no-use-pep517",
         ]
     else:
-        install_cmd = ["pip", "install", "-e", ".", "--no-use-pep517"]
+        install_cmd = ["pip", "install", "-e", "."]
 
     subprocess.run(install_cmd, check=True)
 
