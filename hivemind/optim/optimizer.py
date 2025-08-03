@@ -87,7 +87,7 @@ class Optimizer(torch.optim.Optimizer):
     >>>    delay_grad_averaging=OPTIONAL, delay_optimizer_step=OPTIONAL, # train faster, but with 1 round of staleness;
     >>>    # setting both to True is equivalent to Delayed Parameter Updates (see https://arxiv.org/abs/2101.06840)
     >>>
-    >>>    grad_compression=hivemind.Float16Compression(),  state_averaging_compression=hivemind.Float16Compression(),
+    >>>    grad_compression=hivemind.compression.Float16Compression(),  state_averaging_compression=hivemind.compression.Float16Compression(),
     >>>    # ^-- it is usually fine to use pure 16-bit or even lower precision during communication with no precaution;
     >>>    # See hivemind/examples/albert for an working example of mixed 8/16-bit compression.
     >>>

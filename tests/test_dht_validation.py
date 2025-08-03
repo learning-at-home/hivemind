@@ -4,12 +4,13 @@ from typing import Dict
 import pytest
 from pydantic.v1 import BaseModel, StrictInt
 
-import hivemind
+from hivemind import DHT
 from hivemind.dht.crypto import RSASignatureValidator
 from hivemind.dht.protocol import DHTProtocol
 from hivemind.dht.routing import DHTID
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import CompositeValidator, DHTRecord
+from hivemind.utils import get_dht_time
 
 
 class SchemaA(BaseModel):
@@ -32,7 +33,7 @@ def validators_for_app():
 @pytest.mark.forked
 def test_dht_add_validators(validators_for_app):
     # One app may create a DHT with its validators
-    dht = hivemind.DHT(start=False, record_validators=validators_for_app["A"])
+    dht = DHT(start=False, record_validators=validators_for_app["A"])
 
     # While the DHT process is not started, you can't send a command to append new validators
     with pytest.raises(RuntimeError):
@@ -42,18 +43,18 @@ def test_dht_add_validators(validators_for_app):
     # After starting the process, other apps may add new validators to the existing DHT
     dht.add_validators(validators_for_app["B"])
 
-    assert dht.store("field_a", b"bytes_value", hivemind.get_dht_time() + 10)
+    assert dht.store("field_a", b"bytes_value", get_dht_time() + 10)
     assert dht.get("field_a", latest=True).value == b"bytes_value"
 
-    assert not dht.store("field_a", 666, hivemind.get_dht_time() + 10)
+    assert not dht.store("field_a", 666, get_dht_time() + 10)
     assert dht.get("field_a", latest=True).value == b"bytes_value"
 
     local_public_key = validators_for_app["A"][0].local_public_key
-    assert dht.store("field_b", 777, hivemind.get_dht_time() + 10, subkey=local_public_key)
+    assert dht.store("field_b", 777, get_dht_time() + 10, subkey=local_public_key)
     dictionary = dht.get("field_b", latest=True).value
     assert len(dictionary) == 1 and dictionary[local_public_key].value == 777
 
-    assert not dht.store("unknown_key", 666, hivemind.get_dht_time() + 10)
+    assert not dht.store("unknown_key", 666, get_dht_time() + 10)
     assert dht.get("unknown_key", latest=True) is None
 
 
@@ -70,7 +71,7 @@ def test_composite_validator(validators_for_app):
         key=DHTID.generate(source="field_b").to_bytes(),
         subkey=DHTProtocol.serializer.dumps(local_public_key),
         value=DHTProtocol.serializer.dumps(777),
-        expiration_time=hivemind.get_dht_time() + 10,
+        expiration_time=get_dht_time() + 10,
     )
 
     signed_record = dataclasses.replace(record, value=validator.sign_value(record))
@@ -84,7 +85,7 @@ def test_composite_validator(validators_for_app):
         key=DHTID.generate(source="unknown_key").to_bytes(),
         subkey=DHTProtocol.IS_REGULAR_VALUE,
         value=DHTProtocol.serializer.dumps(777),
-        expiration_time=hivemind.get_dht_time() + 10,
+        expiration_time=get_dht_time() + 10,
     )
 
     signed_record = dataclasses.replace(record, value=validator.sign_value(record))

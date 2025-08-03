@@ -9,13 +9,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import hivemind
+from hivemind import DHT
 from hivemind.averaging.control import AveragingStage
 from hivemind.optim.grad_averager import GradientAverager, GradientAveragerFactory
 from hivemind.optim.optimizer import Optimizer
 from hivemind.optim.power_sgd_averager import PowerSGDGradientAverager
 from hivemind.optim.progress_tracker import ProgressTracker
 from hivemind.optim.state_averager import ZERO_GRAD_SET_TO_NONE_DEFAULT, TrainingStateAverager
+from hivemind.utils import get_dht_time
 from hivemind.utils.crypto import RSAPrivateKey
 
 
@@ -27,20 +28,20 @@ from hivemind.utils.crypto import RSAPrivateKey
 def test_grad_averager(grad_averager_factory: GradientAveragerFactory):
     parameter_shape = (5, 5)
 
-    dht1 = hivemind.DHT(start=True)
+    dht1 = DHT(start=True)
     model1 = nn.ParameterDict({"w": nn.Parameter(torch.zeros(parameter_shape))})
     averager1 = grad_averager_factory(
         model1.parameters(), dht=dht1, prefix="test", target_group_size=2, reuse_grad_buffers=False, start=True
     )
 
-    dht2 = hivemind.DHT(start=True, initial_peers=dht1.get_visible_maddrs())
+    dht2 = DHT(start=True, initial_peers=dht1.get_visible_maddrs())
     model2 = nn.ParameterDict({"w": nn.Parameter(torch.zeros(parameter_shape))})
     averager2 = grad_averager_factory(
         model2.parameters(), dht=dht2, prefix="test", target_group_size=2, reuse_grad_buffers=True, start=True
     )
 
-    control1 = averager1.schedule_step(hivemind.get_dht_time() + 5)
-    control2 = averager2.schedule_step(hivemind.get_dht_time() + 5)
+    control1 = averager1.schedule_step(get_dht_time() + 5)
+    control2 = averager2.schedule_step(get_dht_time() + 5)
 
     for i in range(10):
         time.sleep(0.1)
@@ -94,7 +95,7 @@ def test_grad_averager(grad_averager_factory: GradientAveragerFactory):
 def test_grad_averager_wrong_shape(grad_averager_factory: GradientAveragerFactory):
     parameter_shape = (5, 5)
     model = nn.ParameterDict({"w": nn.Parameter(torch.zeros(parameter_shape))})
-    dht = hivemind.DHT(start=True)
+    dht = DHT(start=True)
 
     with pytest.raises(ValueError):
         grad_averager_factory(
@@ -114,8 +115,8 @@ def test_grad_averager_wrong_shape(grad_averager_factory: GradientAveragerFactor
     [(False, False, False), (True, True, False), (True, False, False), (False, True, True), (True, False, True)],
 )
 def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch_when_averaging: bool):
-    dht1 = hivemind.DHT(start=True)
-    dht2 = hivemind.DHT(initial_peers=dht1.get_visible_maddrs(), start=True)
+    dht1 = DHT(start=True)
+    dht2 = DHT(initial_peers=dht1.get_visible_maddrs(), start=True)
 
     torch.manual_seed(1337)
     torch.use_deterministic_algorithms(True)
@@ -183,8 +184,8 @@ def test_state_averager(offload_optimizer: bool, reuse_tensors: bool, sync_epoch
 
 @pytest.mark.forked
 def test_load_state_from_peers():
-    dht1 = hivemind.DHT(start=True)
-    dht2 = hivemind.DHT(initial_peers=dht1.get_visible_maddrs(), start=True)
+    dht1 = DHT(start=True)
+    dht2 = DHT(initial_peers=dht1.get_visible_maddrs(), start=True)
 
     model1 = nn.Linear(2, 3)
     model2 = nn.Linear(2, 3)
@@ -221,14 +222,14 @@ def test_progress_tracker():
     # note to a curious reader: no, you cannot reduce the timings without compromising realism or stability
     prefix = "my_exp"
     target_batch_size = 256
-    dht_root = hivemind.DHT(start=True)
+    dht_root = DHT(start=True)
     barrier = mp.Barrier(parties=5)
     delayed_start_evt = mp.Event()
     finished_evt = mp.Event()
     emas = mp.Array(ctypes.c_double, 5)
 
     def run_worker(index: int, batch_size: int, period: float, **kwargs):
-        dht = hivemind.DHT(initial_peers=dht_root.get_visible_maddrs(), start=True)
+        dht = DHT(initial_peers=dht_root.get_visible_maddrs(), start=True)
         tracker = ProgressTracker(
             dht,
             prefix,
@@ -290,7 +291,7 @@ def test_progress_tracker():
     barrier.wait()
 
     local_epoch = 0
-    last_timestamp = hivemind.get_dht_time()
+    last_timestamp = get_dht_time()
     step_time_deltas = []
 
     while local_epoch < 6:
@@ -300,11 +301,11 @@ def test_progress_tracker():
             with tracker.pause_updates():
                 local_epoch = tracker.update_epoch(local_epoch + 1)
 
-            time_delta = hivemind.get_dht_time() - last_timestamp
+            time_delta = get_dht_time() - last_timestamp
             if local_epoch == 2:
                 delayed_start_evt.set()
 
-            last_timestamp = hivemind.get_dht_time()
+            last_timestamp = get_dht_time()
             step_time_deltas.append(time_delta)
 
     finished_evt.set()
@@ -368,7 +369,7 @@ def _test_optimizer(
     delay_optimizer_step: bool = True,
     average_state_every: int = 1,
 ):
-    dht = hivemind.DHT(start=True)
+    dht = DHT(start=True)
 
     features = torch.randn(100, 5)
     targets = features @ torch.randn(5, 1)
@@ -388,7 +389,7 @@ def _test_optimizer(
             params=model.parameters(),
             optimizer=partial(torch.optim.SGD, lr=0.1),
             scheduler=partial(torch.optim.lr_scheduler.StepLR, gamma=0.5, step_size=1),
-            dht=hivemind.DHT(initial_peers=dht.get_visible_maddrs(), client_mode=client_mode, start=True),
+            dht=DHT(initial_peers=dht.get_visible_maddrs(), client_mode=client_mode, start=True),
             tracker_opts=dict(private_key=RSAPrivateKey(), max_refresh_period=1.0),
             averager_opts=dict(request_timeout=0.5),
             use_local_updates=use_local_updates,

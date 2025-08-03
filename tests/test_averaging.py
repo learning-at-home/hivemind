@@ -5,14 +5,14 @@ import numpy as np
 import pytest
 import torch
 
-import hivemind
-from hivemind.averaging import DecentralizedAverager
+from hivemind import DHT, DecentralizedAverager
 from hivemind.averaging.allreduce import AveragingMode
 from hivemind.averaging.control import AveragingStage
 from hivemind.averaging.key_manager import GroupKeyManager
 from hivemind.averaging.load_balancing import load_balance_peers
 from hivemind.averaging.partition import AllreduceException
 from hivemind.p2p import PeerID
+from hivemind.utils import get_dht_time
 
 from test_utils.dht_swarms import launch_dht_instances
 
@@ -20,7 +20,7 @@ from test_utils.dht_swarms import launch_dht_instances
 @pytest.mark.forked
 @pytest.mark.asyncio
 async def test_key_manager():
-    dht = hivemind.DHT(start=True)
+    dht = DHT(start=True)
     key_manager = GroupKeyManager(
         dht,
         prefix="test_averaging",
@@ -30,7 +30,7 @@ async def test_key_manager():
     alice = dht.peer_id
     bob = PeerID(b"bob")
 
-    t = hivemind.get_dht_time()
+    t = get_dht_time()
     key = key_manager.current_key
     await key_manager.declare_averager(key, alice, expiration_time=t + 60)
     await key_manager.declare_averager(key, bob, expiration_time=t + 61)
@@ -418,7 +418,7 @@ def test_load_state_priority():
 
     averagers = []
     for i in range(4):
-        averager = hivemind.DecentralizedAverager(
+        averager = DecentralizedAverager(
             [torch.randn(3), torch.rand(5), torch.tensor([i], dtype=torch.float32)],
             dht=dht_instances[i],
             start=True,
@@ -455,7 +455,7 @@ def test_load_state_priority():
 
 @pytest.mark.forked
 def test_getset_bits():
-    dht = hivemind.DHT(start=True)
+    dht = DHT(start=True)
     averager = DecentralizedAverager(
         [torch.randn(3)],
         dht=dht,
@@ -487,7 +487,7 @@ def test_averaging_trigger():
         controls.append(
             averager.step(
                 wait=False,
-                scheduled_time=hivemind.get_dht_time() + 0.5,
+                scheduled_time=get_dht_time() + 0.5,
                 weight=1.0,
                 require_trigger=i in (1, 2),
             )

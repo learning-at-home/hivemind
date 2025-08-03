@@ -5,20 +5,24 @@ import pytest
 import torch
 import torch.nn as nn
 
-import hivemind
+import hivemind.compression
+from hivemind import TrainingAverager
+from hivemind.averaging import DecentralizedAverager
 from hivemind.compression import (
     CompressionBase,
     CompressionInfo,
     Float16Compression,
     NoCompression,
-    PerTensorCompression,
-    RoleAdaptiveCompression,
-    SizeAdaptiveCompression,
-    Uniform8BitQuantization,
     deserialize_torch_tensor,
     serialize_torch_tensor,
 )
-from hivemind.compression.adaptive import AdaptiveCompressionBase
+from hivemind.compression.adaptive import (
+    AdaptiveCompressionBase,
+    PerTensorCompression,
+    RoleAdaptiveCompression,
+    SizeAdaptiveCompression,
+)
+from hivemind.compression.quantization import Uniform8BitQuantization
 from hivemind.proto.runtime_pb2 import CompressionType
 from hivemind.utils.streaming import combine_from_streaming, split_for_streaming
 
@@ -127,7 +131,7 @@ def test_allreduce_compression():
 
     for compression_type_pair in [(FLOAT16, FLOAT16), (FLOAT16, UINT8), (UINT8, FLOAT16), (UINT8, UINT8)]:
         dht_instances = launch_dht_instances(2)
-        averager1 = hivemind.averaging.DecentralizedAverager(
+        averager1 = DecentralizedAverager(
             [x.clone() for x in tensors1],
             dht=dht_instances[0],
             compression=PerTensorCompression(compression_type_pair),
@@ -136,7 +140,7 @@ def test_allreduce_compression():
             prefix="mygroup",
             start=True,
         )
-        averager2 = hivemind.averaging.DecentralizedAverager(
+        averager2 = DecentralizedAverager(
             [x.clone() for x in tensors2],
             dht=dht_instances[1],
             compression=PerTensorCompression(compression_type_pair),
@@ -223,7 +227,7 @@ def test_adaptive_compression():
 
     dht_instances = launch_dht_instances(2)
 
-    averager1 = hivemind.TrainingAverager(
+    averager1 = TrainingAverager(
         opt=torch.optim.Adam(make_params()),
         average_parameters=True,
         average_gradients=True,
@@ -237,7 +241,7 @@ def test_adaptive_compression():
         dht=dht_instances[0],
     )
 
-    averager2 = hivemind.TrainingAverager(
+    averager2 = TrainingAverager(
         opt=torch.optim.Adam(make_params()),
         average_parameters=True,
         average_gradients=True,

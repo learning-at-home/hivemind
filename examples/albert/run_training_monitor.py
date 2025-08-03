@@ -102,7 +102,7 @@ class CheckpointHandler:
             optimizer=opt,
             scheduler=get_linear_schedule_with_warmup(opt, num_warmup_steps=5000, num_training_steps=125_000),
             prefix=f"{run_id}_state_averager",
-            state_compression=hivemind.Float16Compression(),
+            state_compression=hivemind.compression.Float16Compression(),
             bandwidth=optimizer_args.bandwidth,
             client_mode=optimizer_args.client_mode,
             start=True,

@@ -7,7 +7,7 @@ from typing import AsyncIterator
 import pytest
 import torch
 
-import hivemind
+from hivemind import DHT, DecentralizedAverager
 from hivemind.averaging.averager import AllReduceRunner, AveragingMode, GatheredData
 from hivemind.averaging.group_info import GroupInfo
 from hivemind.averaging.load_balancing import load_balance_peers
@@ -29,7 +29,7 @@ class Fault(Enum):
     CANCEL = auto()
 
 
-class FaultyAverager(hivemind.DecentralizedAverager):
+class FaultyAverager(DecentralizedAverager):
     def __init__(self, *args, fault: Fault = Fault.NONE, **kwargs):
         self.fault = fault
         super().__init__(*args, **kwargs)
@@ -145,13 +145,13 @@ def test_fault_tolerance(fault0: Fault, fault1: Fault):
     def _make_tensors():
         return [torch.rand(16, 1024), -torch.rand(3, 8192), 2 * torch.randn(4, 4, 4), torch.randn(1024, 1024)]
 
-    dht = hivemind.DHT(start=True)
+    dht = DHT(start=True)
 
     averagers = []
     for i in range(5):
         averager = FaultyAverager(
             _make_tensors(),
-            hivemind.DHT(initial_peers=dht.get_visible_maddrs(), start=True),
+            DHT(initial_peers=dht.get_visible_maddrs(), start=True),
             prefix="test",
             request_timeout=0.3,
             min_matchmaking_time=1.0,
