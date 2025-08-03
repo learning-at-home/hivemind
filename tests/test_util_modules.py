@@ -10,10 +10,8 @@ import numpy as np
 import pytest
 import torch
 
-import hivemind
 from hivemind.compression import deserialize_torch_tensor, serialize_torch_tensor
 from hivemind.proto.runtime_pb2 import CompressionType
-from hivemind.utils import BatchTensorDescriptor, DHTExpiration, HeapEntry, MSGPackSerializer, ValueWithExpiration
 from hivemind.utils.asyncio import (
     achain,
     aenumerate,
@@ -27,13 +25,17 @@ from hivemind.utils.asyncio import (
     cancel_and_wait,
     enter_asynchronously,
 )
-from hivemind.utils.mpfuture import InvalidStateError
+from hivemind.utils.mpfuture import InvalidStateError, MPFuture
 from hivemind.utils.performance_ema import PerformanceEMA
+from hivemind.utils.serializer import MSGPackSerializer
+from hivemind.utils.streaming import combine_from_streaming, split_for_streaming
+from hivemind.utils.tensor_descr import BatchTensorDescriptor
+from hivemind.utils.timed_storage import DHTExpiration, HeapEntry, ValueWithExpiration
 
 
 @pytest.mark.forked
 def test_mpfuture_result():
-    future = hivemind.MPFuture()
+    future = MPFuture()
 
     def _proc(future):
         with pytest.raises(RuntimeError):
@@ -50,7 +52,7 @@ def test_mpfuture_result():
     assert future.cancel() is False
     assert future.done() and not future.running() and not future.cancelled()
 
-    future = hivemind.MPFuture()
+    future = MPFuture()
     with pytest.raises(concurrent.futures.TimeoutError):
         future.result(timeout=1e-3)
 
@@ -60,7 +62,7 @@ def test_mpfuture_result():
 
 @pytest.mark.forked
 def test_mpfuture_exception():
-    future = hivemind.MPFuture()
+    future = MPFuture()
     with pytest.raises(concurrent.futures.TimeoutError):
         future.exception(timeout=1e-3)
 
@@ -80,7 +82,7 @@ def test_mpfuture_exception():
 
 @pytest.mark.forked
 def test_mpfuture_cancel():
-    future = hivemind.MPFuture()
+    future = MPFuture()
     assert not future.cancelled()
     future.cancel()
     evt = mp.Event()
@@ -106,7 +108,7 @@ def test_mpfuture_cancel():
 @pytest.mark.forked
 def test_mpfuture_status():
     evt = mp.Event()
-    future = hivemind.MPFuture()
+    future = MPFuture()
 
     def _proc1(future):
         assert future.set_running_or_notify_cancel() is True
@@ -122,7 +124,7 @@ def test_mpfuture_status():
     with pytest.raises(InvalidStateError):
         future.set_running_or_notify_cancel()
 
-    future = hivemind.MPFuture()
+    future = MPFuture()
     assert future.cancel()
 
     def _proc2(future):
@@ -135,7 +137,7 @@ def test_mpfuture_status():
     p.join()
     evt.set()
 
-    future2 = hivemind.MPFuture()
+    future2 = MPFuture()
     future2.cancel()
     assert future2.set_running_or_notify_cancel() is False
 
@@ -143,7 +145,7 @@ def test_mpfuture_status():
 @pytest.mark.asyncio
 async def test_await_mpfuture():
     # await result from the same process, but a different coroutine
-    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
+    f1, f2 = MPFuture(), MPFuture()
 
     async def wait_and_assign_async():
         assert f2.set_running_or_notify_cancel() is True
@@ -156,7 +158,7 @@ async def test_await_mpfuture():
     assert (await asyncio.gather(f1, f2)) == [(123, "ololo"), (456, "pyshpysh")]
 
     # await result from separate processes
-    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
+    f1, f2 = MPFuture(), MPFuture()
 
     def wait_and_assign(future, value):
         time.sleep(0.1 * random.random())
@@ -172,7 +174,7 @@ async def test_await_mpfuture():
         p.join()
 
     # await cancel
-    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
+    f1, f2 = MPFuture(), MPFuture()
 
     def wait_and_cancel():
         time.sleep(0.01)
@@ -190,7 +192,7 @@ async def test_await_mpfuture():
     p.join()
 
     # await exception
-    f1, f2 = hivemind.MPFuture(), hivemind.MPFuture()
+    f1, f2 = MPFuture(), MPFuture()
 
     def wait_and_raise():
         time.sleep(0.01)
@@ -211,10 +213,10 @@ async def test_await_mpfuture():
 @pytest.mark.forked
 def test_mpfuture_bidirectional():
     evt = mp.Event()
-    future_from_main = hivemind.MPFuture()
+    future_from_main = MPFuture()
 
     def _future_creator():
-        future_from_fork = hivemind.MPFuture()
+        future_from_fork = MPFuture()
         future_from_main.set_result(("abc", future_from_fork))
 
         if future_from_fork.result() == ["we", "need", "to", "go", "deeper"]:
@@ -224,7 +226,7 @@ def test_mpfuture_bidirectional():
     p.start()
 
     out = future_from_main.result()
-    assert isinstance(out[1], hivemind.MPFuture)
+    assert isinstance(out[1], MPFuture)
     out[1].set_result(["we", "need", "to", "go", "deeper"])
 
     p.join()
@@ -237,7 +239,7 @@ def test_mpfuture_done_callback():
     events = [mp.Event() for _ in range(7)]
 
     def _future_creator():
-        future1, future2, future3 = hivemind.MPFuture(), hivemind.MPFuture(), hivemind.MPFuture()
+        future1, future2, future3 = MPFuture(), MPFuture(), MPFuture()
 
         def _check_result_and_set(future):
             assert future.done()
@@ -283,12 +285,12 @@ def test_mpfuture_done_callback():
 def test_many_futures():
     evt = mp.Event()
     receiver, sender = mp.Pipe()
-    main_futures = [hivemind.MPFuture() for _ in range(1000)]
-    assert len(hivemind.MPFuture._active_futures) == 1000
+    main_futures = [MPFuture() for _ in range(1000)]
+    assert len(MPFuture._active_futures) == 1000
 
     def _run_peer():
-        fork_futures = [hivemind.MPFuture() for _ in range(500)]
-        assert len(hivemind.MPFuture._active_futures) == 500
+        fork_futures = [MPFuture() for _ in range(500)]
+        assert len(MPFuture._active_futures) == 500
 
         for i, future in enumerate(random.sample(main_futures, 300)):
             if random.random() < 0.5:
@@ -302,11 +304,11 @@ def test_many_futures():
 
         evt.wait()
 
-        assert len(hivemind.MPFuture._active_futures) == 200
+        assert len(MPFuture._active_futures) == 200
         for future in fork_futures:
             if not future.done():
                 future.set_result(123)
-        assert len(hivemind.MPFuture._active_futures) == 0
+        assert len(MPFuture._active_futures) == 0
 
     p = mp.Process(target=_run_peer)
     p.start()
@@ -314,7 +316,7 @@ def test_many_futures():
     some_fork_futures = receiver.recv()
 
     time.sleep(0.1)  # giving enough time for the futures to be destroyed
-    assert len(hivemind.MPFuture._active_futures) == 700
+    assert len(MPFuture._active_futures) == 700
 
     for future in some_fork_futures:
         future.set_running_or_notify_cancel()
@@ -325,7 +327,7 @@ def test_many_futures():
     for future in main_futures:
         future.cancel()
     time.sleep(0.1)  # giving enough time for the futures to be destroyed
-    assert len(hivemind.MPFuture._active_futures) == 0
+    assert len(MPFuture._active_futures) == 0
     p.join()
 
 
@@ -346,31 +348,31 @@ def test_serialize_tuple():
 def test_split_parts():
     tensor = torch.randn(910, 512)
     serialized_tensor_part = serialize_torch_tensor(tensor, allow_inplace=False)
-    chunks1 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 16384))
+    chunks1 = list(split_for_streaming(serialized_tensor_part, 16384))
     assert len(chunks1) == int(np.ceil(tensor.numel() * tensor.element_size() / 16384))
 
-    chunks2 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10_000))
+    chunks2 = list(split_for_streaming(serialized_tensor_part, 10_000))
     assert len(chunks2) == int(np.ceil(tensor.numel() * tensor.element_size() / 10_000))
 
-    chunks3 = list(hivemind.utils.split_for_streaming(serialized_tensor_part, 10**9))
+    chunks3 = list(split_for_streaming(serialized_tensor_part, 10**9))
     assert len(chunks3) == 1
 
     compressed_tensor_part = serialize_torch_tensor(tensor, CompressionType.FLOAT16, allow_inplace=False)
-    chunks4 = list(hivemind.utils.split_for_streaming(compressed_tensor_part, 16384))
+    chunks4 = list(split_for_streaming(compressed_tensor_part, 16384))
     assert len(chunks4) == int(np.ceil(tensor.numel() * 2 / 16384))
 
-    combined1 = hivemind.utils.combine_from_streaming(chunks1)
-    combined2 = hivemind.utils.combine_from_streaming(iter(chunks2))
-    combined3 = hivemind.utils.combine_from_streaming(chunks3)
-    combined4 = hivemind.utils.combine_from_streaming(chunks4)
+    combined1 = combine_from_streaming(chunks1)
+    combined2 = combine_from_streaming(iter(chunks2))
+    combined3 = combine_from_streaming(chunks3)
+    combined4 = combine_from_streaming(chunks4)
     for combined in combined1, combined2, combined3:
         assert torch.allclose(tensor, deserialize_torch_tensor(combined), rtol=1e-5, atol=1e-8)
 
     assert torch.allclose(tensor, deserialize_torch_tensor(combined4), rtol=1e-3, atol=1e-3)
 
-    combined_incomplete = hivemind.utils.combine_from_streaming(chunks4[:5])
-    combined_incomplete2 = hivemind.utils.combine_from_streaming(chunks4[:1])
-    combined_incomplete3 = hivemind.utils.combine_from_streaming(chunks4[:-1])
+    combined_incomplete = combine_from_streaming(chunks4[:5])
+    combined_incomplete2 = combine_from_streaming(chunks4[:1])
+    combined_incomplete3 = combine_from_streaming(chunks4[:-1])
     for combined in combined_incomplete, combined_incomplete2, combined_incomplete3:
         with pytest.raises(RuntimeError):
             deserialize_torch_tensor(combined)

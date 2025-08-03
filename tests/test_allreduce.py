@@ -6,11 +6,11 @@ from typing import Sequence
 import pytest
 import torch
 
-from hivemind import Quantile8BitQuantization, aenumerate
 from hivemind.averaging.allreduce import AllReduceRunner, AveragingMode
 from hivemind.averaging.partition import TensorPartContainer, TensorPartReducer
-from hivemind.compression import deserialize_torch_tensor
+from hivemind.compression import Quantile8BitQuantization, deserialize_torch_tensor
 from hivemind.p2p import P2P
+from hivemind.utils.asyncio import aenumerate
 
 
 @pytest.mark.forked

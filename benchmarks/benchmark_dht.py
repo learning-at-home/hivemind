@@ -8,7 +8,8 @@ from typing import Tuple
 import numpy as np
 from tqdm import trange
 
-import hivemind
+from hivemind import DHT
+from hivemind.utils import get_dht_time
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
 
@@ -71,7 +72,7 @@ async def store_and_get_task(
                 key,
                 subkey=subkey,
                 value=store_values[subkey],
-                expiration_time=hivemind.get_dht_time() + expiration,
+                expiration_time=get_dht_time() + expiration,
                 return_future=True,
             )
             for peer, subkey in zip(store_peers, store_subkeys)
@@ -135,7 +136,7 @@ async def benchmark_dht(
         neighbors = sum(
             [peer.get_visible_maddrs() for peer in random.sample(peers, min(initial_peers, len(peers)))], []
         )
-        peer = hivemind.DHT(initial_peers=neighbors, start=True, wait_timeout=wait_timeout)
+        peer = DHT(initial_peers=neighbors, start=True, wait_timeout=wait_timeout)
         peers.append(peer)
 
     benchmark_started = time.perf_counter()

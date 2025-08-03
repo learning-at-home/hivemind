@@ -5,7 +5,7 @@ import time
 
 import torch
 
-import hivemind
+from hivemind import DHT, DecentralizedAverager
 from hivemind.compression import Float16Compression
 from hivemind.utils.limits import increase_file_limit
 from hivemind.utils.logging import get_logger, use_hivemind_log_handler
@@ -44,7 +44,7 @@ def benchmark_averaging(
     num_layers: int,
     spawn_dtime: float,
 ):
-    dht_root = hivemind.DHT(start=True)
+    dht_root = DHT(start=True)
     initial_peers = dht_root.get_visible_maddrs()
 
     num_groups = 2 ** int(round(math.log2(num_peers / target_group_size)))
@@ -56,9 +56,9 @@ def benchmark_averaging(
 
     def run_averager(index):
         nonlocal successful_steps, total_steps, lock_stats
-        dht = hivemind.DHT(initial_peers=initial_peers, start=True)
+        dht = DHT(initial_peers=initial_peers, start=True)
         initial_bits = bin(index % num_groups)[2:].rjust(nbits, "0")
-        averager = hivemind.averaging.DecentralizedAverager(
+        averager = DecentralizedAverager(
             peer_tensors[index],
             dht,
             prefix="my_tensor",

@@ -14,8 +14,9 @@ from hivemind.averaging.key_manager import GroupKey, GroupKeyManager
 from hivemind.dht import DHT, DHTID
 from hivemind.p2p import P2P, P2PContext, P2PDaemonError, P2PHandlerError, PeerID, ServicerBase
 from hivemind.proto import averaging_pb2
-from hivemind.utils import DHTExpiration, TimedStorage, get_dht_time, get_logger, timed_storage
+from hivemind.utils import DHTExpiration, TimedStorage, get_dht_time, get_logger
 from hivemind.utils.asyncio import anext, cancel_and_wait
+from hivemind.utils.timed_storage import MAX_DHT_TIME_DISCREPANCY_SECONDS
 
 logger = get_logger(__name__)
 
@@ -497,7 +498,7 @@ class PotentialLeaders:
             return maybe_next_leader
 
     async def _update_queue_periodically(self, key_manager: GroupKeyManager) -> None:
-        DISCREPANCY = timed_storage.MAX_DHT_TIME_DISCREPANCY_SECONDS
+        DISCREPANCY = MAX_DHT_TIME_DISCREPANCY_SECONDS
         while get_dht_time() < self.search_end_time:
             new_peers = await key_manager.get_averagers(key_manager.current_key, only_active=True)
             self.max_assured_time = max(
