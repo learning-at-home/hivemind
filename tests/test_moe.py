@@ -17,7 +17,8 @@ from hivemind.moe.expert_uid import ExpertInfo
 from hivemind.moe.server import ModuleBackend, Server, background_server, declare_experts
 from hivemind.moe.server.layers import name_to_block
 from hivemind.p2p.p2p_daemon_bindings.control import P2PHandlerError
-from hivemind.utils import BatchTensorDescriptor, MPFuture, get_dht_time
+from hivemind.utils import MPFuture, get_dht_time
+from hivemind.utils.tensor_descr import BatchTensorDescriptor
 
 
 @pytest.mark.forked

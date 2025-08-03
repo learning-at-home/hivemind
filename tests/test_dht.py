@@ -5,8 +5,10 @@ import time
 
 import pytest
 
-import hivemind
+from hivemind import DHT
+from hivemind.p2p import P2P, P2PDaemonError
 from hivemind.utils.multiaddr import Multiaddr
+from hivemind.utils.timed_storage import get_dht_time
 
 from test_utils.dht_swarms import launch_dht_instances
 from test_utils.networking import get_free_port
@@ -17,7 +19,7 @@ def test_get_store(n_peers=10):
     peers = launch_dht_instances(n_peers)
 
     node1, node2 = random.sample(peers, 2)
-    assert node1.store("key1", "value1", expiration_time=hivemind.get_dht_time() + 30)
+    assert node1.store("key1", "value1", expiration_time=get_dht_time() + 30)
     assert node1.get("key1").value == "value1"
     assert node2.get("key1").value == "value1"
     assert node2.get("key2") is None
@@ -28,13 +30,13 @@ def test_get_store(n_peers=10):
     future = node1.get("foo", return_future=True)
     future.cancel()
 
-    assert node2.store("key1", 123, expiration_time=hivemind.get_dht_time() + 31)
-    assert node2.store("key2", 456, expiration_time=hivemind.get_dht_time() + 32)
+    assert node2.store("key1", 123, expiration_time=get_dht_time() + 31)
+    assert node2.store("key2", 456, expiration_time=get_dht_time() + 32)
     assert node1.get("key1", latest=True).value == 123
     assert node1.get("key2").value == 456
 
-    assert node1.store("key2", subkey="subkey1", value=789, expiration_time=hivemind.get_dht_time() + 32)
-    assert node2.store("key2", subkey="subkey2", value="pew", expiration_time=hivemind.get_dht_time() + 32)
+    assert node1.store("key2", subkey="subkey1", value=789, expiration_time=get_dht_time() + 32)
+    assert node2.store("key2", subkey="subkey2", value="pew", expiration_time=get_dht_time() + 32)
     found_dict = node1.get("key2", latest=True).value
     assert isinstance(found_dict, dict) and len(found_dict) == 2
     assert found_dict["subkey1"].value == 789 and found_dict["subkey2"].value == "pew"
@@ -69,7 +71,7 @@ async def dummy_dht_coro_for_cancel(self, node):
 
 @pytest.mark.forked
 def test_run_coroutine():
-    dht = hivemind.DHT(start=True)
+    dht = DHT(start=True)
     assert dht.run_coroutine(dummy_dht_coro) == "pew"
 
     with pytest.raises(ValueError):
@@ -95,7 +97,7 @@ def test_run_coroutine():
 async def test_dht_get_visible_maddrs():
     # test 1: IPv4 localhost multiaddr is visible by default
 
-    dht = hivemind.DHT(start=True)
+    dht = DHT(start=True)
 
     assert any(str(maddr).startswith("/ip4/127.0.0.1") for maddr in dht.get_visible_maddrs())
     dht.shutdown()
@@ -103,8 +105,8 @@ async def test_dht_get_visible_maddrs():
     # test 2: announce_maddrs are the single visible multiaddrs if defined
 
     dummy_endpoint = Multiaddr("/ip4/123.45.67.89/tcp/31337")
-    p2p = await hivemind.p2p.P2P.create(announce_maddrs=[dummy_endpoint])
-    dht = hivemind.DHT(start=True, p2p=p2p)
+    p2p = await P2P.create(announce_maddrs=[dummy_endpoint])
+    dht = DHT(start=True, p2p=p2p)
 
     assert dht.get_visible_maddrs() == [dummy_endpoint.encapsulate(f"/p2p/{p2p.peer_id}")]
     dht.shutdown()
@@ -112,13 +114,13 @@ async def test_dht_get_visible_maddrs():
 
 @pytest.mark.asyncio
 async def test_startup_error():
-    with pytest.raises(hivemind.p2p.P2PDaemonError, match=r"(?i)Failed to connect to bootstrap peers"):
-        hivemind.DHT(
+    with pytest.raises(P2PDaemonError, match=r"(?i)Failed to connect to bootstrap peers"):
+        DHT(
             initial_peers=[f"/ip4/127.0.0.1/tcp/{get_free_port()}/p2p/QmdaK4LUeQaKhqSFPRu9N7MvXUEWDxWwtCvPrS444tCgd1"],
             start=True,
         )
 
-    dht = hivemind.DHT(start=True, await_ready=False)
+    dht = DHT(start=True, await_ready=False)
     with pytest.raises(concurrent.futures.TimeoutError):
         dht.wait_until_ready(timeout=0.01)
     dht.shutdown()

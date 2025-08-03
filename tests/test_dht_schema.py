@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from pydantic.v1 import BaseModel, StrictInt, conint
 
-import hivemind
+from hivemind import DHT
 from hivemind.dht.node import DHTNode
 from hivemind.dht.schema import BytesWithPublicKey, SchemaValidator
 from hivemind.dht.validation import DHTRecord, RecordValidatorBase
@@ -185,8 +185,8 @@ async def test_merging_schema_validators(dht_nodes_with_schema):
 
 @pytest.mark.forked
 def test_sending_validator_instance_between_processes():
-    alice = hivemind.DHT(start=True)
-    bob = hivemind.DHT(start=True, initial_peers=alice.get_visible_maddrs())
+    alice = DHT(start=True)
+    bob = DHT(start=True, initial_peers=alice.get_visible_maddrs())
 
     alice.add_validators([SchemaValidator(SampleSchema)])
     bob.add_validators([SchemaValidator(SampleSchema)])
