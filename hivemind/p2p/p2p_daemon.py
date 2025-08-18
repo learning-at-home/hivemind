@@ -684,18 +684,26 @@ class P2P:
 
     async def _read_outputs(self, ready: asyncio.Future) -> None:
         last_line = None
-        while True:
-            line = await self._child.stdout.readline()
-            if not line:  # Stream closed
-                break
-            last_line = line.rstrip().decode(errors="ignore")
+        try:
+            while True:
+                try:
+                    line = await self._child.stdout.readline()
+                    if not line:  # Stream closed
+                        break
+                    last_line = line.rstrip().decode(errors="ignore")
 
-            self._log_p2pd_message(last_line)
-            if last_line.startswith("Peer ID:"):
-                ready.set_result(None)
+                    self._log_p2pd_message(last_line)
+                    if last_line.startswith("Peer ID:"):
+                        ready.set_result(None)
+                except (asyncio.CancelledError, RuntimeError):
+                    # Task was cancelled or event loop closed
+                    break
 
-        if not ready.done():
-            ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
+            if not ready.done():
+                ready.set_exception(P2PDaemonError(f"Daemon failed to start: {last_line}"))
+        except (asyncio.CancelledError, RuntimeError):
+            # Task was cancelled or event loop closed during cleanup
+            pass
 
     @staticmethod
     def _log_p2pd_message(line: str) -> None:
