@@ -15,7 +15,11 @@ image = (
             "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
         ]
     )
-    .add_local_dir("hivemind", remote_path="/root/hivemind/hivemind")
+    .add_local_dir(
+        "hivemind",
+        remote_path="/root/hivemind/hivemind",
+        ignore=["hivemind/proto/*_pb2.py", "**/*/p2pd"],
+    )
     .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
     .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
     .add_local_file("requirements-docs.txt", remote_path="/root/hivemind/requirements-docs.txt")
@@ -66,23 +70,16 @@ codecov_secret = modal.Secret.from_dict(
 def setup_environment(*, build_p2pd=False):
     os.chdir("/root/hivemind")
 
+    environment = os.environ.copy()
+    environment["HIVEMIND_MEMORY_SHARING_STRATEGY"] = "file_descriptor"
+
     if build_p2pd:
-        install_cmd = [
-            "pip",
-            "install",
-            "--no-cache-dir",
-            ".",
-            "--global-option=build_py",
-            "--global-option=--buildgo",
-            "--no-use-pep517",
-        ]
+        environment["HIVEMIND_BUILDGO"] = "1"
+        install_cmd = ["pip", "install", "--no-cache-dir", ".", "--no-use-pep517"]
     else:
         install_cmd = ["pip", "install", "-e", ".", "--no-use-pep517"]
 
-    subprocess.run(install_cmd, check=True)
-
-    environment = os.environ.copy()
-    environment["HIVEMIND_MEMORY_SHARING_STRATEGY"] = "file_descriptor"
+    subprocess.run(install_cmd, check=True, env=environment)
 
     return environment
 

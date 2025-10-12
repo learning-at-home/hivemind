@@ -13,6 +13,7 @@ from pkg_resources import parse_requirements, parse_version
 from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
+from setuptools.dist import Distribution
 
 P2PD_VERSION = "v0.5.0.hivemind1"
 
@@ -58,15 +59,51 @@ def proto_compile(output_path):
             file.truncate()
 
 
-def build_p2p_daemon():
+def _parse_platform(target_platform):
+    """Parse the target platform and return Go build environment variables"""
+    # Only allow platforms we have precompiled binaries for
+    supported_platforms = ["linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64"]
+    if target_platform not in supported_platforms:
+        raise ValueError(f"Unsupported platform: {target_platform}. Supported: {supported_platforms}")
+
+    os_name, arch = target_platform.split("-", 1)
+    return {"GOOS": os_name, "GOARCH": arch}
+
+
+def _detect_current_platform():
+    """Detect the current platform in the standard format"""
+    arch = platform.machine()
+    if arch in ("x86_64", "x64"):
+        arch = "amd64"
+    elif arch in ("aarch64", "aarch64_be", "armv8b", "armv8l"):
+        arch = "arm64"
+    return f"{platform.system().lower()}-{arch}"
+
+
+def build_p2p_daemon(target_platform, output_dir):
+    """Build p2pd from the source, optionally for a specific target platform
+
+    Args:
+        target_platform (str): Target platform in the format 'os-arch' (e.g., 'linux-amd64').
+                                        If None, builds for the current platform.
+        output_dir (str): Directory where the p2pd binary will be placed
+    """
     result = subprocess.run("go version", capture_output=True, shell=True).stdout.decode("ascii", "replace")
     m = re.search(r"^go version go([\d.]+)", result)
 
     if m is None:
-        raise FileNotFoundError("Could not find golang installation")
+        raise FileNotFoundError("Could not find an installation of golang")
     version = parse_version(m.group(1))
     if version < parse_version("1.13"):
         raise OSError(f"Newer version of go required: must be >= 1.13, found {version}")
+
+    env = os.environ.copy()
+
+    if target_platform is None:
+        target_platform = _detect_current_platform()
+
+    env.update(_parse_platform(target_platform))
+    print(f"Building p2pd for the current platform ({target_platform})")
 
     with tempfile.TemporaryDirectory() as tempdir:
         dest = os.path.join(tempdir, "libp2p-daemon.tar.gz")
@@ -75,34 +112,43 @@ def build_p2p_daemon():
         with tarfile.open(dest, "r:gz") as tar:
             tar.extractall(tempdir)
 
+        output_path = os.path.abspath(os.path.join(output_dir, "hivemind", "hivemind_cli", "p2pd"))
         result = subprocess.run(
-            ["go", "build", "-o", os.path.join(here, "hivemind", "hivemind_cli", "p2pd")],
+            ["go", "build", "-o", output_path],
             cwd=os.path.join(tempdir, f"go-libp2p-daemon-{P2PD_VERSION.lstrip('v')}", "p2pd"),
+            env=env,
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
-            raise RuntimeError(f"Failed to build p2pd: exited with status code: {result.returncode}")
+            raise RuntimeError(
+                f"Failed to build p2pd: exited with the status code: {result.returncode}\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
 
 
-def download_p2p_daemon():
-    binary_path = os.path.join(here, "hivemind", "hivemind_cli", "p2pd")
-    arch = platform.machine()
-    # An architecture name may vary depending on the OS (e.g., the same CPU is arm64 on macOS and aarch64 on Linux).
-    # We consider multiple aliases here, see https://stackoverflow.com/questions/45125516/possible-values-for-uname-m
-    if arch in ("x86_64", "x64"):
-        arch = "amd64"
-    if arch in ("aarch64", "aarch64_be", "armv8b", "armv8l"):
-        arch = "arm64"
-    binary_name = f"p2pd-{platform.system().lower()}-{arch}"
+def download_p2p_daemon(target_platform=None, output_dir=here):
+    """Download platform-specific p2pd binary
+
+    Args:
+        target_platform (str, optional): Target platform in the format 'os-arch' (e.g., 'linux-amd64')
+        output_dir (str, optional): Directory where the p2pd binary will be placed. Defaults to source tree.
+    """
+    if target_platform is None:
+        target_platform = _detect_current_platform()
+
+    binary_name = f"p2pd-{target_platform}"
 
     if binary_name not in P2P_BINARY_HASH:
         raise RuntimeError(
-            f"hivemind does not provide a precompiled p2pd binary for {platform.system()} ({arch}). "
+            f"hivemind does not provide a precompiled p2pd binary for {target_platform}. "
             f"Please install Go and build it from source: https://github.com/learning-at-home/hivemind#from-source"
         )
     expected_hash = P2P_BINARY_HASH[binary_name]
 
+    binary_path = os.path.join(str(output_dir), "hivemind", "hivemind_cli", "p2pd")
     if sha256(binary_path) != expected_hash:
-        binary_url = os.path.join(P2PD_BINARY_URL, binary_name)
+        binary_url = f"{P2PD_BINARY_URL.rstrip('/')}/{binary_name}"
         print(f"Downloading {binary_url} to {binary_path}")
 
         urllib.request.urlretrieve(binary_url, binary_path)
@@ -110,25 +156,30 @@ def download_p2p_daemon():
 
         actual_hash = sha256(binary_path)
         if actual_hash != expected_hash:
+            os.unlink(binary_path)
             raise RuntimeError(
                 f"The sha256 checksum for p2pd does not match (expected: {expected_hash}, actual: {actual_hash})"
             )
 
+        print(f"Downloaded {binary_name}")
+
 
 class BuildPy(build_py):
-    user_options = build_py.user_options + [("buildgo", None, "Builds p2pd from source")]
-
     def initialize_options(self):
         super().initialize_options()
-        self.buildgo = False
 
     def run(self):
-        if self.buildgo:
-            build_p2p_daemon()
-        else:
-            download_p2p_daemon()
-
+        # First, copy source files to build directory
         super().run()
+
+        # Then, download/build p2pd into the build directory
+        target_platform = os.environ.get("HIVEMIND_TARGET_PLATFORM")
+        buildgo = os.environ.get("HIVEMIND_BUILDGO", "").lower() in ("1", "true", "yes")
+
+        if buildgo:
+            build_p2p_daemon(target_platform=target_platform, output_dir=self.build_lib)
+        else:
+            download_p2p_daemon(target_platform=target_platform, output_dir=self.build_lib)
 
         proto_compile(os.path.join(self.build_lib, "hivemind", "proto"))
 
@@ -140,11 +191,18 @@ class Develop(develop):
         super().run()
 
 
+class BinaryDistribution(Distribution):
+    """Distribution which always forces a binary package with platform name"""
+
+    def has_ext_modules(self):
+        return True
+
+
 with open("requirements.txt") as requirements_file:
     install_requires = list(map(str, parse_requirements(requirements_file)))
 
 # loading version from setup.py
-with codecs.open(os.path.join(here, "hivemind/__init__.py"), encoding="utf-8") as init_file:
+with codecs.open(os.path.join(here, "hivemind", "__init__.py"), encoding="utf-8") as init_file:
     version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.MULTILINE)
     version_string = version_match.group(1)
 
@@ -164,6 +222,7 @@ setup(
     name="hivemind",
     version=version_string,
     cmdclass={"build_py": BuildPy, "develop": Develop},
+    distclass=BinaryDistribution,
     description="Decentralized deep learning in PyTorch",
     long_description="Decentralized deep learning in PyTorch. Built to train models on thousands of volunteers "
     "across the world.",
@@ -174,7 +233,7 @@ setup(
     package_data={"hivemind": ["proto/*", "hivemind_cli/*"]},
     include_package_data=True,
     license="MIT",
-    setup_requires=["grpcio-tools"],
+    setup_requires=["grpcio-tools>=1.33.2,<1.68"],
     install_requires=install_requires,
     extras_require=extras,
     classifiers=[
