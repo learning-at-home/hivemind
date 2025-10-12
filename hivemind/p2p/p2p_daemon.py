@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import platform
 import secrets
 import warnings
 from collections.abc import AsyncIterable as AsyncIterableABC
@@ -223,9 +224,25 @@ class P2P:
         env["GOLOG_LOG_FMT"] = "json"
 
         logger.debug(f"Launching {proc_args}")
-        self._child = await asyncio.subprocess.create_subprocess_exec(
-            *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env
-        )
+        try:
+            self._child = await asyncio.subprocess.create_subprocess_exec(
+                *proc_args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env
+            )
+        except FileNotFoundError:
+            raise P2PDaemonError(
+                f"p2pd binary not found at {proc_args[0]}. "
+                f"This may indicate a failed installation. "
+                f"Try reinstalling with: HIVEMIND_BUILDGO=1 pip install -e ."
+            )
+        except OSError as e:
+            if "Exec format error" in str(e) or "cannot execute binary file" in str(e):
+                raise P2PDaemonError(
+                    f"p2pd binary format incompatible with your platform ({platform.system()}/{platform.machine()}). "
+                    f"The binary may be corrupted or for the wrong architecture. "
+                    f"Reinstall with: HIVEMIND_BUILDGO=1 pip install -e ."
+                )
+            else:
+                raise P2PDaemonError(f"Failed to start p2pd daemon: {e}")
         self._alive = True
 
         ready = asyncio.Future()
