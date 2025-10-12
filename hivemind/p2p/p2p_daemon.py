@@ -232,14 +232,14 @@ class P2P:
             raise P2PDaemonError(
                 f"p2pd binary not found at {proc_args[0]}. "
                 f"This may indicate a failed installation. "
-                f"Try reinstalling with: pip install -e . --global-option=build_py --global-option=--buildgo"
+                f"Try reinstalling with: HIVEMIND_BUILDGO=1 pip install -e ."
             )
         except OSError as e:
             if "Exec format error" in str(e) or "cannot execute binary file" in str(e):
                 raise P2PDaemonError(
                     f"p2pd binary format incompatible with your platform ({platform.system()}/{platform.machine()}). "
                     f"The binary may be corrupted or for the wrong architecture. "
-                    f"Reinstall with: pip install -e . --global-option=build_py --global-option=--buildgo"
+                    f"Reinstall with: HIVEMIND_BUILDGO=1 pip install -e ."
                 )
             else:
                 raise P2PDaemonError(f"Failed to start p2pd daemon: {e}")

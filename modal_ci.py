@@ -66,23 +66,16 @@ codecov_secret = modal.Secret.from_dict(
 def setup_environment(*, build_p2pd=False):
     os.chdir("/root/hivemind")
 
-    if build_p2pd:
-        install_cmd = [
-            "pip",
-            "install",
-            "--no-cache-dir",
-            ".",
-            "--global-option=build_py",
-            "--global-option=--buildgo",
-            "--no-use-pep517",
-        ]
-    else:
-        install_cmd = ["pip", "install", "-e", ".", "--no-use-pep517"]
-
-    subprocess.run(install_cmd, check=True)
-
     environment = os.environ.copy()
     environment["HIVEMIND_MEMORY_SHARING_STRATEGY"] = "file_descriptor"
+
+    if build_p2pd:
+        environment["HIVEMIND_BUILDGO"] = "1"
+        install_cmd = ["pip", "install", "--no-cache-dir", "."]
+    else:
+        install_cmd = ["pip", "install", "-e", "."]
+
+    subprocess.run(install_cmd, check=True, env=environment)
 
     return environment
 

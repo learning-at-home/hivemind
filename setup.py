@@ -164,11 +164,9 @@ def download_p2p_daemon(target_platform=None, output_dir=here):
 
 
 class BuildPy(build_py):
-    user_options = build_py.user_options + [("buildgo", None, "Builds p2pd from source")]
 
     def initialize_options(self):
         super().initialize_options()
-        self.buildgo = False
 
     def run(self):
         # First, copy source files to build directory
@@ -176,7 +174,9 @@ class BuildPy(build_py):
 
         # Then, download/build p2pd into the build directory
         target_platform = os.environ.get("HIVEMIND_TARGET_PLATFORM")
-        if self.buildgo:
+        buildgo = os.environ.get("HIVEMIND_BUILDGO", "").lower() in ("1", "true", "yes")
+
+        if buildgo:
             build_p2p_daemon(target_platform=target_platform, output_dir=self.build_lib)
         else:
             download_p2p_daemon(target_platform=target_platform, output_dir=self.build_lib)
