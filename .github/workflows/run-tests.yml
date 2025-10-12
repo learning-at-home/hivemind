@@ -68,7 +68,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          HIVEMIND_BUILDGO=1 pip install .
+          HIVEMIND_BUILDGO=1 pip install . --no-use-pep517
       - name: Test
         run: |
           cd tests
