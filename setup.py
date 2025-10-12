@@ -98,7 +98,7 @@ def build_p2p_daemon(target_platform, output_dir):
         raise OSError(f"Newer version of go required: must be >= 1.13, found {version}")
 
     env = os.environ.copy()
-    
+
     if target_platform is None:
         target_platform = _detect_current_platform()
 
@@ -120,8 +120,10 @@ def build_p2p_daemon(target_platform, output_dir):
             text=True,
         )
         if result.returncode != 0:
-            raise RuntimeError(f"Failed to build p2pd: exited with the status code: {result.returncode}\n"
-                               f"stdout: {result.stdout}\nstderr: {result.stderr}")
+            raise RuntimeError(
+                f"Failed to build p2pd: exited with the status code: {result.returncode}\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
 
 
 def download_p2p_daemon(target_platform=None, output_dir=here):
