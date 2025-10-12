@@ -164,7 +164,6 @@ def download_p2p_daemon(target_platform=None, output_dir=here):
 
 
 class BuildPy(build_py):
-
     def initialize_options(self):
         super().initialize_options()
 
