@@ -112,8 +112,9 @@ def build_p2p_daemon(target_platform, output_dir):
         with tarfile.open(dest, "r:gz") as tar:
             tar.extractall(tempdir)
 
+        output_path = os.path.abspath(os.path.join(output_dir, "hivemind", "hivemind_cli", "p2pd"))
         result = subprocess.run(
-            ["go", "build", "-o", os.path.join(output_dir, "hivemind", "hivemind_cli", "p2pd")],
+            ["go", "build", "-o", output_path],
             cwd=os.path.join(tempdir, f"go-libp2p-daemon-{P2PD_VERSION.lstrip('v')}", "p2pd"),
             env=env,
             capture_output=True,
@@ -232,7 +233,7 @@ setup(
     package_data={"hivemind": ["proto/*", "hivemind_cli/*"]},
     include_package_data=True,
     license="MIT",
-    setup_requires=["grpcio-tools"],
+    setup_requires=["grpcio-tools>=1.33.2,<1.68"],
     install_requires=install_requires,
     extras_require=extras,
     classifiers=[
