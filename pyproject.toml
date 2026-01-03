@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hivemind"
-dynamic = ["version", "dependencies", "optional-dependencies"]
+dynamic = ["version"]
 description = "Decentralized deep learning in PyTorch"
 readme = "README.md"
 license = "MIT"
@@ -25,7 +25,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -50,10 +49,6 @@ Documentation = "https://learning-at-home.readthedocs.io"
 
 [tool.setuptools.dynamic]
 version = {attr = "hivemind.__version__"}
-dependencies = {file = "requirements.txt"}
-optional-dependencies.dev = {file = "requirements-dev.txt"}
-optional-dependencies.docs = {file = "requirements-docs.txt"}
-optional-dependencies.bitsandbytes = {file = "requirements-bitsandbytes.txt"}
 
 [tool.setuptools.packages.find]
 exclude = ["tests"]

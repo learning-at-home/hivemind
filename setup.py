@@ -211,8 +211,24 @@ class BinaryDistribution(Distribution):
         return True
 
 
+with open("requirements.txt") as requirements_file:
+    install_requires = [line.strip() for line in requirements_file if line.strip() and not line.startswith("#")]
+
+extras = {}
+
+with open("requirements-dev.txt") as dev_requirements_file:
+    extras["dev"] = [line.strip() for line in dev_requirements_file if line.strip() and not line.startswith("#")]
+
+with open("requirements-docs.txt") as docs_requirements_file:
+    extras["docs"] = [line.strip() for line in docs_requirements_file if line.strip() and not line.startswith("#")]
+
+extras["bitsandbytes"] = ["bitsandbytes~=0.45.2"]
+
+extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
+
 setup(
     cmdclass={"build_py": BuildPy},
     distclass=BinaryDistribution,
-    extras_require={"all": ["hivemind[dev,docs,bitsandbytes]"]},
+    install_requires=install_requires,
+    extras_require=extras,
 )
