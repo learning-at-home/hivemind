@@ -9,7 +9,7 @@ import tempfile
 import urllib.request
 
 from packaging.version import parse as parse_version
-from setuptools import setup
+from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.dist import Distribution
 
@@ -27,6 +27,7 @@ P2P_BINARY_HASH = {
 }
 
 here = os.path.abspath(os.path.dirname(__file__))
+src_dir = os.path.join(here, "src")
 
 
 def sha256(path):
@@ -41,9 +42,9 @@ def proto_compile(output_path):
 
     cli_args = [
         "grpc_tools.protoc",
-        "--proto_path=hivemind/proto",
+        "--proto_path=src/hivemind/proto",
         f"--python_out={output_path}",
-    ] + glob.glob("hivemind/proto/*.proto")
+    ] + glob.glob("src/hivemind/proto/*.proto")
 
     code = grpc_tools.protoc.main(cli_args)
     if code:  # hint: if you get this error in jupyter, run in console for richer error message
@@ -174,7 +175,7 @@ class BuildPy(build_py):
         buildgo = os.environ.get("HIVEMIND_BUILDGO", "").lower() in ("1", "true", "yes")
 
         if self.editable_mode:
-            output_dir = here
+            output_dir = src_dir
         else:
             super().run()
             output_dir = self.build_lib
@@ -212,6 +213,10 @@ extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
 setup(
     cmdclass={"build_py": BuildPy},
     distclass=BinaryDistribution,
+    package_dir={"": "src"},
+    packages=find_packages(where="src"),
+    package_data={"hivemind": ["proto/*", "hivemind_cli/*"]},
+    include_package_data=True,
     install_requires=install_requires,
     extras_require=extras,
 )
