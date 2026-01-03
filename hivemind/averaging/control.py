@@ -1,10 +1,9 @@
+import math
 import os
 import struct
 from enum import Enum
+from multiprocessing.shared_memory import SharedMemory
 from typing import Optional
-
-import numpy as np
-import torch
 
 from hivemind.utils import DHTExpiration, MPFuture, get_dht_time, get_logger
 
@@ -30,8 +29,12 @@ class StepControl(MPFuture):
     :param data_for_gather: send this data to all peers in the next group and gather it from groupmates
     """
 
-    # indices for the shared buffer
-    _SCHEDULED_TIME, _WEIGHT, _STAGE, _BEGAN_ALLREDUCE = slice(0, 8), slice(8, 16), 16, 17
+    # Buffer layout: scheduled_time (8 bytes) | weight (8 bytes) | stage (1 byte) | began_allreduce (1 byte)
+    _BUFFER_SIZE = 18
+    _SCHEDULED_TIME_OFFSET = 0
+    _WEIGHT_OFFSET = 8
+    _STAGE_OFFSET = 16
+    _BEGAN_ALLREDUCE_OFFSET = 17
 
     def __init__(
         self,
@@ -46,9 +49,11 @@ class StepControl(MPFuture):
         self._trigger: Optional[MPFuture] = None
         self._cancel: Optional[MPFuture] = None
 
-        # Buffer contents:
-        # scheduled_time (double) | weight (double) | stage (AveragingStage, 1 byte) | began_allreduce: (bool, 1 byte)
-        self._shared_buffer = torch.zeros([18], dtype=torch.uint8).share_memory_()
+        # Create shared memory buffer for cross-process state
+        self._shared_buffer = SharedMemory(create=True, size=self._BUFFER_SIZE)
+        self._shared_buffer_name = self._shared_buffer.name
+
+        # Initialize values
         self.stage = AveragingStage.IDLE
         self.scheduled_time = scheduled_time
         self.weight = weight
@@ -77,7 +82,7 @@ class StepControl(MPFuture):
 
     @property
     def scheduled_time(self) -> DHTExpiration:
-        return struct.unpack("d", self._shared_buffer[StepControl._SCHEDULED_TIME].numpy().data)[0]
+        return struct.unpack_from("d", self._shared_buffer.buf, self._SCHEDULED_TIME_OFFSET)[0]
 
     @scheduled_time.setter
     def scheduled_time(self, scheduled_time):
@@ -85,36 +90,36 @@ class StepControl(MPFuture):
             logger.warning("Changing scheduled time has no effect after all-reduce has already started")
         if scheduled_time >= self.deadline:
             logger.warning("Changing scheduled time to after deadline, averaging will likely fail due to timeout")
-        struct.pack_into("d", self._shared_buffer[StepControl._SCHEDULED_TIME].numpy().data, 0, float(scheduled_time))
+        struct.pack_into("d", self._shared_buffer.buf, self._SCHEDULED_TIME_OFFSET, float(scheduled_time))
 
     @property
     def weight(self) -> float:
-        return struct.unpack("d", self._shared_buffer[StepControl._WEIGHT].numpy().data)[0]
+        return struct.unpack_from("d", self._shared_buffer.buf, self._WEIGHT_OFFSET)[0]
 
     @weight.setter
     def weight(self, weight: float):
-        assert weight >= 0 and np.isfinite(weight)
+        assert weight >= 0 and math.isfinite(weight)
         if self.began_allreduce:
             logger.warning("Changing weights has no effect after all-reduce has already started")
-        struct.pack_into("d", self._shared_buffer[StepControl._WEIGHT].numpy().data, 0, float(weight))
+        struct.pack_into("d", self._shared_buffer.buf, self._WEIGHT_OFFSET, float(weight))
 
     @property
     def stage(self) -> AveragingStage:
-        return AveragingStage(self._shared_buffer[StepControl._STAGE].item())
+        return AveragingStage(self._shared_buffer.buf[self._STAGE_OFFSET])
 
     @stage.setter
     def stage(self, stage: AveragingStage):
         if stage == AveragingStage.RUNNING_ALLREDUCE:
             self.began_allreduce = True
-        self._shared_buffer[StepControl._STAGE] = stage.value
+        self._shared_buffer.buf[self._STAGE_OFFSET] = stage.value
 
     @property
     def began_allreduce(self) -> bool:
-        return bool(self._shared_buffer[StepControl._BEGAN_ALLREDUCE].item())
+        return bool(self._shared_buffer.buf[self._BEGAN_ALLREDUCE_OFFSET])
 
     @began_allreduce.setter
     def began_allreduce(self, value: bool):
-        self._shared_buffer[StepControl._BEGAN_ALLREDUCE] = int(value)
+        self._shared_buffer.buf[self._BEGAN_ALLREDUCE_OFFSET] = int(value)
 
     @property
     def data_for_gather(self) -> bytes:
@@ -136,14 +141,23 @@ class StepControl(MPFuture):
             super().__getstate__(),
             _trigger=self._trigger,
             _cancel=self._cancel,
-            _shared_buffer=self._shared_buffer,
+            _shared_buffer_name=self._shared_buffer_name,
             immutable_params=(self._data_for_gather, self._deadline, self._allow_retries),
         )
 
     def __setstate__(self, state):
         super().__setstate__(state)
-        self._trigger, self._cancel, self._shared_buffer = state["_trigger"], state["_cancel"], state["_shared_buffer"]
+        self._trigger, self._cancel = state["_trigger"], state["_cancel"]
+        self._shared_buffer_name = state["_shared_buffer_name"]
         self._data_for_gather, self._deadline, self._allow_retries = state["immutable_params"]
+
+        # Reconnect to the shared memory buffer
+        try:
+            self._shared_buffer = SharedMemory(name=self._shared_buffer_name)
+        except FileNotFoundError:
+            # If the shared memory was cleaned up, create a local buffer as fallback
+            self._shared_buffer = SharedMemory(create=True, size=self._BUFFER_SIZE)
+            self._shared_buffer_name = self._shared_buffer.name
 
     def __del__(self):
         if os.getpid() == self._origin_pid and not self.triggered:
