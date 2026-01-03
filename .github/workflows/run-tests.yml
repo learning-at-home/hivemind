@@ -47,17 +47,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.20.11'
           check-latest: true
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Cache dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: Key-v1-3.11-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
@@ -78,13 +78,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Cache dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: Key-v1-3.11-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
@@ -104,4 +104,4 @@ jobs:
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor
           pytest --cov hivemind --cov-config=pyproject.toml -v tests
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
