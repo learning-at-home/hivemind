@@ -12,7 +12,6 @@ import urllib.request
 from pkg_resources import parse_requirements, parse_version
 from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
-from setuptools.command.develop import develop
 from setuptools.dist import Distribution
 
 P2PD_VERSION = "v0.5.0.hivemind1"
@@ -165,30 +164,45 @@ def download_p2p_daemon(target_platform=None, output_dir=here):
 
 
 class BuildPy(build_py):
+    editable_mode = False
+
     def initialize_options(self):
         super().initialize_options()
+        self.editable_mode = False
 
     def run(self):
-        # First, copy source files to build directory
-        super().run()
-
-        # Then, download/build p2pd into the build directory
         target_platform = os.environ.get("HIVEMIND_TARGET_PLATFORM")
         buildgo = os.environ.get("HIVEMIND_BUILDGO", "").lower() in ("1", "true", "yes")
 
-        if buildgo:
-            build_p2p_daemon(target_platform=target_platform, output_dir=self.build_lib)
+        if self.editable_mode:
+            output_dir = here
         else:
-            download_p2p_daemon(target_platform=target_platform, output_dir=self.build_lib)
+            super().run()
+            output_dir = self.build_lib
 
-        proto_compile(os.path.join(self.build_lib, "hivemind", "proto"))
+        if buildgo:
+            build_p2p_daemon(target_platform=target_platform, output_dir=output_dir)
+        else:
+            download_p2p_daemon(target_platform=target_platform, output_dir=output_dir)
 
+        proto_compile(os.path.join(output_dir, "hivemind", "proto"))
 
-class Develop(develop):
-    def run(self):
-        self.reinitialize_command("build_py", build_lib=here)
-        self.run_command("build_py")
-        super().run()
+    def get_output_mapping(self):
+        mapping = {}
+        if hasattr(super(), "get_output_mapping"):
+            mapping = super().get_output_mapping()
+
+        proto_dir = "hivemind/proto"
+        for proto_file in glob.glob(os.path.join(proto_dir, "*.proto")):
+            pb2_name = os.path.basename(proto_file).replace(".proto", "_pb2.py")
+            if self.editable_mode:
+                dest = os.path.join(proto_dir, pb2_name)
+                mapping[dest] = dest
+            else:
+                dest = os.path.join(self.build_lib, proto_dir, pb2_name)
+                mapping[dest] = os.path.join(proto_dir, pb2_name)
+
+        return mapping
 
 
 class BinaryDistribution(Distribution):
@@ -221,7 +235,7 @@ extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
 setup(
     name="hivemind",
     version=version_string,
-    cmdclass={"build_py": BuildPy, "develop": Develop},
+    cmdclass={"build_py": BuildPy},
     distclass=BinaryDistribution,
     description="Decentralized deep learning in PyTorch",
     long_description="Decentralized deep learning in PyTorch. Built to train models on thousands of volunteers "
@@ -233,7 +247,6 @@ setup(
     package_data={"hivemind": ["proto/*", "hivemind_cli/*"]},
     include_package_data=True,
     license="MIT",
-    setup_requires=["grpcio-tools>=1.33.2,<1.68"],
     install_requires=install_requires,
     extras_require=extras,
     classifiers=[

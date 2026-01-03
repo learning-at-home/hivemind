@@ -68,7 +68,7 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          HIVEMIND_BUILDGO=1 pip install . --no-use-pep517
+          HIVEMIND_BUILDGO=1 pip install .
       - name: Test
         run: |
           cd tests
@@ -98,7 +98,7 @@ jobs:
           pip install bitsandbytes==0.45.2
       - name: Build hivemind
         run: |
-          pip install -e . --no-use-pep517
+          pip install -e .
       - name: Test
         run: |
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor

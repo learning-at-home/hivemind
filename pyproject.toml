@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=64", "grpcio-tools>=1.33.2,<1.68"]
+build-backend = "setuptools.build_meta"
+
 [tool.coverage.run]
 concurrency = ["thread", "multiprocessing"]
 omit = ["hivemind/proto/*"]

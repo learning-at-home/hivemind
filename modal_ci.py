@@ -75,9 +75,9 @@ def setup_environment(*, build_p2pd=False):
 
     if build_p2pd:
         environment["HIVEMIND_BUILDGO"] = "1"
-        install_cmd = ["pip", "install", "--no-cache-dir", ".", "--no-use-pep517"]
+        install_cmd = ["pip", "install", "--no-cache-dir", "."]
     else:
-        install_cmd = ["pip", "install", "-e", ".", "--no-use-pep517"]
+        install_cmd = ["pip", "install", "-e", "."]
 
     subprocess.run(install_cmd, check=True, env=environment)
 
