@@ -98,7 +98,7 @@ jobs:
           pip install bitsandbytes==0.45.2
       - name: Build hivemind
         run: |
-          pip install -e .
+          pip install -e . --no-build-isolation
       - name: Test
         run: |
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor

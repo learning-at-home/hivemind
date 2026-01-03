@@ -23,6 +23,7 @@ image = (
     .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
     .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
     .add_local_file("requirements-docs.txt", remote_path="/root/hivemind/requirements-docs.txt")
+    .add_local_file("requirements-bitsandbytes.txt", remote_path="/root/hivemind/requirements-bitsandbytes.txt")
     .add_local_file("setup.py", remote_path="/root/hivemind/setup.py")
     .add_local_file("pyproject.toml", remote_path="/root/hivemind/pyproject.toml")
     .add_local_dir("tests", remote_path="/root/hivemind/tests")
@@ -49,6 +50,7 @@ image_with_golang = (
     .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
     .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
     .add_local_file("requirements-docs.txt", remote_path="/root/hivemind/requirements-docs.txt")
+    .add_local_file("requirements-bitsandbytes.txt", remote_path="/root/hivemind/requirements-bitsandbytes.txt")
     .add_local_file("setup.py", remote_path="/root/hivemind/setup.py")
     .add_local_file("pyproject.toml", remote_path="/root/hivemind/pyproject.toml")
     .add_local_dir("tests", remote_path="/root/hivemind/tests")
@@ -77,7 +79,8 @@ def setup_environment(*, build_p2pd=False):
         environment["HIVEMIND_BUILDGO"] = "1"
         install_cmd = ["pip", "install", "--no-cache-dir", "."]
     else:
-        install_cmd = ["pip", "install", "-e", "."]
+        # Use --no-build-isolation so proto files are generated in the source directory
+        install_cmd = ["pip", "install", "-e", ".", "--no-build-isolation"]
 
     subprocess.run(install_cmd, check=True, env=environment)
 
