@@ -3,6 +3,7 @@ import subprocess
 
 import modal
 
+# Create an image with system dependencies
 image = (
     modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
     .apt_install(["git", "procps", "build-essential", "cmake", "wget"])
@@ -27,6 +28,7 @@ image = (
     .add_local_dir("tests", remote_path="/root/repo/tests")
 )
 
+# Create an image with golang and other system dependencies
 image_with_golang = (
     modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
     .apt_install(["git", "procps", "build-essential", "cmake", "wget"])
