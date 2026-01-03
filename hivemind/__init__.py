@@ -10,4 +10,4 @@ from hivemind.moe import (
 )
 from hivemind.optim import GradScaler, Optimizer, TrainingAverager
 
-__version__ = "1.1.11"
+__version__ = "1.1.12"
