@@ -4,15 +4,20 @@ This tutorial will teach you how to install `hivemind`, host your own experts an
 
 ## Installation
 
-Just `pip install hivemind` to get the latest release (requires Python 3.8 or newer). 
+We recommend using [uv](https://docs.astral.sh/uv/) for faster installations:
+
+```bash
+uv pip install hivemind
+```
+
+Or with pip: `pip install hivemind` (requires Python 3.9 or newer). 
 
 You can also install the bleeding edge version from GitHub:
 
-```
+```bash
 git clone https://github.com/learning-at-home/hivemind
 cd hivemind
-pip install grpcio-tools
-pip install -e . --no-build-isolation
+uv pip install -e . --no-build-isolation  # or: pip install -e . --no-build-isolation
 ```
  
 ## Decentralized Training

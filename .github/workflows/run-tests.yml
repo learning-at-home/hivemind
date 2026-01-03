@@ -22,22 +22,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Cache dependencies
-        uses: actions/cache@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          path: ~/.cache/pip
-          key: Key-v1-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
+          enable-cache: true
+          cache-dependency-glob: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          uv pip install --system -r requirements.txt
+          uv pip install --system -r requirements-dev.txt
       - name: Build bitsandbytes
         run: |
-          pip install bitsandbytes==0.45.2
+          uv pip install --system bitsandbytes==0.45.2
       - name: Build hivemind
         run: |
-          pip install .
+          uv pip install --system .
       - name: Test
         run: |
           cd tests
@@ -47,28 +48,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-go@v3
         with:
           go-version: '1.20.11'
           check-latest: true
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Cache dependencies
-        uses: actions/cache@v3
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          path: ~/.cache/pip
-          key: Key-v1-3.11-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
+          enable-cache: true
+          cache-dependency-glob: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          uv pip install --system setuptools wheel
+          uv pip install --system -r requirements.txt
+          uv pip install --system -r requirements-dev.txt
       - name: Build hivemind
         run: |
-          HIVEMIND_BUILDGO=1 pip install .
+          HIVEMIND_BUILDGO=1 uv pip install --system . --no-build-isolation
       - name: Test
         run: |
           cd tests
@@ -78,27 +81,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Cache dependencies
-        uses: actions/cache@v3
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          path: ~/.cache/pip
-          key: Key-v1-3.11-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}
+          enable-cache: true
+          cache-dependency-glob: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+          uv pip install --system setuptools wheel
+          uv pip install --system -r requirements.txt
+          uv pip install --system -r requirements-dev.txt
       - name: Build bitsandbytes
         run: |
-          pip install bitsandbytes==0.45.2
+          uv pip install --system bitsandbytes==0.45.2
       - name: Build hivemind
         run: |
-          pip install -e . --no-build-isolation
+          uv pip install --system -e . --no-build-isolation
       - name: Test
         run: |
           export HIVEMIND_MEMORY_SHARING_STRATEGY=file_descriptor

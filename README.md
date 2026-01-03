@@ -40,11 +40,25 @@ feel free to submit a pull request that adds your project to this list.
 
 ## Installation
 
-Before installing, make sure that your environment has Python 3.8+
+Before installing, make sure that your environment has Python 3.9+
 and [PyTorch](https://pytorch.org/get-started/locally/#start-locally) 1.9.0 or newer. They can be installed either
 natively or with [Anaconda](https://www.anaconda.com/products/individual).
 
-You can get [the latest release](https://pypi.org/project/hivemind) with pip or build hivemind from source.
+You can get [the latest release](https://pypi.org/project/hivemind) with uv (recommended), pip, or build hivemind from source.
+
+### With uv (recommended)
+
+We recommend using [uv](https://docs.astral.sh/uv/) for faster and more reliable installations:
+
+```bash
+uv pip install hivemind
+```
+
+To include blockwise 8-bit compression from [bitsandbytes](https://github.com/TimDettmers/bitsandbytes):
+
+```bash
+uv pip install hivemind[bitsandbytes]
+```
 
 ### With pip
 
@@ -62,18 +76,19 @@ After that, you can use the `BlockwiseQuantization` class in [hivemind.compressi
 
 To install hivemind from source, simply run the following:
 
-```
+```bash
 git clone https://github.com/learning-at-home/hivemind.git
 cd hivemind
-pip install .
+uv pip install .  # or: pip install .
 ```
 
-If you would like to verify that your installation is working properly, you can install with `pip install .[dev]`
-instead. Then, you can run the tests with `pytest tests/`.
+If you would like to verify that your installation is working properly, you can install with `uv pip install .[dev]`
+(or `pip install .[dev]`) instead. Then, you can run the tests with `pytest tests/`.
 
 By default, hivemind uses the precompiled binary of
 the [go-libp2p-daemon](https://github.com/learning-at-home/go-libp2p-daemon) library. If you face compatibility issues
-or want to build the binary yourself, you can recompile it by running `HIVEMIND_BUILDGO=1 pip install .`.
+or want to build the binary yourself, you can recompile it by running `HIVEMIND_BUILDGO=1 uv pip install . --no-build-isolation`
+(or `HIVEMIND_BUILDGO=1 pip install .` with pip).
 Before running the compilation, please ensure that your machine has a recent version
 of [the Go toolchain](https://golang.org/doc/install) (1.20 or newer is supported).
 

@@ -7,10 +7,13 @@ import modal
 image = (
     modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
     .apt_install(["git", "procps", "build-essential", "cmake", "wget"])
-    .pip_install_from_requirements("requirements-dev.txt")
-    .pip_install_from_requirements("requirements.txt")
+    .pip_install("uv")
+    .add_local_file("requirements.txt", remote_path="/root/requirements.txt", copy=True)
+    .add_local_file("requirements-dev.txt", remote_path="/root/requirements-dev.txt", copy=True)
     .run_commands(
         [
+            "uv pip install --system -r /root/requirements-dev.txt",
+            "uv pip install --system -r /root/requirements.txt",
             "git clone --branch 0.45.2 --depth 1 https://github.com/bitsandbytes-foundation/bitsandbytes.git",
             "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
         ]
@@ -32,10 +35,13 @@ image = (
 image_with_golang = (
     modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
     .apt_install(["git", "procps", "build-essential", "cmake", "wget"])
-    .pip_install_from_requirements("requirements-dev.txt")
-    .pip_install_from_requirements("requirements.txt")
+    .pip_install("uv")
+    .add_local_file("requirements.txt", remote_path="/root/requirements.txt", copy=True)
+    .add_local_file("requirements-dev.txt", remote_path="/root/requirements-dev.txt", copy=True)
     .run_commands(
         [
+            "uv pip install --system -r /root/requirements-dev.txt",
+            "uv pip install --system -r /root/requirements.txt",
             "wget https://go.dev/dl/go1.20.11.linux-amd64.tar.gz",
             "rm -rf /usr/local/go && tar -C /usr/local -xzf go1.20.11.linux-amd64.tar.gz",
             "ln -s /usr/local/go/bin/go /usr/bin/go",

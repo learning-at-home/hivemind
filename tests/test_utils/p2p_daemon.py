@@ -5,7 +5,7 @@ import subprocess
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
-from importlib.resources import files
+from importlib.resources import as_file, files
 from typing import NamedTuple
 
 import hivemind.hivemind_cli as cli
@@ -15,21 +15,20 @@ from hivemind.utils.multiaddr import Multiaddr, protocols
 from test_utils.networking import get_free_port
 
 TIMEOUT_DURATION = 5  # seconds
-P2PD_PATH = str(files(cli).joinpath("p2pd"))
+P2PD_FILENAME = "p2pd"
+
+
+def get_p2pd_path():
+    return files(cli).joinpath(P2PD_FILENAME)
 
 
 async def try_until_success(coro_func, timeout=TIMEOUT_DURATION):
-    """
-    Keep running ``coro_func`` until the time is out.
-    All arguments of ``coro_func`` should be filled, i.e. it should be called without arguments.
-    """
     t_start = time.monotonic()
     while True:
         result = await coro_func()
         if result:
             break
         if (time.monotonic() - t_start) >= timeout:
-            # timeout
             assert False, f"{coro_func} still failed after `{timeout}` seconds"
         await asyncio.sleep(0.01)
 
@@ -40,6 +39,7 @@ class Daemon:
     log_filename = ""
     f_log = None
     closed = None
+    _p2pd_context = None
 
     def __init__(self, control_maddr, enable_control, enable_connmgr, enable_dht, enable_pubsub):
         self.control_maddr = control_maddr
@@ -57,7 +57,9 @@ class Daemon:
         self.f_log = open(self.log_filename, "wb")
 
     def _run(self):
-        cmd_list = [P2PD_PATH, f"-listen={str(self.control_maddr)}"]
+        self._p2pd_context = as_file(get_p2pd_path())
+        p2pd_path = self._p2pd_context.__enter__()
+        cmd_list = [str(p2pd_path), f"-listen={str(self.control_maddr)}"]
         cmd_list += ["-hostAddrs=/ip4/127.0.0.1/tcp/0"]
         if self.enable_connmgr:
             cmd_list += ["-connManager=true", "-connLo=1", "-connHi=2", "-connGrace=0"]
@@ -82,7 +84,6 @@ class Daemon:
 
             await try_until_success(read_from_daemon_and_check)
 
-        # sleep for a while in case that the daemon haven't been ready after emitting these lines
         await asyncio.sleep(0.1)
 
     def close(self):
@@ -92,6 +93,8 @@ class Daemon:
         self.proc_daemon.wait()
         self.f_log.close()
         os.remove(self.log_filename)
+        if self._p2pd_context is not None:
+            self._p2pd_context.__exit__(None, None, None)
         self.is_closed = True
 
 
@@ -120,10 +123,14 @@ async def make_p2pd_pair_unix(enable_control, enable_connmgr, enable_dht, enable
         ) as pair:
             yield pair
     finally:
-        with suppress(FileNotFoundError):
-            os.unlink(control_maddr.value_for_protocol(protocols.P_UNIX))
-        with suppress(FileNotFoundError):
-            os.unlink(listen_maddr.value_for_protocol(protocols.P_UNIX))
+        control_path = control_maddr.value_for_protocol(protocols.P_UNIX)
+        listen_path = listen_maddr.value_for_protocol(protocols.P_UNIX)
+        if control_path is not None:
+            with suppress(FileNotFoundError):
+                os.unlink(control_path)
+        if listen_path is not None:
+            with suppress(FileNotFoundError):
+                os.unlink(listen_path)
 
 
 @asynccontextmanager
@@ -157,7 +164,6 @@ async def _make_p2pd_pair(
         enable_dht=enable_dht,
         enable_pubsub=enable_pubsub,
     )
-    # wait for daemon ready
     await p2pd.wait_until_ready()
     client = await Client.create(control_maddr=control_maddr, listen_maddr=listen_maddr)
     try:
