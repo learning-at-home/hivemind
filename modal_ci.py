@@ -75,11 +75,8 @@ def setup_environment(*, build_p2pd=False):
 
     if build_p2pd:
         environment["HIVEMIND_BUILDGO"] = "1"
-        install_cmd = ["pip", "install", "--no-cache-dir", "."]
-    else:
-        # Use --no-build-isolation so proto files are generated in the source directory
-        install_cmd = ["pip", "install", "-e", ".", "--no-build-isolation"]
 
+    install_cmd = ["pip", "install", "--no-cache-dir", "."]
     subprocess.run(install_cmd, check=True, env=environment)
 
     return environment
