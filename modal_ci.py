@@ -84,7 +84,7 @@ def setup_environment(*, build_p2pd=False):
     return environment
 
 
-@app.function(image=image, timeout=600, cpu=8, memory=8192)
+@app.function(image=image, timeout=1200, cpu=8, memory=8192)
 def run_tests():
     environment = setup_environment(build_p2pd=False)
 
