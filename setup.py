@@ -186,6 +186,7 @@ class BuildPy(build_py):
 
         proto_compile(os.path.join(output_dir, "hivemind", "proto"))
 
+
 class BinaryDistribution(Distribution):
     """Distribution which always forces a binary package with platform name"""
 
