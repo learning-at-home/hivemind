@@ -186,24 +186,6 @@ class BuildPy(build_py):
 
         proto_compile(os.path.join(output_dir, "hivemind", "proto"))
 
-    def get_output_mapping(self):
-        mapping = {}
-        if hasattr(super(), "get_output_mapping"):
-            mapping = super().get_output_mapping()
-
-        proto_dir = "hivemind/proto"
-        for proto_file in glob.glob(os.path.join(proto_dir, "*.proto")):
-            pb2_name = os.path.basename(proto_file).replace(".proto", "_pb2.py")
-            if self.editable_mode:
-                dest = os.path.join(proto_dir, pb2_name)
-                mapping[dest] = dest
-            else:
-                dest = os.path.join(self.build_lib, proto_dir, pb2_name)
-                mapping[dest] = os.path.join(proto_dir, pb2_name)
-
-        return mapping
-
-
 class BinaryDistribution(Distribution):
     """Distribution which always forces a binary package with platform name"""
 
