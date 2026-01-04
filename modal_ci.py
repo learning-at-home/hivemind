@@ -75,8 +75,10 @@ def setup_environment(*, build_p2pd=False):
 
     if build_p2pd:
         environment["HIVEMIND_BUILDGO"] = "1"
+        install_cmd = ["pip", "install", "--no-cache-dir", "."]
+    else:
+        install_cmd = ["pip", "install", "--no-cache-dir", "-e", "."]
 
-    install_cmd = ["pip", "install", "--no-cache-dir", "."]
     subprocess.run(install_cmd, check=True, env=environment)
 
     return environment
@@ -94,10 +96,11 @@ def run_tests():
             "-v",
             "-n",
             "8",
-            "tests",
+            "/root/hivemind/tests",
         ],
         check=True,
         env=environment,
+        cwd="/tmp",
     )
 
 
@@ -110,12 +113,13 @@ def run_codecov():
             "pytest",
             "--cov",
             "hivemind",
-            "--cov-config=pyproject.toml",
+            "--cov-config=/root/hivemind/pyproject.toml",
             "-v",
-            "tests",
+            "/root/hivemind/tests",
         ],
         check=True,
         env=environment,
+        cwd="/tmp",
     )
 
     # Forward GitHub Actions environment variables to the codecov command
@@ -152,8 +156,9 @@ def build_and_test_p2pd():
             "-k",
             "p2p",
             "-v",
-            "tests",
+            "/root/hivemind/tests",
         ],
         check=True,
         env=environment,
+        cwd="/tmp",
     )
