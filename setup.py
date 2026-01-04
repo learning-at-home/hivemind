@@ -92,8 +92,8 @@ def build_p2p_daemon(target_platform, output_dir):
     if m is None:
         raise FileNotFoundError("Could not find an installation of golang")
     version = parse_version(m.group(1))
-    if version < parse_version("1.13"):
-        raise OSError(f"Newer version of go required: must be >= 1.13, found {version}")
+    if version < parse_version("1.20"):
+        raise OSError(f"Newer version of go required: must be >= 1.20, found {version}")
 
     env = os.environ.copy()
 
