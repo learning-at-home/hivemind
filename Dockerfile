@@ -23,8 +23,8 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
 ENV PATH="/opt/conda/bin:${PATH}"
 
 RUN conda install python~=3.11.0 pip && \
-    pip install --no-cache-dir torch torchvision torchaudio && \
-    conda clean --all
+    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 && \
+    conda clean --all && rm -rf /root/.cache
 
 COPY requirements.txt hivemind/requirements.txt
 COPY requirements-dev.txt hivemind/requirements-dev.txt
