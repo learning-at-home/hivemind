@@ -50,9 +50,6 @@ Documentation = "https://learning-at-home.readthedocs.io"
 [tool.setuptools.dynamic]
 version = {attr = "hivemind.__version__"}
 
-[tool.setuptools.packages.find]
-exclude = ["tests"]
-
 [tool.setuptools.package-data]
 hivemind = ["proto/*", "hivemind_cli/*"]
 
