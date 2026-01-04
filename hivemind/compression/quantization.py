@@ -38,7 +38,7 @@ class Quantization(CompressionBase, ABC):
         )
 
     def extract(self, serialized_tensor: runtime_pb2.Tensor) -> torch.Tensor:
-        codebook_size = int(np.frombuffer(serialized_tensor.buffer, count=1, dtype=np.int64))
+        codebook_size = np.frombuffer(serialized_tensor.buffer, count=1, dtype=np.int64).item()
         codebook = np.frombuffer(serialized_tensor.buffer, offset=8, count=codebook_size, dtype=self.codebook_dtype)
         quantized = np.frombuffer(serialized_tensor.buffer, offset=8 + codebook.nbytes, dtype=self.indices_dtype)
         quantized = torch.as_tensor(quantized, dtype=torch.int64).reshape(tuple(serialized_tensor.size))
@@ -182,8 +182,8 @@ class BlockwiseQuantization(Quantization):
         except ImportError:
             raise ImportError(BNB_MISSING_MESSAGE)
 
-        absmax_size = int(np.frombuffer(serialized_tensor.buffer, count=1, dtype=np.int64))
-        codebook_size = int(np.frombuffer(serialized_tensor.buffer, offset=8, count=1, dtype=np.int64))
+        absmax_size = np.frombuffer(serialized_tensor.buffer, count=1, dtype=np.int64).item()
+        codebook_size = np.frombuffer(serialized_tensor.buffer, offset=8, count=1, dtype=np.int64).item()
         absmax = np.frombuffer(serialized_tensor.buffer, offset=16, count=absmax_size, dtype=self.codebook_dtype)
         codebook = np.frombuffer(
             serialized_tensor.buffer, offset=16 + absmax.nbytes, count=codebook_size, dtype=self.codebook_dtype

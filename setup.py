@@ -1,4 +1,3 @@
-import codecs
 import glob
 import hashlib
 import os
@@ -9,10 +8,9 @@ import tarfile
 import tempfile
 import urllib.request
 
-from pkg_resources import parse_requirements, parse_version
-from setuptools import find_packages, setup
+from packaging.version import parse as parse_version
+from setuptools import setup
 from setuptools.command.build_py import build_py
-from setuptools.command.develop import develop
 from setuptools.dist import Distribution
 
 P2PD_VERSION = "v0.5.0.hivemind1"
@@ -94,8 +92,8 @@ def build_p2p_daemon(target_platform, output_dir):
     if m is None:
         raise FileNotFoundError("Could not find an installation of golang")
     version = parse_version(m.group(1))
-    if version < parse_version("1.13"):
-        raise OSError(f"Newer version of go required: must be >= 1.13, found {version}")
+    if version < parse_version("1.20"):
+        raise OSError(f"Newer version of go required: must be >= 1.20, found {version}")
 
     env = os.environ.copy()
 
@@ -165,30 +163,28 @@ def download_p2p_daemon(target_platform=None, output_dir=here):
 
 
 class BuildPy(build_py):
+    editable_mode = False
+
     def initialize_options(self):
         super().initialize_options()
+        self.editable_mode = False
 
     def run(self):
-        # First, copy source files to build directory
-        super().run()
-
-        # Then, download/build p2pd into the build directory
         target_platform = os.environ.get("HIVEMIND_TARGET_PLATFORM")
         buildgo = os.environ.get("HIVEMIND_BUILDGO", "").lower() in ("1", "true", "yes")
 
-        if buildgo:
-            build_p2p_daemon(target_platform=target_platform, output_dir=self.build_lib)
+        if self.editable_mode:
+            output_dir = here
         else:
-            download_p2p_daemon(target_platform=target_platform, output_dir=self.build_lib)
+            super().run()
+            output_dir = self.build_lib
 
-        proto_compile(os.path.join(self.build_lib, "hivemind", "proto"))
+        if buildgo:
+            build_p2p_daemon(target_platform=target_platform, output_dir=output_dir)
+        else:
+            download_p2p_daemon(target_platform=target_platform, output_dir=output_dir)
 
-
-class Develop(develop):
-    def run(self):
-        self.reinitialize_command("build_py", build_lib=here)
-        self.run_command("build_py")
-        super().run()
+        proto_compile(os.path.join(output_dir, "hivemind", "proto"))
 
 
 class BinaryDistribution(Distribution):
@@ -199,66 +195,23 @@ class BinaryDistribution(Distribution):
 
 
 with open("requirements.txt") as requirements_file:
-    install_requires = list(map(str, parse_requirements(requirements_file)))
-
-# loading version from setup.py
-with codecs.open(os.path.join(here, "hivemind", "__init__.py"), encoding="utf-8") as init_file:
-    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.MULTILINE)
-    version_string = version_match.group(1)
+    install_requires = [line.strip() for line in requirements_file if line.strip() and not line.startswith("#")]
 
 extras = {}
 
 with open("requirements-dev.txt") as dev_requirements_file:
-    extras["dev"] = list(map(str, parse_requirements(dev_requirements_file)))
+    extras["dev"] = [line.strip() for line in dev_requirements_file if line.strip() and not line.startswith("#")]
 
 with open("requirements-docs.txt") as docs_requirements_file:
-    extras["docs"] = list(map(str, parse_requirements(docs_requirements_file)))
+    extras["docs"] = [line.strip() for line in docs_requirements_file if line.strip() and not line.startswith("#")]
 
 extras["bitsandbytes"] = ["bitsandbytes~=0.45.2"]
 
 extras["all"] = extras["dev"] + extras["docs"] + extras["bitsandbytes"]
 
 setup(
-    name="hivemind",
-    version=version_string,
-    cmdclass={"build_py": BuildPy, "develop": Develop},
+    cmdclass={"build_py": BuildPy},
     distclass=BinaryDistribution,
-    description="Decentralized deep learning in PyTorch",
-    long_description="Decentralized deep learning in PyTorch. Built to train models on thousands of volunteers "
-    "across the world.",
-    author="Learning@home & contributors",
-    author_email="hivemind-team@hotmail.com",
-    url="https://github.com/learning-at-home/hivemind",
-    packages=find_packages(exclude=["tests"]),
-    package_data={"hivemind": ["proto/*", "hivemind_cli/*"]},
-    include_package_data=True,
-    license="MIT",
-    setup_requires=["grpcio-tools>=1.33.2,<1.68"],
     install_requires=install_requires,
     extras_require=extras,
-    classifiers=[
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Developers",
-        "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Topic :: Scientific/Engineering",
-        "Topic :: Scientific/Engineering :: Mathematics",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        "Topic :: Software Development",
-        "Topic :: Software Development :: Libraries",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-    ],
-    entry_points={
-        "console_scripts": [
-            "hivemind-dht = hivemind.hivemind_cli.run_dht:main",
-            "hivemind-server = hivemind.hivemind_cli.run_server:main",
-        ]
-    },
-    # What does your project relate to?
-    keywords="pytorch, deep learning, machine learning, gpu, distributed computing, volunteer computing, dht",
 )

@@ -17,15 +17,15 @@ image = (
     )
     .add_local_dir(
         "hivemind",
-        remote_path="/root/hivemind/hivemind",
+        remote_path="/root/repo/hivemind",
         ignore=["hivemind/proto/*_pb2.py", "**/*/p2pd"],
     )
-    .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
-    .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
-    .add_local_file("requirements-docs.txt", remote_path="/root/hivemind/requirements-docs.txt")
-    .add_local_file("setup.py", remote_path="/root/hivemind/setup.py")
-    .add_local_file("pyproject.toml", remote_path="/root/hivemind/pyproject.toml")
-    .add_local_dir("tests", remote_path="/root/hivemind/tests")
+    .add_local_file("requirements.txt", remote_path="/root/repo/requirements.txt")
+    .add_local_file("requirements-dev.txt", remote_path="/root/repo/requirements-dev.txt")
+    .add_local_file("requirements-docs.txt", remote_path="/root/repo/requirements-docs.txt")
+    .add_local_file("setup.py", remote_path="/root/repo/setup.py")
+    .add_local_file("pyproject.toml", remote_path="/root/repo/pyproject.toml")
+    .add_local_dir("tests", remote_path="/root/repo/tests")
 )
 
 # Create an image with golang and other system dependencies
@@ -45,13 +45,13 @@ image_with_golang = (
             "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
         ]
     )
-    .add_local_dir("hivemind", remote_path="/root/hivemind/hivemind")
-    .add_local_file("requirements.txt", remote_path="/root/hivemind/requirements.txt")
-    .add_local_file("requirements-dev.txt", remote_path="/root/hivemind/requirements-dev.txt")
-    .add_local_file("requirements-docs.txt", remote_path="/root/hivemind/requirements-docs.txt")
-    .add_local_file("setup.py", remote_path="/root/hivemind/setup.py")
-    .add_local_file("pyproject.toml", remote_path="/root/hivemind/pyproject.toml")
-    .add_local_dir("tests", remote_path="/root/hivemind/tests")
+    .add_local_dir("hivemind", remote_path="/root/repo/hivemind")
+    .add_local_file("requirements.txt", remote_path="/root/repo/requirements.txt")
+    .add_local_file("requirements-dev.txt", remote_path="/root/repo/requirements-dev.txt")
+    .add_local_file("requirements-docs.txt", remote_path="/root/repo/requirements-docs.txt")
+    .add_local_file("setup.py", remote_path="/root/repo/setup.py")
+    .add_local_file("pyproject.toml", remote_path="/root/repo/pyproject.toml")
+    .add_local_dir("tests", remote_path="/root/repo/tests")
 )
 
 
@@ -68,23 +68,23 @@ codecov_secret = modal.Secret.from_dict(
 
 
 def setup_environment(*, build_p2pd=False):
-    os.chdir("/root/hivemind")
+    os.chdir("/root/repo")
 
     environment = os.environ.copy()
     environment["HIVEMIND_MEMORY_SHARING_STRATEGY"] = "file_descriptor"
 
     if build_p2pd:
         environment["HIVEMIND_BUILDGO"] = "1"
-        install_cmd = ["pip", "install", "--no-cache-dir", ".", "--no-use-pep517"]
+        install_cmd = ["pip", "install", "--no-cache-dir", "."]
     else:
-        install_cmd = ["pip", "install", "-e", ".", "--no-use-pep517"]
+        install_cmd = ["pip", "install", "--no-cache-dir", "-e", "."]
 
     subprocess.run(install_cmd, check=True, env=environment)
 
     return environment
 
 
-@app.function(image=image, timeout=600, cpu=8, memory=8192)
+@app.function(image=image, timeout=1200, cpu=8, memory=8192)
 def run_tests():
     environment = setup_environment(build_p2pd=False)
 
@@ -96,10 +96,11 @@ def run_tests():
             "-v",
             "-n",
             "8",
-            "tests",
+            "/root/repo/tests",
         ],
         check=True,
         env=environment,
+        cwd="/tmp",
     )
 
 
@@ -112,12 +113,13 @@ def run_codecov():
             "pytest",
             "--cov",
             "hivemind",
-            "--cov-config=pyproject.toml",
+            "--cov-config=/root/repo/pyproject.toml",
             "-v",
-            "tests",
+            "/root/repo/tests",
         ],
         check=True,
         env=environment,
+        cwd="/tmp",
     )
 
     # Forward GitHub Actions environment variables to the codecov command
@@ -154,8 +156,9 @@ def build_and_test_p2pd():
             "-k",
             "p2p",
             "-v",
-            "tests",
+            "/root/repo/tests",
         ],
         check=True,
         env=environment,
+        cwd="/tmp",
     )
