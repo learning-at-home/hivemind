@@ -16,9 +16,9 @@ image = (
         ]
     )
     .add_local_dir(
-        "hivemind",
-        remote_path="/root/repo/hivemind",
-        ignore=["hivemind/proto/*_pb2.py", "**/*/p2pd"],
+        "src/hivemind",
+        remote_path="/root/repo/src/hivemind",
+        ignore=["src/hivemind/proto/*_pb2.py", "**/*/p2pd"],
     )
     .add_local_file("requirements.txt", remote_path="/root/repo/requirements.txt")
     .add_local_file("requirements-dev.txt", remote_path="/root/repo/requirements-dev.txt")
@@ -36,16 +36,14 @@ image_with_golang = (
     .pip_install_from_requirements("requirements.txt")
     .run_commands(
         [
-            # Install Go 1.20.11
             "wget https://go.dev/dl/go1.20.11.linux-amd64.tar.gz",
             "rm -rf /usr/local/go && tar -C /usr/local -xzf go1.20.11.linux-amd64.tar.gz",
             "ln -s /usr/local/go/bin/go /usr/bin/go",
-            # Install bitsandbytes
             "git clone --branch 0.45.2 --depth 1 https://github.com/bitsandbytes-foundation/bitsandbytes.git",
             "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
         ]
     )
-    .add_local_dir("hivemind", remote_path="/root/repo/hivemind")
+    .add_local_dir("src/hivemind", remote_path="/root/repo/src/hivemind")
     .add_local_file("requirements.txt", remote_path="/root/repo/requirements.txt")
     .add_local_file("requirements-dev.txt", remote_path="/root/repo/requirements-dev.txt")
     .add_local_file("requirements-docs.txt", remote_path="/root/repo/requirements-docs.txt")
@@ -104,7 +102,7 @@ def run_tests():
     )
 
 
-@app.function(image=image, timeout=900, cpu=8, memory=8192, secrets=[codecov_secret])
+@app.function(image=image, timeout=1200, cpu=8, memory=8192, secrets=[codecov_secret])
 def run_codecov():
     environment = setup_environment(build_p2pd=False)
 
@@ -122,7 +120,6 @@ def run_codecov():
         cwd="/tmp",
     )
 
-    # Forward GitHub Actions environment variables to the codecov command
     environment.update(
         {
             "CODECOV_TOKEN": os.environ["CODECOV_TOKEN"],

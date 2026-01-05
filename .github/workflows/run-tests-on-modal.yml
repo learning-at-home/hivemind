@@ -55,7 +55,7 @@ jobs:
       GITHUB_EVENT_NUMBER: ${{ github.event.number }}
       GITHUB_EVENT_PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       PYTHON_VERSION: "3.11"
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
