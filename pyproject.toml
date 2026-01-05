@@ -55,7 +55,7 @@ hivemind = ["proto/*", "hivemind_cli/*"]
 
 [tool.coverage.run]
 concurrency = ["thread", "multiprocessing"]
-omit = ["src/hivemind/proto/*"]
+omit = ["*/hivemind/proto/*"]
 source = ["hivemind"]
 parallel = true
 sigterm = true
