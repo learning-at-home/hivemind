@@ -14,7 +14,6 @@ from hivemind.moe.server import background_server
 
 
 @pytest.mark.forked
-@pytest.mark.skip("Skipping test due to freezes in CI")
 def test_training(max_steps: int = 100, threshold: float = 0.9):
     dataset = load_digits(n_class=2)
     X_train, y_train = torch.tensor(dataset["data"], dtype=torch.float), torch.tensor(dataset["target"])
@@ -55,7 +54,6 @@ def test_training(max_steps: int = 100, threshold: float = 0.9):
 
 
 @pytest.mark.forked
-@pytest.mark.skip("Skipping test due to freezes in CI")
 def test_moe_training(max_steps: int = 100, threshold: float = 0.9, num_experts=2):
     dataset = load_digits(n_class=2)
     X_train, y_train = torch.tensor(dataset["data"], dtype=torch.float), torch.tensor(dataset["target"])
@@ -108,7 +106,6 @@ class SwitchNetwork(nn.Module):
 
 
 @pytest.mark.forked
-@pytest.mark.skip("Skipping test due to freezes in CI")
 def test_switch_training(max_steps: int = 10, threshold: float = 0.9, num_experts=5):
     dataset = load_digits(n_class=2)
     X_train, y_train = torch.tensor(dataset["data"], dtype=torch.float), torch.tensor(dataset["target"])
