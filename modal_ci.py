@@ -8,12 +8,10 @@ image = (
     modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
     .apt_install(["git", "procps", "build-essential", "cmake", "wget"])
     .pip_install("uv")
-    .add_local_file("requirements.txt", remote_path="/root/requirements.txt", copy=True)
-    .add_local_file("requirements-dev.txt", remote_path="/root/requirements-dev.txt", copy=True)
+    .pip_install_from_requirements("requirements-dev.txt")
+    .pip_install_from_requirements("requirements.txt")
     .run_commands(
         [
-            "uv pip install --system -r /root/requirements-dev.txt",
-            "uv pip install --system -r /root/requirements.txt",
             "git clone --branch 0.45.2 --depth 1 https://github.com/bitsandbytes-foundation/bitsandbytes.git",
             "cd bitsandbytes && cmake -DCOMPUTE_BACKEND=cpu -S . && make && pip --no-cache install . ",
         ]
@@ -36,12 +34,10 @@ image_with_golang = (
     modal.Image.debian_slim(python_version=os.environ["PYTHON_VERSION"])
     .apt_install(["git", "procps", "build-essential", "cmake", "wget"])
     .pip_install("uv")
-    .add_local_file("requirements.txt", remote_path="/root/requirements.txt", copy=True)
-    .add_local_file("requirements-dev.txt", remote_path="/root/requirements-dev.txt", copy=True)
+    .pip_install_from_requirements("requirements-dev.txt")
+    .pip_install_from_requirements("requirements.txt")
     .run_commands(
         [
-            "uv pip install --system -r /root/requirements-dev.txt",
-            "uv pip install --system -r /root/requirements.txt",
             "wget https://go.dev/dl/go1.20.11.linux-amd64.tar.gz",
             "rm -rf /usr/local/go && tar -C /usr/local -xzf go1.20.11.linux-amd64.tar.gz",
             "ln -s /usr/local/go/bin/go /usr/bin/go",
@@ -79,9 +75,9 @@ def setup_environment(*, build_p2pd=False):
 
     if build_p2pd:
         environment["HIVEMIND_BUILDGO"] = "1"
-        install_cmd = ["pip", "install", "--no-cache-dir", "."]
+        install_cmd = ["uv", "pip", "install", "--system", "--no-cache-dir", "."]
     else:
-        install_cmd = ["pip", "install", "--no-cache-dir", "-e", "."]
+        install_cmd = ["uv", "pip", "install", "--system", "--no-cache-dir", "-e", "."]
 
     subprocess.run(install_cmd, check=True, env=environment)
 
@@ -118,6 +114,7 @@ def run_codecov():
             "--cov",
             "hivemind",
             "--cov-config=/root/repo/pyproject.toml",
+            "--timeout=120",
             "-v",
             "/root/repo/tests",
         ],
