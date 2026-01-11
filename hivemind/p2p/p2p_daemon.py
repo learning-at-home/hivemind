@@ -6,7 +6,7 @@ import platform
 import secrets
 import warnings
 from collections.abc import AsyncIterable as AsyncIterableABC
-from contextlib import closing, suppress
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from importlib.resources import files
@@ -458,27 +458,28 @@ class P2P:
                         # Sometimes `e` is a connection error, so it is okay if we fail to report `e` to the caller
                         await P2P.send_protobuf(RPCError(message=str(e)), writer)
 
-            with closing(writer):
-                processing_task = asyncio.create_task(_process_stream())
-                try:
-                    while True:
-                        receive_task = asyncio.create_task(P2P.receive_protobuf(input_protobuf_type, reader))
-                        await asyncio.wait({processing_task, receive_task}, return_when=asyncio.FIRST_COMPLETED)
+            processing_task = asyncio.create_task(_process_stream())
+            try:
+                while True:
+                    receive_task = asyncio.create_task(P2P.receive_protobuf(input_protobuf_type, reader))
+                    await asyncio.wait({processing_task, receive_task}, return_when=asyncio.FIRST_COMPLETED)
 
-                        if processing_task.done():
-                            receive_task.cancel()
+                    if processing_task.done():
+                        receive_task.cancel()
+                        return
+
+                    if receive_task.done():
+                        try:
+                            request, _ = await receive_task
+                        except asyncio.IncompleteReadError:  # Connection is closed (the client cancelled or died)
                             return
-
-                        if receive_task.done():
-                            try:
-                                request, _ = await receive_task
-                            except asyncio.IncompleteReadError:  # Connection is closed (the client cancelled or died)
-                                return
-                            await requests.put(request)  # `request` is None for the end-of-stream message
-                except Exception:
-                    logger.warning("Exception while receiving requests:", exc_info=True)
-                finally:
-                    processing_task.cancel()
+                        await requests.put(request)  # `request` is None for the end-of-stream message
+            except Exception:
+                logger.warning("Exception while receiving requests:", exc_info=True)
+            finally:
+                processing_task.cancel()
+                writer.close()
+                await writer.wait_closed()
 
         await self.add_binary_stream_handler(name, _handle_stream, balanced=balanced)
 
@@ -493,21 +494,22 @@ class P2P:
             await P2P.send_protobuf(P2P.END_OF_STREAM, writer)
 
         async def _read_from_stream() -> AsyncIterator[Message]:
-            with closing(writer):
-                try:
-                    while True:
-                        try:
-                            response, err = await P2P.receive_protobuf(output_protobuf_type, reader)
-                        except asyncio.IncompleteReadError:  # Connection is closed
-                            break
+            try:
+                while True:
+                    try:
+                        response, err = await P2P.receive_protobuf(output_protobuf_type, reader)
+                    except asyncio.IncompleteReadError:  # Connection is closed
+                        break
 
-                        if err is not None:
-                            raise P2PHandlerError(f"Failed to call handler `{name}` at {peer_id}: {err.message}")
-                        yield response
+                    if err is not None:
+                        raise P2PHandlerError(f"Failed to call handler `{name}` at {peer_id}: {err.message}")
+                    yield response
 
-                    await writing_task
-                finally:
-                    writing_task.cancel()
+                await writing_task
+            finally:
+                writing_task.cancel()
+                writer.close()
+                await writer.wait_closed()
 
         writing_task = asyncio.create_task(_write_to_stream())
         return _read_from_stream()
