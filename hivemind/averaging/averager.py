@@ -177,6 +177,7 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         self.shutdown_timeout = shutdown_timeout
         self.next_chunk_timeout = next_chunk_timeout
         self.bandwidth = bandwidth
+        self._state_download_lock = asyncio.Lock()
 
         self.matchmaking_kwargs = dict(
             servicer_type=type(self),
@@ -637,18 +638,21 @@ class DecentralizedAverager(mp.Process, ServicerBase):
         """
         if not self.allow_state_sharing:
             return  # deny request and direct peer to the next prospective averager
-        metadata, tensors, infos = await self._get_current_state_from_host_process()
-        if infos is None:
-            infos = [CompressionInfo.from_tensor(tensor, key=i) for i, tensor in enumerate(tensors)]
-        assert len(tensors) == len(infos)
+        if self._state_download_lock.locked():
+            return  # decline if already serving another peer
+        async with self._state_download_lock:
+            metadata, tensors, infos = await self._get_current_state_from_host_process()
+            if infos is None:
+                infos = [CompressionInfo.from_tensor(tensor, key=i) for i, tensor in enumerate(tensors)]
+            assert len(tensors) == len(infos)
 
-        for tensor, info in zip(tensors, infos):
-            for part in split_for_streaming(self.state_compression.compress(tensor, info, allow_inplace=False)):
-                if metadata is not None:
-                    yield averaging_pb2.DownloadData(tensor_part=part, metadata=metadata)
-                    metadata = None
-                else:
-                    yield averaging_pb2.DownloadData(tensor_part=part)
+            for tensor, info in zip(tensors, infos):
+                for part in split_for_streaming(self.state_compression.compress(tensor, info, allow_inplace=False)):
+                    if metadata is not None:
+                        yield averaging_pb2.DownloadData(tensor_part=part, metadata=metadata)
+                        metadata = None
+                    else:
+                        yield averaging_pb2.DownloadData(tensor_part=part)
 
     def get_current_state(self) -> Tuple[Any, Sequence[torch.Tensor], Sequence[CompressionInfo]]:
         """
