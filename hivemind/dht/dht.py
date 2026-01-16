@@ -126,7 +126,7 @@ class DHT(mp.context.ForkProcess):
                     continue
                 try:
                     method, args, kwargs = self._inner_pipe.recv()
-                except (OSError, ConnectionError, RuntimeError) as e:
+                except (OSError, ConnectionError, RuntimeError, BlockingIOError, EOFError) as e:
                     logger.exception(e)
                     await asyncio.sleep(self._node.protocol.wait_timeout)
                     continue
