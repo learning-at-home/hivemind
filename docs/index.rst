@@ -23,6 +23,7 @@ documentation below.
   modules/index
   user/dht
   user/moe
+  user/libp2p
   user/contributing
   user/benchmarks
   user/acknowledgements
