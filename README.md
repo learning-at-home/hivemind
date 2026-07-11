@@ -261,3 +261,7 @@ at [mryab/learning-at-home](https://github.com/mryab/learning-at-home)):
 
 We also maintain a list
 of [related projects and acknowledgements](https://learning-at-home.readthedocs.io/en/latest/user/acknowledgements.html).
+
+---
+
+*[Mukller](https://github.com/Mukller)*
